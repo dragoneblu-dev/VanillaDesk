@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VanillaDesk - Workflow & Node Graph Studio</title>
+
+    <!-- Risorse condivise di VanillaDesk -->
+    <link rel="stylesheet" href="../css/variables.css">
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/ui-components.css">
+    <link rel="stylesheet" href="../css/colors.css">
+    <link rel="stylesheet" href="../css/modals.css">
+    <link rel="stylesheet" href="../css/advanced-table.css">
+    <link rel="stylesheet" href="workflow.css">
+
+    <!-- Script Core di VanillaDesk -->
+    <script src="../js/icons.js"></script>
+    <script src="../js/state.js"></script>
+    <script src="../js/store.js"></script>
+    <script src="../js/ui/ui-core.js"></script>
+    <script src="../js/ui/ui-menu.js"></script>
+    <script src="../js/ui/ui-drawer.js"></script>
+    <script src="../js/ui/ui-notifications.js"></script>
+    <script src="../js/ui/ui-preferences.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-core.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-context.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-formula.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-record.js"></script>
+    <script src="../js/logic-engine-core.js"></script>
+
+    <!-- Architettura Modulare Workflow Studio -->
+    <script src="workflow-core.js"></script>
+    <script src="workflow-canvas.js"></script>
+    <script src="workflow-nodes.js"></script>
+    <script src="workflow-connections.js"></script>
+    <script src="workflow-layout.js"></script>
+    <script src="workflow-ui.js"></script>
+</head>
+<body>
+
+    <!-- TOOLTIP CONTAINER UNIVERSALE -->
+    <div id="advCustomTooltip" class="adv-custom-tooltip"></div>
+
+    <!-- TOOLBAR SUPERIORE -->
+    <header>
+        <div class="header-left">
+            <button class="btn btn-primary" onclick="WorkflowApp.selectWorkspace()">
+                <script>document.write(Icons.folderOpen)</script>
+                <span id="wsBtnLabel">Apri Cartella Workspace...</span>
+            </button>
+
+            <div class="separator"></div>
+
+            <button id="btnSwitchDb" class="btn" style="display:none;" onclick="WorkflowApp.showDbPicker()">
+                <script>document.write(Icons.tableDatabase)</script> Cambia Database
+            </button>
+
+            <button id="btnReloadDb" class="btn" style="display:none;" onclick="WorkflowApp.reloadCurrentDatabase(false)" title="Ricarica i dati aggiornati dal database mantenendo il layout">
+                <script>document.write(Icons.refresh)</script> Ricarica
+            </button>
+
+            <span id="activeDbTitle" style="font-weight: bold; font-size: 0.95rem; color: var(--text-primary); display:none;"></span>
+        </div>
+
+        <div class="header-right" id="workflowCanvasControls" style="display:none;">
+            <!-- RICERCA RAPIDA NODO CON AUTOCOMPLETE E CENTRATURA -->
+            <div class="search-box-header">
+                <span class="search-icon-inside"><script>document.write(Icons.search)</script></span>
+                <input type="text" id="workflowSearchInput" placeholder="Cerca nodo (like)..." autocomplete="off"
+                       oninput="WorkflowApp.handleSearchInput(this.value)"
+                       onkeydown="WorkflowApp.handleSearchKeydown(event, this.value)">
+                
+                <div id="workflowSearchDropdown" class="search-autocomplete-portal"></div>
+            </div>
+
+            <!-- TOGGLE LOCK LAYOUT -->
+            <button id="btnLockLayout" class="btn" onclick="WorkflowApp.toggleLayoutLock()" title="Blocca/Sblocca spostamento schede e collegamenti">
+                <script>document.write(Icons.lock)</script>
+                <span id="lockBtnLabel">Blocca</span>
+            </button>
+
+            <div class="separator"></div>
+
+            <!-- Zoom Centrato sullo Schermo -->
+            <div style="display:flex; border:1px solid var(--border-color); border-radius:6px; overflow:hidden;">
+                <button class="btn" style="border:none; border-radius:0; padding:6px 10px;" onclick="WorkflowApp.adjustZoom(-0.15)">-</button>
+                <button class="btn" style="border:none; border-radius:0; border-left:1px solid var(--border-color); border-right:1px solid var(--border-color); padding:6px 10px;" onclick="WorkflowApp.resetZoom()">100%</button>
+                <button class="btn" style="border:none; border-radius:0; padding:6px 10px;" onclick="WorkflowApp.adjustZoom(0.15)">+</button>
+            </div>
+
+            <!-- MENU AD HAMBURGER CON SOTTOMENÙ COMPATTI -->
+            <button id="btnHamburgerMenu" class="btn" onclick="WorkflowApp.openMainMenu(event)" title="Menu Opzioni">
+                <script>document.write(Icons.menu)</script>
+            </button>
+        </div>
+    </header>
+
+    <!-- 1. SCREEN: WELCOME -->
+    <div id="welcomeScreen" class="app-screen active">
+        <div class="welcome-card">
+            <h1>Workflow Graph Studio</h1>
+            <p>
+                Visualizzatore a grafo avanzato con snap millimetrico a griglia, minimappa radar interattiva e selezione elastica.<br><br>
+                <b>Integrità Dati Garantita:</b> Il workflow memorizza la disposizione spaziale all'interno della cartella <code>assets/workflow/</code> del workspace selezionato senza alterare la struttura del database.
+            </p>
+            <button class="btn btn-primary" style="padding: 12px 24px; font-size: 1rem; width: 100%; justify-content: center;" onclick="WorkflowApp.selectWorkspace()">
+                Seleziona Cartella Workspace
+            </button>
+        </div>
+    </div>
+
+    <!-- 2. SCREEN: SCELTA DATABASE (FILTRO AUTO-RELAZIONI) -->
+    <div id="dbPickerScreen" class="app-screen">
+        <div class="db-picker-header">
+            <h2 style="font-size: 1.5rem; margin-bottom: 6px;">Seleziona il Database da visualizzare:</h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;">
+                Vengono mostrati esclusivamente i database provvisti di auto-relazione interna.
+            </p>
+        </div>
+        <div id="dbGridList" class="db-grid"></div>
+    </div>
+
+    <!-- 3. SCREEN: CANVAS INTERATTIVO -->
+    <div id="canvasScreen" class="app-screen">
+        <div id="canvasViewport">
+            <div id="canvasGridLayer"></div>
+            
+            <!-- Riquadro Elastico di Selezione (Marquee Box) -->
+            <div id="canvasMarqueeBox"></div>
+
+            <div id="canvasPlane">
+                <!-- Contenitore Clusters Bounding Box -->
+                <div id="canvasClustersContainer"></div>
+
+                <!-- LIVELLO SVG (Linee Connessione & Smart Alignment Guides) -->
+                <svg id="canvasSvgLayer">
+                    <defs>
+                        <!-- Marker predefinito -->
+                        <marker id="wfArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+                            <polygon points="0 0, 8 4, 0 8" fill="var(--accent-color)" />
+                        </marker>
+                        <!-- Marker per ramo evidenziato su sfondo scuro (Bianco) -->
+                        <marker id="wfArrowHighlightedDark" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                            <polygon points="0 1, 9 5, 0 9" fill="#ffffff" />
+                        </marker>
+                        <!-- Marker per ramo evidenziato su sfondo chiaro (Nero) -->
+                        <marker id="wfArrowHighlightedLight" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
+                            <polygon points="0 1, 9 5, 0 9" fill="#111827" />
+                        </marker>
+                    </defs>
+                </svg>
+                <div id="canvasNodesContainer"></div>
+            </div>
+
+            <!-- RADAR MINIMAP INTERATTIVA -->
+            <div id="workflowMinimap" title="Clicca o trascina per spostare la vista">
+                <svg id="minimapSvg"></svg>
+            </div>
+
+            <!-- TOOLBAR FLOTTANTE ALLINEAMENTO E DISTRIBUZIONE MULTIPLA -->
+            <div id="wfSelectionToolbar" class="wf-selection-toolbar"></div>
+        </div>
+    </div>
+
+    <!-- DRAWER LATERALE UNIVERSALE -->
+    <div id="advGlobalDrawer" class="adv-drawer">
+        <div class="adv-drawer-header">
+            <div class="adv-drawer-title" id="advDrawerTitle">Pannello</div>
+            <button class="close-modal-btn" onclick="UI.closeDrawer()">✕</button>
+        </div>
+        <div id="advDrawerBody" class="adv-drawer-body"></div>
+        <div id="advDrawerFooter" class="adv-drawer-footer"></div>
+    </div>
+
+    <!-- NOTIFICHE TOAST -->
+    <div id="adv-toast-container" class="toast-container"></div>
+
+</body>
+</html>
