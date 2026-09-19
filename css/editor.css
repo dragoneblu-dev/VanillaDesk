@@ -1,7 +1,7 @@
 :root {
     --font-editor: "Menlo", "Consolas", "Monaco", "Courier New", monospace;
     --reading-font-size: 16px;
-    --page-max-width: 900px; /* FIX: Variabile per la larghezza della pagina */
+    --page-max-width: 900px; /* Variabile per la larghezza della pagina */
 }
 
 main {
@@ -136,7 +136,7 @@ main {
 .right-align { margin-left: auto; border: 1px solid var(--border-color) !important; }
 .highlight-btn { border-bottom: 3px solid var(--highlight-bg) !important; color: var(--text-primary) !important; }
 
-/* FIX LARGHEZZA: Centralizzazione della max-width tramite CSS variable */
+/* Centralizzazione della max-width tramite CSS variable */
 .editor-content { 
     flex: 1 0 auto; 
     font-size: var(--reading-font-size); 
@@ -219,6 +219,7 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
 .list-option-btn { text-align: left; background: transparent; border: none; padding: 6px 10px; cursor: pointer; font-size: 0.9rem; color: var(--text-primary); border-radius: 3px; display: flex; align-items: center; gap: 8px; }
 .list-option-btn:hover { background: var(--item-hover); }
 
+/* --- GHOST MODE: Toolbar contestuali fluttuanti (Tabelle, Link, Immagini) --- */
 .adv-floating-popover {
     position: absolute;
     background: var(--sidebar-bg);
@@ -231,6 +232,24 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
     gap: 4px;
     z-index: 1000;
     color: var(--text-primary); 
+    
+    /* Trasparenza adattiva ridotta per garantire nitidezza e contrasto immediati */
+    opacity: 0.7;
+    transition: opacity 0.2s ease, box-shadow 0.2s ease;
+}
+
+.adv-floating-popover:hover,
+.adv-floating-popover:focus-within {
+    opacity: 1;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.3);
+}
+
+/* POPOVER SEGNALIBRO (BOOKMARK): Completamente solido ed evidente fin dall'apertura */
+#adv-bookmark-popover {
+    opacity: 1 !important;
+    background: var(--sidebar-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25) !important;
 }
 
 .adv-floating-popover button {

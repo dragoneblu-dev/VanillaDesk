@@ -17,6 +17,7 @@
     margin: 15px 0;
     width: 100%;
     max-width: 100%;
+    clear: both; /* Impedisce compenetrazioni con immagini o elementi flottanti precedenti */
 }
 
 .adv-inline-shell {
@@ -66,6 +67,7 @@
 .editor-container.read-mode .adv-widget-shell .adv-cal-event-std,
 .editor-container.read-mode .adv-widget-shell .adv-cal-event-abs,
 .editor-container.read-mode .adv-widget-shell .adv-timeline-bar,
+.editor-container.read-mode .adv-widget-shell .adv-timeline-nav-arrow,
 .editor-container.read-mode .adv-widget-shell .adv-board-card,
 .editor-container.read-mode .adv-widget-shell .adv-select-pill,
 .editor-container.read-mode .adv-widget-shell .adv-cal-more-btn,
@@ -78,7 +80,8 @@
 .editor-container.read-mode .adv-widget-shell .columns-opt-btn,
 .editor-container.read-mode .widget-type-audio audio,
 .editor-container.read-mode .widget-type-video iframe,
-.editor-container.read-mode .snippet-copy-btn { 
+.editor-container.read-mode .snippet-copy-btn,
+.editor-container.read-mode .adv-widget-shell a.internal-link { 
     pointer-events: auto !important;
 }
 

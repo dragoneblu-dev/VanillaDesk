@@ -7,6 +7,7 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     user-select: none;
     background: transparent;
+    clear: both; /* Impedisce compenetrazioni con immagini o elementi flottanti precedenti */
 }
 
 /* Intestazione e Footer */
@@ -285,3 +286,109 @@ textarea.modern-input::-webkit-scrollbar-thumb:hover { background: var(--text-se
 
 /* FIX PAN SCROLL: Blocca le interazioni native quando la tabella viene trascinata a mano */
 body.is-panning * { user-select: none !important; pointer-events: none !important; }
+
+/* =========================================================================
+   STILI TABELLA GERARCHICA AD ALBERO (TREE TABLE / WBS)
+   ========================================================================= */
+
+.adv-tree-row {
+    transition: background-color 0.15s ease;
+}
+
+.adv-tree-cell-wrapper {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+    min-height: 24px;
+    position: relative;
+    box-sizing: border-box;
+}
+
+.adv-tree-toggle {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: transform 0.15s ease, background 0.1s ease, color 0.1s ease;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+.adv-tree-toggle:hover {
+    background: var(--item-hover);
+    filter: brightness(1.15);
+}
+
+.adv-tree-leaf-bullet {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 18px;
+    height: 18px;
+    font-size: 14px;
+    flex-shrink: 0;
+    user-select: none;
+}
+
+/* Differenziazione cromatica per livelli gerarchici (0..4) */
+.adv-tree-level-0 { color: var(--accent-color) !important; font-weight: bold; }
+.adv-tree-level-1 { color: var(--tx-c4) !important; }
+.adv-tree-level-2 { color: var(--tx-c6) !important; }
+.adv-tree-level-3 { color: var(--tx-c8) !important; }
+.adv-tree-level-4 { color: var(--tx-c7) !important; }
+
+/* Micro-badge conteggio sotto-task su rami collassati */
+.adv-tree-badge-count {
+    font-size: 0.7rem;
+    font-family: monospace;
+    font-weight: bold;
+    padding: 1px 5px;
+    border-radius: 10px;
+    background: var(--item-active);
+    color: var(--text-secondary);
+    border: 1px solid var(--border-color);
+    margin-right: 2px;
+    line-height: 1.2;
+    user-select: none;
+}
+
+.adv-tree-quick-add {
+    opacity: 0;
+    visibility: hidden;
+    background: transparent;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--accent-color);
+    cursor: pointer;
+    font-size: 11px;
+    font-weight: bold;
+    width: 18px;
+    height: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    margin-left: auto;
+    flex-shrink: 0;
+    transition: opacity 0.15s ease, background 0.15s ease;
+}
+
+.adv-tree-row:hover .adv-tree-quick-add {
+    opacity: 0.7;
+    visibility: visible;
+}
+
+.adv-tree-quick-add:hover {
+    opacity: 1 !important;
+    background: var(--item-hover);
+    border-color: var(--accent-color);
+}
+
+.tree-ancestor-dimmed {
+    opacity: 0.55;
+    font-style: italic;
+}
