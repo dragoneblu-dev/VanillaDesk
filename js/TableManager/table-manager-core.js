@@ -4,6 +4,7 @@
  * FIX LAYOUT W3C: Introdotto l'uso di <colgroup> e <col> per il dimensionamento. 
  * Questo scavalca il limite nativo dei browser che bloccava il ridimensionamento
  * se la prima riga della tabella conteneva celle unite (colspan).
+ * RESTORE DRAG LISTENERS: Invocazione esplicita di TableManager.Drag.init() al caricamento.
  */
 
 window.TableManager = {
@@ -26,6 +27,7 @@ window.TableManager = {
         setTimeout(() => {
             if (typeof TableManager.UI.initTriggers === 'function') TableManager.UI.initTriggers();
             if (typeof TableManager.Selection.init === 'function') TableManager.Selection.init();
+            if (typeof TableManager.Drag.init === 'function') TableManager.Drag.init();
         }, 50);
     },
 

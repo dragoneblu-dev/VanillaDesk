@@ -1,7 +1,10 @@
 /**
  * AdvancedTableBoard.js
- * Modulo Kanban (Bacheca Trello-style) per Tabelle Database.
- * LOG BOMB: Strumentazione di tracciamento profondo per gli eventi Mousedown e Drag.
+ * Modulo Kanban (Bacheca Trello-style) e selettore viste per Tabelle Database.
+ * FEAT: Integrazione della Vista ad Albero (WBS) con selettore colonna e direzione gerarchica.
+ * FIX: Messaggio informativo in rosso quando non è presente alcuna colonna di relazione con se stesso.
+ * PERF: Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
+ * Protegge le prestazioni del browser con migliaia di record e mantiene intatta la posizione di scroll.
  */
 
 const AdvancedBoard = {
@@ -10,6 +13,7 @@ const AdvancedBoard = {
     ghostElement: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
+    _columnLimits: {}, // Memorizza il limite visibile per ogni colonna (tableId + '_' + groupVal)
 
     openViewMenu: (e, tableId) => {
         if (e) e.stopPropagation();
@@ -17,21 +21,73 @@ const AdvancedBoard = {
         let state = AdvancedTable.getState(tableId);
         if (!state) return;
 
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        const realState = AdvancedTable.getState(realTableId);
+
         const selectCols = state.columns.filter(c => c.type === 'select');
         const dateCols = state.columns.filter(c => c.type === 'date' || c.type === 'datetime');
+        
+        // Cerca tutte le colonne di auto-relazione (puntano alla tabella stessa)
+        const selfRelCols = (state.columns || []).filter(c => c.type === 'relation' && (c.targetTableId === tableId || c.targetTableId === realTableId));
 
         const chk = '<span style="color:var(--accent-color); font-weight:bold; float:right; margin-left:10px;">✓</span>';
 
-        const menuItems =[
+        const menuItems = [
             { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:2px;">Seleziona Vista</div>' },
             { 
                 icon: Icons.viewList, 
-                label: 'Vista formato Tabella' + (state.viewType === 'table' || !state.viewType ? chk : ''), 
+                label: 'Vista formato Tabella' + ((state.viewType === 'table' || !state.viewType) ? chk : ''), 
                 onClick: () => AdvancedBoard.setView(tableId, 'table') 
-            },
-            { type: 'divider' },
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">Bacheca (Raggruppa per...)</div>' }
+            }
         ];
+
+        // Sezione Vista ad Albero (WBS) con avviso di coerenza se assente
+        menuItems.push({ type: 'divider' });
+        menuItems.push({ type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">Gerarchia ad Albero (WBS)</div>' });
+
+        if (selfRelCols.length === 0) {
+            menuItems.push({ 
+                type: 'custom', 
+                html: '<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">Crea una colonna "Relazione" che punti a questo stesso DB</div>' 
+            });
+        } else {
+            selfRelCols.forEach(c => {
+                const isTreeActive = state.viewType === 'tree' && state.treeRelationColId === c.id;
+                const isChildrenDir = isTreeActive && state.treeRelationDirection === 'children';
+                const isParentDir = isTreeActive && state.treeRelationDirection === 'parent';
+
+                let treeSubMenu = [
+                    { 
+                        icon: Icons.treeNode, 
+                        label: `Il campo "${c.name}" indica i Figli` + (isChildrenDir ? chk : ''), 
+                        onClick: () => {
+                            if (typeof AdvancedTree !== 'undefined') {
+                                AdvancedTree.setView(tableId, c.id, 'children');
+                            }
+                        } 
+                    },
+                    { 
+                        icon: Icons.treeNode, 
+                        label: `Il campo "${c.name}" indica il Genitore` + (isParentDir ? chk : ''), 
+                        onClick: () => {
+                            if (typeof AdvancedTree !== 'undefined') {
+                                AdvancedTree.setView(tableId, c.id, 'parent');
+                            }
+                        } 
+                    }
+                ];
+
+                menuItems.push({
+                    icon: Icons.treeNode,
+                    label: c.name + (isTreeActive ? chk : ''),
+                    type: 'submenu',
+                    items: treeSubMenu
+                });
+            });
+        }
+
+        menuItems.push({ type: 'divider' });
+        menuItems.push({ type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">Bacheca (Raggruppa per...)</div>' });
 
         if (selectCols.length === 0) {
             menuItems.push({ type: 'custom', html: '<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">Crea una colonna "Select Singola"</div>' });
@@ -56,7 +112,7 @@ const AdvancedBoard = {
                 const isCalActive = state.viewType === 'calendar' && state.calendarDateCol === c.id;
                 const isTlActive = state.viewType === 'timeline' && state.timelineDateCol === c.id;
 
-                let timeSubMenu =[
+                let timeSubMenu = [
                     { icon: Icons.viewCalendar, label: 'Calendario' + (isCalActive ? chk : ''), onClick: () => AdvancedBoard.setView(tableId, 'calendar', null, null, c.id) }
                 ];
 
@@ -90,6 +146,15 @@ const AdvancedBoard = {
         AdvancedTable.renderTable(tableId);
     },
 
+    loadMoreCards: (e, tableId, colValue, step = 30) => {
+        if (e) e.stopPropagation();
+        AdvancedBoard._columnLimits = AdvancedBoard._columnLimits || {};
+        const key = `${tableId}_${colValue}`;
+        const currentLimit = AdvancedBoard._columnLimits[key] || 30;
+        AdvancedBoard._columnLimits[key] = currentLimit + step;
+        AdvancedTable.renderTable(tableId);
+    },
+
     render: (tableId, wrapper, state) => {
         const groupColId = state.boardGroupBy;
         const groupCol = state.columns.find(c => c.id === groupColId);
@@ -118,9 +183,18 @@ const AdvancedBoard = {
             bodyContainer = wrapper.querySelector('.widget-body');
         }
 
+        // Memorizza la posizione di scroll orizzontale della bacheca e verticale di ciascuna colonna
         let prevScrollX = 0;
         const existingScroll = bodyContainer.querySelector('.adv-scroll-container');
         if (existingScroll) prevScrollX = existingScroll.scrollLeft;
+
+        const colScrollTops = {};
+        bodyContainer.querySelectorAll('.adv-kanban-col').forEach(colEl => {
+            const colVal = colEl.getAttribute('data-col-val');
+            if (colVal !== null) {
+                colScrollTops[colVal] = colEl.scrollTop;
+            }
+        });
 
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
         const hasSort = state.sorts && state.sorts.length > 0;
@@ -182,26 +256,33 @@ const AdvancedBoard = {
         const titleCol = allVisible.length > 0 ? allVisible[0] : state.columns[0];
         const propCols = allVisible.filter(c => c.id !== titleCol.id && c.id !== groupColId);
 
-        columnsData.forEach(colData => {
-            const count = boardData[colData.value].length;
-            const colorClass = colData.value ? (state.selectColors[groupColId]?.[colData.value] || 'default-color') : '';
+        AdvancedBoard._columnLimits = AdvancedBoard._columnLimits || {};
 
+        columnsData.forEach(colData => {
+            const totalInCol = boardData[colData.value].length;
+            const colorClass = colData.value ? (state.selectColors[groupColId]?.[colData.value] || 'default-color') : '';
             const safeGrpName = String(colData.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const colLimitKey = `${tableId}_${colData.value}`;
+            const currentLimit = AdvancedBoard._columnLimits[colLimitKey] || 30;
+
+            const visibleCards = boardData[colData.value].slice(0, currentLimit);
+            const hasMoreCards = totalInCol > currentLimit;
 
             html += `
                 <div class="adv-board-col-wrapper">
                     <div class="adv-board-col-header">
                         ${colData.value ? `<span class="adv-select-pill ${colorClass}" style="margin:0;">${safeGrpName}</span>` : `<span style="font-weight:bold; color:var(--text-secondary); font-size:0.85rem;">Senza Stato</span>`}
-                        <span style="color:var(--text-secondary); font-size:0.75rem; opacity:0.7;">${count}</span>
+                        <span style="color:var(--text-secondary); font-size:0.75rem; opacity:0.7;">${totalInCol}</span>
                     </div>
                     
                     <div class="adv-kanban-col"
+                         data-col-val="${colData.value.replace(/"/g, '&quot;')}"
                          ondragover="AdvancedBoard.onDragOver(event)"
                          ondragleave="AdvancedBoard.onDragLeave(event)"
                          ondrop="AdvancedBoard.onDrop(event, '${tableId}', '${colData.value.replace(/'/g, "\\'")}')">
             `;
 
-            boardData[colData.value].forEach(row => {
+            visibleCards.forEach(row => {
                 let tVal = row.virtualCells[titleCol.id] || 'Senza Titolo';
                 if (titleCol.type === 'record_note') {
                     const noteObj = typeof Store !== 'undefined' ? Store.getNote(tVal) : null;
@@ -231,7 +312,6 @@ const AdvancedBoard = {
 
                     if (pVal === '' || pVal === null || pVal === undefined || (Array.isArray(pVal) && pVal.length === 0)) return;
 
-                    // RIPRISTINATO: Rendering NATIVO (Senza alterare le classi per capire se il problema è lì)
                     const rendered = AdvancedTable.renderCell(tableId, row, pCol, pVal, state, false);
 
                     let pValStr = '';
@@ -264,6 +344,19 @@ const AdvancedBoard = {
                 html += `</div></div>`;
             });
 
+            // Pulsante "Mostra altri 30 di [totale]" per lazy rendering incrementale
+            if (hasMoreCards) {
+                const remaining = totalInCol - currentLimit;
+                const nextBatch = Math.min(30, remaining);
+                html += `
+                    <button class="adv-add-btn" 
+                            style="text-align:center; justify-content:center; margin-top:4px; margin-bottom:4px; font-weight:bold; border: 1px dashed var(--border-color); background: var(--bg-color); font-size:0.75rem;" 
+                            onclick="AdvancedBoard.loadMoreCards(event, '${tableId}', '${colData.value.replace(/'/g, "\\'")}', 30)">
+                        Mostra altri ${nextBatch} di ${totalInCol} (${remaining} rimanenti)
+                    </button>
+                `;
+            }
+
             if (isEdit && !hasFilter && !isSysDB) {
                 html += `<button class="adv-add-btn" style="text-align:left; justify-content:flex-start; margin-top:5px; opacity:0.6; flex-shrink:0;" onclick="AdvancedBoard.addCard(event, '${tableId}', '${colData.value.replace(/'/g, "\\'")}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova scheda</span></button>`;
             }
@@ -275,17 +368,22 @@ const AdvancedBoard = {
         
         bodyContainer.innerHTML = html;
 
+        // Ripristina lo scroll orizzontale generale della bacheca
         if (prevScrollX > 0) {
             const newScroll = bodyContainer.querySelector('.adv-scroll-container');
             if (newScroll) newScroll.scrollLeft = prevScrollX;
         }
+
+        // Ripristina la posizione verticale di scroll di ciascuna colonna Kanban
+        bodyContainer.querySelectorAll('.adv-kanban-col').forEach(colEl => {
+            const colVal = colEl.getAttribute('data-col-val');
+            if (colVal !== null && colScrollTops[colVal]) {
+                colEl.scrollTop = colScrollTops[colVal];
+            }
+        });
     },
 
     onDragStart: (e, rowId, tableId) => {
-
-        // NESSUN FIREWALL (Li ho tolti apposta). Voglio vedere se arriva fino alla fine del blocco
-        // o se esplode in mezzo.
-        
         AdvancedBoard.draggedCardRowId = rowId;
         AdvancedBoard.draggedFromTableId = tableId;
         e.dataTransfer.effectAllowed = 'move';
@@ -344,6 +442,10 @@ const AdvancedBoard = {
         
         document.removeEventListener('dragover', AdvancedBoard.updateGhostPosition);
         document.querySelectorAll('.adv-kanban-col').forEach(el => el.style.backgroundColor = 'transparent');
+        
+        document.querySelectorAll('.node-content').forEach(el => el.classList.remove('drag-middle', 'drag-top', 'drag-bottom'));
+        const tc = document.getElementById('treeContainer');
+        if (tc) tc.classList.remove('drag-over-root');
     },
 
     onDragOver: (e) => {
@@ -404,6 +506,15 @@ const AdvancedBoard = {
         });
 
         state.rows.push(newRow);
+
+        // Assicura che la nuova scheda rientri nel limite di visualizzazione della colonna di destinazione
+        AdvancedBoard._columnLimits = AdvancedBoard._columnLimits || {};
+        const colKey = `${tableId}_${groupValue}`;
+        const currentLimit = AdvancedBoard._columnLimits[colKey] || 30;
+        const currentCountInGroup = state.rows.filter(r => (r.cells[groupColId] || '') === groupValue).length;
+        if (currentCountInGroup > currentLimit) {
+            AdvancedBoard._columnLimits[colKey] = currentCountInGroup;
+        }
 
         if (typeof AdvancedAutomations !== 'undefined') {
             AdvancedAutomations.evaluate(tableId, newRow.id, true);

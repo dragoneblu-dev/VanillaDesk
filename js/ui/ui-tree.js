@@ -2,6 +2,8 @@
  * ui-tree.js
  * Modulo dedicato al DOM dell'albero gerarchico laterale e Drag&Drop delle Note.
  * Rendering reattivo e isolato dei tempi residui per i segnalibri temporizzati.
+ * FIX SEARCH: extractSearchableText ora estrae il testo dei blocchi di codice 
+ * e dei diari leggendoli direttamente da AppState.databases.
  */
 
 Object.assign(UI, {
@@ -198,6 +200,54 @@ Object.assign(UI, {
         
         temp.querySelectorAll('a[data-link-note]').forEach(el => {
             pureText += " " + (el.getAttribute('data-link-note') || "");
+        });
+
+        // ESTRAZIONE CONTENUTO BLOCCHI DI CODICE (Sia montati che deidratati in AppState.databases)
+        temp.querySelectorAll('[id^="adv_code_"], .code-wrapper, [data-widget-type="code"]').forEach(el => {
+            const pre = el.querySelector('pre');
+            if (pre && pre.textContent.trim()) {
+                pureText += " " + pre.textContent;
+            } else if (el.id && AppState.databases) {
+                const trueId = el.id.split('_cited_')[0];
+                const codeState = AppState.databases[trueId];
+                if (codeState) {
+                    if (codeState.content) pureText += " " + codeState.content;
+                    if (codeState.title) pureText += " " + codeState.title;
+                }
+            }
+        });
+
+        // Controllo aggiuntivo per identificatori di blocchi codice tramite Regex nel markup
+        if (AppState.databases) {
+            const codeRegex = /id=["'](adv_code_[^"']+)["']/g;
+            let match;
+            while ((match = codeRegex.exec(htmlContent)) !== null) {
+                const trueId = match[1].split('_cited_')[0];
+                const codeState = AppState.databases[trueId];
+                if (codeState) {
+                    if (codeState.content && !pureText.includes(codeState.content)) {
+                        pureText += " " + codeState.content;
+                    }
+                    if (codeState.title && !pureText.includes(codeState.title)) {
+                        pureText += " " + codeState.title;
+                    }
+                }
+            }
+        }
+
+        // ESTRAZIONE CONTENUTO DIARI / LOG
+        temp.querySelectorAll('[id^="adv_journal_"], .adv-journal-wrapper, [data-widget-type="journal"]').forEach(el => {
+            if (el.id && AppState.databases) {
+                const trueId = el.id.split('_cited_')[0];
+                const jState = AppState.databases[trueId];
+                if (jState && jState.entries) {
+                    jState.entries.forEach(entry => {
+                        if (entry.content) {
+                            pureText += " " + entry.content.replace(/<[^>]*>?/gm, '');
+                        }
+                    });
+                }
+            }
         });
 
         return pureText;

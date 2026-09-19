@@ -3,6 +3,8 @@
  * Sottomodulo di UI.
  * Gestione del motore di navigazione a cassetto (Drawer), dello Stack di History 
  * per l'apertura di sottomenu, e delle feature X-Ray (Ghost) e Docking.
+ * FIX WORKFLOW: Inserita guardia difensiva su AdvancedTable.renderTable per evitare crash
+ * quando il drawer viene chiuso in ambienti privi del modulo render tabelle.
  */
 
 Object.assign(UI, {
@@ -249,7 +251,10 @@ Object.assign(UI, {
                 Object.keys(AppState.databases).forEach(tId => {
                     const state = AppState.databases[tId];
                     if (state && state.rows && state.rows.some(r => r.id === targetRowId)) {
-                        AdvancedTable.renderTable(tId);
+                        // Verifica difensiva: renderTable viene invocato solo se il modulo di rendering tabelle è caricato, serve per poter richiamare la funzione anche quando la si invoca dall'applicazione/estensione Workflow
+                        if (typeof AdvancedTable.renderTable === 'function') {
+                            AdvancedTable.renderTable(tId);
+                        }
                     }
                 });
             }

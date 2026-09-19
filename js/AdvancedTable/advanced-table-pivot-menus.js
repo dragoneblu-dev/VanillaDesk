@@ -23,7 +23,7 @@ const AdvancedPivotMenus = {
 
         const widthLabel = 'Adatta a larghezza pagina&nbsp;' + (!state.freeWidth ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
         const zebraLabel = 'Righe alternate' + (state.striped !== false ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
-        const footerLabel = 'Mostra Controlli (Nuova Riga)' + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const footerLabel = 'Piè di pagina (Paginazione)' + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
 
         // --- CALCOLO VISIBILITA' CAMPI ---
         let viewId = 'table';

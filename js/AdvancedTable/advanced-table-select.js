@@ -1,8 +1,11 @@
 /**
- * AdvancedTableSelect.js
+ * js/AdvancedTable/advanced-table-select.js
  * Isolamento gestione Tipi Select (Singola, Multipla, Colori, Opzioni) con UI Stile Notion
  * FIX POSIZIONAMENTO MENU: Logica di ricalcolo ancoraggio per i menu ricostruiti all'interno del Drawer.
- * Aggiunti log di sistema per monitoraggio coordinate e ID.
+ * FEAT ORDINAMENTO A-Z PERSISTENTE: Inserimento e rinomina opzioni mantengono sempre ordinato
+ * l'array state.selectOptions[colId] da A alla Z in memoria e a video.
+ * FIX SEARCH INPUT RESET: Azzeramento automatico dell'input "Cerca o Crea Opzione" dopo la creazione
+ * e selezione di una nuova etichetta, ripristinando l'elenco completo delle opzioni.
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
@@ -20,7 +23,10 @@ Object.assign(AdvancedTable, {
         const col = state.columns.find(c => c.id === colId);
         const row = state.rows.find(r => r.id === rowId);
         
-        const options = [...(state.selectOptions[colId] || [])].sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
+        // Garantisce l'ordinamento A-Z immediato dell'elenco memorizzato
+        if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
+        state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
+        const options = [...state.selectOptions[colId]];
 
         if (!state.selectColors) state.selectColors = {};
         if (!state.selectColors[colId]) state.selectColors[colId] = {};
@@ -54,13 +60,6 @@ Object.assign(AdvancedTable, {
                 anchorId = `adv-sel-${tableId}-${rowId}-${colId}`;
             }
         }
-
-        //console.log(`[SELECT-MENU LOG] Generazione Menu per colonna: ${col.name}`);
-        //console.log(`[SELECT-MENU LOG] ID Ancoraggio individuato: ${anchorId}`);
-        const anchorNode = document.getElementById(anchorId);
-        //if (!anchorNode) {
-        //    console.warn(`[SELECT-MENU LOG] ATTENZIONE: Il nodo HTML di ancoraggio "${anchorId}" non esiste nel DOM! Il menu verrà generato a coordinate 0,0.`);
-        //}
 
         AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, options, currentVals, col, anchorId);
         document.body.appendChild(dropdown);
@@ -142,6 +141,12 @@ Object.assign(AdvancedTable, {
     createSelectOptionFromInput: (tableId, rowId, colId, value) => {
         const newOpt = value.trim();
         if (!newOpt) return;
+
+        // Pulizia immediata dell'input per evitare la persistenza visiva del testo digitato
+        const inputEl = document.getElementById('advCreateSelectInput');
+        if (inputEl) {
+            inputEl.value = '';
+        }
         
         let state = AdvancedTable.getState(tableId);
         const options = state.selectOptions[colId] || [];
@@ -213,6 +218,9 @@ Object.assign(AdvancedTable, {
         const optIndex = state.selectOptions[colId].indexOf(oldName);
         if (optIndex > -1) state.selectOptions[colId][optIndex] = newName;
 
+        // Ordina alfabeticamente l'elenco dopo ogni rinomina
+        state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
+
         if (state.selectColors[colId][oldName]) {
             state.selectColors[colId][newName] = state.selectColors[colId][oldName];
             delete state.selectColors[colId][oldName];
@@ -258,11 +266,19 @@ Object.assign(AdvancedTable, {
     createSelectOption: (tableId, rowId, colId, newOpt) => {
         let state = AdvancedTable.getState(tableId);
         if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
-        state.selectOptions[colId].push(newOpt);
+        
+        if (!state.selectOptions[colId].includes(newOpt)) {
+            state.selectOptions[colId].push(newOpt);
+        }
+
+        // Ordina alfabeticamente l'elenco da A alla Z in modo persistente
+        state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
 
         if (!state.selectColors) state.selectColors = {};
         if (!state.selectColors[colId]) state.selectColors[colId] = {};
-        state.selectColors[colId][newOpt] = 'hl-c1';
+        if (!state.selectColors[colId][newOpt]) {
+            state.selectColors[colId][newOpt] = 'hl-c1';
+        }
 
         AdvancedTable.setState(tableId, state);
         AdvancedTable.toggleSelectValue(tableId, rowId, colId, newOpt);
@@ -327,23 +343,22 @@ Object.assign(AdvancedTable, {
 
         const dropdown = document.getElementById('advSelectDropdown');
         if (dropdown && col.type === 'multi-select') {
-            let searchVal = "";
-            const oldInput = document.getElementById('advCreateSelectInput');
-            if(oldInput) searchVal = oldInput.value;
-
             state = AdvancedTable.getState(tableId);
             
-            const options = [...(state.selectOptions[colId] || [])].sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
+            if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
+            state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
+            const options = [...state.selectOptions[colId]];
+            
             let currentVals = state.rows.find(r => r.id === rowId).cells[colId];
             if (!Array.isArray(currentVals)) currentVals = currentVals ? [currentVals] : [];
             
             AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, options, currentVals, col, null);
             
             const input = document.getElementById('advCreateSelectInput');
-            if(input) { 
-                input.value = searchVal;
+            if (input) { 
+                input.value = ''; // Svuota completamente l'input per il prossimo inserimento
                 input.focus(); 
-                if (searchVal) AdvancedTable.filterSelectOptions(searchVal);
+                AdvancedTable.filterSelectOptions(''); // Ripristina la visibilità di tutte le opzioni
             }
         }
     },

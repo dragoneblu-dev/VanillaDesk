@@ -1,6 +1,8 @@
 /**
  * App.js
  * ENTRY POINT - Inizializzazione applicazione e montaggio architettura a componenti.
+ * REFACTOR: Eliminata l'iniezione imperativa sul DOM del menu principale poiché 
+ * la voce "Sicurezza e Password..." è ora nativamente inclusa in UI.toggleMainMenu.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -37,30 +39,13 @@ document.addEventListener('DOMContentLoaded', () => {
         layoutElement.insertAdjacentHTML('beforeend', drawerHTML);
     }
 
-    // 3. Iniezione dinamica opzione Sicurezza nel Menu
-    const mainMenu = document.getElementById('mainMenuDropdown');
-    if (mainMenu) {
-        const manualItem = Array.from(mainMenu.querySelectorAll('.menu-item')).find(el => el.innerText.includes('Manuale d\'Uso'));
-        if (manualItem) {
-            const pwdBtn = document.createElement('div');
-            pwdBtn.className = 'menu-item';
-            pwdBtn.style.color = 'var(--text-primary)';
-            
-            const miniLock = Icons.lock.replace('width="48"', 'width="16"').replace('height="48"', 'height="16"');
-            pwdBtn.innerHTML = `<span class="menu-icon-svg" style="width:16px; height:16px; display:inline-flex; align-items:center; justify-content:center;">${miniLock}</span> Sicurezza e Password...`;
-            pwdBtn.onclick = () => { UI.PasswordManager.openSettings(); UI.toggleMainMenu(); };
-            
-            manualItem.parentNode.insertBefore(pwdBtn, manualItem.previousElementSibling);
-        }
-    }
-
-    // 4. Inizializzazione Sotto-sistemi Visivi
+    // 3. Inizializzazione Sotto-sistemi Visivi
     SidebarManager.init(); 
     UI.loadPreferences();
     if (typeof TableManager !== 'undefined') TableManager.init();
     if (typeof ColorManager !== 'undefined') ColorManager.init();
 
-    // 5. Ripristino Dati da IndexedDB (Crash Recovery)
+    // 4. Ripristino Dati da IndexedDB (Crash Recovery)
     Store.recoverFromCrash();
 
     // SINC. DB PROPRIETA' PAGINA: Inizializza o aggiorna il Shadow Database
@@ -68,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
         AdvancedTable.ensureSystemPropertiesDB();
     }
 
-    // 6. Layout adattivo per Mobile
+    // 5. Layout adattivo per Mobile
     if (window.innerWidth <= 850) {
         const sb = document.getElementById('sidebar');
         const btn = document.getElementById('sidebarToggleBtn');
@@ -84,7 +69,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (btn) btn.classList.remove('active');
             }
         } else {
-            // FIX: Assicura che l'icona sidebar sia marcata come attiva in base al suo display
             const btn = document.getElementById('sidebarToggleBtn');
             const sb = document.getElementById('sidebar');
             if (btn && sb && !sb.classList.contains('collapsed')) {
@@ -93,12 +77,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    // 7. Avvio degli Eventi Interattivi Globali
+    // 6. Avvio degli Eventi Interattivi Globali
     if (typeof EventsGlobal !== 'undefined') {
         EventsGlobal.init();
     }
 
-    // 8. Attivazione Motore Cron delle Automazioni (Asincrono)
+    // 7. Attivazione Motore Cron delle Automazioni (Asincrono)
     if (typeof AdvancedAutomations !== 'undefined') {
         AdvancedAutomations.startCronEngine();
     }

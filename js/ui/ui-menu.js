@@ -3,7 +3,7 @@
  * Motore isolato per la generazione e gestione dei Menu a Tendina e Contestuali.
  * FIX: Aggiunto supporto per la proprietà 'shortcut' per visualizzare le scorciatoie da tastiera allineate a destra.
  * FIX RICERCA: Esclusione del portale di autocompletamento della Sidebar dalla distruzione globale per prevenire la chiusura forzata durante l'aggiornamento della nota attiva.
- * FEAT UX: Aggiunto supporto nativo per i 'badge' (Pillole numeriche informative) allineati a destra.
+ * FEAT UX: Aggiunto supporto nativo per i 'badge' (Pillole numeriche informative) con colore personalizzabile (badgeColor).
  */
 
 Object.assign(UI, {
@@ -104,9 +104,10 @@ Object.assign(UI, {
                             </div>
                         `;
 
-                        // Aggiunge il Badge numerico
+                        // Aggiunge il Badge numerico con supporto a badgeColor opzionale
                         if (item.badge !== undefined && item.badge !== null) {
-                            innerHTML += `<span style="background:var(--accent-color); color:white; font-size:0.7rem; font-weight:bold; padding:2px 6px; border-radius:10px; margin-left:auto;">${item.badge}</span>`;
+                            const bColor = item.badgeColor || 'var(--accent-color)';
+                            innerHTML += `<span style="background:${bColor}; color:white; font-size:0.7rem; font-weight:bold; padding:2px 6px; border-radius:10px; margin-left:auto;">${item.badge}</span>`;
                         }
                         // Aggiunge la scorciatoia testuale
                         else if (item.shortcut) {

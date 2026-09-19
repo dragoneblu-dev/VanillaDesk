@@ -5,7 +5,8 @@
  * FIX UX: Aggiunto pulsante rapido per il Grassetto coerente con la toolbar principale.
  * FEATURE CTRL+CLICK: Supporto per la selezione multipla non adiacente (Sparse Selection).
  * FIX DRAWER CONFLICT: Il motore di selezione ignora totalmente le tabelle presenti nel pannello laterale (Drawer).
- * REFACTOR: Rimozione di asset SVG hardcoded. Uso centralizzato di Icons.js.
+ * REFACTOR UX CONTESTO: La toolbar fluttuante orizzontale compare ESCLUSIVAMENTE quando sono selezionate 
+ * due o più celle, rimanendo perfettamente opaca e ad alto contrasto. Su cella singola la toolbar viene nascosta.
  */
 
 Object.assign(TableManager.Selection, {
@@ -50,7 +51,7 @@ Object.assign(TableManager.Selection, {
                 cell.classList.remove('adv-cell-selected');
                 TableManager.Selection.isSelecting = false;
                 
-                if (TableManager.Selection.selectedCells.length > 0) {
+                if (TableManager.Selection.selectedCells.length > 1) {
                     TableManager.Selection.showFloatingMenu();
                 } else {
                     TableManager.Selection.hideFloatingMenu();
@@ -96,8 +97,19 @@ Object.assign(TableManager.Selection, {
             TableManager.Selection.isSelecting = false;
             document.body.style.userSelect = '';
             
-            if (TableManager.Selection.selectedCells.length > 0) {
+            // La toolbar orizzontale compare SOLTANTO se sono selezionate 2 o più celle
+            if (TableManager.Selection.selectedCells.length > 1) {
                 TableManager.Selection.showFloatingMenu();
+                // Durante la selezione multipla nascondiamo i trigger singoli (ingranaggio, riga, colonna)
+                if (typeof TableManager.UI.hideTriggers === 'function') {
+                    TableManager.UI.hideTriggers();
+                }
+            } else {
+                TableManager.Selection.hideFloatingMenu();
+                // Su cella singola ripristiniamo i trigger normali
+                if (TableManager.activeCell && TableManager.currentTable) {
+                    TableManager.UI.showTriggers(TableManager.activeCell, TableManager.currentTable);
+                }
             }
         }
     },
@@ -327,7 +339,10 @@ Object.assign(TableManager.Selection, {
     },
 
     splitCell: () => {
-        const cells = TableManager.Selection.selectedCells;
+        const cells = TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0 
+            ? TableManager.Selection.selectedCells 
+            : (TableManager.activeCell ? [TableManager.activeCell] : []);
+            
         if (!cells || cells.length !== 1) return;
         
         const cell = cells[0];
@@ -399,25 +414,19 @@ Object.assign(TableManager.Selection, {
     showFloatingMenu: () => {
         TableManager.Selection.hideFloatingMenu();
 
-        if (!TableManager.Selection.selectedCells || TableManager.Selection.selectedCells.length === 0) {
-            if (TableManager.activeCell) {
-                TableManager.Selection.selectedCells = [TableManager.activeCell];
-            } else {
-                return;
-            }
+        // La toolbar compare ESCLUSIVAMENTE per selezioni multiple (2 o più celle)
+        if (!TableManager.Selection.selectedCells || TableManager.Selection.selectedCells.length < 2) {
+            return;
         }
 
-        const isMulti = TableManager.Selection.selectedCells.length > 1;
         const singleCell = TableManager.Selection.selectedCells[0];
         const table = singleCell.closest('table');
-        
-        const hasSpans = !isMulti && singleCell && (parseInt(singleCell.getAttribute('rowspan')) > 1 || parseInt(singleCell.getAttribute('colspan')) > 1);
         
         // Controlla se la selezione forma un blocco perfetto o se sono celle sparse (CTRL+Click)
         const isContiguous = TableManager.Selection.isContiguous(TableManager.Selection.selectedCells, table);
 
         let isMergeSafe = true;
-        if (isMulti && isContiguous) {
+        if (isContiguous) {
             const isHorizontalOnly = TableManager.Selection.selectedCells.every(c => c.parentNode === singleCell.parentNode);
             let isVerticalOnly = true;
             let currentCellIndex = singleCell.cellIndex;
@@ -441,24 +450,16 @@ Object.assign(TableManager.Selection, {
         popover.className = 'adv-floating-popover';
         
         let extraButtons = '';
-        if (isMulti) {
-            // Se la selezione è sparsa, i pulsanti Copia/Unisci non vengono stampati.
-            if (isContiguous) {
-                extraButtons = `
-                    <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
-                    ${isMergeSafe ? `<button onclick="TableManager.Selection.mergeCells()" title="Unisci Celle Selezionate">${Icons.merge}</button>` : `<button disabled style="opacity:0.3; cursor:not-allowed;" title="Azione bloccata: Unione mista di celle rischierebbe di corrompere la struttura della tabella.">${Icons.merge}</button>`}
-                    <button onclick="TableManager.Selection.copySelectedAsExcel()" title="Copia selezione per Excel">${Icons.clipboard}</button>
-                `;
-            }
-        } else if (hasSpans) {
+        if (isContiguous) {
             extraButtons = `
                 <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
-                <button onclick="TableManager.Selection.splitCell()" title="Dividi Celle Unite">${Icons.split}</button>
+                ${isMergeSafe ? `<button onclick="TableManager.Selection.mergeCells()" title="Unisci Celle Selezionate">${Icons.merge}</button>` : `<button disabled style="opacity:0.3; cursor:not-allowed;" title="Azione bloccata: Unione mista di celle rischierebbe di corrompere la struttura della tabella.">${Icons.merge}</button>`}
+                <button onclick="TableManager.Selection.copySelectedAsExcel()" title="Copia selezione per Excel">${Icons.clipboard}</button>
             `;
         }
 
         popover.innerHTML = `
-            <button onclick="TableManager.UI.performAction('toggleBold')" title="Grassetto (Tutte le celle)"><b style="font-size:0.9rem; line-height:1;">B</b></button>
+            <button onclick="TableManager.UI.performAction('toggleBold')" title="Grassetto (Tutte le celle selezionate)"><b style="font-size:0.9rem; line-height:1;">B</b></button>
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
 
             <button onclick="TableManager.UI.performAction('alignCell', 'text-left')" title="Allinea a Sinistra">${Icons.alignLeft}</button>
@@ -468,10 +469,10 @@ Object.assign(TableManager.Selection, {
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
             
             <div style="display:flex; align-items:center; position:relative;" id="tblSelectionColorBtn">
-                <button title="Colore Sfondo" onclick="event.stopPropagation(); document.getElementById('tblSelectionColorDrop').classList.toggle('hidden')">
+                <button title="Colore Sfondo Selezione" onclick="event.stopPropagation(); document.getElementById('tblSelectionColorDrop').classList.toggle('hidden')">
                     <span style="color:var(--accent-color);">${typeof Icons !== 'undefined' ? Icons.palette : '🎨'}</span> Sfondo
                 </button>
-                <div id="tblSelectionColorDrop" class="hidden" style="position:absolute; bottom:100%; margin-bottom:5px; right:0; padding:8px; width:max-content; z-index:10000; background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:8px; box-shadow:0 4px 12px rgba(0,0,0,0.15);">
+                <div id="tblSelectionColorDrop" class="hidden" style="position:absolute; bottom:100%; margin-bottom:5px; right:0; padding:8px; width:max-content; z-index:10000; background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:8px; box-shadow:0 8px 24px rgba(0,0,0,0.25);">
                     ${TableManager.getColorGridHTML('colorCell')}
                 </div>
             </div>

@@ -43,7 +43,7 @@ const AdvancedTableMenus = {
 
         const widthLabel = 'Adatta a larghezza pagina&nbsp;' + (!state.freeWidth ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
         const zebraLabel = 'Righe alternate' + (state.striped !== false ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
-        const footerLabel = 'Mostra Controlli (Nuova Riga/Pagine)' + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const footerLabel = 'Piè di pagina (Nuova riga / Pagine)' + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
 
         const clamp = state.textClamp !== undefined ? state.textClamp : 1; 
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right; margin-left:10px;">✓</span>';

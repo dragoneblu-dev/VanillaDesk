@@ -2,6 +2,8 @@
  * logic-engine-ui.js
  * Generatori di Markup HTML e UI per la costruzione visiva delle regole Logiche (Dropdown, Input e Preview).
  * Supporto dinamico per offset giorni (+/- giorni) e minuti (+/- minuti) su azioni Oggi e Adesso.
+ * FIX TEMA/CONTRASTO: Normalizzato lo sfondo e il colore delle textarea delle formule con 
+ * background: var(--bg-color) e color: var(--text-primary) con spellcheck disabilitato.
  */
 
 Object.assign(LogicEngine, {
@@ -211,10 +213,10 @@ Object.assign(LogicEngine, {
             const inputIdAttr = (extraData && extraData.inputId) ? `id="${extraData.inputId}"` : '';
             
             if (extraData && extraData.isEmailBody) {
-                return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--code-bg); color:var(--code-text); border:1px solid var(--border-color); border-radius:4px; padding:8px; min-height:80px; resize:vertical;" placeholder="'Gentile ' + riga['Nome Cliente'] + ',\\nQuesta è una mail multi-riga!\\n\\n' + riga['Dettagli']" oninput="${onchangeCallback}('value', this.value)">${safeVal1}</textarea>`;
+                return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:80px; resize:vertical;" placeholder="'Gentile ' + riga['Nome Cliente'] + ',\\nQuesta è una mail multi-riga!\\n\\n' + riga['Dettagli']" oninput="${onchangeCallback}('value', this.value)">${safeVal1}</textarea>`;
             }
             
-            return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--code-bg); color:var(--code-text); border:1px solid var(--border-color); border-radius:4px; padding:8px; min-height:80px; resize:vertical;" placeholder="${ph}" oninput="${onchangeCallback}('value', this.value)">${safeVal1}</textarea>`;
+            return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:80px; resize:vertical;" placeholder="${ph}" oninput="${onchangeCallback}('value', this.value)">${safeVal1}</textarea>`;
         }
 
         if (actType === 'set_fixed' && extraData && extraData.isEmailBody) {

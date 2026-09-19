@@ -2,6 +2,7 @@
  * AdvancedTableTimeline-Drag.js
  * Modulo Timeline: Gestisce il Pan dello scroll, il Drag & Drop dei blocchi (Spostamento e Resize)
  * e la UI innovativa del "Drag To Connect" per le relazioni padre-figlio.
+ * FIX NAVIGAZIONE: Spegnimento tempestivo delle frecce durante l'interazione drag/pan.
  */
 
 Object.assign(AdvancedTimeline, {
@@ -38,6 +39,9 @@ Object.assign(AdvancedTimeline, {
     startPan: (e) => {
         if (e.target.closest('.adv-timeline-bar, .timeline-link-handle, .adv-cal-event-abs, button, a')) return;
         const container = e.currentTarget;
+        const tableId = container.id.replace('timeline-scroll-', '');
+        AdvancedTimeline.hideLaneNav(tableId);
+
         AdvancedTimeline.panState = { el: container, startX: e.pageX, scrollLeft: container.scrollLeft };
         container.style.cursor = 'grabbing';
         document.addEventListener('mousemove', AdvancedTimeline.onPanMove);
@@ -95,6 +99,8 @@ Object.assign(AdvancedTimeline, {
         if (!AppState.isEditMode) return;
         e.preventDefault();
         e.stopPropagation();
+
+        AdvancedTimeline.hideLaneNav(tableId);
 
         const state = AdvancedTable.getState(tableId);
         const row = state.rows.find(r => r.id === rowId);
@@ -269,6 +275,8 @@ Object.assign(AdvancedTimeline, {
         if (!AppState.isEditMode) return;
         e.preventDefault();
         e.stopPropagation();
+
+        AdvancedTimeline.hideLaneNav(tableId);
 
         let svgLayer = document.getElementById(`timeline-svg-${tableId}`);
         

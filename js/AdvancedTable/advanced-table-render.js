@@ -6,6 +6,9 @@
  * FIX DRY: Rimosse logiche duplicate di sortRows e filterRows. Delega a advanced-table-data.js.
  * FEAT COLORI: Supporto per Opacità Dinamica (CSS color-mix) via Javascript o Valore Fisso.
  * FIX TOOLTIP FILTRI: Unificate le informazioni di Commento e Filtro Attivo nell'unico tooltip di colonna (TH) per evitare conflitti di hover.
+ * FEAT: Icona e layout per colonna 'note_link'.
+ * FEAT TREE VIEW: Routing automatico verso AdvancedTree.render quando viewType === 'tree'.
+ * RESTORE ATTACH CELL EVENTS: Ripristinata integralmente la funzione attachCellEvents e il mouseover globale.
  */
 
 Object.assign(AdvancedTable, {
@@ -43,6 +46,8 @@ Object.assign(AdvancedTable, {
 
         if (viewType === 'table') {
             AdvancedTable._renderAsTable(wrapper, state, tableId);
+        } else if (viewType === 'tree' && typeof AdvancedTree !== 'undefined') {
+            AdvancedTree.render(tableId, wrapper, state);
         } else if (viewType === 'board' && typeof AdvancedBoard !== 'undefined') {
             AdvancedBoard.render(tableId, wrapper, state);
         } else if (viewType === 'timeline' && typeof AdvancedTimeline !== 'undefined') {
@@ -122,7 +127,7 @@ Object.assign(AdvancedTable, {
         let pagedRows = viewRows;
 
         if (pageSize !== 'all') {
-            pageSize = parseInt(pageSize);
+            pageSize = parseInt(pageSize, 10);
             totalPages = Math.ceil(totalRows / pageSize) || 1;
             if (currentPage > totalPages) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
@@ -146,7 +151,7 @@ Object.assign(AdvancedTable, {
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
             if (typeof AdvancedBoard !== 'undefined') {
-                tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewList, title: 'Cambia visualizzazione', onClick: AdvancedBoard.openViewMenu });
+                tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewList, title: 'Cambia visualizzazione', label: 'Vista', onClick: AdvancedBoard.openViewMenu });
             }
             if (!state.isLinkedView && !isSysDB) {
                 tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
@@ -156,7 +161,6 @@ Object.assign(AdvancedTable, {
             // FILTRI E VISTE SALVATE
             tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra Dati (Campi)', active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
             
-            // L'icona segnalibro è PIENA se ci sono viste salvate, ma lo SFONDO (active) è blu solo se hasFilter è vero.
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
             tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: 'Viste / Filtri Salvati', active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
             
@@ -193,6 +197,7 @@ Object.assign(AdvancedTable, {
             if (col.type === 'rollup') icon = Icons.rollup;
             if (col.type === 'url') icon = Icons.url;
             if (col.type === 'record_note') icon = Icons.recordPage;
+            if (col.type === 'note_link') icon = Icons.link;
             if (col.type === 'button') icon = Icons.play;
 
             let sortIndicator = '';
@@ -269,7 +274,7 @@ Object.assign(AdvancedTable, {
 
                 if (state.conditionalColors && state.conditionalColors.length > 0) {
                     for (const rule of state.conditionalColors) {
-                        if (!rule.active || rule.conditions.length === 0) continue;
+                        if (!rule.active || !rule.conditions || rule.conditions.length === 0) continue;
                         
                         let allMatch = true;
                         for (const cond of rule.conditions) {
@@ -320,9 +325,8 @@ Object.assign(AdvancedTable, {
                     rowColorClass = ''; 
                 }
 
-                const isRowSelected = state.selectedRows.includes(row.id);
+                const isRowSelected = state.selectedRows && state.selectedRows.includes(row.id);
                 const selectedClass = isRowSelected ? 'adv-row-selected' : '';
-                
                 const dblClickEvent = isEdit ? `ondblclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')"` : '';
                 
                 html += `<tr class="${rowColorClass} ${selectedClass}" data-row-id="${row.id}" ${dblClickEvent} style="${inlineBgStyle}">`;
@@ -332,8 +336,7 @@ Object.assign(AdvancedTable, {
                     html += `<td style="width: ${col.width}px; max-width: ${col.width}px;">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                 });
 
-                let actionCell = ``;
-                actionCell += `<button class="adv-icon-btn" title="Apri Record" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
+                let actionCell = `<button class="adv-icon-btn" title="Apri Record" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
                 html += `<td class="adv-action-cell"><div class="adv-action-cell-content">${actionCell}</div></td></tr>`;
             });
         }

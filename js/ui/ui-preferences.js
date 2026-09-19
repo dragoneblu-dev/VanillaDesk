@@ -3,37 +3,157 @@
  * Sottomodulo di UI.
  * Gestione delle impostazioni dell'utente (Salvataggio in LocalStorage), 
  * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
+ * REFACTOR CENTRALIZZATO: Menu principale (hamburger) gestito interamente tramite UI.Menu.buildContextMenu.
  */
 
 Object.assign(UI, {
-    toggleMainMenu: () => {
-        const menu = document.getElementById('mainMenuDropdown');
-        if (menu) {
-            // FIX UX: JIT Calculation per il Badge Cestino
-            const trashCount = AppState.notes ? AppState.notes.filter(n => n.deletedAt).length : 0;
-            const menuItems = Array.from(menu.querySelectorAll('.menu-item'));
-            const trashItem = menuItems.find(el => el.innerHTML.includes('Cestino'));
-            
-            if (trashItem) {
-                let badge = trashItem.querySelector('.menu-badge');
-                if (!badge) {
-                    badge = document.createElement('span');
-                    badge.className = 'menu-badge';
-                    badge.style.cssText = 'background:var(--danger-color); color:white; font-size:0.65rem; font-weight:bold; padding:2px 6px; border-radius:10px; margin-left:auto;';
-                    // Assicuriamo che l'elemento diventi un flex container corretto per posizionare il badge a destra
-                    trashItem.style.display = 'flex';
-                    trashItem.style.alignItems = 'center';
-                    trashItem.appendChild(badge);
-                }
-                if (trashCount > 0) {
-                    badge.innerText = trashCount;
-                    badge.style.display = 'inline-block';
-                } else {
-                    badge.style.display = 'none';
-                }
-            }
+    toggleMainMenu: (e) => {
+        if (e) e.stopPropagation();
+        
+        const existing = document.querySelector('.adv-dropdown.main-menu-portal');
+        UI.Menu.closeAll(true);
+        if (existing && e) return;
 
-            menu.classList.toggle('hidden');
+        const currentTheme = localStorage.getItem('theme') || 'light';
+        const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
+        
+        const trashCount = AppState.notes ? AppState.notes.filter(n => n.deletedAt).length : 0;
+        const currentWidth = document.documentElement.style.getPropertyValue('--page-max-width');
+        const isFullWidth = currentWidth === '100%';
+
+        const items = [
+            {
+                icon: Icons.folderOpen,
+                label: 'Nuovo Workspace...',
+                onClick: () => Store.createWorkspace()
+            },
+            {
+                icon: Icons.folder,
+                label: 'Apri Workspace...',
+                onClick: () => Store.openWorkspace()
+            },
+            {
+                icon: Icons.file,
+                label: 'File JSON',
+                type: 'submenu',
+                items: [
+                    {
+                        icon: Icons.import,
+                        label: 'Carica File JSON...',
+                        onClick: () => Store.loadSnapshot()
+                    },
+                    {
+                        icon: Icons.download,
+                        label: 'Scarica Backup JSON',
+                        onClick: () => Store.downloadSnapshot()
+                    }
+                ]
+            },
+            {
+                icon: Icons.trash,
+                label: 'Cestino',
+                badge: trashCount > 0 ? trashCount : null,
+                badgeColor: 'var(--danger-color)',
+                onClick: () => UI.Trash.open()
+            },
+            { type: 'divider' },
+            {
+                icon: Icons.lightning || '📦',
+                label: 'Installa Modulo (Modpack)...',
+                onClick: () => PackageManager.importModpack()
+            },
+            {
+                icon: Icons.file,
+                label: 'Importa file Markdown...',
+                onClick: () => ExportManager.importMarkdown()
+            },
+            {
+                icon: Icons.export,
+                label: 'Esporta Doc. Unico...',
+                onClick: () => ExportManager.openModal()
+            },
+            { type: 'divider' },
+            {
+                icon: AppState.noWrapMode ? Icons.checkSquare : Icons.square,
+                label: 'No Word Wrap',
+                onClick: () => UI.toggleWordWrap()
+            },
+            {
+                icon: AppState.continuousEditMode ? Icons.checkSquare : Icons.square,
+                label: 'Edit Continuo',
+                onClick: () => UI.toggleContinuousEdit()
+            },
+            {
+                icon: Icons.lock,
+                label: 'Sicurezza e Password...',
+                onClick: () => UI.PasswordManager.openSettings()
+            },
+            { type: 'divider' },
+            {
+                icon: Icons.palette,
+                label: 'Aspetto',
+                type: 'submenu',
+                items: [
+                    {
+                        type: 'custom',
+                        html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Layout Pagina</div>'
+                    },
+                    {
+                        icon: isFullWidth ? Icons.widthFull : Icons.widthFit,
+                        label: isFullWidth ? 'Larghezza: Intera' : 'Larghezza: Standard',
+                        onClick: () => UI.togglePageWidth()
+                    },
+                    { type: 'divider' },
+                    {
+                        type: 'custom',
+                        html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Tema Colori</div>'
+                    },
+                    {
+                        label: 'Bianco Puro' + (currentTheme === 'white' ? chk : ''),
+                        onClick: () => UI.setTheme('white')
+                    },
+                    {
+                        label: 'Carta avorio' + (currentTheme === 'light' ? chk : ''),
+                        onClick: () => UI.setTheme('light')
+                    },
+                    {
+                        label: 'Fresco Pastello' + (currentTheme === 'pastel' ? chk : ''),
+                        onClick: () => UI.setTheme('pastel')
+                    },
+                    {
+                        label: 'Blu lavagna' + (currentTheme === 'dark' ? chk : ''),
+                        onClick: () => UI.setTheme('dark')
+                    },
+                    {
+                        label: 'Notte stellata' + (currentTheme === 'notion-dark' ? chk : ''),
+                        onClick: () => UI.setTheme('notion-dark')
+                    },
+                    { type: 'divider' },
+                    {
+                        type: 'custom',
+                        html: `
+                            <div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Zoom Testo</div>
+                            <div style="display:flex; gap:5px; padding:4px 0;">
+                                <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(-1); event.stopPropagation();">A -</button>
+                                <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(1); event.stopPropagation();">A +</button>
+                            </div>
+                        `
+                    }
+                ]
+            },
+            { type: 'divider' },
+            {
+                icon: Icons.book,
+                label: 'Manuale d\'Uso',
+                onClick: () => Manual.open()
+            }
+        ];
+
+        UI.Menu.buildContextMenu('mainMenuBtn', items);
+        
+        const menuEl = document.querySelector('.adv-dropdown.adv-context-menu:last-child');
+        if (menuEl) {
+            menuEl.classList.add('main-menu-portal');
         }
     },
 
@@ -328,12 +448,6 @@ Object.assign(UI, {
         });
 
         document.addEventListener('click', (e) => {
-            const menu = document.getElementById('mainMenuDropdown');
-            const btn = e.target.closest('.main-menu-btn');
-            if (menu && !menu.classList.contains('hidden') && !btn && !menu.contains(e.target)) {
-                menu.classList.add('hidden');
-            }
-
             const drawer = document.getElementById('advGlobalDrawer');
             if (drawer && drawer.classList.contains('open') &&
                 !e.target.closest('.adv-drawer') && !e.target.closest('.adv-icon-btn') &&

@@ -7,6 +7,7 @@
  * Inseriti .adv-board-card e gli eventi calendario nella Whitelist di handleSmartClickEscape.
  * Normalizzazione retroattiva degli appunti inline salvati con tag a blocco.
  * FIX CARET: Integrato l'estrattore geometrico assoluto basato su Range.cloneContents per il calcolo infallibile degli offset.
+ * FIX UNDO/REDO CARET: minifyHTMLForStorage preserva il marcatore di cronologia quando richiesto dagli snapshot RAM.
  */
 
 const Editor = {
@@ -459,7 +460,7 @@ const Editor = {
         }
     },
 
-    minifyHTMLForStorage: (htmlString) => {
+    minifyHTMLForStorage: (htmlString, keepHistoryMarker = false) => {
         if (!htmlString) return "";
         const temp = document.createElement('div');
         temp.innerHTML = htmlString;
@@ -504,7 +505,12 @@ const Editor = {
             }
         });
 
-        temp.querySelectorAll('#editor-undo-marker, .adv-multi-cursor, #tab-start-marker, #tab-end-marker, #history-undo-marker-temp').forEach(g => {
+        // Gestione selettiva marcatori Undo/Redo: preservati negli snapshot di cronologia in RAM, estirpati nel salvataggio su disco
+        const ghostsSelector = keepHistoryMarker 
+            ? '#editor-undo-marker, .adv-multi-cursor, #tab-start-marker, #tab-end-marker'
+            : '#editor-undo-marker, .adv-multi-cursor, #tab-start-marker, #tab-end-marker, #history-undo-marker-temp';
+
+        temp.querySelectorAll(ghostsSelector).forEach(g => {
             const parent = g.parentNode;
             while (g.firstChild) parent.insertBefore(g.firstChild, g);
             parent.removeChild(g);
@@ -567,12 +573,14 @@ const Editor = {
 
         const svgCopy = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
         clone.querySelectorAll('.code-action-copy, .code-copy-btn').forEach(btn => {
-            if (btn.innerHTML.includes("Copiato") || btn.innerHTML.includes("✓")) btn.innerHTML = svgCopy;
+            if (btn.innerHTML.includes("Copiato") || btn.innerHTML.includes("✓")) {
+                btn.innerHTML = svgCopy;
+            }
         });
         
         clone.normalize();
         Editor._normalizeEmptyBlocks(clone);
-        return Editor.minifyHTMLForStorage(clone.innerHTML);
+        return Editor.minifyHTMLForStorage(clone.innerHTML, false);
     },
 
     sanitizeContent: () => {
@@ -659,7 +667,7 @@ const Editor = {
         if (AppState.currentNoteId) {
             const note = Store.getNote(AppState.currentNoteId);
             if (note) {
-                note.content = Editor.minifyHTMLForStorage(editor.innerHTML);
+                note.content = Editor.minifyHTMLForStorage(editor.innerHTML, false);
             }
         }
         

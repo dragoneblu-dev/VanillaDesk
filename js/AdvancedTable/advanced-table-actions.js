@@ -4,6 +4,8 @@
  * Esecuzione macro con LogicEngine centralizzato.
  * Ottimizzazione rendering relazioni e paginazione incrementale.
  * Mappatura ID garantita per la generazione dei Prompt AI.
+ * Integrazione selettore per colonna 'note_link' (Collegamento a Nota).
+ * FIX MODAL READONLY: openLongTextModal mostra sola lettura senza tasto Salva per campi calcolati (Rollup/Formula).
  */
 
 Object.assign(AdvancedTable, {
@@ -277,7 +279,7 @@ Object.assign(AdvancedTable, {
                     let w = ctx.measureText(strVal).width + 30; 
                     
                     if (col.type === 'select' || col.type === 'multi-select' || col.type === 'relation' || col.type === 'relation_backlink') w += 20; 
-                    if (col.type === 'record_note') w += 25; 
+                    if (col.type === 'record_note' || col.type === 'note_link') w += 25; 
                     
                     if (w > maxWidth) maxWidth = w;
                 }
@@ -854,23 +856,37 @@ Object.assign(AdvancedTable, {
         const col = state.columns.find(c => c.id === colId);
         if (!row || !col) return;
 
-        const val = row.cells[colId] || '';
+        const isComputed = ['formula', 'rollup', 'relation_backlink', 'created_time', 'last_edited_time'].includes(col.type);
+
+        let val = '';
+        if (isComputed) {
+            const vRow = AdvancedTable.buildVirtualRow(realTableId, row, state);
+            val = AdvancedTable.getFormatDisplayValue(col, vRow.virtualCells[colId]);
+        } else {
+            val = row.cells[colId] || '';
+        }
+
+        const readonlyAttr = (!AppState.isEditMode || isComputed) ? 'readonly' : '';
+        const modalTitle = isComputed ? `Visualizza: ${col.name}` : `Modifica: ${col.name}`;
 
         const bodyHTML = `
-            <textarea id="advLongTextInput" class="modern-input" style="width:100%; height:100%; min-height: 300px; resize:vertical; font-family:inherit; font-size:0.95rem; line-height:1.5; padding:10px;">${val}</textarea>
+            <textarea id="advLongTextInput" class="modern-input" ${readonlyAttr} style="width:100%; height:100%; min-height: 300px; resize:vertical; font-family:inherit; font-size:0.95rem; line-height:1.5; padding:10px; ${isComputed ? 'cursor:default;' : ''}">${UI.escapeHTML(String(val))}</textarea>
         `;
-        const footerHTML = `
+        
+        const footerHTML = (isComputed || !AppState.isEditMode) ? `
+            <button class="btn btn-primary" onclick="UI.closeDrawer()">Chiudi</button>
+        ` : `
             <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
             <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')">Salva Testo</button>
         `;
 
         if (typeof UI !== 'undefined') {
-            UI.openDrawer(`${Icons.edit} Modifica: ${col.name}`, bodyHTML, footerHTML);
+            UI.openDrawer(`${Icons.recordView} ${modalTitle}`, bodyHTML, footerHTML);
         }
         
         setTimeout(() => {
             const input = document.getElementById('advLongTextInput');
-            if (input) input.focus();
+            if (input && !isComputed) input.focus();
         }, 50);
     },
 
@@ -1332,5 +1348,49 @@ Object.assign(AdvancedTable, {
             Store.triggerAutoSave();
             UI.closeDrawer();
         }
+    },
+
+    // =========================================================================
+    // GESTORI COLLEGAMENTO A NOTA (note_link)
+    // =========================================================================
+    openNoteLinkSelector: (e, tableId, rowId, colId) => {
+        if (e) e.stopPropagation();
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        const state = AdvancedTable.getState(realTableId);
+        const row = state.rows.find(r => r.id === rowId);
+        const currentVal = row ? row.cells[colId] : null;
+
+        let targetNoteId = null;
+        let targetRefId = null;
+
+        if (currentVal && typeof currentVal === 'object') {
+            targetNoteId = currentVal.noteId;
+            targetRefId = currentVal.refId;
+        } else if (typeof currentVal === 'string' && currentVal) {
+            targetNoteId = currentVal;
+        }
+
+        UI.DocumentBrowser.open('link', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.link} Collega a Nota</span>`, (item) => {
+            const anchor = (item.refType === 'chapter') ? item.title : null;
+            let displayTitle = item.noteTitle || item.title;
+            if (item.refType !== 'note' && item.refType !== 'chapter') {
+                displayTitle = item.title;
+            }
+
+            const linkData = {
+                noteId: item.noteId,
+                title: displayTitle,
+                anchor: anchor,
+                refId: item.refId
+            };
+
+            AdvancedTable.updateData(tableId, rowId, colId, linkData);
+            UI.closeDrawer();
+        }, { noteId: targetNoteId, refId: targetRefId });
+    },
+
+    clearNoteLink: (e, tableId, rowId, colId) => {
+        if (e) e.stopPropagation();
+        AdvancedTable.updateData(tableId, rowId, colId, null);
     }
 });

@@ -1,6 +1,8 @@
 /**
  * AdvancedTableTimeline.js
- * Core Modulo Timeline: Gestione Math (Date->Pixel), Zoom e Menu.
+ * Core Modulo Timeline: Gestione Math (Date->Pixel), Zoom, Menu e Navigazione Rapida Eventi.
+ * FIX ZOOM: Abbassato il clamp minimo a 6px per consentire una visualizzazione trimestrale/annuale fluida.
+ * FIX OGGI: Garantito lo scorrimento accurato della data corrente anche su scale temporali ampie.
  */
 
 const AdvancedTimeline = {
@@ -9,6 +11,10 @@ const AdvancedTimeline = {
     panState: null,
     preservedCenterMs: undefined,
     linkDragState: null,
+
+    // Cache dati per navigazione rapida e hover corsie
+    _timelineData: {},
+    _currentHoveredLane: {},
 
     _getPxFromDate: (targetMs, startDateMs, colWidth) => {
         const dTarget = new Date(targetMs);
@@ -81,9 +87,9 @@ const AdvancedTimeline = {
         const state = AdvancedTable.getState(tableId);
         const colWidth = state.timelineZoom || 40;
         const startDateMs = Number(scrollArea.dataset.startDate);
-        const todayMs = new Date().getTime();
+        const todayMs = new Date().setHours(12, 0, 0, 0); // Posiziona al centro della giornata odierna
         const targetPx = AdvancedTimeline._getPxFromDate(todayMs, startDateMs, colWidth);
-        scrollArea.scrollTo({ left: targetPx - (scrollArea.offsetWidth * 0.2), behavior: 'smooth' });
+        scrollArea.scrollTo({ left: Math.max(0, targetPx - (scrollArea.clientWidth / 2)), behavior: 'smooth' });
     },
 
     openZoomMenu: (e, tableId) => {
@@ -95,7 +101,7 @@ const AdvancedTimeline = {
         const presetDay = Math.round(viewWidth / 1);
         const presetWeek = Math.round(viewWidth / 7);
         const presetMonth = Math.round(viewWidth / 30);
-        const presetQuarter = Math.round(viewWidth / 90);
+        const presetQuarter = Math.max(6, Math.round(viewWidth / 92)); // Calcolo reale per 3 mesi completi
 
         const menuItems =[
             { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Zoom Preimpostato:</div>' },
@@ -120,7 +126,7 @@ const AdvancedTimeline = {
         }
 
         let newZoom = exactPx;
-        if (newZoom < 15) newZoom = 15;
+        if (newZoom < 6) newZoom = 6; // Permette la visualizzazione completa di trimestri su qualsiasi display
         if (newZoom > 1200) newZoom = 1200;
 
         state.timelineZoom = newZoom;
@@ -144,10 +150,11 @@ const AdvancedTimeline = {
         let step = 10;
         if (currentZoom >= 100) step = 40;
         if (currentZoom >= 300) step = 100;
+        if (currentZoom <= 20) step = 3;
 
         currentZoom += (delta > 0 ? step : -step);
 
-        if (currentZoom < 15) currentZoom = 15;
+        if (currentZoom < 6) currentZoom = 6;
         if (currentZoom > 1200) currentZoom = 1200;
 
         state.timelineZoom = currentZoom;
@@ -188,5 +195,187 @@ const AdvancedTimeline = {
         Store.triggerAutoSave();
         UI.Menu.closeAll(true);
         AdvancedTable.renderTable(tableId);
+    },
+
+    // =========================================================================
+    // MOTORE DI NAVIGAZIONE RAPIDA: FRECCE PER EVENTI FUORI VISTA
+    // =========================================================================
+
+    handleLaneHover: (e, tableId) => {
+        if (AdvancedTimeline.dragState || AdvancedTimeline.panState || AdvancedTimeline.linkDragState) {
+            AdvancedTimeline.hideLaneNav(tableId);
+            return;
+        }
+
+        const data = AdvancedTimeline._timelineData[tableId];
+        const scrollArea = document.getElementById(`timeline-scroll-${tableId}`);
+        if (!data || !scrollArea) return;
+
+        const rect = scrollArea.getBoundingClientRect();
+        const relativeY = e.clientY - rect.top + scrollArea.scrollTop;
+
+        // Se siamo nell'header temporale sticky (i primi 60px), nascondi le frecce
+        if (relativeY < 60) {
+            AdvancedTimeline.hideLaneNav(tableId);
+            return;
+        }
+
+        const hoveredLane = Math.floor((relativeY - 60) / data.rowHeight);
+        if (hoveredLane < 0 || hoveredLane >= data.totalLanes) {
+            AdvancedTimeline.hideLaneNav(tableId);
+            return;
+        }
+
+        AdvancedTimeline._currentHoveredLane[tableId] = hoveredLane;
+        AdvancedTimeline.updateLaneNav(tableId);
+    },
+
+    updateLaneNav: (tableId) => {
+        const data = AdvancedTimeline._timelineData[tableId];
+        const scrollArea = document.getElementById(`timeline-scroll-${tableId}`);
+        const prevBtn = document.getElementById(`timeline-nav-prev-${tableId}`);
+        const nextBtn = document.getElementById(`timeline-nav-next-${tableId}`);
+
+        if (!data || !scrollArea || !prevBtn || !nextBtn) return;
+
+        const hoveredLane = AdvancedTimeline._currentHoveredLane[tableId];
+        if (hoveredLane === undefined || hoveredLane === null || hoveredLane < 0) {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+            return;
+        }
+
+        const laneTasks = data.scheduledRows.filter(r => r._lane === hoveredLane);
+        if (laneTasks.length === 0) {
+            prevBtn.style.display = 'none';
+            nextBtn.style.display = 'none';
+            return;
+        }
+
+        const viewLeft = scrollArea.scrollLeft;
+        const viewRight = scrollArea.scrollLeft + scrollArea.clientWidth;
+
+        let prevTask = null;
+        let maxEndPx = -Infinity;
+
+        let nextTask = null;
+        let minStartPx = Infinity;
+
+        for (const t of laneTasks) {
+            const startPx = AdvancedTimeline._getPxFromDate(t._timeStart, data.startDateMs, data.colWidth);
+            const endPx = t._timeStart === t._timeEnd ? startPx + 14 : AdvancedTimeline._getPxFromDate(t._timeEnd, data.startDateMs, data.colWidth);
+
+            // Evento precedente non visibile (termina prima o a ridosso del margine sinistro)
+            if (endPx <= viewLeft + 15) {
+                if (endPx > maxEndPx) {
+                    maxEndPx = endPx;
+                    prevTask = t;
+                }
+            }
+
+            // Evento successivo non visibile (inizia dopo o a ridosso del margine destro)
+            if (startPx >= viewRight - 15) {
+                if (startPx < minStartPx) {
+                    minStartPx = startPx;
+                    nextTask = t;
+                }
+            }
+        }
+
+        const btnY = 60 + (hoveredLane * data.rowHeight) + (data.rowHeight - 26) / 2;
+
+        // Gestione Freccia Sinistra
+        if (prevTask) {
+            const titleCol = data.titleCol;
+            let tName = prevTask.virtualCells[titleCol.id] || 'Senza Titolo';
+            if (titleCol.type === 'record_note') {
+                const noteObj = typeof Store !== 'undefined' ? Store.getNote(tName) : null;
+                if (noteObj) tName = noteObj.title || 'Senza Titolo';
+            }
+            const dateFmt = AdvancedTimeline.formatTooltipDate(prevTask._timeStart, data.dateColType);
+
+            prevBtn.style.display = 'flex';
+            prevBtn.style.top = `${btnY}px`;
+            prevBtn.style.left = `${viewLeft + 8}px`;
+            prevBtn.title = `Precedente: ${tName} (${dateFmt})`;
+            prevBtn.onclick = (ev) => {
+                ev.stopPropagation();
+                AdvancedTimeline.jumpToTask(tableId, prevTask.id);
+            };
+        } else {
+            prevBtn.style.display = 'none';
+        }
+
+        // Gestione Freccia Destra
+        if (nextTask) {
+            const titleCol = data.titleCol;
+            let tName = nextTask.virtualCells[titleCol.id] || 'Senza Titolo';
+            if (titleCol.type === 'record_note') {
+                const noteObj = typeof Store !== 'undefined' ? Store.getNote(tName) : null;
+                if (noteObj) tName = noteObj.title || 'Senza Titolo';
+            }
+            const dateFmt = AdvancedTimeline.formatTooltipDate(nextTask._timeStart, data.dateColType);
+
+            nextBtn.style.display = 'flex';
+            nextBtn.style.top = `${btnY}px`;
+            nextBtn.style.left = `${viewRight - 34}px`;
+            nextBtn.title = `Successivo: ${tName} (${dateFmt})`;
+            nextBtn.onclick = (ev) => {
+                ev.stopPropagation();
+                AdvancedTimeline.jumpToTask(tableId, nextTask.id);
+            };
+        } else {
+            nextBtn.style.display = 'none';
+        }
+    },
+
+    hideLaneNav: (tableId) => {
+        AdvancedTimeline._currentHoveredLane[tableId] = null;
+        const prevBtn = document.getElementById(`timeline-nav-prev-${tableId}`);
+        const nextBtn = document.getElementById(`timeline-nav-next-${tableId}`);
+        if (prevBtn) prevBtn.style.display = 'none';
+        if (nextBtn) nextBtn.style.display = 'none';
+    },
+
+    jumpToTask: (tableId, taskId) => {
+        const data = AdvancedTimeline._timelineData[tableId];
+        const scrollArea = document.getElementById(`timeline-scroll-${tableId}`);
+        if (!data || !scrollArea) return;
+
+        const task = data.scheduledRows.find(r => r.id === taskId);
+        if (!task) return;
+
+        const startPx = AdvancedTimeline._getPxFromDate(task._timeStart, data.startDateMs, data.colWidth);
+        const endPx = task._timeStart === task._timeEnd ? startPx + 14 : AdvancedTimeline._getPxFromDate(task._timeEnd, data.startDateMs, data.colWidth);
+        const taskWidth = Math.max(14, endPx - startPx);
+
+        // Centra l'evento nella visuale della timeline
+        let targetScrollLeft = startPx - (scrollArea.clientWidth / 2) + (taskWidth / 2);
+        if (targetScrollLeft < 0) targetScrollLeft = 0;
+
+        scrollArea.scrollTo({ left: targetScrollLeft, behavior: 'smooth' });
+
+        setTimeout(() => {
+            const bar = document.getElementById(`bar-${task.id}`);
+            if (bar) {
+                AdvancedTimeline._pulseBar(bar);
+            }
+            AdvancedTimeline.updateLaneNav(tableId);
+        }, 350);
+    },
+
+    _pulseBar: (bar) => {
+        bar.style.transition = 'box-shadow 0.3s ease, transform 0.3s ease';
+        bar.style.boxShadow = '0 0 0 3px var(--bg-color), 0 0 0 6px var(--accent-color), 0 0 20px var(--accent-color)';
+        bar.style.transform = 'scale(1.05)';
+        bar.style.zIndex = '50';
+        setTimeout(() => {
+            bar.style.boxShadow = '';
+            bar.style.transform = '';
+            setTimeout(() => { 
+                bar.style.transition = ''; 
+                bar.style.zIndex = '';
+            }, 300);
+        }, 900);
     }
 };

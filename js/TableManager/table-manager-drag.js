@@ -4,10 +4,17 @@
  * FIX COLGROUP RESIZER: L'algoritmo non imposta più stili sui TD/TH. Aggiorna
  * esclusivamente gli attributi width dei tag <col> presenti nel <colgroup>,
  * risolvendo in modo assoluto i problemi con intestazioni unite (colspan).
+ * RESTORE DRAG RIGHE/COLONNE: Reintegrati e blindati i listener document su dragenter, dragover e drop.
  */
 
 Object.assign(TableManager.Drag, {
     dragState: null,
+
+    init: () => {
+        document.addEventListener('dragenter', (e) => TableManager.Drag.handleDragEnter(e));
+        document.addEventListener('dragover', (e) => TableManager.Drag.handleDragOver(e));
+        document.addEventListener('drop', (e) => TableManager.Drag.handleDrop(e));
+    },
 
     handleGlobalTableDrag: (e) => {
         const table = TableManager.currentTable;
@@ -330,12 +337,12 @@ Object.assign(TableManager.Drag, {
         const { grid, cellData } = TableManager.getGridMap(table);
 
         if (ds.type === 'row') {
-            // Le righe sono facili, basta spostare il nodo TR
             const sourceRow = Array.from(table.rows).find(r => r.rowIndex === ds.sourceIndex);
             
             if (sourceRow) {
+                const tbody = table.querySelector('tbody') || table;
                 if (ds.targetIndex >= table.rows.length) {
-                    table.querySelector('tbody').appendChild(sourceRow);
+                    tbody.appendChild(sourceRow);
                 } else {
                     const refRow = Array.from(table.rows).find(r => r.rowIndex === ds.targetIndex);
                     if (refRow) refRow.parentNode.insertBefore(sourceRow, refRow);
@@ -343,7 +350,6 @@ Object.assign(TableManager.Drag, {
             }
         } 
         else if (ds.type === 'col') {
-            // Le colonne richiedono spostamento di TD su ogni TR
             const rows = Array.from(table.rows);
             for (let r = 0; r < rows.length; r++) {
                 const rowObj = rows[r];
@@ -353,7 +359,9 @@ Object.assign(TableManager.Drag, {
                 const cellInfo = cellData.get(sourceCell);
                 if (cellInfo.y !== r) continue; 
                 
-                rowObj.removeChild(sourceCell);
+                if (sourceCell.parentNode === rowObj) {
+                    rowObj.removeChild(sourceCell);
+                }
 
                 const targetCell = grid[r][ds.targetIndex];
                 if (targetCell) {

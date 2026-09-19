@@ -8,6 +8,7 @@ Manual.registerSection(
                 <li><kbd>Ctrl + B</kbd> : Grassetto (Bold)</li>
                 <li><kbd>Ctrl + I</kbd> : Corsivo (Italic)</li>
                 <li><kbd>Ctrl + U</kbd> : Sottolineato (Underline)</li>
+                <li><kbd>Ctrl + K</kbd> : Alterna Maiuscolo / Minuscolo (Toggle Case) sul testo selezionato.</li>
                 <li><kbd>Ctrl + Z</kbd> / <kbd>Ctrl + Y</kbd> : Annulla o Ripeti l'ultima digitazione.</li>
             </ul>
         </li>

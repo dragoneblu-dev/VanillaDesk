@@ -1,8 +1,12 @@
 /**
- * AdvancedTableFormula.js
+ * js/AdvancedTable/advanced-table-formula.js
  * Motore di esecuzione Sandbox (JS eval), funzioni Wrapper per la matematica
  * e Modulo Formula Editor in UI.
  * FIX TEMA: Rimossi colori di sfondo hardcoded. L'editor si adatta al tema globale.
+ * FEAT PROMPT: Istruzioni esplicite per la manipolazione di campi con data di fine (hasEndDate)
+ * e pattern per traslare eventi mantenendo inalterata la durata.
+ * FIX SUGGERIMENTI DB: Rimosso codice, bottoni, diari e viste collegate.
+ * Ripristinato il layout a pillole compatto ed elegante con soli database reali.
  */
 
 Object.assign(AdvancedTable, {
@@ -14,7 +18,7 @@ Object.assign(AdvancedTable, {
         const PADRE = (id) => { const n = AppState.notes.find(x => x.id === id); return n ? n.parentId : null; };
         const FIGLI = (id) => AppState.notes.filter(n => n.parentId === id && !n.deletedAt).map(n => n.id);
         const PROPRIETA = (id, campo) => { const db = AppState.databases['SYS_PROPERTIES_DB']; if(!db) return ""; const row = db.rows.find(r => r.cells['sys_c_note'] === id); if(!row) return ""; const col = db.columns.find(c => c.name === campo); if(!col) return ""; return row.cells[col.id]; };
-        const NOTA_CORRENTE = () => riga["_sys_note_id"] || null;
+        const NOTA_CORRENTE = () => riga["_sys_note_id"] || (typeof AppState !== 'undefined' ? AppState.currentNoteId : null) || null;
         
         const SE = (condizione, se_vero, se_falso) => condizione ? se_vero : se_falso;
         
@@ -129,7 +133,7 @@ Object.assign(AdvancedTable, {
     evaluateFormula: (formulaStr, row, columns, tableId, stateTitle, virtualCells = null, renderCache = null, origineContext = null) => {
         if (!formulaStr) return '';
         try {
-            const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, renderCache || {});
+            const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, renderCache || {}, tableId);
             const tabella = AdvancedTable._buildTabellaContext(renderCache);
             const righe = tabella[stateTitle] || []; 
             const origine = origineContext || {};
@@ -157,7 +161,7 @@ Object.assign(AdvancedTable, {
     executeAsyncScript: async (scriptStr, row, columns, tableId, stateTitle, virtualCells = null, origineContext = null) => {
         if (!scriptStr) return '';
         try {
-            const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells);
+            const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, {}, tableId);
             const tabella = AdvancedTable._buildTabellaContext(null); 
             const righe = tabella[stateTitle] || []; 
             const origine = origineContext || {};
@@ -167,7 +171,7 @@ Object.assign(AdvancedTable, {
             const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
             const executor = new AsyncFunction('riga', 'tabella', 'righe', 'origine', 'window', 'document', 'localStorage', 'fetch', 'AppState', 'Store', 'Editor', 'AdvancedTable', 'UI', fullCode);
             
-        // FIX SANDBOX ASYNC: AppState e le API Globali vengono correttamente iniettate!
+            // FIX SANDBOX ASYNC: AppState e le API Globali vengono correttamente iniettate!
             const result = await executor.call(null, riga, tabella, righe, origine, undefined, undefined, undefined, undefined, AppState, Store, undefined, AdvancedTable, undefined);
 
             if (result === undefined || result === null) return '';
@@ -308,7 +312,8 @@ Object.assign(AdvancedTable, {
 
         let colsInfo = [];
         (state.columns || []).forEach(c => {
-            let info = `- "${c.name}" (Tipo: ${c.type})`;
+            let extra = c.hasEndDate ? " [Ha Data di Fine abilitata - Intervallo]" : "";
+            let info = `- "${c.name}" (Tipo: ${c.type}${extra})`;
             if (c.type === 'relation' && c.targetTableId) {
                 const tState = AdvancedTable.getTableState(c.targetTableId);
                 if (tState && tState.columns) {
@@ -318,64 +323,109 @@ Object.assign(AdvancedTable, {
             colsInfo.push(info);
         });
 
-        const prompt = `Agisci come un programmatore Javascript esperto e aiutami a scrivere una formula per un Database in stile Notion.
+        const prompt = `Agisci come un programmatore Javascript esperto e aiutami a scrivere una formula per un Database in stile Notion all'interno dell'applicazione VanillaDesk.
 
-IL CONTESTO DEL SISTEMA:
-L'applicazione fornisce queste variabili predefinite:
-1. \`riga\`: Un oggetto che rappresenta la riga corrente. Si accede ai campi con riga["Nome Campo"].
-2. \`righe\`: Un array di oggetti che contiene tutte le righe del database corrente. Utile per calcoli globali.
-3. \`tabella\`: Un oggetto contenente tutti gli altri database. Si accede agli altri DB con tabella["Nome Altro DB"], che restituisce un array di oggetti (le righe di quell'altro DB).
+CHIAREZZA ARCHITETTURALE (NON CONFONDERE NOTE E DATABASE):
+L'applicazione gestisce due entità distinte e gerarchiche:
+1. LE NOTE (Pagine Documento):
+   - Sono le pagine e i documenti dell'albero gerarchico nella barra laterale (come in Obsidian o Notion).
+   - Possono avere relazioni gerarchiche tra loro: una Nota può essere genitrice (PADRE) di sotto-note (FIGLI).
+   - Hanno proprietà globali di pagina (es. Tag, Autore, Data Scadenza Pagina).
+2. I DATABASE (Tabelle RDBMS):
+   - Sono componenti strutturati inseriti ALL'INTERNO di una Nota.
+   - Sono composti da Colonne (Campi) e Righe (Record).
+   - "riga" si riferisce sempre a un singolo record di questo database, NON alla pagina intera.
 
-L'applicazione fornisce inoltre queste funzioni personalizzate già pronte per essere usate:
-- NOTA_CORRENTE() -> restituisce l'ID della nota corrente
-- PADRE(id_nota) -> restituisce l'ID del genitore di quella nota
-- FIGLI(id_nota) -> restituisce un array di ID note
-- PROPRIETA(id_nota, "Nome Campo") -> estrae un valore da una specifica nota
-- SE(condizione, se_vero, se_falso)
-- SOMMA(valore1, valore2) OPPURE SOMMA(tabella["DB"], "Nome Colonna")
-- MEDIA(valore1, valore2) OPPURE MEDIA(tabella["DB"], "Nome Colonna")
-- CERCA(array_tabella_destinazione, "Colonna Ricerca", valore_ricerca, "Colonna Ritorno")
-- CONTA(array, "Colonna", "Valore Esatto")
-- UNISCI(testo1, testo2) OPPURE UNISCI(tabella["DB"], "Nome Colonna", separatore)
-- OGGI() -> restituisce YYYY-MM-DD
-- ADESSO() -> restituisce YYYY-MM-DDTHH:mm
-- DATA_DIFF(data_fine, data_inizio, "giorni/ore/minuti/mesi/anni") -> restituisce numero
-- DATA_AGGIUNGI(data, quantita, "giorni/ore/minuti/mesi/anni") -> restituisce data YYYY-MM-DDTHH:mm
-- ANNO(data), MESE(data), GIORNO(data), ORA(data), MINUTO(data) -> restituiscono un numero
-- GIORNO_SETTIMANA(data) -> restituisce il giorno della settimana (1 = Lunedì, 7 = Domenica)
+IL CONTESTO DEL MOTORE DELLE FORMULE:
+L'applicazione fornisce le seguenti variabili predefinite nell'ambiente di esecuzione:
+1. \`riga\`: Un oggetto che rappresenta il RECORD corrente della tabella. I campi si leggono con la sintassi case-sensitive: riga["Nome Campo"].
+2. \`righe\`: Un array di oggetti contenente TUTTI i record del database corrente. Utile per aggregazioni globali sul database (es. percentuali sul totale).
+3. \`tabella\`: Un oggetto che permette di accedere a QUALSIASI ALTRO database dello spazio di lavoro tramite il suo titolo esatto.
+   Esempio: tabella["Nome Altro DB"] restituisce l'array dei record di quell'altra tabella.
 
-REGOLE DI SCRITTURA (SINGOLA ESPRESSIONE vs BLOCCHI COMPLESSI):
-Il motore esegue il codice in modo rigoroso, accodandolo a un comando "return".
-- Se la logica è semplice, scrivi solo una singola espressione (es: \`riga["A"] + 1\`).
-- Se ti servono variabili multiple, cicli (for/while), logiche if/else complesse o funzioni ricorsive, DEVI OBBLIGATORIAMENTE incapsulare tutto in una IIFE (Immediately Invoked Function Expression) che ritorni il valore finale.
-Esempio di IIFE:
-(() => { 
-    let base = Number(riga["Valore"]); 
-    if (base > 10) return "Alto"; 
-    return "Basso"; 
-})()
+L'applicazione fornisce inoltre queste funzioni personalizzate già pronte per essere usate
+FUNZIONI DI SISTEMA:
+- Navigazione tra le Note (Pagine del Workspace):
+  * NOTA_CORRENTE() -> Restituisce l'ID univoco (stringa) della Nota/Pagina che ospita questa tabella.
+  * PADRE(id_nota) -> Restituisce l'ID della Nota genitrice di quella pagina nell'albero della sidebar (o null se è alla radice).
+  * FIGLI(id_nota) -> Restituisce un array di ID delle Note figlie/sotto-note di quella pagina.
+  * PROPRIETA(id_nota, "Nome Proprietà") -> Estrae il valore di un tag o di una proprietà assegnata a quella specifica Nota/Pagina.
 
-REGOLA FONDAMENTALE SUI NOMI (CASE-SENSITIVE):
-Le chiavi per accedere a righe e tabelle sono rigorosamente Case-Sensitive! I nomi delle colonne (es: riga["Stato"]) e i nomi dei database (es: tabella["Clienti"]) devono rispettare esattamente le MAIUSCOLE, minuscole e gli spazi vuoti presenti nell'elenco fornito sotto.
+- Funzioni Logiche e di Ricerca:
+  * SE(condizione, se_vero, se_falso) -> Operatore condizionale rapido (alternativo a condizione ? vero : falso).
+  * CERCA(array_tabella_destinazione, "ColonnaRicerca", valoreDaCercare, "ColonnaDaRestituire") -> Funzione di VLOOKUP relazionale tra database.
+  * CONTA(array, "Colonna", "ValoreEsatto") -> Conta i record che hanno quel valore esatto.
+  * SOMMA(valore1, valore2, ...) OPPURE SOMMA(array_record, "NomeColonna") -> Somma algebrica.
+  * MEDIA(valore1, valore2, ...) OPPURE MEDIA(array_record, "NomeColonna") -> Media aritmetica.
+  * UNISCI(testo1, testo2, ...) OPPURE UNISCI(array_record, "NomeColonna", separatore) -> Concatena stringhe.
 
-ATTENZIONE ALLE STRUTTURE DATI SPECIALI:
+- Funzioni di Calcolo Temporale:
+  * OGGI() -> Restituisce la data odierna in formato YYYY-MM-DD.
+  * ADESSO() -> Restituisce data e ora attuali in formato YYYY-MM-DDTHH:mm.
+  * DATA_DIFF(data_fine, data_inizio, "giorni/ore/minuti/secondi/mesi/anni") -> Restituisce la differenza numerica.
+  * DATA_AGGIUNGI(data_base, quantita, "giorni/ore/minuti/secondi/mesi/anni") -> Calcola la nuova data risultante.
+  * ANNO(data), MESE(data), GIORNO(data), ORA(data), MINUTO(data) -> Estraggono le rispettive componenti numeriche.
+  * GIORNO_SETTIMANA(data) -> Restituisce il numero del giorno (1 = Lunedì, 7 = Domenica).
+
+REGOLE TASSATIVE DI SCRITTURA DEL CODICE:
+1. Modalità di Esecuzione:
+   Il motore accoda il codice a un comando "return".
+   - Per calcoli semplici, fornisci una singola espressione diretta (es: \`Number(riga["Importo"] || 0) * 1.22\`).
+   - Per logiche articolate (dichiarazione di variabili, cicli for, clausole if/else multiple), DEVI incapsulare il codice in una IIFE (Immediately Invoked Function Expression).
+     Esempio:
+     (() => {
+         const stato = riga["Stato"];
+         const ggDiff = DATA_DIFF(riga["Scadenza"], OGGI(), "giorni");
+         if (stato === "Chiuso") return "Completato";
+         if (ggDiff < 0) return "In Ritardo di " + Math.abs(ggDiff) + " gg";
+         return "In Corso";
+     })()
+
+2. Case-Sensitivity dei Nomi:
+   I nomi delle colonne in riga["..."] e i nomi dei database in tabella["..."] sono rigorosamente case-sensitive e devono rispettare fedelmente maiuscole, minuscole e spazi presenti nella definizione dello schema riportata sotto.
+
+3. ATTENZIONE ALLE STRUTTURE DATI SPECIALI:
 Nel JSON, le celle non sono sempre primitive. Devi trattarle di conseguenza:
-- I tipi "date", "datetime" e "time" sono OGGETTI strutturati così: { "start": "YYYY-MM-DDTHH:mm", "end": "YYYY-MM-DDTHH:mm" }. Quando leggi una data usa sempre \`riga["NomeData"]?.start\`
+- Numeri: Possono essere stringhe o null. Usa sempre \`Number(riga["Campo"] || 0)\` o \`parseFloat\` per i calcoli matematici.
+- I campi "date", "datetime" e "time" con opzione [Data di Fine] sono memorizzati come OGGETTO: { "start": "...", "end": "..." }.
+  * In LETTURA: usa sempre \`riga["NomeData"]?.start\` o \`riga["NomeData"]?.end\`.
+  * Se devi calcolare o restituire un intervallo temporale: restituisci un oggetto { start: "...", end: "..." }.
 - I tipi "multi-select" o "rollup" multipli sono ARRAY di stringhe: ["Valore 1", "Valore 2"].
 - I tipi "relation" vengono esposti GIA' RISOLTI come Array di Nomi testuali, non di ID (Es: ["Mario", "Luigi"]). Puoi usare comodamente riga["Tua Relazione"].join(', ').
 - I tipi "checkbox" sono BOOLEANI: true / false.
+- Pagina Record (record_note): Restituisce l'ID della nota dedicata associata a quel record.
+
+PATTERN: TRASLARE UN EVENTO MANTENENDO LA DURATA INVARIATA (START & END):
+Se devi spostare avanti o indietro un evento con Data di Inizio e Data di Fine preservandone l'esatta durata:
+(() => {
+    const d = riga["NomeCampoData"];
+    if (!d || !d.start) return d;
+    const sMs = new Date(d.start).getTime();
+    const eMs = d.end ? new Date(d.end).getTime() : sMs;
+    const durata = eMs - sMs; // Durata preservata
+    const offsetGiorni = 7; // Es. sposta di +7 giorni
+    const shiftMs = offsetGiorni * 24 * 60 * 60 * 1000;
+    const nStart = new Date(sMs + shiftMs);
+    const nEnd = new Date(sMs + shiftMs + durata);
+    const fmt = dt => {
+        const c = new Date(dt.getTime() - dt.getTimezoneOffset() * 60000);
+        return c.toISOString().slice(0, 16); // usa split('T')[0] per date senza ora
+    };
+    return { start: fmt(nStart), end: fmt(nEnd) };
+})()
 
 AVVERTENZA SULLE FUNZIONI RAPIDE:
 Usa UNISCI() o SOMMA() in modalità Array solo su colonne che contengono primitive testuali o numeriche semplici.
 Se devi manipolare o mappare campi complessi (come le date) estratti da 'tabella["..."]', NON USARE le scorciatoie. Usa ESCLUSIVAMENTE i metodi nativi Javascript: .filter( ).map( ).join( ) assicurandoti di estrarre correttamente l'oggetto interno (es. obj.start).
 
-IL MIO DATABASE:
+IL MIO DATABASE ATTUALE:
 Nome del Database corrente: "${state.title}"
 Campi disponibili in questo database:
 ${colsInfo.join('\n')}
 
 LA MIA RICHIESTA:
 [Scrivi qui cosa vuoi ottenere nella tua formula, prestando attenzione ai nomi esatti delle colonne in base a quanto sopra]`;
+
 
         navigator.clipboard.writeText(prompt).then(() => {
             const btn = document.getElementById('btnCopyAIPrompt');
@@ -485,15 +535,28 @@ LA MIA RICHIESTA:
 
         const { state, colId } = AdvancedTable._pendingFormulaConfig;
 
+        // FILTRO RIGOROSO RDBMS: Raccoglie solo i Database primari che possiedono righe interrogabili,
+        // escludendo blocchi di codice, bottoni, colonne, diari, tabelle pivot e viste collegate.
         const dbList = [];
         if (AppState.databases) {
             Object.keys(AppState.databases).forEach(id => {
                 const s = AppState.databases[id];
-                if (s && !s.isPivot && s.title !== 'Diario/Log') {
-                    dbList.push({ dbTitle: s.title || 'Senza Nome', noteTitle: 'Workspace' });
-                }
+                if (!s || !s.columns || !Array.isArray(s.columns)) return;
+
+                // Esclusione categorica di elementi non pertinenti o non interrogabili
+                if (s.isPivot || s.isLinkedView) return;
+                if (id.startsWith('adv_code_') || id.startsWith('adv_btnbar_') || id.startsWith('adv_cols_') || id.startsWith('adv_journal_')) return;
+                if (s.entries || s.buttons) return;
+
+                dbList.push({
+                    dbTitle: s.title || 'Database',
+                    id: id
+                });
             });
         }
+
+        // Ordine alfabetico dei Database Primari
+        dbList.sort((a, b) => a.dbTitle.localeCompare(b.dbTitle, undefined, { numeric: true, sensitivity: 'base' }));
 
         const referencedDBs = [];
         const regexDB = /tabella\[['"]([^'"]+)['"]\]/g;
@@ -506,7 +569,7 @@ LA MIA RICHIESTA:
             if (!AppState.databases) return null;
             for (let id in AppState.databases) {
                 const s = AppState.databases[id];
-                if (s && s.title === dbTitle && !s.isPivot) return s.columns || [];
+                if (s && s.title === dbTitle && !s.isPivot && !s.isLinkedView && s.columns && Array.isArray(s.columns)) return s.columns;
             }
             return null;
         };
@@ -593,17 +656,22 @@ LA MIA RICHIESTA:
         const dynContainer = document.getElementById('adv-dynamic-section');
         const dictContainer = document.getElementById('adv-dict-container');
 
+        // SUGGERIMENTO DINAMICO: L'utente sta digitando tabella["... (Formato compatto a pillole orizzontali)
         if (textBeforeCursor.match(/tabella\[['"]([^'"]*)$/)) {
             contextTitle.style.display = 'block';
             contextTitle.textContent = `Seleziona il Database Esistente:`;
             if (dbList.length > 0) {
                 const pillContainer = document.createElement('div');
-                pillContainer.style.display = 'flex'; pillContainer.style.flexWrap = 'wrap'; pillContainer.style.gap = '4px';
+                pillContainer.style.display = 'flex'; 
+                pillContainer.style.flexWrap = 'wrap'; 
+                pillContainer.style.gap = '4px';
 
                 dbList.forEach(db => {
                     const pill = document.createElement('span');
-                    pill.className = 'adv-select-pill default-color'; pill.style.cursor = 'pointer'; pill.style.fontFamily = 'monospace';
-                    pill.innerHTML = `<span style="display:inline-flex; align-items:center; gap:4px; margin-right:4px;">${Icons.tableDatabase}</span> ${db.dbTitle}`;
+                    pill.className = 'adv-select-pill default-color'; 
+                    pill.style.cursor = 'pointer'; 
+                    pill.style.fontFamily = 'monospace';
+                    pill.innerHTML = `<span style="display:inline-flex; align-items:center; gap:4px; margin-right:4px;">${Icons.tableDatabase}</span> ${UI.escapeHTML(db.dbTitle)}`;
                     
                     pill.addEventListener('mousedown', (e) => {
                         e.preventDefault();
@@ -614,7 +682,7 @@ LA MIA RICHIESTA:
                 });
                 dynContainer.appendChild(pillContainer);
             } else {
-                dynContainer.innerHTML = '<span style="color:#888; font-size:0.8rem; width:100%; padding-left:5px;">Nessun database trovato nello spazio di lavoro.</span>';
+                dynContainer.innerHTML = '<span style="color:var(--text-secondary); font-size:0.8rem; width:100%; padding-left:5px;">Nessun database trovato nello spazio di lavoro.</span>';
             }
             return;
         }
@@ -776,7 +844,7 @@ LA MIA RICHIESTA:
             }
 
             try {
-                const riga = AdvancedTable._buildRigaContext(mockRow, state.columns || [], mockRow.virtualCells);
+                const riga = AdvancedTable._buildRigaContext(mockRow, state.columns || [], mockRow.virtualCells, {}, tableId);
                 const tabella = AdvancedTable._buildTabellaContext();
                 const righe = tabella[state.title] || [];
 

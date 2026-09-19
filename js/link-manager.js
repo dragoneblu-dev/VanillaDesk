@@ -6,6 +6,7 @@
  * esclusivamente DOPO il link, per permettere all'utente di digitare senza rimanere incastrato, 
  * evitando la duplicazione di \u200B e la fastidiosa permanenza in caso di cancellazione del testo.
  * FEAT UX: Aggiunta indicazione visiva della shortcut "[[" nel pannello di selezione link.
+ * FEAT MIDDLE-CLICK: Centralizzata la funzione openLinkDirect per consentire l'apertura rapida tramite rotella mouse.
  */
 
 const LinkManager = {
@@ -211,23 +212,31 @@ const LinkManager = {
         }
     },
 
-    openCurrentLink: () => {
-        const link = LinkManager.activeLink;
+    // APERTURA DIRETTA DEL LINK (USATA ANCHE DAL CLICK CENTRALE CON ROTELLA DEL MOUSE)
+    openLinkDirect: (link) => {
         if (!link || link.tagName !== 'A') return;
-
-        LinkManager.hideFloatingMenu();
 
         if (link.classList.contains('internal-link')) {
             const noteId = link.getAttribute('data-note-id');
             const anchor = link.getAttribute('data-anchor');
             const refId = link.getAttribute('data-ref-id'); 
-            if (noteId && typeof UI !== 'undefined') UI.selectNote(noteId, anchor, refId);
+            if (noteId && typeof UI !== 'undefined' && UI.selectNote) UI.selectNote(noteId, anchor, refId);
         } else if (link.classList.contains('file-link')) {
             const path = link.getAttribute('data-file-path');
-            if (path) LinkManager.openViewer(path, link);
+            if (path && typeof LinkManager !== 'undefined' && LinkManager.openViewer) LinkManager.openViewer(path, link);
         } else {
-            if (link.href) window.open(link.href, '_blank');
+            if (link.href && !link.href.startsWith('javascript:')) {
+                window.open(link.href, '_blank');
+            }
         }
+    },
+
+    openCurrentLink: () => {
+        const link = LinkManager.activeLink;
+        if (!link || link.tagName !== 'A') return;
+
+        LinkManager.hideFloatingMenu();
+        LinkManager.openLinkDirect(link);
     },
 
     openExternalModal: (prefilledUrl = null) => {

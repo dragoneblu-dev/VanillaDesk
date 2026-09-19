@@ -1,13 +1,8 @@
 /**
  * AdvancedTableFilter.js
  * Modulo Filtri Avanzato con Autocompletamento e Gestione Filtri Salvati.
- * FIX UI FILTRI: Spostato il reset totale dei filtri nel menu "Viste/Filtri Salvati" per coerenza logica.
- * FIX UX: Rimossi i bottoni disabilitati e i testi ridondanti per mantenere il menu pulito e minimale.
- * FIX EXACT MATCH: Cliccando su un valore nell'autocompletamento viene forzato l'operatore di match esatto (=).
- * FIX ARCHITETTURA: Eliminata la logica duplicata. L'autocompletamento si appoggia a getFormatDisplayValue 
- * e _resolveRelationNames (dal Core) per decodificare in modo sicuro ed efficiente qualsiasi dato.
- * FIX AUTOFILL: Accecate le euristiche aggressive dei browser (Chrome) che sovrapponevano 
- * la rubrica contatti/email usando un token autocomplete non valido e data-attributes di blocco.
+ * FIX CHECKBOX SUGGESTIONS: Normalizzati i suggerimenti per i campi checkbox (Sì / No)
+ * evitando simboli o stringhe descrittive composite che bloccavano il match esatto.
  */
 
 Object.assign(AdvancedTable, {
@@ -282,6 +277,31 @@ Object.assign(AdvancedTable, {
         AdvancedTable._currentFilterInput = inputEl;
         const targetColId = inputEl.getAttribute('data-col');
         const state = AdvancedTable.getState(tableId);
+        const tgtColDef = (state.columns || []).find(c => c.id === targetColId);
+
+        // GESTIONE CHECKBOX: Suggerimenti dedicati puliti senza simboli che corrompono il match
+        if (tgtColDef && tgtColDef.type === 'checkbox') {
+            let popup = document.getElementById('adv-filter-autocomplete-portal');
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.id = 'adv-filter-autocomplete-portal';
+                popup.className = 'adv-filter-autocomplete';
+                popup.style.position = 'fixed';
+                popup.style.zIndex = '99999';
+                document.body.appendChild(popup);
+            }
+            const rect = inputEl.getBoundingClientRect();
+            popup.style.top = rect.bottom + 'px';
+            popup.style.left = rect.left + 'px';
+            popup.style.width = rect.width + 'px';
+
+            popup.innerHTML = `
+                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'Sì')">Sì (Spuntato)</div>
+                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'No')">No (Vuoto)</div>
+            `;
+            popup.style.display = 'block';
+            return;
+        }
 
         let uniqueVals = new Set();
 
@@ -289,7 +309,7 @@ Object.assign(AdvancedTable, {
             let tempRows = rowsData || [];
             if (state.filters) {
                 Object.keys(state.filters).forEach(cId => {
-                    if (cId === targetColId) return; // Non filtrare per se stesso
+                    if (cId === targetColId) return;
                     const rawTerm = state.filters[cId].trim();
                     if (!rawTerm) return;
 
@@ -494,7 +514,6 @@ Object.assign(AdvancedTable, {
             });
 
             const filteredRows = buildFilteredRows(rawDbRows, false);
-            const tgtColDef = (state.columns || []).find(c => c.id === targetColId);
 
             filteredRows.forEach(r => {
                 let val = r.virtualCells[targetColId];

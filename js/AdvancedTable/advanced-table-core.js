@@ -1,6 +1,7 @@
 /**
  * AdvancedTableCore.js
  * Motore di Stato (State Management), Lifecycle e Inizializzazione RDBMS.
+ * Supporto esteso ai parametri per la Vista Gerarchica ad Albero (Tree Table / WBS).
  */
 
 const AdvancedTable = {
@@ -111,6 +112,7 @@ const AdvancedTable = {
         if (!state.selectedRows) state.selectedRows = [];
         if (!state.conditionalColors) state.conditionalColors = [];
         if (state.hideFooterControls === undefined) state.hideFooterControls = false;
+        if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
         return state;
     },
 
@@ -283,6 +285,9 @@ const AdvancedTable = {
             sorts: state.sorts,
             viewConfig: state.viewConfig,
             boardGroupBy: state.boardGroupBy,
+            treeRelationColId: state.treeRelationColId,
+            treeRelationDirection: state.treeRelationDirection,
+            treeCollapsedNodes: state.treeCollapsedNodes || [],
             calendarDateCol: state.calendarDateCol,
             calendarMode: state.calendarMode,
             calendarFocusDate: state.calendarFocusDate,
@@ -313,7 +318,7 @@ const AdvancedTable = {
     
     startPan: (e) => {
         const tgt = e.target;
-        if (tgt.closest('input, textarea, button, a, select, .adv-select-pill, .adv-add-btn, .adv-tool-btn, .adv-icon-btn, .widget-drag-handle, .widget-options-btn, .adv-board-card')) return;
+        if (tgt.closest('input, textarea, button, a, select, .adv-select-pill, .adv-add-btn, .adv-tool-btn, .adv-icon-btn, .widget-drag-handle, .widget-options-btn, .adv-board-card, .adv-tree-toggle, .adv-tree-quick-add')) return;
         if (tgt.closest('.widget-editable-area') || tgt.closest('.adv-col-resizer') || tgt.closest('.adv-cell-text[contenteditable="true"]')) return;
         if (tgt.closest('th')) return;
 

@@ -3,6 +3,11 @@
  * Isolamento delle operazioni CRUD (Create, Read, Update, Delete) per i Database.
  * FIX SEARCH CONTENT: Il filtro text/contains ora cerca anche all'interno del corpo (content) 
  * delle note dedicate (record_note) e non solo nel titolo.
+ * Integrazione colonna 'note_link' (Collegamento a Nota).
+ * FIX CHECKBOX EXACT MATCH: Supporto a match esatti booleani (= Sì / = No / = true / = false)
+ * evitando fallimenti causati da parole chiave descrittive composite.
+ * PERF & DOM SHIELD: Uscita immediata (early-exit) in updateData se il valore non è cambiato,
+ * prevenendo la distruzione accidentale del DOM e consentendo il click singolo sui campi interattivi.
  */
 
 Object.assign(AdvancedTable, {
@@ -35,20 +40,24 @@ Object.assign(AdvancedTable, {
         if (!state || state.isPivot) return;
 
         const row = state.rows.find(r => r.id === rowId);
-        if (row) {
-            if (JSON.stringify(row.cells[colId]) !== JSON.stringify(value)) {
-                let oldRowContext = JSON.parse(JSON.stringify(row));
-                
-                row.cells[colId] = value;
-                row.updatedAt = Date.now();
+        if (!row) return;
 
-                AdvancedTable.setState(realTableId, state);
+        // Se il dato non è cambiato, non tocchiamo il DOM
+        // Questo impedisce la distruzione del nodo durante il mousedown/mouseup, consentendo il click singolo
+        const isChanged = JSON.stringify(row.cells[colId]) !== JSON.stringify(value);
+        if (!isChanged) {
+            return;
+        }
 
-                if (typeof AdvancedAutomations !== 'undefined') {
-                    await AdvancedAutomations.evaluate(realTableId, rowId, false, oldRowContext);
-                    await AdvancedAutomations.triggerCrossDB(realTableId); 
-                }
-            }
+        let oldRowContext = JSON.parse(JSON.stringify(row));
+        row.cells[colId] = value;
+        row.updatedAt = Date.now();
+
+        AdvancedTable.setState(realTableId, state);
+
+        if (typeof AdvancedAutomations !== 'undefined') {
+            await AdvancedAutomations.evaluate(realTableId, rowId, false, oldRowContext);
+            await AdvancedAutomations.triggerCrossDB(realTableId); 
         }
         
         state = AdvancedTable.getState(realTableId);
@@ -364,7 +373,8 @@ Object.assign(AdvancedTable, {
             'url': 'Nuovo Link',
             'created_time': 'Data Creazione',
             'last_edited_time': 'Ultima Modifica',
-            'record_note': 'Pagina Record'
+            'record_note': 'Pagina Record',
+            'note_link': 'Collegamento a Nota'
         };
         const colName = typeNames[type] || 'Nuova Colonna';
 
@@ -527,6 +537,11 @@ Object.assign(AdvancedTable, {
                     const titleB = noteB ? (noteB.title || '').toLowerCase() : '';
                     diff = titleA.localeCompare(titleB, undefined, {numeric: true, sensitivity: 'base'});
                 }
+                else if (colDef.type === 'note_link') {
+                    const strA = AdvancedTable.getFormatDisplayValue(colDef, va).toLowerCase();
+                    const strB = AdvancedTable.getFormatDisplayValue(colDef, vb).toLowerCase();
+                    diff = strA.localeCompare(strB, undefined, {numeric: true, sensitivity: 'base'});
+                }
                 // Gestione Date Standard e Datetime (Supporto italiano DD/MM/YYYY)
                 else if (isDateCol) {
                     if (typeof va === 'object' && va !== null) va = va.start;
@@ -595,7 +610,7 @@ Object.assign(AdvancedTable, {
                 if (isPivotContext) {
                     displayStr = String(cellVal || '');
                 } else {
-                    // LA MAGIA: deleghiamo tutta la risoluzione complessa alla funzione centrale!
+                    // Delega tutta la risoluzione complessa alla funzione centrale
                     displayStr = AdvancedTable.getFormatDisplayValue(colDef, cellVal);
                     
                     if (colDef.type === 'checkbox') {
@@ -621,6 +636,21 @@ Object.assign(AdvancedTable, {
                     if (matchOp) {
                         const operator = matchOp[1];
                         let targetVal = matchOp[2].trim();
+
+                        // RISOLUZIONE ACCURATA BOOLEANA PER CHECKBOX
+                        if (colDef.type === 'checkbox') {
+                            const isChecked = cellVal === true;
+                            const lowerTarget = targetVal.toLowerCase();
+                            const isTargetTrue = ['sì', 'si', 'true', '1', 'checked', 'completato'].includes(lowerTarget);
+                            const isTargetFalse = ['no', 'false', '0', 'unchecked', 'falso'].includes(lowerTarget);
+
+                            if (operator === '=') {
+                                return isTargetTrue ? isChecked : (isTargetFalse ? !isChecked : false);
+                            }
+                            if (operator === '!=') {
+                                return isTargetTrue ? !isChecked : (isTargetFalse ? isChecked : false);
+                            }
+                        }
 
                         if (isDateType) {
                             let rawDateForMath = cellVal;

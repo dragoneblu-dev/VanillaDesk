@@ -2,6 +2,9 @@
  * logic-engine-core.js
  * Nucleo del Motore Logico: Calcoli matematici e valutazione delle condizioni (WHERE e SET).
  * Esecuzione prioritaria di Formule JS e supporto calcolo dinamico offset per Oggi (+/- giorni) e Adesso (+/- minuti).
+ * Integrazione supporto e confronto per la colonna 'note_link' (Collegamento a Nota).
+ * FIX RESILIENZA DATE MULTIPLE: Gestione del merge parziale/totale per campi con Data di Fine (hasEndDate)
+ * quando aggiornati tramite "Formula JS (Sovrascrive tutto...)".
  */
 
 // UTILITY GLOBALE PER XSS (Scudo Iniezioni HTML)
@@ -41,6 +44,33 @@ const LogicEngine = {
         let strVal = String(currentVal === undefined || currentVal === null ? '' : currentVal).trim().toLowerCase();
         let oldStrVal = String(oldVal === undefined || oldVal === null ? '' : oldVal).trim().toLowerCase();
         let tgtValLower = String(targetVal === undefined || targetVal === null ? '' : targetVal).trim().toLowerCase();
+
+        // Estrazione titolo pulito se stiamo valutando un collegamento a nota
+        if (colDef.type === 'note_link') {
+            let linkObj = null;
+            if (currentVal && typeof currentVal === 'object') linkObj = currentVal;
+            else if (currentVal && typeof currentVal === 'string') {
+                try { linkObj = JSON.parse(currentVal); } catch(e) { linkObj = { noteId: currentVal }; }
+            }
+            if (linkObj && linkObj.noteId) {
+                const note = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
+                strVal = (note ? (note.title || '') : (linkObj.title || '')).trim().toLowerCase();
+            } else {
+                strVal = '';
+            }
+
+            let oldLinkObj = null;
+            if (oldVal && typeof oldVal === 'object') oldLinkObj = oldVal;
+            else if (oldVal && typeof oldVal === 'string') {
+                try { oldLinkObj = JSON.parse(oldVal); } catch(e) { oldLinkObj = { noteId: oldVal }; }
+            }
+            if (oldLinkObj && oldLinkObj.noteId) {
+                const oldNote = typeof Store !== 'undefined' ? Store.getNote(oldLinkObj.noteId) : null;
+                oldStrVal = (oldNote ? (oldNote.title || '') : (oldLinkObj.title || '')).trim().toLowerCase();
+            } else {
+                oldStrVal = '';
+            }
+        }
 
         if (['number', 'formula', 'rollup'].includes(colDef.type)) {
             const cNum = parseFloat(currentVal);
@@ -192,6 +222,7 @@ const LogicEngine = {
             if (['multi-select', 'relation'].includes(colDef.type)) return [];
             if (colDef.type === 'checkbox') return false;
             if (['date', 'datetime'].includes(colDef.type) && colDef.hasEndDate) return { start: '', end: '' };
+            if (colDef.type === 'note_link') return null;
             return '';
         }
 
@@ -278,8 +309,13 @@ const LogicEngine = {
             }
             if (actType === 'set_formula') {
                 try {
-                    const parsed = JSON.parse(formulaResult);
-                    if (parsed && (parsed.start !== undefined || parsed.end !== undefined)) return parsed;
+                    const parsed = typeof formulaResult === 'string' ? JSON.parse(formulaResult) : formulaResult;
+                    if (parsed && typeof parsed === 'object' && (parsed.start !== undefined || parsed.end !== undefined)) {
+                        return colDef.hasEndDate ? {
+                            start: parsed.start !== undefined ? parsed.start : (dateObj.start || ''),
+                            end: parsed.end !== undefined ? parsed.end : (dateObj.end || '')
+                        } : (parsed.start !== undefined ? parsed.start : (dateObj.start || ''));
+                    }
                 } catch(e) {}
                 dateObj.start = formulaResult;
                 return colDef.hasEndDate ? dateObj : dateObj.start;

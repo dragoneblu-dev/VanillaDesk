@@ -5,6 +5,9 @@
  * sbloccare il passaggio delle coordinate al motore di trascinamento.
  * FIX SELEZIONE: Aggiunta logica per forzare il grassetto programmatico su un array di celle.
  * FIX DRAWER CONFLICT: I controlli e i trigger ignorano completamente le tabelle incluse nel pannello laterale.
+ * REFACTOR INTEGRATO: Il menu dell'ingranaggio (openMainMenu) gestisce sia la Cella Corrente 
+ * (Allineamento Sinistra/Centro/Destra compatto, Sfondo Cella, Dividi se fusa) sia l'intera Tabella,
+ * disattivandosi automaticamente durante la selezione multipla per dare priorità alla toolbar dedicata.
  */
 
 Object.assign(TableManager, {
@@ -169,6 +172,13 @@ Object.assign(TableManager, {
 
         checkSelection: () => {
             if (!AppState.isEditMode) return;
+
+            // Se sono selezionate 2 o più celle, i trigger singoli non devono interferire con la toolbar di selezione
+            if (TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 1) {
+                TableManager.UI.hideTriggers();
+                return;
+            }
+
             const selection = window.getSelection();
             if (selection.rangeCount > 0) {
                 let node = selection.getRangeAt(0).startContainer;
@@ -206,6 +216,12 @@ Object.assign(TableManager, {
         },
 
         showTriggers: (cell, table) => {
+            // Se c'è una selezione estesa attiva a blocchi, non mostrare i controlli di singola cella
+            if (TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 1) {
+                TableManager.UI.hideTriggers();
+                return;
+            }
+
             TableManager.activeCell = cell;
             const cellRect = cell.getBoundingClientRect();
             const tableRect = table.getBoundingClientRect();
@@ -265,6 +281,7 @@ Object.assign(TableManager, {
             const table = TableManager.currentTable;
             if (!table) return;
 
+            const cell = TableManager.activeCell;
             const currentLayout = table.style.tableLayout;
             const currentWidth = table.style.width;
             let mode = 'auto';
@@ -273,30 +290,108 @@ Object.assign(TableManager, {
 
             const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
-            const menuItems = [
-                {
-                    icon: Icons.layoutAuto, label: 'Layout Tabella', type: 'submenu',
+            const svgLeft = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 6h18v2H3V6zm0 5h12v2H3v-2zm0 5h18v2H3v-2z"/></svg>`;
+            const svgCenter = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 6h18v2H3V6zm4 5h10v2H7v-2zm-4 5h18v2H3v-2z"/></svg>`;
+            const svgRight = `<svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 6h18v2H3V6zm6 5h12v2H9v-2zm-6 5h18v2H3v-2z"/></svg>`;
+
+            const menuItems = [];
+
+            // =========================================================================
+            // 1. SEZIONE CELLA CORRENTE (Allineamento, Sfondo, Dividi se unita)
+            // =========================================================================
+            if (cell) {
+                const isMergedCell = (parseInt(cell.getAttribute('rowspan')) || 1) > 1 || (parseInt(cell.getAttribute('colspan')) || 1) > 1;
+
+                menuItems.push({ 
+                    type: 'custom', 
+                    html: '<div class="adv-dropdown-title" style="margin-bottom:4px;">Cella Attiva</div>' 
+                });
+
+                if (isMergedCell) {
+                    menuItems.push({
+                        icon: Icons.split,
+                        label: 'Dividi Cella Unita',
+                        onClick: () => {
+                            TableManager.Selection.selectedCells = [cell];
+                            TableManager.Selection.splitCell();
+                        }
+                    });
+                }
+
+                menuItems.push({
+                    type: 'custom',
+                    html: `
+                        <div style="display:flex; justify-content:space-between; padding:0 4px; gap:5px; margin-bottom:5px;">
+                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-left')" title="Allinea Testo a Sinistra" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgLeft}</button>
+                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-center')" title="Allinea Testo al Centro" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgCenter}</button>
+                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-right')" title="Allinea Testo a Destra" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgRight}</button>
+                        </div>
+                    `
+                });
+
+                menuItems.push({
+                    icon: Icons.palette,
+                    label: 'Sfondo Cella',
+                    type: 'submenu',
                     items: [
-                        { icon: Icons.layoutAuto, label: 'Adattivo (Testo)' + (mode === 'auto' ? chk : ''), onClick: () => TableManager.setLayoutMode('auto') },
-                        { icon: Icons.percent, label: 'Percentuale (Schermo)' + (mode === 'percent' ? chk : ''), onClick: () => TableManager.setLayoutMode('percent') },
-                        { icon: Icons.pixel, label: 'Libera (Scroll Orizz.)' + (mode === 'pixel' ? chk : ''), onClick: () => TableManager.setLayoutMode('pixel') }
+                        { type: 'custom', html: TableManager.getColorGridHTML('colorCell') }
                     ]
-                },
-                { icon: Icons.zebraTbl, label: 'Righe alternate' + (isStriped ? chk : ''), onClick: () => TableManager.toggleZebraCurrent() },
-                { type: 'divider' },
-                {
-                    icon: Icons.file, label: 'Importa / Esporta Dati', type: 'submenu',
-                    items: [
-                        { icon: Icons.clipboard, label: 'Copia negli Appunti (per Excel)', onClick: () => TableManager.CSV.copyToClipboardAsExcel() },
-                        { type: 'divider' },
-                        { icon: Icons.editTbl, label: 'Modifica Dati con Editor di Testo', onClick: () => TableManager.CSV.editDataAsCSV() },
-                        { icon: Icons.exportCSV, label: 'Esporta Tabella in file CSV', onClick: () => TableManager.CSV.exportToCSV() }
-                    ]
-                },
-                { type: 'divider' },
-                { icon: Icons.tableDatabase, label: 'Converti in Database', onClick: () => TableManager.CSV.convertToDatabase() },
-                { icon: Icons.trash, label: 'Elimina Tabella', danger: true, onClick: () => TableManager.UI.performAction('deleteTable') }
-            ];
+                });
+
+                menuItems.push({ type: 'divider' });
+            }
+
+            // =========================================================================
+            // 2. SEZIONE TABELLA INTERA
+            // =========================================================================
+            menuItems.push({ 
+                type: 'custom', 
+                html: '<div class="adv-dropdown-title" style="margin-bottom:4px;">Tabella Intera</div>' 
+            });
+
+            menuItems.push({
+                icon: Icons.layoutAuto, 
+                label: 'Layout Tabella', 
+                type: 'submenu',
+                items: [
+                    { icon: Icons.layoutAuto, label: 'Adattivo (Testo)' + (mode === 'auto' ? chk : ''), onClick: () => TableManager.setLayoutMode('auto') },
+                    { icon: Icons.percent, label: 'Percentuale (Schermo)' + (mode === 'percent' ? chk : ''), onClick: () => TableManager.setLayoutMode('percent') },
+                    { icon: Icons.pixel, label: 'Libera (Scroll Orizz.)' + (mode === 'pixel' ? chk : ''), onClick: () => TableManager.setLayoutMode('pixel') }
+                ]
+            });
+
+            menuItems.push({ 
+                icon: Icons.zebraTbl, 
+                label: 'Righe alternate' + (isStriped ? chk : ''), 
+                onClick: () => TableManager.toggleZebraCurrent() 
+            });
+
+            menuItems.push({ type: 'divider' });
+
+            menuItems.push({
+                icon: Icons.file, 
+                label: 'Importa / Esporta Dati', 
+                type: 'submenu',
+                items: [
+                    { icon: Icons.clipboard, label: 'Copia negli Appunti (per Excel)', onClick: () => TableManager.CSV.copyToClipboardAsExcel() },
+                    { type: 'divider' },
+                    { icon: Icons.editTbl, label: 'Modifica Dati con Editor di Testo', onClick: () => TableManager.CSV.editDataAsCSV() },
+                    { icon: Icons.exportCSV, label: 'Esporta Tabella in file CSV', onClick: () => TableManager.CSV.exportToCSV() }
+                ]
+            });
+
+            menuItems.push({ type: 'divider' });
+            menuItems.push({ 
+                icon: Icons.tableDatabase, 
+                label: 'Converti in Database', 
+                onClick: () => TableManager.CSV.convertToDatabase() 
+            });
+            menuItems.push({ 
+                icon: Icons.trash, 
+                label: 'Elimina Tabella', 
+                danger: true, 
+                onClick: () => TableManager.UI.performAction('deleteTable') 
+            });
 
             UI.Menu.buildContextMenu(e.currentTarget.id, menuItems);
         },

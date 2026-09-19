@@ -17,8 +17,6 @@ Object.assign(Editor, {
             const sel = window.getSelection();
             if (sel.isCollapsed) return;
 
-            //console.groupCollapsed(`[DEBUG-PASTE] Evento ${e.type.toUpperCase()} intercettato`);
-
             e.preventDefault();
 
             const range = sel.getRangeAt(0);
@@ -29,7 +27,6 @@ Object.assign(Editor, {
             const codeBlock = anchorNode.closest('.code-content');
             
             if (codeBlock) {
-                //console.log("[DEBUG-PASTE] Copia da blocco codice");
                 const tempDiv = document.createElement('div');
                 tempDiv.appendChild(range.cloneContents());
                 
@@ -53,7 +50,6 @@ Object.assign(Editor, {
                     if (typeof CodeManager !== 'undefined') CodeManager.highlightBlock(codeBlock, true);
                     Store.triggerAutoSave();
                 }
-                //console.groupEnd();
                 return;
             }
 
@@ -61,8 +57,6 @@ Object.assign(Editor, {
             const clone = range.cloneContents();
             const tempDiv = document.createElement('div');
             tempDiv.appendChild(clone);
-
-            //console.log("[DEBUG-PASTE] HTML clonato dalla selezione:", tempDiv.innerHTML);
 
             let htmlStr = tempDiv.innerHTML;
             htmlStr = htmlStr.replace(/<\/p>\s*<p>/gi, '\n');
@@ -86,7 +80,6 @@ Object.assign(Editor, {
                 range.deleteContents();
                 Store.triggerAutoSave();
             }
-            //console.groupEnd();
         };
 
         document.addEventListener('copy', handleCopyCut);
@@ -94,14 +87,9 @@ Object.assign(Editor, {
     },
 
     handlePaste: (e) => {
-        //console.groupCollapsed('🔴 [DEBUG-PASTE] Avvio Incolla (handlePaste)');
-        
         const clipboardData = (e.clipboardData || window.clipboardData);
         const pastedText = clipboardData.getData('text/plain');
         const pastedHTML = clipboardData.getData('text/html');
-        
-        //console.log("[DEBUG-PASTE] Plain Text in entrata:", pastedText);
-        //console.log("[DEBUG-PASTE] HTML in entrata:", pastedHTML);
         
         const items = Array.from((e.clipboardData || e.originalEvent.clipboardData).items);
         let isImage = false;
@@ -109,7 +97,6 @@ Object.assign(Editor, {
         // 1. GESTIONE IMMAGINI INCOLLATE (Clipboard File)
         for (let item of items) {
             if (item.kind === 'file' && item.type.includes('image/')) {
-                //console.log(`[DEBUG-PASTE] Immagine rilevata. Passo a FileReader.`);
                 e.preventDefault();
                 Editor.saveSnapshot();
                 isImage = true;
@@ -138,13 +125,11 @@ Object.assign(Editor, {
                     img.src = ev.target.result;
                 };
                 reader.readAsDataURL(blob);
-                //console.groupEnd();
                 return;
             }
         }
 
         if (isImage) {
-            //console.groupEnd();
             return;
         }
 
@@ -160,7 +145,6 @@ Object.assign(Editor, {
             if (typeof Editor !== 'undefined' && Editor.handleBulkWidgetDeletion) {
                 if (!Editor.handleBulkWidgetDeletion()) {
                     e.preventDefault();
-                    //console.groupEnd();
                     return;
                 }
             }
@@ -168,8 +152,6 @@ Object.assign(Editor, {
 
         let targetNode = sel.anchorNode;
         if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
-
-        //console.log("[DEBUG-PASTE] Target Node per Incolla:", targetNode);
 
         // FIX INLINE WIDGETS: Controlliamo sia i blocchi (DB/Codice) che gli inline (Snippet/Appunti)
         const isInsideWidget = WidgetManager.isProtectedBlock(targetNode) || WidgetManager.isProtectedInline(targetNode);
@@ -185,11 +167,9 @@ Object.assign(Editor, {
                 Editor.saveSnapshot();
 
                 if (isInsideWidget) {
-                    //console.log("[DEBUG-PASTE] Incollo dentro un Widget esistente.");
                     const isEditable = WidgetManager.isInsideEditableWidgetArea(targetNode) || !!targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th');
                     
                     if (!isEditable) {
-                        //console.warn("[DEBUG-PASTE] Area non editabile, abort.");
                         alert("⚠️ Cursore in area non valida. Clicca all'interno di un'area di testo prima di incollare.");
                         return;
                     }
@@ -197,8 +177,6 @@ Object.assign(Editor, {
                     // FIX ASSOLUTO SNIPPET COPIABILE MULTI-LINEA: Incolla l'HTML pulito
                     // usando i <br> per non spaccare in due il DOM dello span!
                     if (snippetText) {
-                        //console.log("[DEBUG-PASTE] Incollo testo multi-riga in Snippet Copiabile preservando i ritorni a capo");
-                        // Sanitizza il testo puro e converte gli a capo in <br>
                         const cleanTextWithBrs = pastedText.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r\n|\n|\r/g, '<br>');
                         document.execCommand('insertHTML', false, cleanTextWithBrs);
                         Store.triggerAutoSave();
@@ -233,9 +211,7 @@ Object.assign(Editor, {
                         
                         if (typeof CodeManager !== 'undefined') CodeManager.highlightBlock(preNode, true);
                         if (typeof Editor._setCodeOffset === 'function') Editor._setCodeOffset(preNode, targetCaretPos, targetCaretPos);
-                        //console.log("[DEBUG-PASTE] Inserimento DOM nativo in blocco codice completato.");
                     } else {
-                        //console.log("[DEBUG-PASTE] Esecuzione insertText nudo in widget (es. Appunto Inline)");
                         document.execCommand('insertText', false, cleanText);
                     }
                     Store.triggerAutoSave();
@@ -243,13 +219,11 @@ Object.assign(Editor, {
                 }
 
                 if (isInlineNote) {
-                    //console.log("[DEBUG-PASTE] Incollo nel cassetto Modifica Appunto Inline");
                     document.execCommand('insertText', false, pastedText);
                     return;
                 }
 
                 if (!pastedHTML) {
-                    //console.log("[DEBUG-PASTE] Fallback a Plain Text nella Root");
                     let fallbackText = pastedText;
                     // FIX BR: Anche il plain text incollato nella root viene impaginato correttamente
                     if (!targetNode.closest('td, th, li, pre')) {
@@ -261,8 +235,6 @@ Object.assign(Editor, {
                     return;
                 }
 
-                //console.log("[DEBUG-PASTE] Avvio Deep Sanitization (Gomma Draconiana)");
-                
                 // Whitelist estesa solo per l'infrastruttura di VanillaDesk
                 const allowedTags = ['B', 'I', 'U', 'S', 'A', 'P', 'DIV', 'SPAN', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'BR', 'IMG', 'SVG', 'PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE', 'INPUT'];
                 const allowedPrefixes = ['hl-', 'tx-', 'bg-', 'text-', 'ff-', 'fs-'];
@@ -492,12 +464,10 @@ Object.assign(Editor, {
                 //console.log("[PASTE-DEBUG] Deep Sanitization HTML Completata.");
                 
             } finally {
-                //console.groupEnd();
             }
         };
 
         if (isHeavyLoad) {
-            //console.log("[PASTE-DEBUG] Payload gigante rilevato! Esecuzione deviata su asincrono per non bloccare la UI.");
             if (typeof UI !== 'undefined') UI.showToast("⏳ Incollando e ripulendo grande quantità di dati...", "warning");
             setTimeout(processPaste, 50); 
         } else {

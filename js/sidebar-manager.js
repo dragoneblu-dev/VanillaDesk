@@ -62,19 +62,19 @@ const SidebarManager = {
     SearchAutocomplete: {
         
         show: (inputEl, term) => {
-            console.log(`[AUTOCOMPLETE] Richiesta apertura per termine: "${term}"`);
+            //console.log(`[AUTOCOMPLETE] Richiesta apertura per termine: "${term}"`);
             
             SidebarManager.SearchAutocomplete.hide('Reinizializzazione');
 
             if (!term || term.trim() === '') {
-                console.log("[AUTOCOMPLETE] Termine vuoto. Menu non mostrato.");
+                //console.log("[AUTOCOMPLETE] Termine vuoto. Menu non mostrato.");
                 return;
             }
             const lowerTerm = term.toLowerCase();
 
             const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
             if (!propsDb || !propsDb.columns || !propsDb.rows) {
-                console.log("[AUTOCOMPLETE] Nessun SYS_PROPERTIES_DB valido trovato.");
+                //console.log("[AUTOCOMPLETE] Nessun SYS_PROPERTIES_DB valido trovato.");
                 return;
             }
 

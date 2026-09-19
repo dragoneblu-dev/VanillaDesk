@@ -1,7 +1,10 @@
 /**
  * AdvancedTableTimeline-Render.js
  * Motore Grafico HTML/SVG per la Timeline.
- * FIX COLONNE NASCOSTE E TITOLO: La colonna titolo è dinamicamente calcolata come prima tra le visibili.
+ * FIX DATE SINGOLE: I record con sola data di fine (o inizio) vengono inclusi come Milestone (start = end).
+ * FIX CALENDARIO DINAMICO: Inclusione garantita della data odierna (Oggi) e finestra minima di 120 giorni per la vista Trimestre.
+ * FIX HEADER TRIMESTRE: Salto dinamico delle etichette dei giorni con zoom compresso (<22px) per evitare sovrapposizioni.
+ * FIX RIGHE PHANTOM: Le righe della griglia coincidono esattamente con le corsie necessarie, senza corsie vuote residue.
  */
 
 Object.assign(AdvancedTimeline, {
@@ -124,23 +127,30 @@ Object.assign(AdvancedTimeline, {
 
             if (rawDate && typeof rawDate === 'object') {
                 if (rawDate.start) {
-                    let s = rawDate.start;
+                    let s = String(rawDate.start);
                     if(s.length === 10) s += 'T00:00:00';
-                    start = new Date(s).getTime();
+                    const parsed = new Date(s).getTime();
+                    if (!isNaN(parsed)) start = parsed;
                 }
                 if (rawDate.end) {
-                    let e = rawDate.end;
+                    let e = String(rawDate.end);
                     if(e.length === 10) e += 'T00:00:00';
-                    end = new Date(e).getTime();
+                    const parsed = new Date(e).getTime();
+                    if (!isNaN(parsed)) end = parsed;
                 }
             } else if (rawDate) {
-                let s = rawDate;
+                let s = String(rawDate);
                 if(s.length === 10) s += 'T00:00:00';
-                start = new Date(s).getTime();
+                const parsed = new Date(s).getTime();
+                if (!isNaN(parsed)) start = parsed;
             }
 
-            vRow._timeStart = start;
-            vRow._timeEnd = end || start;
+            // Se è presente una sola delle due date, promuoviamo l'evento a Milestone valida
+            const validStart = start !== null ? start : end;
+            const validEnd = end !== null ? end : start;
+
+            vRow._timeStart = validStart;
+            vRow._timeEnd = validEnd;
 
             if (vRow._timeStart !== null && vRow._timeEnd !== null && vRow._timeStart > vRow._timeEnd) {
                 let temp = vRow._timeStart;
@@ -157,7 +167,7 @@ Object.assign(AdvancedTimeline, {
         let unscheduledRows =[];
 
         viewRows.forEach(r => {
-            if (r._timeStart && !isNaN(r._timeStart)) {
+            if (r._timeStart !== null && !isNaN(r._timeStart)) {
                 scheduledRows.push(r);
                 if (r._timeStart < minTime) minTime = r._timeStart;
                 if (r._timeEnd > maxTime) maxTime = r._timeEnd;
@@ -168,22 +178,34 @@ Object.assign(AdvancedTimeline, {
 
         scheduledRows.sort((a, b) => a._timeStart - b._timeStart);
 
-        if (minTime === Infinity) {
-            const now = new Date();
-            minTime = new Date(now.getFullYear(), now.getMonth(), 1).getTime();
-            maxTime = new Date(now.getFullYear(), now.getMonth() + 1, 0).getTime();
+        // Calcolo Dinamico dei Limiti Temporali con Inclusione di OGGI
+        const dayMs = 24 * 60 * 60 * 1000;
+        const todayMs = new Date().setHours(0, 0, 0, 0);
+
+        let effectiveMin = minTime !== Infinity ? minTime : todayMs;
+        let effectiveMax = maxTime !== -Infinity ? maxTime : todayMs;
+
+        // Includiamo sempre Oggi nella timeline per permettere la navigazione con il tasto "Oggi"
+        effectiveMin = Math.min(effectiveMin, todayMs);
+        effectiveMax = Math.max(effectiveMax, todayMs);
+
+        // Margine di respiro prima e dopo
+        effectiveMin -= 25 * dayMs;
+        effectiveMax += 35 * dayMs;
+
+        // Garantiamo una finestra temporale minima di 120 giorni (~4 mesi) per sostenere la vista a Trimestre
+        const currentSpanDays = Math.round((effectiveMax - effectiveMin) / dayMs);
+        if (currentSpanDays < 120) {
+            const missingDays = 120 - currentSpanDays;
+            effectiveMin -= Math.floor(missingDays / 2) * dayMs;
+            effectiveMax += Math.ceil(missingDays / 2) * dayMs;
         }
 
-        const dayMs = 24 * 60 * 60 * 1000;
-        minTime -= 10 * dayMs;
-        maxTime += 15 * dayMs;
+        const startDate = new Date(effectiveMin);
+        const endDate = new Date(effectiveMax);
 
-        const startDate = new Date(minTime);
-        const endDate = new Date(maxTime);
-
-        startDate.setDate(1);
-        endDate.setMonth(endDate.getMonth() + 1);
-        endDate.setDate(0);
+        startDate.setDate(1); // Primo del mese
+        endDate.setMonth(endDate.getMonth() + 1, 0); // Ultimo giorno del mese di chiusura
 
         const totalDays = Math.round((endDate.getTime() - startDate.getTime()) / dayMs) + 1;
         const colWidth = state.timelineZoom || 40;
@@ -191,7 +213,6 @@ Object.assign(AdvancedTimeline, {
         const timelineWidth = totalDays * colWidth;
         const leftPanelWidth = 200; 
         
-        let timelineHeight = 150; 
         let totalLanesNeeded = 0;
 
         let prevScrollX = 0;
@@ -209,12 +230,12 @@ Object.assign(AdvancedTimeline, {
                     </div>
                     <div style="display:flex; gap:5px;">
                         <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.changeZoom('${tableId}', -10)" title="Riduci Zoom">${Icons.zoomOut}</button>
-                        <button id="adv-zoom-menu-${tableId}" class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.openZoomMenu(event, '${tableId}')" title="Zoom Preimpostati (Giorno, Mese...)">${Icons.chevronDown}</button>
+                        <button id="adv-zoom-menu-${tableId}" class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.openZoomMenu(event, '${tableId}')" title="Zoom Preimpostati (Giorno, Mese, Trimestre...)">${Icons.chevronDown}</button>
                         <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.changeZoom('${tableId}', 10)" title="Aumenta Zoom">${Icons.zoomIn}</button>
                     </div>
                  </div>`;
 
-        html += `<div class="adv-timeline-wrapper" style="display:flex; flex-direction:row; background:var(--bg-color); border:1px solid var(--border-color); overflow:hidden;">`;
+        html += `<div class="adv-timeline-wrapper" style="display:flex; flex-direction:row; background:var(--bg-color); border:1px solid var(--border-color); overflow:hidden;" onmouseleave="AdvancedTimeline.hideLaneNav('${tableId}')">`;
 
         let headerMonths = '';
         let headerDays = '';
@@ -256,10 +277,21 @@ Object.assign(AdvancedTimeline, {
                     });
                 }
 
-                const dayStr = isToday ? `<span style="background:var(--accent-color); color:white; border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px;">${currDate.getDate()}</span>` : `<div style="padding-top:2px;">${currDate.getDate()}</div>`;
+                // In caso di zoom compresso (Trimestre/Mese denso), evita sovrapposizioni visive saltando i giorni pari o minori
+                let showDayNumber = true;
+                if (colWidth < 14) {
+                    showDayNumber = (d === 1 || d === 15);
+                } else if (colWidth < 22) {
+                    showDayNumber = (d === 1 || d % 5 === 0);
+                }
+
+                const dayText = showDayNumber ? currDate.getDate() : '';
+                const dayStr = isToday && colWidth >= 16 
+                    ? `<span style="background:var(--accent-color); color:white; border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px;">${currDate.getDate()}</span>` 
+                    : `<div style="padding-top:2px; font-size:${colWidth < 20 ? '0.65rem' : '0.75rem'};">${dayText}</div>`;
 
                 headerDays += `<div class="adv-timeline-day-block" style="width:${colWidth}px; background:transparent; border-right:1px solid var(--border-color); position:relative;">
-                                    <div style="font-weight:${isWeekend ? 'normal' : 'bold'}; color:var(--text-primary); display:flex; justify-content:center;">${dayStr}</div>
+                                    <div style="font-weight:${isWeekend ? 'normal' : 'bold'}; color:${isToday ? 'var(--accent-color)' : 'var(--text-primary)'}; display:flex; justify-content:center;">${dayStr}</div>
                                     ${subLabels}
                                </div>`;
                 currDate.setDate(currDate.getDate() + 1);
@@ -281,10 +313,10 @@ Object.assign(AdvancedTimeline, {
             currDate.setDate(currDate.getDate() + 1);
         }
         
-        const currentNowMs = Date.now();
-        if (currentNowMs >= startDate.getTime() && currentNowMs <= endDate.getTime()) {
-            const todayAbsolutePx = AdvancedTimeline._getPxFromDate(currentNowMs, startDate.getTime(), colWidth);
-            verticalLinesHTML += `<div style="position:absolute; left:${todayAbsolutePx}px; top:0; bottom:0; width:2px; background:var(--danger-color); opacity:0.6; z-index:10; pointer-events:none;"></div>`;
+        // Indicatore verticale della data odierna (linea rossa)
+        if (todayTimestamp >= startDate.getTime() && todayTimestamp <= endDate.getTime()) {
+            const todayAbsolutePx = AdvancedTimeline._getPxFromDate(todayTimestamp, startDate.getTime(), colWidth);
+            verticalLinesHTML += `<div style="position:absolute; left:${todayAbsolutePx}px; top:0; bottom:0; width:2px; background:var(--danger-color); opacity:0.8; z-index:10; pointer-events:none;" title="Oggi"></div>`;
         }
 
         verticalLinesHTML += `</div>`;
@@ -304,7 +336,7 @@ Object.assign(AdvancedTimeline, {
         const renderScheduledRows = () => {
             scheduledRows.forEach((r) => {
                 
-                // FIX VIEW: Risolve dinamicamente il titolo se è una pagina dedicata
+                // Risolve dinamicamente il titolo se è una pagina dedicata
                 let tVal = r.virtualCells[titleCol.id] || 'Senza Titolo';
                 if (titleCol.type === 'record_note') {
                     const noteObj = typeof Store !== 'undefined' ? Store.getNote(tVal) : null;
@@ -378,7 +410,7 @@ Object.assign(AdvancedTimeline, {
 
                 if (isMilestone) {
                     textInsideBar = `<span style="position:absolute; left:20px; top:-4px; font-size:0.75rem; font-weight:bold; white-space:nowrap; color:var(--text-primary); pointer-events:none;">${tVal}</span>`;
-                } else if (!isGroupedByTitle) {
+                } else if (!isGroupedByTitle && widthPx >= 30) {
                     textInsideBar = `<span style="font-size:0.75rem; font-weight:bold; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; pointer-events:none;">${tVal}</span>`;
                 }
 
@@ -445,11 +477,13 @@ Object.assign(AdvancedTimeline, {
                     }
                 });
 
-                groupsConfig.push({ name: gName, rows: rowsInGroup, lanesCount: groupLanes.length });
-                totalLanesNeeded += groupLanes.length;
+                const groupCount = Math.max(1, groupLanes.length);
+                groupsConfig.push({ name: gName, rows: rowsInGroup, lanesCount: groupCount });
+                totalLanesNeeded += groupCount;
             }
 
-            timelineHeight = Math.max(totalLanesNeeded * rowHeight, 150);
+            const totalRowsForGrid = totalLanesNeeded;
+            const timelineHeight = totalRowsForGrid * rowHeight;
 
             leftPanelHTML = `
                 <div style="width:${leftPanelWidth}px; flex-shrink:0; border-right:1px solid var(--border-color); background:var(--sidebar-bg); z-index:10; display:flex; flex-direction:column; overflow:hidden;">
@@ -498,11 +532,11 @@ Object.assign(AdvancedTimeline, {
                 }
             });
 
-            totalLanesNeeded = flatLanes.length;
-            timelineHeight = Math.max(totalLanesNeeded * rowHeight, 150);
+            totalLanesNeeded = Math.max(flatLanes.length, scheduledRows.length > 0 ? flatLanes.length : 1);
+            const totalRowsForGrid = totalLanesNeeded;
+            const timelineHeight = totalRowsForGrid * rowHeight;
             
             ganttAreaHTML += `<div style="position:absolute; top:60px; left:0; right:0; bottom:0; z-index:2;">`;
-            const totalRowsForGrid = Math.max(totalLanesNeeded, Math.ceil(timelineHeight/rowHeight));
             for (let i = 0; i < totalRowsForGrid; i++) {
                 const clickHandler = isEdit ? `ondblclick="event.stopPropagation(); AdvancedTimeline.createRecord(event, '${tableId}', null)"` : '';
                 ganttAreaHTML += `<div ${clickHandler} style="width:100%; height:${rowHeight}px; border-bottom:1px solid var(--border-color); box-sizing:border-box; cursor:pointer;"></div>`;
@@ -512,12 +546,32 @@ Object.assign(AdvancedTimeline, {
             renderScheduledRows();
         }
 
+        // Dati salvati in memoria per consentire alla navigazione di calcolare istantaneamente le corsie
+        AdvancedTimeline._timelineData[tableId] = {
+            scheduledRows: scheduledRows,
+            startDateMs: startDate.getTime(),
+            colWidth: colWidth,
+            rowHeight: rowHeight,
+            totalLanes: totalLanesNeeded,
+            titleCol: titleCol,
+            dateColType: dateCol.type
+        };
+
+        const arrowSvgLeft = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="15 18 9 12 15 6"></polyline></svg>`;
+        const arrowSvgRight = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
+
+        const actualTimelineHeight = Math.max(totalLanesNeeded * rowHeight, rowHeight);
+
         html += leftPanelHTML;
-        html += `<div class="adv-scroll-container" style="flex:1; overflow-x:auto; overflow-y:auto; position:relative; background:var(--bg-color);" id="timeline-scroll-${tableId}" data-start-date="${startDate.getTime()}" onmousedown="AdvancedTimeline.startPan(event)" onscroll="const t = document.getElementById('timeline-titles-${tableId}'); if(t) t.scrollTop = this.scrollTop;">`;
-        html += `<div style="width:${timelineWidth}px; position:relative; min-height:${timelineHeight + 60}px;">`;
+        html += `<div class="adv-scroll-container" style="flex:1; overflow-x:auto; overflow-y:auto; position:relative; background:var(--bg-color);" id="timeline-scroll-${tableId}" data-start-date="${startDate.getTime()}" onmousedown="AdvancedTimeline.startPan(event)" onmousemove="AdvancedTimeline.handleLaneHover(event, '${tableId}')" onscroll="const t = document.getElementById('timeline-titles-${tableId}'); if(t) t.scrollTop = this.scrollTop; AdvancedTimeline.updateLaneNav('${tableId}');">`;
+        html += `<div style="width:${timelineWidth}px; position:relative; min-height:${actualTimelineHeight + 60}px;">`;
         html += `<div class="adv-timeline-header-sticky"><div style="display:flex; height:30px;">${headerMonths}</div><div style="display:flex; height:30px;">${headerDays}</div></div>`;
         html += verticalLinesHTML;
         
+        // Elementi Fluttuanti di Navigazione Corsia
+        html += `<button id="timeline-nav-prev-${tableId}" class="adv-timeline-nav-arrow" style="display:none;" title="Attività precedente fuori vista">${arrowSvgLeft}</button>`;
+        html += `<button id="timeline-nav-next-${tableId}" class="adv-timeline-nav-arrow" style="display:none;" title="Attività successiva fuori vista">${arrowSvgRight}</button>`;
+
         const relationCols = state.columns.filter(c => c.type === 'relation' && c.targetTableId === tableId);
         
         if (relationCols.length > 0 || isEdit) {
@@ -595,7 +649,7 @@ Object.assign(AdvancedTimeline, {
 
         if (unscheduledRows.length > 0) {
             html += `<div style="margin-top:10px; font-size:0.8rem; color:var(--text-secondary); padding: 5px;">
-                        <b><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Record senza intervallo di date valido (${unscheduledRows.length}):</b></span> 
+                        <b><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Record senza data (${unscheduledRows.length}):</b></span> 
                         ${unscheduledRows.map(r => {
                             let tTitle = r.virtualCells[titleCol.id] || 'Senza Titolo';
                             if (titleCol.type === 'record_note') {
@@ -627,14 +681,14 @@ Object.assign(AdvancedTimeline, {
                     scrollArea.scrollLeft = prevScrollX;
                 } else {
                     const today = new Date().getTime();
-                    if (today >= minTime && today <= maxTime) {
+                    if (today >= startDate.getTime() && today <= endDate.getTime()) {
                         const todayPx = AdvancedTimeline._getPxFromDate(today, startDate.getTime(), colWidth);
-                        scrollArea.scrollLeft = todayPx - (scrollArea.offsetWidth * 0.2);
+                        scrollArea.scrollLeft = Math.max(0, todayPx - (scrollArea.clientWidth * 0.2));
                     } else {
                         const firstTask = Math.min(...scheduledRows.map(r => r._timeStart));
                         if (firstTask && firstTask !== Infinity) {
                             const firstPx = AdvancedTimeline._getPxFromDate(firstTask, startDate.getTime(), colWidth);
-                            scrollArea.scrollLeft = firstPx - 50;
+                            scrollArea.scrollLeft = Math.max(0, firstPx - 50);
                         }
                     }
                 }

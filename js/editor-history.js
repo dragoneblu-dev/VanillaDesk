@@ -2,6 +2,10 @@
  * EditorHistory.js
  * Mixin per Undo, Redo e Snapshot tracking con Tokenizzazione Immagini, Audio
  * e Re-Idratazione dello stato RAM di tutti i Widget complessi.
+ * FIX UNDO/REDO CARET: Ripristino matematico e infallibile della posizione del cursore
+ * per elenchi numerati, liste, blocchi di testo e intestazioni tramite marcatore di cronologia preservato.
+ * Gestione sicura del DOM vivo: l'iniezione del marcatore avviene solo se il cursore è collassato,
+ * preservando integralmente le selezioni attive ed evitando la corruzione dei nodi su Taglia e Cancella.
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -189,7 +193,8 @@ Object.assign(Editor, {
             }
         }
 
-        return Editor.minifyHTMLForStorage(tempDiv.innerHTML);
+        // Il secondo parametro (true) preserva il marcatore di cronologia per il riposizionamento del cursore
+        return Editor.minifyHTMLForStorage(tempDiv.innerHTML, true);
     },
 
     saveSnapshot: () => {
@@ -199,51 +204,96 @@ Object.assign(Editor, {
         let markerInserted = false;
         let codeBlockCaret = false;
         let activeCodeBlockWrapper = null;
+        let origContainer = null;
+        let origOffset = 0;
+        let secondPart = null;
 
         const sel = window.getSelection();
         if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-            const node = sel.anchorNode;
-            
-            const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-            
-            if (preNode) {
-                const range = sel.getRangeAt(0);
-                const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                if (activeCodeBlockWrapper) {
-                    activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                    codeBlockCaret = true;
-                }
-            } else {
-                try {
-                    const range = sel.getRangeAt(0).cloneRange();
-                    const marker = document.createElement('span');
-                    marker.id = 'history-undo-marker-temp';
-                    range.insertNode(marker);
-                    markerInserted = true;
-                } catch (e) { 
-                    console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
+            // Se c'è una selezione estesa (testo evidenziato), NON iniettiamo il marker nel DOM vivo
+            // per evitare di spezzare i nodi di testo o collassare la selezione attiva
+            if (sel.isCollapsed) {
+                const node = sel.anchorNode;
+                
+                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                
+                if (preNode) {
+                    const range = sel.getRangeAt(0);
+                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                    if (activeCodeBlockWrapper) {
+                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                        codeBlockCaret = true;
+                    }
+                } else {
+                    try {
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
+                        const marker = document.createElement('span');
+                        marker.id = 'history-undo-marker-temp';
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
+                        markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
+                    } catch (e) { 
+                        console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
+                    }
                 }
             }
         }
 
         const htmlToSave = Editor._buildHistorySnapshot(editor);
 
+        // Nel DOM vivo: rimuoviamo il marker e ricongiungiamo i nodi di testo ripristinando il punto cursore
         if (markerInserted) {
-            const marker = document.getElementById('history-undo-marker-temp');
-            if (marker) {
-                const parent = marker.parentNode;
-                parent.removeChild(marker);
-                parent.normalize();
+            const startM = document.getElementById('history-undo-marker-temp');
+            if (startM) startM.remove();
+
+            if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
+                origContainer.nodeValue += secondPart.nodeValue;
+                secondPart.remove();
             }
+
+            try {
+                if (origContainer && document.body.contains(origContainer)) {
+                    const restoreRange = document.createRange();
+                    if (origContainer.nodeType === Node.TEXT_NODE) {
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                    } else {
+                        const safeOffset = Math.min(origOffset, origContainer.childNodes.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                    }
+                    restoreRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(restoreRange);
+                }
+            } catch(err) {}
         }
         
         if (codeBlockCaret && activeCodeBlockWrapper) {
             activeCodeBlockWrapper.removeAttribute('data-undo-caret');
         }
 
-        if (Editor.undoStack.length > 0 && Editor.undoStack[Editor.undoStack.length - 1] === htmlToSave) {
-            return;
+        // Evita duplicazioni di snapshot identici nel contenuto
+        if (Editor.undoStack.length > 0) {
+            const cleanRegex = /<span id="history-undo-marker-temp"[^>]*><\/span>/gi;
+            const cleanLast = Editor.undoStack[Editor.undoStack.length - 1].replace(cleanRegex, '');
+            const cleanNew = htmlToSave.replace(cleanRegex, '');
+            if (cleanLast === cleanNew) {
+                // Il testo è identico: aggiorniamo l'ultimo snapshot con la nuova posizione del cursore
+                Editor.undoStack[Editor.undoStack.length - 1] = htmlToSave;
+                return;
+            }
         }
 
         Editor.undoStack.push(htmlToSave);
@@ -297,9 +347,8 @@ Object.assign(Editor, {
                     const stateObj = JSON.parse(decodeURIComponent(escape(atob(b64))));
                     const trueId = wrapper.id.split('_cited_')[0];
                     if (!AppState.databases) AppState.databases = {};
-                    AppState.databases[trueId] = stateObj; // Idrata la RAM prima del montaggio DOM
-                } catch(e) { 
-                }
+                    AppState.databases[trueId] = stateObj;
+                } catch(e) {}
                 wrapper.removeAttribute('data-b64-state');
             }
         });
@@ -308,29 +357,18 @@ Object.assign(Editor, {
 
         let codeWidgetId = null;
         let codeCaretPos = null;
-        let hasNormalMarker = false;
 
-        const marker = document.getElementById('history-undo-marker-temp');
-        if (marker) {
-            hasNormalMarker = true;
-        } else {
-            const wrapperWithCaret = editor.querySelector('.code-wrapper[data-undo-caret], [data-widget-type="code"][data-undo-caret]');
-            if (wrapperWithCaret) {
-                codeCaretPos = parseInt(wrapperWithCaret.getAttribute('data-undo-caret'), 10);
-                codeWidgetId = wrapperWithCaret.id;
-                wrapperWithCaret.removeAttribute('data-undo-caret');
-            }
+        const wrapperWithCaret = editor.querySelector('.code-wrapper[data-undo-caret], [data-widget-type="code"][data-undo-caret]');
+        if (wrapperWithCaret) {
+            codeCaretPos = parseInt(wrapperWithCaret.getAttribute('data-undo-caret'), 10);
+            codeWidgetId = wrapperWithCaret.id;
+            wrapperWithCaret.removeAttribute('data-undo-caret');
         }
 
         // Re-idratazione e montaggio di tutti i widget ripristinati
         if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll(editor);
 
-        if (scrollArea) {
-            scrollArea.scrollTop = currentScrollTop;
-            setTimeout(() => { if (scrollArea) scrollArea.scrollTop = currentScrollTop; }, 0);
-        }
-
-        // Riposizionamento Cursor a riavvio completato
+        // RIPOSIZIONAMENTO MATEMATICO DEL CURSORE NEL PUNTO ESATTO DEL SALVATAGGIO
         if (codeWidgetId && codeCaretPos !== null) {
             const wrapper = document.getElementById(codeWidgetId);
             if (wrapper) {
@@ -340,35 +378,64 @@ Object.assign(Editor, {
                     Editor._setCodeOffset(freshPre, codeCaretPos, codeCaretPos);
                 }
             }
-        } else if (hasNormalMarker) {
-            const freshMarker = document.getElementById('history-undo-marker-temp');
-            if (freshMarker) {
-                try {
-                    const sel = window.getSelection();
-                    const range = document.createRange();
-                    range.setStartBefore(freshMarker);
-                    range.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                } catch (e) { }
-
-                const parent = freshMarker.parentNode;
-                parent.removeChild(freshMarker);
-                parent.normalize();
+        } else {
+            const marker = editor.querySelector('#history-undo-marker-temp');
+            if (marker) {
+                const parent = marker.parentNode;
+                const prev = marker.previousSibling;
+                const next = marker.nextSibling;
                 
+                const range = document.createRange();
+
+                if (prev && prev.nodeType === Node.TEXT_NODE) {
+                    range.setStart(prev, prev.nodeValue.length);
+                    range.collapse(true);
+                } else if (next && next.nodeType === Node.TEXT_NODE) {
+                    range.setStart(next, 0);
+                    range.collapse(true);
+                } else if (next) {
+                    range.setStartBefore(next);
+                    range.collapse(true);
+                } else if (prev) {
+                    range.setStartAfter(prev);
+                    range.collapse(true);
+                } else if (parent) {
+                    range.setStart(parent, 0);
+                    range.collapse(true);
+                }
+
+                marker.remove();
+
+                // Se l'elemento è rimasto vuoto (es. <li> o <p> vuoto), assicura la presenza di un <br>
+                if (parent && parent.childNodes.length === 0 && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(parent.tagName)) {
+                    parent.innerHTML = '<br>';
+                    range.setStart(parent, 0);
+                    range.collapse(true);
+                }
+
+                // Focus PRIMA di assegnare il range alla selezione per impedire reset da parte del browser
+                let focusNode = parent;
+                const editableTarget = focusNode && focusNode.closest ? focusNode.closest('[contenteditable="true"]') : null;
+                if (editableTarget && editableTarget !== editor) {
+                    editableTarget.focus({ preventScroll: true });
+                } else {
+                    editor.focus({ preventScroll: true });
+                }
+
                 const sel = window.getSelection();
-                if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-                    let focusNode = sel.anchorNode;
-                    if (focusNode && focusNode.nodeType === 3) focusNode = focusNode.parentNode;
-                    if (focusNode && focusNode.focus && focusNode.id !== 'noteContent') {
-                        focusNode.focus({ preventScroll: true }); 
-                    }
+                sel.removeAllRanges();
+                sel.addRange(range);
+
+                // Scorrimento dolce se il cursore ripristinato si trova fuori dalla visuale
+                if (focusNode && focusNode.scrollIntoView) {
+                    focusNode.scrollIntoView({ behavior: 'auto', block: 'nearest' });
                 }
             } else {
                 editor.focus({ preventScroll: true });
+                if (scrollArea) {
+                    scrollArea.scrollTop = currentScrollTop;
+                }
             }
-        } else {
-            editor.focus({ preventScroll: true });
         }
 
         if (typeof UI !== 'undefined' && UI.handleEditorInput) UI.handleEditorInput();
@@ -388,6 +455,9 @@ Object.assign(Editor, {
             let markerInserted = false;
             let codeBlockCaret = false;
             let activeCodeBlockWrapper = null;
+            let origContainer = null;
+            let origOffset = 0;
+            let secondPart = null;
 
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
@@ -404,11 +474,23 @@ Object.assign(Editor, {
                     }
                 } else {
                     try {
-                        const range = sel.getRangeAt(0).cloneRange();
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
                         const marker = document.createElement('span');
                         marker.id = 'history-undo-marker-temp';
-                        range.insertNode(marker);
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
                         markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
                     } catch (e) { }
                 }
             }
@@ -417,12 +499,29 @@ Object.assign(Editor, {
             Editor.redoStack.push(htmlToSaveForRedo);
 
             if (markerInserted) {
-                const marker = document.getElementById('history-undo-marker-temp');
-                if (marker) {
-                    const parent = marker.parentNode;
-                    parent.removeChild(marker);
-                    parent.normalize();
+                const startM = document.getElementById('history-undo-marker-temp');
+                if (startM) startM.remove();
+
+                if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
+                    origContainer.nodeValue += secondPart.nodeValue;
+                    secondPart.remove();
                 }
+
+                try {
+                    if (origContainer && document.body.contains(origContainer)) {
+                        const restoreRange = document.createRange();
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                            restoreRange.setStart(origContainer, safeOffset);
+                        } else {
+                            const safeOffset = Math.min(origOffset, origContainer.childNodes.length);
+                            restoreRange.setStart(origContainer, safeOffset);
+                        }
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
+                    }
+                } catch(err) {}
             }
             if (codeBlockCaret && activeCodeBlockWrapper) {
                 activeCodeBlockWrapper.removeAttribute('data-undo-caret');
@@ -430,10 +529,11 @@ Object.assign(Editor, {
 
             let snap = Editor.undoStack.pop();
             
-            // Pulisce via solo i marcatori di history per fare un paragone del DOM
+            // Pulisce via solo i marcatori di history per fare un paragone accurato del DOM
+            const cleanRegex = /<span id="history-undo-marker-temp"[^>]*><\/span>/gi;
             const cleanForComparison = (html) => {
                 if (!html) return '';
-                return html.replace(/<span id="history-undo-marker-temp"><\/span>/gi, '')
+                return html.replace(cleanRegex, '')
                            .replace(/ data-undo-caret="[^"]*"/g, '');
             };
 
@@ -464,6 +564,9 @@ Object.assign(Editor, {
             let markerInserted = false;
             let codeBlockCaret = false;
             let activeCodeBlockWrapper = null;
+            let origContainer = null;
+            let origOffset = 0;
+            let secondPart = null;
 
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
@@ -480,11 +583,23 @@ Object.assign(Editor, {
                     }
                 } else {
                     try {
-                        const range = sel.getRangeAt(0).cloneRange();
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
                         const marker = document.createElement('span');
                         marker.id = 'history-undo-marker-temp';
-                        range.insertNode(marker);
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
                         markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
                     } catch (e) { }
                 }
             }
@@ -493,12 +608,29 @@ Object.assign(Editor, {
             Editor.undoStack.push(htmlToSaveForUndo);
 
             if (markerInserted) {
-                const marker = document.getElementById('history-undo-marker-temp');
-                if (marker) {
-                    const parent = marker.parentNode;
-                    parent.removeChild(marker);
-                    parent.normalize();
+                const startM = document.getElementById('history-undo-marker-temp');
+                if (startM) startM.remove();
+
+                if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
+                    origContainer.nodeValue += secondPart.nodeValue;
+                    secondPart.remove();
                 }
+
+                try {
+                    if (origContainer && document.body.contains(origContainer)) {
+                        const restoreRange = document.createRange();
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                            restoreRange.setStart(origContainer, safeOffset);
+                        } else {
+                            const safeOffset = Math.min(origOffset, origContainer.childNodes.length);
+                            restoreRange.setStart(origContainer, safeOffset);
+                        }
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
+                    }
+                } catch(err) {}
             }
             if (codeBlockCaret && activeCodeBlockWrapper) {
                 activeCodeBlockWrapper.removeAttribute('data-undo-caret');

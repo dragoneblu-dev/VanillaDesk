@@ -6,14 +6,17 @@
  * FIX MULTI-SELECT: I valori (Tag) vengono ora sempre visualizzati in ordine alfabetico crescente.
  * FIX RESOLVE SYSTEM: La risoluzione di Pagine e Relazioni per le Viste del DB di sistema ora è infallibile.
  * FIX RELAZIONI FORMULE: Utilizzo nativo e pulito dell'engine centrale 'resolveRelationDetails' senza codice duplicato.
+ * FEAT: Rendering e navigazione interattiva per la tipologia 'note_link' (Collegamento a Nota).
+ * FIX READONLY COMPUTED: Rollup, Formule e Backlink lunghi mostrano solo 'Apri Testo Completo' in sola lettura.
  */
 
 Object.assign(AdvancedTable, {
     renderCell: (tableId, row, col, val, state, isEdit) => {
-        const editable = isEdit ? 'true' : 'false';
-        const readonly = isEdit ? '' : 'readonly';
-        const disabled = isEdit ? '' : 'disabled';
-        const clickEventSelect = isEdit ? `onclick="AdvancedTable.openSelectMenu(event, '${tableId}', '${row.id}', '${col.id}')"` : '';
+        const isComputed = ['formula', 'rollup', 'relation_backlink', 'created_time', 'last_edited_time'].includes(col.type);
+        const editable = (isEdit && !isComputed) ? 'true' : 'false';
+        const readonly = (isEdit && !isComputed) ? '' : 'readonly';
+        const disabled = (isEdit && !isComputed) ? '' : 'disabled';
+        const clickEventSelect = (isEdit && !isComputed) ? `onclick="AdvancedTable.openSelectMenu(event, '${tableId}', '${row.id}', '${col.id}')"` : '';
 
         const isBacklink = col.type === 'relation_backlink';
         const pointerEvent = !isEdit ? 'pointer-events: auto; cursor: pointer;' : '';
@@ -22,7 +25,7 @@ Object.assign(AdvancedTable, {
 
         const clamp = state.textClamp !== undefined ? state.textClamp : 1;
         let clampStyle = '';
-        if ((col.type === 'text' || col.type === 'url') && clamp !== 'auto') {
+        if ((col.type === 'text' || col.type === 'url' || isComputed) && clamp !== 'auto') {
             clampStyle = `display: -webkit-box; -webkit-line-clamp: ${clamp}; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; word-break: break-word;`;
         }
 
@@ -35,6 +38,58 @@ Object.assign(AdvancedTable, {
                         </div>`;
             } else {
                 return `<div class="adv-cell-text adv-cell-readonly" style="background:rgba(0,0,0,0.02); ${clampStyle}" contenteditable="false" ${readOnlyTip}>${val || ''}</div>`;
+            }
+        }
+
+        // --- COLLEGAMENTO A NOTA (note_link) ---
+        if (col.type === 'note_link') {
+            let linkObj = null;
+            if (val && typeof val === 'object') linkObj = val;
+            else if (val && typeof val === 'string') {
+                try { linkObj = JSON.parse(val); } catch(e) { linkObj = { noteId: val }; }
+            }
+
+            let noteTitle = '';
+            let targetNote = null;
+            if (linkObj && linkObj.noteId) {
+                targetNote = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
+                if (targetNote && !targetNote.deletedAt) {
+                    noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || 'Senza Titolo');
+                } else if (targetNote && targetNote.deletedAt) {
+                    noteTitle = 'Nota nel Cestino';
+                } else {
+                    noteTitle = linkObj.title || 'Nota Mancante';
+                }
+            }
+
+            if (noteTitle) {
+                const safeTitle = UI.escapeHTML(noteTitle);
+                const clickNav = `onclick="event.stopPropagation(); UI.selectNote('${linkObj.noteId}', ${linkObj.anchor ? `'${linkObj.anchor.replace(/'/g, "\\'")}'` : 'null'}, ${linkObj.refId ? `'${linkObj.refId}'` : 'null'})"`;
+                const editBtn = isEdit ? `
+                    <button class="adv-icon-btn" title="Cambia Collegamento" style="padding:1px 3px; margin-left:4px; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${row.id}', '${col.id}')">${Icons.edit}</button>
+                    <button class="adv-icon-btn danger" title="Rimuovi Collegamento" style="padding:1px 3px; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTable.clearNoteLink(event, '${tableId}', '${row.id}', '${col.id}')">${Icons.close}</button>
+                ` : '';
+
+                return `
+                    <div class="adv-select-container" style="justify-content: flex-start; align-items: center; flex-wrap: nowrap; width: 100%;">
+                        <a class="internal-link" style="cursor:pointer; max-width: calc(100% - 40px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" ${clickNav} title="Vai a: ${safeTitle}">
+                            ${safeTitle}
+                        </a>
+                        ${editBtn}
+                    </div>
+                `;
+            } else {
+                if (isEdit) {
+                    return `
+                        <div class="adv-select-container" style="justify-content: flex-start; cursor:pointer;" onclick="AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${row.id}', '${col.id}')">
+                            <span class="adv-select-empty" style="color:var(--accent-color); opacity:0.8; display:inline-flex; align-items:center; gap:4px;">
+                                ${Icons.plus} Collega Nota...
+                            </span>
+                        </div>
+                    `;
+                } else {
+                    return `<span class="adv-select-empty">Vuoto</span>`;
+                }
             }
         }
 
@@ -242,26 +297,39 @@ Object.assign(AdvancedTable, {
             }
         } else {
             let rawVal = val || '';
+            if (isComputed) {
+                rawVal = AdvancedTable.getFormatDisplayValue(col, val);
+            }
+
+            const readOnlyClass = isComputed ? 'adv-cell-readonly' : '';
+            const readOnlyAttr = isComputed ? 'contenteditable="false"' : `contenteditable="${editable}"`;
+
             if (!rawVal) {
-                return `<div class="adv-cell-text" style="${clampStyle}" contenteditable="${editable}" data-row="${row.id}" data-col="${col.id}"></div>`;
+                return `<div class="adv-cell-text ${readOnlyClass}" style="${clampStyle}" ${readOnlyAttr} data-row="${row.id}" data-col="${col.id}"></div>`;
             }
 
             if (clamp === 'auto') {
-                const safeText = rawVal.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                return `<div class="adv-cell-text" contenteditable="${editable}" data-row="${row.id}" data-col="${col.id}" style="white-space: pre-wrap; word-break: break-word;">${safeText}</div>`;
+                const safeText = String(rawVal).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                return `<div class="adv-cell-text ${readOnlyClass}" ${readOnlyAttr} data-row="${row.id}" data-col="${col.id}" style="white-space: pre-wrap; word-break: break-word;">${safeText}</div>`;
             } else {
-                const safeText = rawVal.replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                const hasMultipleLines = rawVal.trim().includes('\n');
+                const safeText = String(rawVal).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const hasMultipleLines = String(rawVal).trim().includes('\n');
                 const estimatedMaxChars = Math.max(20, Math.floor((col.width) / 7)) * clamp;
-                const isTooLong = rawVal.length > estimatedMaxChars || hasMultipleLines;
+                const isTooLong = String(rawVal).length > estimatedMaxChars || hasMultipleLines;
 
                 const tooltipAttr = isTooLong ? `data-tooltip="${safeText.replace(/"/g, '&quot;').replace(/\n/g, '<br>')}"` : '';
 
+                // Sui campi calcolati/derivati (rollup, formula) mostriamo SEMPRE E SOLO "Apri Testo Completo" (icona recordView), mai "Modifica"
+                const actionButtonHTML = isTooLong ? (
+                    (isComputed || !isEdit)
+                        ? `<button class="adv-icon-btn" title="Apri Testo Completo" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px; pointer-events:auto; cursor:pointer;">${Icons.recordView}</button>`
+                        : `<button class="adv-icon-btn" title="Modifica Testo Completo" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px;">${Icons.editTbl}</button>`
+                ) : '';
+
                 return `
                     <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:4px; width:100%;">
-                        <div class="adv-cell-text" style="${clampStyle}" contenteditable="${editable}" data-row="${row.id}" data-col="${col.id}" ${tooltipAttr}>${safeText}</div>
-                        ${isTooLong && !isEdit ? `<button class="adv-icon-btn" title="Apri Testo Completo" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px; ${pointerEvent}">${Icons.recordView}</button>` : ''}
-                        ${isTooLong && isEdit ? `<button class="adv-icon-btn" title="Modifica Testo Completo" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px;">${Icons.editTbl}</button>` : ''}
+                        <div class="adv-cell-text ${readOnlyClass}" style="${clampStyle}" ${readOnlyAttr} data-row="${row.id}" data-col="${col.id}" ${tooltipAttr}>${safeText}</div>
+                        ${actionButtonHTML}
                     </div>
                 `;
             }

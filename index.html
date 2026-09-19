@@ -71,136 +71,13 @@
             <div class="separator"></div>
 
             <div style="position: relative;" id="mainMenuWrapper">
-                <button class="icon-btn main-menu-btn" onclick="UI.toggleMainMenu()" title="Menu Principale">
+                <button class="icon-btn main-menu-btn" id="mainMenuBtn" onclick="UI.toggleMainMenu(event)" title="Menu Principale">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="3" y1="12" x2="21" y2="12"></line>
                         <line x1="3" y1="6" x2="21" y2="6"></line>
                         <line x1="3" y1="18" x2="21" y2="18"></line>
                     </svg>
                 </button>
-
-                <div id="mainMenuDropdown" class="main-menu-dropdown hidden">
-                    <div class="menu-item" onclick="Store.createWorkspace(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.folderOpen)</script>
-                        </span> Crea Nuovo Workspace...
-                    </div>
-                    <div class="menu-item" onclick="Store.openWorkspace(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.folder)</script>
-                        </span> Apri Workspace Esistente...
-                    </div>
-                    <div class="menu-item" onclick="Store.downloadSnapshot(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.download)</script>
-                        </span> Scarica Backup JSON
-                    </div>
-                    
-                    <div class="menu-item" onclick="UI.Trash.open(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.trash)</script>
-                        </span> Cestino
-                    </div>
-                    
-                    <div class="separator-h"></div>
-                    <div class="menu-item" onclick="PackageManager.importModpack(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.lightning || '📦')</script>
-                        </span> Installa Modulo (Modpack)...
-                    </div>
-                    <div class="menu-item" onclick="ExportManager.importMarkdown(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.file)</script>
-                        </span> Importa file Markdown...
-                    </div>
-                    <div class="menu-item" onclick="ExportManager.openModal()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.export)</script>
-                        </span> Esporta Doc. Unico...
-                    </div>
-                    <div class="separator-h"></div>
-
-                    <div class="menu-item" onclick="UI.toggleWordWrap(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg" id="wordWrapIcon">
-                            <script>document.write(Icons.square)</script>
-                        </span>
-                        <span id="wordWrapBtn">No Word Wrap</span>
-                    </div>
-                    <div class="menu-item" onclick="UI.toggleContinuousEdit(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg" id="continuousEditIcon">
-                            <script>document.write(Icons.square)</script>
-                        </span>
-                        <span id="continuousEditBtn">Edit Continuo</span>
-                    </div>
-
-                    <div class="separator-h"></div>
-
-                    <div class="adv-menu-item has-submenu" style="padding: 8px 12px; font-size: 0.9rem;"
-                        id="aspectMenuTrigger">
-                        <div style="display:flex; align-items:center; gap:10px;">
-                            <span class="menu-icon-svg">
-                                <script>document.write(Icons.palette)</script>
-                            </span> Aspetto
-                        </div>
-                        <span class="adv-menu-arrow">›</span>
-
-                        <div class="adv-submenu" id="aspectSubMenu" style="min-width: 180px; top:-5px;">
-                            <div class="menu-label"
-                                style="padding: 4px 8px; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">
-                                Layout Pagina</div>
-                            
-                            <div class="menu-item" onclick="UI.togglePageWidth(); UI.toggleMainMenu()">
-                                <span class="menu-icon-svg" id="pageWidthIcon">
-                                    <script>document.write(Icons.widthFit)</script>
-                                </span>
-                                <span id="pageWidthBtn">Larghezza: Standard</span>
-                            </div>
-
-                            <div class="separator-h"></div>
-
-                            <div class="menu-label"
-                                style="padding: 4px 8px; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">
-                                Tema Colori</div>
-                            <div class="menu-item" onclick="UI.setTheme('white'); UI.toggleMainMenu()">
-                                <span id="theme-white-check"
-                                    style="width: 15px; font-weight:bold; color:var(--accent-color)"></span> Bianco Puro
-                            </div>
-                            <div class="menu-item" onclick="UI.setTheme('light'); UI.toggleMainMenu()">
-                                <span id="theme-light-check"
-                                    style="width: 15px; font-weight:bold; color:var(--accent-color)">✓</span> Carta avorio
-                            </div>
-                            <div class="menu-item" onclick="UI.setTheme('pastel'); UI.toggleMainMenu()">
-                                <span id="theme-pastel-check"
-                                    style="width: 15px; font-weight:bold; color:var(--accent-color)"></span> Fresco Pastello
-                            </div>
-                            <div class="menu-item" onclick="UI.setTheme('dark'); UI.toggleMainMenu()">
-                                <span id="theme-dark-check"
-                                    style="width: 15px; font-weight:bold; color:var(--accent-color)"></span> Blu lavagna
-                            </div>
-                            <div class="menu-item" onclick="UI.setTheme('notion-dark'); UI.toggleMainMenu()">
-                                <span id="theme-notion-dark-check"
-                                    style="width: 15px; font-weight:bold; color:var(--accent-color)"></span> Notte stellata
-                            </div>
-                            <div class="separator-h"></div>
-                            <div class="menu-label"
-                                style="padding: 4px 8px; font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase;">
-                                Zoom Testo</div>
-                            <div style="display:flex; gap:5px; padding:4px 8px;">
-                                <button class="btn" style="flex:1; justify-content:center; font-weight:bold;"
-                                    onclick="UI.changeFontSize(-1); event.stopPropagation();">A -</button>
-                                <button class="btn" style="flex:1; justify-content:center; font-weight:bold;"
-                                    onclick="UI.changeFontSize(1); event.stopPropagation();">A +</button>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="separator-h"></div>
-                    <div class="menu-item" onclick="Manual.open(); UI.toggleMainMenu()">
-                        <span class="menu-icon-svg">
-                            <script>document.write(Icons.book)</script>
-                        </span> Manuale d'Uso
-                    </div>
-                </div>
             </div>
         </div>
     </header>
@@ -267,7 +144,7 @@
                         Non il solito blocco note. Scrivi liberamente, ed organizza con la mente di uno sviluppatore: trasforma le tue idee in <b>database relazionali</b>, <b>diagrammi di Gantt</b>, bacheche Kanban e grafici interattivi.<br><br>
                         Imposta le tue automazioni e goditi un workspace che gira alla velocità della luce. Zero cloud, zero abbonamenti: <b>tutto resta al sicuro, solo sul tuo computer.</b>
                     </p>
-                    <div style="display:flex; gap:15px; justify-content:center;">
+                    <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
                         <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.createWorkspace()">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folderOpen)</script>
@@ -276,7 +153,12 @@
                         <button class="btn" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.openWorkspace()">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folder)</script>
-                            </span> Apri Workspace Esistente
+                            </span> Apri Workspace...
+                        </button>
+                        <button id="btnRecoverSession" class="btn" style="padding: 10px 20px; font-size: 1rem; display:none; background: rgba(37, 99, 235, 0.1); border-color: var(--accent-color); color: var(--accent-color); font-weight: bold;" onclick="Store.restoreRecoveredSession()">
+                            <span style="display:inline-block; margin-right:5px;">
+                                <script>document.write(Icons.restore)</script>
+                            </span> Recupera Sessione Precedente
                         </button>
                     </div>
                 </div>
@@ -491,7 +373,6 @@
     <script src="js/logic-engine-ui.js"></script>
     <script src="js/logic-engine-ai.js"></script> 
     
-    
     <script src="js/AdvancedTable/advanced-table-core.js"></script>
     <script src="js/AdvancedTable/advanced-table-context.js"></script>
     <script src="js/AdvancedTable/advanced-table-csv.js"></script>
@@ -503,6 +384,7 @@
     <!-- Moduli Visualizzazione e Manipolazione Dati DB -->
     <script src="js/automation-ui-builder.js"></script>
     <script src="js/AdvancedTable/advanced-table-board.js"></script>
+    <script src="js/AdvancedTable/advanced-table-tree.js"></script>
     <script src="js/AdvancedTable/advanced-table-timeline.js"></script>
     <script src="js/AdvancedTable/advanced-table-timeline-drag.js"></script>
     <script src="js/AdvancedTable/advanced-table-timeline-render.js"></script>

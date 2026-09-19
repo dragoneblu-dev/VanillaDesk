@@ -1,9 +1,10 @@
 /**
- * AdvancedTableColumnMenus.js
+ * js/AdvancedTable/advanced-table-column-menus.js
  * Menu Contestuali per la singola Colonna: Cambio Tipo, Rinomina, Sposta, Elimina.
  * Configurazione esplicita per relazioni con popup di alert per la prevenzione perdita dati.
  * Gestione dinamica della visibilità del campo (compatibile con griglia e Drawer).
  * Pulizia a cascata dello stato (sort, filtri, viste e formattazione condizionale) su eliminazione colonna.
+ * Integrazione del tipo 'note_link' (Collegamento a Nota).
  */
 
 const AdvancedTableColumnMenus = {
@@ -281,6 +282,7 @@ const AdvancedTableColumnMenus = {
             { icon: Icons.relation, label: 'Relazione', onClick: () => AdvancedTable.addColumn(tableId, 'relation') },
             { icon: Icons.rollup, label: 'Rollup (Lookup)', onClick: () => AdvancedTable.addColumn(tableId, 'rollup') },
             { icon: Icons.url, label: 'URL / Link', onClick: () => AdvancedTable.addColumn(tableId, 'url') },
+            { icon: Icons.link, label: 'Collegamento a Nota', onClick: () => AdvancedTable.addColumn(tableId, 'note_link') },
             { icon: Icons.recordPage, label: 'Pagina Dedicata', onClick: () => AdvancedTable.addColumn(tableId, 'record_note') },
             { icon: Icons.play, label: 'Pulsante (Macro)', onClick: () => AdvancedTable.addColumn(tableId, 'button') },
             { type: 'divider' },
@@ -408,6 +410,7 @@ const AdvancedTableColumnMenus = {
                         { icon: Icons.relation, label: 'Relazione' + chkType('relation'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'relation') },
                         { icon: Icons.rollup, label: 'Rollup (Lookup)' + chkType('rollup'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'rollup') },
                         { icon: Icons.url, label: 'URL / Link' + chkType('url'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'url') },
+                        { icon: Icons.link, label: 'Collegamento a Nota' + chkType('note_link'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'note_link') },
                         { icon: Icons.recordPage, label: 'Pagina Dedicata' + chkType('record_note'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'record_note') },
                         { icon: Icons.play, label: 'Pulsante (Macro)' + chkType('button'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'button') },
                         { type: 'divider' },
@@ -500,10 +503,12 @@ const AdvancedTableColumnMenus = {
 
         AdvancedTable.setState(tableId, state);
         
-        if (tableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
-            AdvancedTable.openRecordView(tableId, AdvancedTable.activeRecordId);
-        } else {
-            AdvancedTable.updateDependentViews(tableId);
+        // Sincronizzazione viste e Drawer
+        AdvancedTable.updateDependentViews(tableId);
+
+        if (AdvancedTable.activeRecordId) {
+            const activeTId = AdvancedTable.activeTableId || tableId;
+            AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
         }
         
         Store.triggerAutoSave();
@@ -570,7 +575,7 @@ const AdvancedTableColumnMenus = {
                 }
                 newVal = '';
             }
-            else if (newType === 'created_time' || newType === 'last_edited_time' || newType === 'formula' || newType === 'rollup' || newType === 'record_note' || newType === 'button') {
+            else if (newType === 'created_time' || newType === 'last_edited_time' || newType === 'formula' || newType === 'rollup' || newType === 'record_note' || newType === 'button' || newType === 'note_link') {
                 newVal = '';
                 if (oldVal !== undefined && oldVal !== null && oldVal !== '' && !(Array.isArray(oldVal) && oldVal.length === 0)) {
                     hasDataLoss = true;
@@ -722,6 +727,10 @@ const AdvancedTableColumnMenus = {
             AdvancedTable.openRecordView(tableId, AdvancedTable.activeRecordId);
         } else {
             AdvancedTable.updateDependentViews(tableId);
+            if (AdvancedTable.activeRecordId) {
+                const activeTId = AdvancedTable.activeTableId || tableId;
+                AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
+            }
         }
         
         Store.triggerAutoSave();
@@ -917,6 +926,10 @@ const AdvancedTableColumnMenus = {
             AdvancedTable.openRecordView(realTableId, AdvancedTable.activeRecordId);
         } else {
             AdvancedTable.updateDependentViews(realTableId);
+            if (AdvancedTable.activeRecordId) {
+                const activeTId = AdvancedTable.activeTableId || tableId;
+                AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
+            }
         }
         
         Store.triggerAutoSave();

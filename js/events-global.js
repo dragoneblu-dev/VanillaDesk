@@ -6,9 +6,17 @@
  * FIX CTRL+A: L'isolamento della selezione (Select-All) copre ora anche i campi testuali del Diario
  * e gli snippet, prevenendo selezioni globali indesiderate.
  * FIX DRAG-SCROLL: Inserito "Drag Assist Engine" con calcolo matematico.
+ * RESTORE DRAG & DROP DEI BLOCCHI: Ripristinato l'intero motore nativo di intercettazione
+ * dragstart, dragenter, dragover, dragleave, dragend e drop su editorEl con posizionamento
+ * dinamico di #adv-drop-indicator e scroll assistito a 60FPS.
+ * RESTORE AUTOFIT DBLCLICK: Ripristinato l'ascoltatore per l'auto-fit delle colonne al doppio click sul resizer.
+ * RESTORE SMART CLICK ESCAPE: Ripristinato il listener mousedown su editorEl.
+ * FEAT HORIZONTAL WHEEL SCROLL: Scorrimento orizzontale continuo su Kanban e Timeline tramite mouse wheel.
  */
 
 const EventsGlobal = {
+    _lastMiddleClickTime: 0,
+
     _triggerSearchUpdate: () => {
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
@@ -72,6 +80,73 @@ const EventsGlobal = {
         }, 150);
     },
 
+    // Risoluzione ed esecuzione diretta dei link (usata da click e auxclick centrale)
+    openLinkDirectly: (link) => {
+        if (!link) return;
+
+        if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
+        if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
+
+        if (link.classList.contains('internal-link')) {
+            let noteId = link.getAttribute('data-note-id');
+            let anchor = link.getAttribute('data-anchor');
+            let refId = link.getAttribute('data-ref-id'); 
+
+            // Fallback di recupero se i parametri sono definiti in un attributo onclick inline
+            if (!noteId && link.getAttribute('onclick')) {
+                const match = link.getAttribute('onclick').match(/UI\.selectNote\(['"]([^'"]+)['"](?:,\s*['"]?([^'",)]*)['"]?)?(?:,\s*['"]?([^'",)]*)['"]?)?\)/);
+                if (match) {
+                    noteId = match[1];
+                    anchor = match[2] && match[2] !== 'null' ? match[2] : null;
+                    refId = match[3] && match[3] !== 'null' ? match[3] : null;
+                }
+            }
+
+            if (noteId && typeof UI !== 'undefined' && typeof UI.selectNote === 'function') {
+                UI.selectNote(noteId, anchor, refId);
+            }
+        } else if (link.classList.contains('file-link')) {
+            const path = link.getAttribute('data-file-path');
+            if (path && typeof LinkManager !== 'undefined' && typeof LinkManager.openViewer === 'function') {
+                LinkManager.openViewer(path, link);
+            }
+        } else {
+            let href = link.getAttribute('href');
+            if (!href || href === '#' || href.startsWith('javascript:')) return;
+
+            // GESTIONE ANCORE INTERNE (In-page Anchors es. #sec-1, #sec-2-media, #manualTopIndex)
+            if (href.startsWith('#')) {
+                const targetId = href.substring(1);
+                if (targetId) {
+                    let targetEl = document.getElementById(targetId);
+                    
+                    // Fallback intelligente: se l'ancora specifica non esiste, prova a risalire alla macro-sezione (es. sec-2)
+                    if (!targetEl && targetId.startsWith('sec-')) {
+                        const parts = targetId.split('-');
+                        if (parts.length >= 2) {
+                            targetEl = document.getElementById(`${parts[0]}-${parts[1]}`);
+                        }
+                    }
+
+                    if (targetEl) {
+                        targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }
+                }
+                return;
+            }
+
+            href = href.trim().replace(/^https?:\/\/file:\/\/\//i, 'file:///');
+            const isLocalPath = /^([a-zA-Z]:[\\/]|\\\\)/i.test(href);
+            const hasProtocol = /^[a-zA-Z0-9+-.]+:/i.test(href);
+            if (isLocalPath) {
+                href = 'file:///' + href.replace(/\\/g, '/');
+            } else if (!hasProtocol) {
+                href = 'https://' + href;
+            }
+            window.open(href, '_blank');
+        }
+    },
+
     init: () => {
         if (!document.getElementById('adv-global-row-selector')) {
             const selector = document.createElement('div');
@@ -114,7 +189,6 @@ const EventsGlobal = {
                 if (!shield) {
                     shield = document.createElement('style');
                     shield.id = 'drag-shield-style';
-                    
                     
                     // FIX MACRO DRAG: Esclusione .widget-type-buttonbar.
                     // Evita l'annullamento del drag nativo nei widget con maniglie posizionate nel body.
@@ -225,11 +299,14 @@ const EventsGlobal = {
             document.body.style.cursor = '';
         });
 
+        // BLINDO SALVATAGGIO IN USCITA: Supporto Workspace a cartelle e avviso nativo anti-perdita dati
         window.addEventListener('beforeunload', (e) => {
-            if (Store.isDirty && AppState.fileHandle) {
-                Store.saveToFile();
-            }
-            if (AppState.fileHandle) {
+            if (Store.isDirty) {
+                if (AppState.workspaceHandle) {
+                    Store.saveToFile();
+                } else {
+                    Store.saveLocalBackup();
+                }
                 e.preventDefault();
                 e.returnValue = '';
             }
@@ -301,7 +378,7 @@ const EventsGlobal = {
 
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
             const key = e.key.toLowerCase();
-            
+
             // ISOLAMENTO SELECT-ALL (Ctrl+A)
             if (isCtrlOrCmd && key === 'a' && AppState.isEditMode) {
                 const sel = window.getSelection();
@@ -323,32 +400,122 @@ const EventsGlobal = {
                 }
             }
 
-            if (isCtrlOrCmd && AppState.isEditMode) {
-                if (e.shiftKey && key === 'b') {
-                    e.preventDefault();
+            if (isCtrlOrCmd && key === 'x' && AppState.isEditMode) {
+                const selection = window.getSelection();
+                if (!selection.isCollapsed && selection.rangeCount > 0) {
+                    const range = selection.getRangeAt(0);
+                    const container = range.commonAncestorContainer;
+                    const elementNode = container.nodeType === 3 ? container.parentNode : container;
                     
-                    // Evitiamo che il segnalibro venga inserito dentro il blocco di codice distruggendone il DOM
-                    const sel = window.getSelection();
-                    if (sel.rangeCount > 0) {
-                        const node = sel.anchorNode;
-                        if (node && node.nodeType === 3) {
-                            if (node.parentNode.closest('.code-content')) {
-                                if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Impossibile inserire un segnalibro dentro un blocco di codice.", "warning");
-                                return;
-                            }
-                        } else if (node && node.closest('.code-content')) {
-                            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Impossibile inserire un segnalibro dentro un blocco di codice.", "warning");
+                    const selectedProtectedNodes = elementNode.querySelectorAll ? elementNode.querySelectorAll(WidgetManager.blockSelector) : [];
+                    const intersectsProtected = Array.from(selectedProtectedNodes).some(node => selection.containsNode(node, true));
+                    const isInsideProtected = WidgetManager.isProtectedBlock(elementNode);
+
+                    if (intersectsProtected || (isInsideProtected && !WidgetManager.isInsideEditableWidgetArea(elementNode))) {
+                        e.preventDefault();
+                        alert("⚠️ Taglio non consentito: Stai tentando di tagliare elementi complessi (Widget) mischiati a testo normale.\nPer evitare corruzioni, sposta o elimina questi elementi tramite i loro menu dedicati.");
+                        return;
+                    }
+                }
+            }
+
+            if (typeof Editor !== 'undefined') {
+                if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
+                    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                        if (typeof Editor.handleTableNavigation === 'function') {
+                            if (Editor.handleTableNavigation(e)) return;
+                        }
+                    }
+                }
+
+                if (e.key === 'Enter') { Editor.registerTypingStart(e.key); Editor.handleEnterKey(e); }
+                if (e.key === 'Tab') { Editor.registerTypingStart(e.key); Editor.handleTabKey(e); }
+                if (e.key === 'Backspace') { Editor.handleBackspaceKey(e); }
+                if (e.key === 'Delete') { 
+                    if (e.shiftKey) return; // Lascia che il browser gestisca Shift+Delete come Cut (Taglia) nativo
+                    Editor.handleDeleteKey(e); 
+                }
+                
+                if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
+                    Editor.handleBracketAutoClose(e);
+                    Editor.handleFormatEscape(e);
+                }
+            }
+
+            if (isCtrlOrCmd && AppState.isEditMode) {
+                if (key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
+                if (key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
+                if (key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
+                if (key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
+                
+                if (key === 'd') { 
+                    e.preventDefault(); 
+                    Editor.triggerMultiCursor(); 
+                    return; 
+                }
+            }
+
+            if (e.altKey && AppState.isEditMode) {
+                if (e.key === 'ArrowUp') { e.preventDefault(); Editor.moveBlock(-1); return; }
+                if (e.key === 'ArrowDown') { e.preventDefault(); Editor.moveBlock(1); return; }
+            }
+
+            if (isCtrlOrCmd && !e.shiftKey && key === 'z') {
+                e.preventDefault();
+                Editor.undo();
+                return;
+            }
+            if ((isCtrlOrCmd && key === 'y') || (isCtrlOrCmd && e.shiftKey && key === 'z')) {
+                e.preventDefault();
+                Editor.redo();
+                return;
+            }
+
+            if (!isCtrlOrCmd && !e.altKey && e.key.length === 1) {
+                const sel = window.getSelection();
+                if (!sel.isCollapsed && sel.rangeCount > 0) {
+                    if (typeof Editor !== 'undefined' && Editor.handleBulkWidgetDeletion) {
+                        if (!Editor.handleBulkWidgetDeletion()) {
+                            e.preventDefault(); 
                             return;
                         }
                     }
+                }
+                if (typeof Editor !== 'undefined') Editor.registerTypingStart(e.key);
+            }
+        });
 
-                    Editor.saveSelection(); 
-                    Editor.insertBookmark();
-                    if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
-                    return;
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                if (typeof TableManager !== 'undefined') {
+                    if (TableManager.Drag && TableManager.Drag.dragState) TableManager.Drag.handleMouseUp();
+                    if (TableManager.resizingCol) TableManager.handleMouseUp();
+                    if (typeof TableManager.UI.hideTriggers === 'function') TableManager.UI.hideTriggers();
+                }
+                if (typeof AdvancedTable !== 'undefined' && AdvancedTable.resizingCol) {
+                    AdvancedTable.handleGlobalMouseUp({ pageX: AdvancedTable.startX }); 
+                }
+                if (typeof AdvancedCalendar !== 'undefined' && AdvancedCalendar.resizeState) {
+                    AdvancedCalendar.onResizeEnd({ pageY: AdvancedCalendar.resizeState.startY });
+                }
+                if (typeof AdvancedTimeline !== 'undefined' && AdvancedTimeline.dragState) {
+                    AdvancedTimeline.onDragEnd({ pageX: AdvancedTimeline.dragState.startX });
+                }
+                if (typeof UI !== 'undefined' && UI.Menu) {
+                    UI.Menu.closeAll(true);
+                }
+                if (typeof Editor !== 'undefined' && Editor.multiSelectActive) {
+                    Editor.clearMultiCursor();
+                }
+                if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
+                if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
+                
+                const drawer = document.getElementById('advGlobalDrawer');
+                if (drawer && drawer.classList.contains('open')) {
+                    if (typeof UI.closeDrawer !== 'undefined') UI.closeDrawer();
                 }
             }
-        }, true);
+        });
 
         editorEl.addEventListener('mousedown', (e) => {
             if (window.innerWidth <= 600) {
@@ -385,6 +552,9 @@ const EventsGlobal = {
             }
         }, true);
 
+        // =========================================================================
+        // MOTORE DI GESTIONE TRASCINAMENTO BLOCCHI NELL'EDITOR (DRAG & DROP WIDGETS)
+        // =========================================================================
         editorEl.addEventListener('dragstart', (e) => {
             if (!AppState.isEditMode) return;
             
@@ -412,7 +582,7 @@ const EventsGlobal = {
                 AppState.draggedBlockId = target.getAttribute('data-image-ref');
                 AppState.draggedBlockType = 'image';
                 e.dataTransfer.effectAllowed = 'move';
-                // Niente scudo per le immagini, vogliamo poterle inserire ovunque
+                e.dataTransfer.setData('text/plain', AppState.draggedBlockId);
                 return;
             }
 
@@ -437,6 +607,8 @@ const EventsGlobal = {
                     AppState.draggedBlockType = 'simple-table';
                 }
                 
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', widgetWrapper.id);
 
                 // DRAG ASSIST: Attiviamo lo scudo e il motore per i widget complessi
                 toggleDragShield(true, AppState.draggedBlockType);
@@ -797,161 +969,61 @@ const EventsGlobal = {
         // AUXCLICK (MIDDLE CLICK SUI LINK)
         // -------------------------------------------------------------
         document.addEventListener('auxclick', (e) => {
-            if (e.button === 1) { // 1 = Tasto centrale (Rotellina)
-                const link = e.target.closest('a');
-                if (link && AppState.isEditMode) {
+            if (e.button === 1 || e.which === 2) {
+                let target = e.target;
+                if (target.nodeType === 3) target = target.parentNode;
+                if (!target || !target.closest) return;
+
+                const link = target.tagName === 'A' ? target : target.closest('a');
+                if (link) {
+                    if (link.hasAttribute('download')) return;
+
                     e.preventDefault();
                     e.stopPropagation();
-                    
-                    if (typeof LinkManager !== 'undefined') {
-                        LinkManager.activeLink = link;
-                        LinkManager.openCurrentLink();
-                    }
+
+                    // Prevenzione doppi scatti su browser che emettono eventi multipli
+                    if (Date.now() - EventsGlobal._lastMiddleClickTime < 250) return;
+                    EventsGlobal._lastMiddleClickTime = Date.now();
+
+                    EventsGlobal.openLinkDirectly(link);
                 }
             }
         });
 
-        editorEl.addEventListener('keydown', (e) => {
-            // Check di sicurezza: Non c'è e.key se l'evento è sintetico!
-            if (!e.key) return;
+        // =========================================================================
+        // SCROLL ORIZZONTALE FLUIDO CON MOUSE WHEEL (Shift + Wheel o Timeline/Kanban)
+        // =========================================================================
+        document.addEventListener('wheel', (e) => {
+            if (e.target.closest('#canvasViewport')) return;
 
-            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-            const key = e.key.toLowerCase();
+            const timelineScroll = e.target.closest('[id^="timeline-scroll-"]');
+            const boardContainer = e.target.closest('.adv-board-container');
+            const scrollContainer = e.target.closest('.adv-scroll-container');
 
-            // ISOLAMENTO SELECT-ALL (Ctrl+A)
-            if (isCtrlOrCmd && key === 'a' && AppState.isEditMode) {
-                const sel = window.getSelection();
-                if (sel.rangeCount > 0) {
-                    let node = sel.anchorNode;
-                    if (node && node.nodeType === 3) node = node.parentNode;
-                    
-                    // Identifica se siamo in una sotto-area editabile protetta
-                    const isolatedArea = node ? node.closest('.code-content, .journal-content, .snippet-text, .adv-cell-text, td[contenteditable="true"], th[contenteditable="true"]') : null;
-                    
-                    if (isolatedArea) {
+            if (e.shiftKey && scrollContainer) {
+                if (scrollContainer.scrollWidth > scrollContainer.clientWidth) {
+                    e.preventDefault();
+                    scrollContainer.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
+                }
+            } else if (timelineScroll) {
+                // Sulla Timeline, se l'utente usa la rotella del mouse sull'intestazione o nell'area libera
+                if (e.target.closest('.adv-timeline-header-sticky') || !e.target.closest('.adv-cal-week-container')) {
+                    if (timelineScroll.scrollWidth > timelineScroll.clientWidth) {
                         e.preventDefault();
-                        const range = document.createRange();
-                        range.selectNodeContents(isolatedArea);
-                        sel.removeAllRanges();
-                        sel.addRange(range);
-                        return;
+                        timelineScroll.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
                     }
                 }
-            }
-
-            if (isCtrlOrCmd && key === 'x' && AppState.isEditMode) {
-                const selection = window.getSelection();
-                if (!selection.isCollapsed && selection.rangeCount > 0) {
-                    const range = selection.getRangeAt(0);
-                    const container = range.commonAncestorContainer;
-                    const elementNode = container.nodeType === 3 ? container.parentNode : container;
-                    
-                    const selectedProtectedNodes = elementNode.querySelectorAll ? elementNode.querySelectorAll(WidgetManager.blockSelector) : [];
-                    const intersectsProtected = Array.from(selectedProtectedNodes).some(node => selection.containsNode(node, true));
-                    const isInsideProtected = WidgetManager.isProtectedBlock(elementNode);
-
-                    if (intersectsProtected || (isInsideProtected && !WidgetManager.isInsideEditableWidgetArea(elementNode))) {
+            } else if (boardContainer) {
+                // Nella bacheca Kanban, se l'utente usa la rotella sull'intestazione o tra le colonne
+                const kanbanCol = e.target.closest('.adv-kanban-col');
+                if (!kanbanCol || kanbanCol.scrollHeight <= kanbanCol.clientHeight) {
+                    if (boardContainer.scrollWidth > boardContainer.clientWidth) {
                         e.preventDefault();
-                        alert("⚠️ Taglio non consentito: Stai tentando di tagliare elementi complessi (Widget) mischiati a testo normale.\nPer evitare corruzioni, sposta o elimina questi elementi tramite i loro menu dedicati.");
-                        return;
+                        boardContainer.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
                     }
                 }
             }
-
-            if (typeof Editor !== 'undefined') {
-                if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
-                    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-                        if (typeof Editor.handleTableNavigation === 'function') {
-                            if (Editor.handleTableNavigation(e)) return;
-                        }
-                    }
-                }
-
-                if (e.key === 'Enter') { Editor.registerTypingStart(e.key); Editor.handleEnterKey(e); }
-                if (e.key === 'Tab') { Editor.registerTypingStart(e.key); Editor.handleTabKey(e); }
-                if (e.key === 'Backspace') { Editor.registerTypingStart(e.key); Editor.handleBackspaceKey(e); }
-                if (e.key === 'Delete') { Editor.registerTypingStart(e.key); Editor.handleDeleteKey(e); }
-                
-                if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
-                    Editor.handleBracketAutoClose(e);
-                    Editor.handleFormatEscape(e);
-                }
-            }
-
-            if (isCtrlOrCmd && AppState.isEditMode) {
-                if (key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
-                if (key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
-                if (key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
-                if (key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
-                
-                if (key === 'd') { 
-                    e.preventDefault(); 
-                    Editor.triggerMultiCursor(); 
-                    return; 
-                }
-            }
-
-            if (e.altKey && AppState.isEditMode) {
-                if (e.key === 'ArrowUp') { e.preventDefault(); Editor.moveBlock(-1); return; }
-                if (e.key === 'ArrowDown') { e.preventDefault(); Editor.moveBlock(1); return; }
-            }
-
-            if (isCtrlOrCmd && !e.shiftKey && key === 'z') {
-                e.preventDefault();
-                Editor.undo();
-                return;
-            }
-            if ((isCtrlOrCmd && key === 'y') || (isCtrlOrCmd && e.shiftKey && key === 'z')) {
-                e.preventDefault();
-                Editor.redo();
-                return;
-            }
-
-            if (!isCtrlOrCmd && !e.altKey && e.key.length === 1) {
-                const sel = window.getSelection();
-                if (!sel.isCollapsed && sel.rangeCount > 0) {
-                    if (typeof Editor !== 'undefined' && Editor.handleBulkWidgetDeletion) {
-                        if (!Editor.handleBulkWidgetDeletion()) {
-                            e.preventDefault(); 
-                            return;
-                        }
-                    }
-                }
-                if (typeof Editor !== 'undefined') Editor.registerTypingStart(e.key);
-            }
-        });
-
-        document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape') {
-                if (typeof TableManager !== 'undefined') {
-                    if (TableManager.Drag && TableManager.Drag.dragState) TableManager.Drag.handleMouseUp();
-                    if (TableManager.resizingCol) TableManager.handleMouseUp();
-                    if (typeof TableManager.UI.hideTriggers === 'function') TableManager.UI.hideTriggers();
-                }
-                if (typeof AdvancedTable !== 'undefined' && AdvancedTable.resizingCol) {
-                    AdvancedTable.handleGlobalMouseUp({ pageX: AdvancedTable.startX }); 
-                }
-                if (typeof AdvancedCalendar !== 'undefined' && AdvancedCalendar.resizeState) {
-                    AdvancedCalendar.onResizeEnd({ pageY: AdvancedCalendar.resizeState.startY });
-                }
-                if (typeof AdvancedTimeline !== 'undefined' && AdvancedTimeline.dragState) {
-                    AdvancedTimeline.onDragEnd({ pageX: AdvancedTimeline.dragState.startX });
-                }
-                if (typeof UI !== 'undefined' && UI.Menu) {
-                    UI.Menu.closeAll(true);
-                }
-                if (typeof Editor !== 'undefined' && Editor.multiSelectActive) {
-                    Editor.clearMultiCursor();
-                }
-                if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
-                if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
-                
-                const drawer = document.getElementById('advGlobalDrawer');
-                if (drawer && drawer.classList.contains('open')) {
-                    if (typeof UI.closeDrawer !== 'undefined') UI.closeDrawer();
-                }
-            }
-        });
+        }, { passive: false });
 
         editorEl.addEventListener('paste', (e) => {
             if (AppState.isEditMode && typeof Editor !== 'undefined' && Editor.handlePaste) {
@@ -1099,25 +1171,22 @@ const EventsGlobal = {
                     return; 
                 }
 
-                if (AppState.isEditMode && !e.ctrlKey && !e.metaKey) {
+                // Supporto per click centrale nel caso venga emesso sul listener click (legacy/fallback)
+                if (e.button === 1 || e.which === 2) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (Date.now() - EventsGlobal._lastMiddleClickTime < 250) return;
+                    EventsGlobal._lastMiddleClickTime = Date.now();
+                    EventsGlobal.openLinkDirectly(link);
+                    return;
+                }
+
+                // FIX: Mostra il floating menu di editing ESCLUSIVAMENTE per i link interni a #noteContent
+                if (AppState.isEditMode && !e.ctrlKey && !e.metaKey && link.closest('#noteContent')) {
                     // CITAZIONI: Se è dentro una citazione, clicca direttamente il link bypassando il menu fluttuante
                     if (link.closest('.block-citation')) {
-                        if (link.classList.contains('internal-link')) {
-                            e.preventDefault();
-                            const noteId = link.getAttribute('data-note-id');
-                            const anchor = link.getAttribute('data-anchor');
-                            const refId = link.getAttribute('data-ref-id'); 
-                            if (noteId) UI.selectNote(noteId, anchor, refId);
-                        } else if (link.classList.contains('file-link')) {
-                            e.preventDefault();
-                            const path = link.getAttribute('data-file-path');
-                            if (path) LinkManager.openViewer(path, link);
-                        } else {
-                            if (link.href && link.href.startsWith('http')) {
-                                e.preventDefault();
-                                window.open(link.href, '_blank');
-                            }
-                        }
+                        e.preventDefault();
+                        EventsGlobal.openLinkDirectly(link);
                         return;
                     }
 
@@ -1182,21 +1251,5 @@ const EventsGlobal = {
                 }
             }
         });
-
-        const aspectMenuTrigger = document.getElementById('aspectMenuTrigger');
-        const aspectSubMenu = document.getElementById('aspectSubMenu');
-
-        if (aspectMenuTrigger && aspectSubMenu) {
-            aspectMenuTrigger.addEventListener('mouseenter', () => {
-                const rect = aspectMenuTrigger.getBoundingClientRect();
-                if (rect.right + 180 > window.innerWidth) {
-                    aspectSubMenu.style.left = 'auto';
-                    aspectSubMenu.style.right = '100%';
-                } else {
-                    aspectSubMenu.style.left = '100%';
-                    aspectSubMenu.style.right = 'auto';
-                }
-            });
-        }
     }
 };

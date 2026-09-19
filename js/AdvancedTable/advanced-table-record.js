@@ -7,6 +7,10 @@
  * FIX TIPI DATO: La cella "Number" ora invia il dato in formato Float e non String.
  * FIX RELAZIONI FORMULE: Assicura che i nomi delle relazioni nel Drawer passino
  * per la decodifica delle Virtual Row se la colonna bersaglio è una Formula JS. (Sostituito con metodo del Core).
+ * FEAT: Rendering e navigazione della colonna 'note_link' (Collegamento a Nota) sia in Edit che in Read-Only.
+ * FIX COMPATIBILITÀ MODULARE: Verifica l'esistenza di AdvancedTable.renderTable prima dell'invocazione.
+ * FIX VALUE EXTRACTION: Utilizzo universale di AdvancedTable.getFormatDisplayValue per formule/rollup/numeri
+ * preservando l'accesso diretto a row.createdAt e row.updatedAt per i timestamp di sistema.
  */
 
 Object.assign(AdvancedTable, {
@@ -79,17 +83,15 @@ Object.assign(AdvancedTable, {
             const isCellEdit = isEdit && !isBacklink && !isSysNoteLink;
 
             if (isCellEdit) {
-                if (col.type === 'created_time' || col.type === 'last_edited_time' || col.type === 'formula' || col.type === 'rollup') {
-                    let displayValToUse = val;
-                    if (col.type === 'created_time') displayValToUse = AdvancedTable.formatTime(row.createdAt);
-                    else if (col.type === 'last_edited_time') displayValToUse = AdvancedTable.formatTime(row.updatedAt);
-                    else {
-                        if (col.decimals !== undefined && col.decimals !== 'default' && val !== '' && val !== null) {
-                            const n = parseFloat(val);
-                            if (!isNaN(n)) displayValToUse = n.toFixed(col.decimals);
-                        }
-                    }
-                    displayVal = `<span style="opacity:0.6; font-family:monospace; font-size:0.9rem;">${displayValToUse}</span>`;
+                if (col.type === 'created_time') {
+                    displayVal = `<span style="opacity:0.6; font-family:monospace; font-size:0.9rem;">${AdvancedTable.formatTime(row.createdAt)}</span>`;
+                }
+                else if (col.type === 'last_edited_time') {
+                    displayVal = `<span style="opacity:0.6; font-family:monospace; font-size:0.9rem;">${AdvancedTable.formatTime(row.updatedAt)}</span>`;
+                }
+                else if (col.type === 'formula' || col.type === 'rollup') {
+                    let displayValToUse = AdvancedTable.getFormatDisplayValue(col, val);
+                    displayVal = `<span style="opacity:0.6; font-family:monospace; font-size:0.9rem;">${displayValToUse || '-'}</span>`;
                 }
                 else if (col.type === 'checkbox') {
                     displayVal = `<input type="checkbox" ${val ? 'checked' : ''} style="transform: scale(1.2); cursor:pointer;" onchange="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.checked); AdvancedTable.openRecordView('${tableId}', '${rowId}');">`;
@@ -157,10 +159,48 @@ Object.assign(AdvancedTable, {
                     const cellId = `adv-sel-rec-${tableId}-${rowId}-${col.id}`;
                     displayVal = `<div id="${cellId}" class="adv-select-container" style="justify-content:flex-end; padding:6px; border:1px dashed var(--border-color); border-radius:4px; min-width:150px; cursor:pointer;" onclick="AdvancedTable.openSelectMenu(event, '${tableId}', '${rowId}', '${col.id}')">${content}</div>`;
                 }
+                else if (col.type === 'note_link') {
+                    let linkObj = null;
+                    if (val && typeof val === 'object') linkObj = val;
+                    else if (val && typeof val === 'string') {
+                        try { linkObj = JSON.parse(val); } catch(e) { linkObj = { noteId: val }; }
+                    }
+
+                    let noteTitle = '';
+                    let targetNote = null;
+                    if (linkObj && linkObj.noteId) {
+                        targetNote = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
+                        if (targetNote && !targetNote.deletedAt) {
+                            noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || 'Senza Titolo');
+                        } else if (targetNote && targetNote.deletedAt) {
+                            noteTitle = 'Nota nel Cestino';
+                        } else {
+                            noteTitle = linkObj.title || 'Nota Mancante';
+                        }
+                    }
+
+                    if (noteTitle) {
+                        const safeTitle = UI.escapeHTML(noteTitle);
+                        const clickNav = `onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => UI.selectNote('${linkObj.noteId}', ${linkObj.anchor ? `'${linkObj.anchor.replace(/'/g, "\\'")}'` : 'null'}, ${linkObj.refId ? `'${linkObj.refId}'` : 'null'}), 100);"`;
+                        displayVal = `
+                            <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; width:100%;">
+                                <a class="internal-link" style="cursor:pointer;" ${clickNav}>${safeTitle}</a>
+                                <button class="btn" style="padding:2px 8px; font-size:0.75rem;" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${rowId}', '${col.id}')">${Icons.edit} Cambia</button>
+                                <button class="adv-icon-btn danger" style="padding:2px 6px;" title="Rimuovi" onclick="event.stopPropagation(); AdvancedTable.clearNoteLink(event, '${tableId}', '${rowId}', '${col.id}')">${Icons.close}</button>
+                            </div>
+                        `;
+                    } else {
+                        displayVal = `
+                            <button class="btn" style="padding:4px 10px; font-size:0.8rem; border:1px dashed var(--accent-color); color:var(--accent-color);" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${rowId}', '${col.id}')">
+                                <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.link} Seleziona Nota...</span>
+                            </button>
+                        `;
+                    }
+                }
                 else if (col.type === 'relation') {
                     const targetDbId = col.targetTableId;
                     
-                    // LA MODIFICA: Delega la risoluzione profonda all'engine
+                    // Delega la risoluzione profonda all'engine
                     const details = AdvancedTable.resolveRelationDetails(col, val, state._renderCache || {});
                     let pills = '';
                     
@@ -224,8 +264,6 @@ Object.assign(AdvancedTable, {
                         displayVal = `<div style="text-align:right; white-space:pre-wrap; word-break:break-word; width:100%; box-sizing:border-box; font-size:0.9em;" ${readOnlyTip}>${val || '<span class="adv-select-empty" style="float:right;">Vuoto</span>'}</div>`;
                     } else {
                         const targetDbId = col.linkedTableId;
-                        
-                        // LA MODIFICA: Usiamo il core e ci godiamo i risultati pronti
                         const details = AdvancedTable.resolveRelationDetails(col, val, state._renderCache || {});
                         
                         if (details.length > 0) {
@@ -245,10 +283,36 @@ Object.assign(AdvancedTable, {
                         }
                     }
                 } 
+                else if (col.type === 'note_link') {
+                    let linkObj = null;
+                    if (val && typeof val === 'object') linkObj = val;
+                    else if (val && typeof val === 'string') {
+                        try { linkObj = JSON.parse(val); } catch(e) { linkObj = { noteId: val }; }
+                    }
+
+                    let noteTitle = '';
+                    let targetNote = null;
+                    if (linkObj && linkObj.noteId) {
+                        targetNote = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
+                        if (targetNote && !targetNote.deletedAt) {
+                            noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || 'Senza Titolo');
+                        } else if (targetNote && targetNote.deletedAt) {
+                            noteTitle = 'Nota nel Cestino';
+                        } else {
+                            noteTitle = linkObj.title || 'Nota Mancante';
+                        }
+                    }
+
+                    if (noteTitle) {
+                        const safeTitle = UI.escapeHTML(noteTitle);
+                        const clickNav = `onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => UI.selectNote('${linkObj.noteId}', ${linkObj.anchor ? `'${linkObj.anchor.replace(/'/g, "\\'")}'` : 'null'}, ${linkObj.refId ? `'${linkObj.refId}'` : 'null'}), 100);"`;
+                        displayVal = `<div style="display:flex; justify-content:flex-end;"><a class="internal-link" style="cursor:pointer; ${pointerEvent}" ${clickNav}>${safeTitle}</a></div>`;
+                    } else {
+                        displayVal = `<span class="adv-select-empty" style="float:right;">Vuoto</span>`;
+                    }
+                }
                 else if (col.type === 'relation') {
                     const targetDbId = col.targetTableId;
-                    
-                    // LA MODIFICA: Usiamo il core
                     const details = AdvancedTable.resolveRelationDetails(col, val, state._renderCache || {});
                     
                     if (details.length > 0) {
@@ -321,7 +385,7 @@ Object.assign(AdvancedTable, {
                         }
                     } 
                     else if (col.type === 'formula' || col.type === 'rollup' || col.type === 'number') {
-                        let displayValToUse = AdvancedTable.formatDecimal(val, col.decimals);
+                        let displayValToUse = AdvancedTable.getFormatDisplayValue(col, val);
                         displayVal = `<div style="text-align:right;">${displayValToUse !== '' && displayValToUse !== null ? displayValToUse : '<span class="adv-select-empty" style="float:right;">Vuoto</span>'}</div>`;
                     }
                     else if (col.type === 'url') {
@@ -415,7 +479,10 @@ Object.assign(AdvancedTable, {
 
         setTimeout(() => {
             const el = document.getElementById(tableId);
-            if (el) AdvancedTable.renderTable(tableId);
+            // il test sul fatto che sia una function serve per poter richiamare la funzione anche quando la si invoca dall'applicazione/estensione Workflow
+            if (el && typeof AdvancedTable.renderTable === 'function') {
+                AdvancedTable.renderTable(tableId);
+            }
         }, 50);
     }
 });

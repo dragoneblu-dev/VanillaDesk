@@ -8,8 +8,8 @@
  * all'interno degli span generati dal syntax highlighter, risolvendo i salti cursore.
  * FEAT SMART HOME: Aggiunto gestore handleHomeKey per i blocchi di codice.
  * FEAT LINK RAPIDI: Intercettazione della digitazione "[[" per evocare in modo nativo LinkManager.openInternalModal().
- * FIX LINK RAPIDI ZWS: Eliminata l'iniezione duplicata di Zero-Width Space. La sanità del cursore viene ora delegata
- * completamente a LinkManager al momento del rilascio, mantenendo pulito il DOM.
+ * FIX LINK RAPIDI INDEXSIZEERROR: Risolto crash setStart(4294967295) collassando direttamente cleanRange
+ * dopo deleteContents(), garantendo il corretto ancoraggio e l'apertura immediata del Drawer.
  */
 
 Object.assign(Editor, {
@@ -111,29 +111,34 @@ Object.assign(Editor, {
                         if (charBefore === '[') {
                             e.preventDefault();
                             
-                            // Dobbiamo cancellare la prima "[" e anche l'eventuale "]" 
-                            // che il sistema aveva inserito preventivamente tramite auto-close
-                            let deleteEndOffset = range.startOffset;
+                            const startOffset = range.startOffset - 1;
+                            let endOffset = range.startOffset;
+                            
+                            // Se la prima '[' aveva inserito una ']' automatica, la includiamo nella cancellazione
                             if (node.textContent.charAt(range.startOffset) === ']') {
-                                deleteEndOffset += 1;
+                                endOffset += 1;
                             }
                             
                             const cleanRange = document.createRange();
-                            cleanRange.setStart(node, range.startOffset - 1);
-                            cleanRange.setEnd(node, deleteEndOffset);
+                            cleanRange.setStart(node, startOffset);
+                            cleanRange.setEnd(node, endOffset);
                             cleanRange.deleteContents();
-                            
-                            // FIX ZWS POLLUTION: Abbiamo rimosso l'inserimento forzato dello 
-                            // Zero-Width Space in questa fase. La pulizia del DOM e l'inserimento
-                            // del cursore vengono gestite da LinkManager al termine dell'operazione.
-                            
+                            cleanRange.collapse(true);
+
+                            // Se il nodo di testo è rimasto vuoto ed è l'unico figlio del blocco, proteggiamo il layout con <br>
+                            if (node.nodeType === Node.TEXT_NODE && node.nodeValue === '') {
+                                const parent = node.parentNode;
+                                if (parent && parent.childNodes.length === 1 && parent.id !== 'noteContent' && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(parent.tagName)) {
+                                    parent.innerHTML = '<br>';
+                                    cleanRange.setStart(parent, 0);
+                                    cleanRange.collapse(true);
+                                }
+                            }
+
                             sel.removeAllRanges();
-                            const focusRange = document.createRange();
-                            focusRange.setStart(node, range.startOffset - 1);
-                            focusRange.collapse(true);
-                            sel.addRange(focusRange);
+                            sel.addRange(cleanRange);
                             
-                            // Forza l'apertura del Drawer Link nativo come se avessi premuto il bottone
+                            // Salva la selezione corretta e apre il Drawer per il Link Interno
                             Editor.saveSelection();
                             if (typeof UI !== 'undefined') UI.closeDrawer();
                             if (typeof LinkManager !== 'undefined') {
@@ -423,7 +428,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (e.shiftKey && key === 'b') {
                     e.preventDefault();
                     
-                    // FIX: Evitiamo che il segnalibro venga inserito dentro il blocco di codice distruggendone il DOM
+                    // Prevenzione inserimento segnalibro nei blocchi di codice
                     const sel = window.getSelection();
                     if (sel.rangeCount > 0) {
                         const node = sel.anchorNode;

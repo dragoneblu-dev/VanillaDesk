@@ -5,6 +5,7 @@
  * i falsi positivi di conflitto generati dal File System.
  * Logica di concorrenza LWW (Last-Write-Wins) con gestione robusta delle transizioni di crittografia.
  * Scansione dei Template nel Garbage Collector per tutelare immagini e audio associati.
+ * Controllo non invasivo della sessione orfana/recuperabile con pulsante esplicito nell'onboarding.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -71,6 +72,7 @@ const Store = {
     dbPromise: null,
     _isSavingFile: false,
     _saveQueuePending: false,
+    _pendingRecoveryData: null,
     
     _diskHashes: { notes: {}, databases: {}, index: "" },
 
@@ -676,6 +678,12 @@ const Store = {
     openWorkspace: async () => {
         try {
             const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            
+            // Azzeramento pulsante e cache sessione di recupero
+            const btnRec = document.getElementById('btnRecoverSession');
+            if (btnRec) btnRec.style.display = 'none';
+            Store._pendingRecoveryData = null;
+
             AppState.workspaceHandle = dirHandle;
             AppState.fileName = dirHandle.name;
 
@@ -804,6 +812,11 @@ const Store = {
         try {
             const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             
+            // Azzeramento pulsante e cache sessione di recupero
+            const btnRec = document.getElementById('btnRecoverSession');
+            if (btnRec) btnRec.style.display = 'none';
+            Store._pendingRecoveryData = null;
+
             let isEmpty = true;
             try { for await (const entry of dirHandle.values()) { isEmpty = false; break; } } catch(e) {}
 
@@ -1008,36 +1021,79 @@ const Store = {
         } catch (e) {}
     },
 
-    recoverFromCrash: async () => {
+    checkRecoverableSession: async () => {
         try {
             const db = await Store.initDB();
             const tx = db.transaction(STORE_NAME, 'readonly');
             const store = tx.objectStore(STORE_NAME);
             const request = store.get('crash_recovery');
-            request.onsuccess = async () => {
+            request.onsuccess = () => {
                 const result = request.result;
-                if (!result || result._isDirty !== true) return;
+                if (!result) return;
+                
+                const hasNotes = result.notes && result.notes.length > 0;
+                const hasEncrypted = result._isEncryptedBackup && result.payload;
 
-                if (result._isEncryptedBackup && result.payload) {
-                    const password = await UI.PasswordManager.promptForOpen("Sessione Interrotta Protetta");
-                    if (!password) return; 
-
-                    try {
-                        const decryptedJson = await CryptoUtils.decrypt(result.payload, password);
-                        AppState.documentPassword = password;
-                        Store._processLoadedMonolith(JSON.parse(decryptedJson));
-                        AppState.fileName = "Sessione Ripristinata (Senza Workspace)";
-                        Store._finalizeUIAfterLoad();
-                        UI.showStatus("unsaved"); 
-                    } catch (e) { alert("Password errata."); }
-                } else if (result.notes && result.notes.length > 0) {
-                    Store._processLoadedMonolith(result);
-                    AppState.fileName = "Sessione Ripristinata (Senza Workspace)";
-                    Store._finalizeUIAfterLoad();
-                    UI.showStatus("unsaved"); 
+                if (hasNotes || hasEncrypted) {
+                    Store._pendingRecoveryData = result;
+                    const btn = document.getElementById('btnRecoverSession');
+                    if (btn) {
+                        btn.style.display = 'inline-flex';
+                    }
                 }
             };
-        } catch (e) {}
+        } catch (e) {
+            console.warn("Impossibile verificare la sessione precedente:", e);
+        }
+    },
+
+    recoverFromCrash: async () => {
+        // Verifica in background la presenza di una sessione e aggiorna il pulsante dell'onboarding
+        await Store.checkRecoverableSession();
+    },
+
+    restoreRecoveredSession: async () => {
+        const result = Store._pendingRecoveryData;
+        if (!result) return;
+
+        try {
+            if (result._isEncryptedBackup && result.payload) {
+                const password = await UI.PasswordManager.promptForOpen("Sessione Interrotta Protetta");
+                if (!password) return; 
+
+                try {
+                    const decryptedJson = await CryptoUtils.decrypt(result.payload, password);
+                    AppState.documentPassword = password;
+                    Store._processLoadedMonolith(JSON.parse(decryptedJson));
+                } catch (e) { 
+                    alert("Password errata."); 
+                    return;
+                }
+            } else if (result.notes && result.notes.length > 0) {
+                Store._processLoadedMonolith(result);
+            }
+
+            AppState.fileName = "Sessione Ripristinata (Senza Workspace)";
+            if (typeof AdvancedTable !== 'undefined') {
+                AdvancedTable.ensureSystemPropertiesDB();
+            }
+
+            Store._finalizeUIAfterLoad();
+            Store.isDirty = true;
+            UI.showStatus("unsaved");
+
+            const btn = document.getElementById('btnRecoverSession');
+            if (btn) btn.style.display = 'none';
+
+            Store._pendingRecoveryData = null;
+
+            if (typeof UI !== 'undefined' && UI.showToast) {
+                UI.showToast("Sessione precedente caricata in memoria. Salva in un Workspace per renderla permanente.", "info");
+            }
+        } catch(err) {
+            console.error("Errore nel ripristino della sessione:", err);
+            alert("Impossibile ripristinare la sessione: " + err.message);
+        }
     },
 
     downloadSnapshot: async () => {
@@ -1053,5 +1109,80 @@ const Store = {
         document.body.appendChild(downloadAnchorNode);
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
+    },
+
+    loadSnapshot: async () => {
+        try {
+            let text = "";
+            let fileName = "Backup";
+
+            if (window.showOpenFilePicker) {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{ description: 'Backup JSON', accept: { 'application/json': ['.json'] } }],
+                });
+                const file = await fileHandle.getFile();
+                fileName = file.name.replace(/\.json$/i, '');
+                text = await file.text();
+            } else {
+                text = await new Promise((resolve, reject) => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return resolve(null);
+                        fileName = file.name.replace(/\.json$/i, '');
+                        const reader = new FileReader();
+                        reader.onload = (event) => resolve(event.target.result);
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsText(file);
+                    };
+                    input.click();
+                });
+            }
+
+            if (!text) return;
+
+            if (AppState.workspaceHandle && Store.isDirty) {
+                if (!confirm("Attenzione: Il caricamento di un file di backup sostituirà la sessione corrente in memoria. Le modifiche non salvate andranno perse. Vuoi continuare?")) {
+                    return;
+                }
+            } else if (AppState.notes && AppState.notes.length > 0) {
+                if (!confirm("Attenzione: Il caricamento di un file di backup sostituirà i dati correnti in memoria. Vuoi procedere?")) {
+                    return;
+                }
+            }
+
+            if (typeof Editor !== 'undefined') Editor.clearHistory();
+
+            // Azzeramento pulsante e cache sessione di recupero
+            const btnRec = document.getElementById('btnRecoverSession');
+            if (btnRec) btnRec.style.display = 'none';
+            Store._pendingRecoveryData = null;
+
+            AppState.workspaceHandle = null;
+            AppState.assetsHandle = null;
+            Store._diskHashes = { notes: {}, databases: {}, index: "" };
+
+            const success = await Store._decryptAndProcess(text);
+            if (!success) return;
+
+            AppState.fileName = `${fileName} (Backup)`;
+            if (typeof AdvancedTable !== 'undefined') AdvancedTable.ensureSystemPropertiesDB();
+
+            Store._finalizeUIAfterLoad();
+            Store.isDirty = true;
+            Store.saveLocalBackup();
+            UI.showStatus("unsaved");
+
+            if (typeof UI !== 'undefined' && UI.showToast) {
+                UI.showToast("File JSON di backup caricato con successo.", "success");
+            }
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                console.error("Errore caricamento backup JSON:", err);
+                alert("Errore durante il caricamento del file JSON: " + err.message);
+            }
+        }
     }
 };
