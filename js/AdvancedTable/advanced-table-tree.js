@@ -9,6 +9,7 @@
  * - Tasto rapido Espandi Tutto / Comprimi Tutto nella barra della tabella.
  * - Differenziazione cromatica per livelli di profondità (Livello 0..4) applicata a freccia, pallino e badge.
  * - FIX HEADER TOOLTIPS & COMMENTS: Mostra i tooltip informativi dei campi, i commenti colonna e l'icona informativa nell'intestazione <th>.
+ * - LIVE REFRESH: Pulsante refresh aggiornato per ricaricare fedelmente i dati dal disco.
  */
 
 const AdvancedTree = {
@@ -19,7 +20,7 @@ const AdvancedTree = {
 
         state.viewType = 'tree';
         state.treeRelationColId = relColId;
-        state.treeRelationDirection = direction; // 'children' | 'parent'
+        state.treeRelationDirection = direction;
 
         // All'attivazione iniziale della vista WBS, collassa tutti i rami di default per non disorientare l'utente
         const allParentIds = new Set();
@@ -248,9 +249,8 @@ const AdvancedTree = {
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
             tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: 'Viste / Filtri Salvati', active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
 
-            if (hasCalculatedFields) {
-                tools.push({ icon: Icons.refresh, title: 'Aggiorna Dati Calcolati', onClick: () => AdvancedTable.forceRecalculate(tableId) });
-            }
+            // Pulsante di ricarica e sincronizzazione con il disco
+            tools.push({ icon: Icons.refresh, title: 'Ricarica dal disco e aggiorna dati', onClick: () => AdvancedTable.forceRecalculate(tableId) });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',

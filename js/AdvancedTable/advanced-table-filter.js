@@ -4,6 +4,9 @@
  * FIX CHECKBOX SUGGESTIONS: Normalizzati i suggerimenti per i campi checkbox (Sì / No)
  * evitando simboli o stringhe descrittive composite che bloccavano il match esatto.
  * FIX PIVOT MAX/MIN DATE: Risolto bug per cui le date venivano scambiate per numeri da parseFloat.
+ * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano coerentemente anche nei filtri live:
+ * - Numeri: confronto matematico.
+ * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
  */
 
 Object.assign(AdvancedTable, {
@@ -306,6 +309,12 @@ Object.assign(AdvancedTable, {
 
         let uniqueVals = new Set();
 
+        const isStrictNumeric = (str) => {
+            if (str === null || str === undefined) return false;
+            const s = String(str).trim().replace(',', '.');
+            return s !== '' && !isNaN(s) && !isNaN(parseFloat(s)) && isFinite(Number(s));
+        };
+
         const buildFilteredRows = (rowsData, isPivot) => {
             let tempRows = rowsData || [];
             if (state.filters) {
@@ -353,15 +362,31 @@ Object.assign(AdvancedTable, {
                                     }
                                 }
 
-                                const cNum = parseFloat(cellVal); const tNum = parseFloat(targetVal);
-                                if (!isNaN(cNum) && !isNaN(tNum)) {
-                                    if (operator === '>') return cNum > tNum; if (operator === '<') return cNum < tNum;
-                                    if (operator === '>=') return cNum >= tNum; if (operator === '<=') return cNum <= tNum;
-                                    if (operator === '=') return cNum === tNum; if (operator === '!=') return cNum !== tNum;
+                                // Confronto numerico matematico puro
+                                const isColNumeric = ['number', 'formula', 'rollup'].includes(colDef.type);
+                                const isBothNumeric = isStrictNumeric(cellVal) && isStrictNumeric(targetVal);
+
+                                if (isColNumeric || isBothNumeric) {
+                                    const cNum = parseFloat(String(cellVal).replace(',', '.'));
+                                    const tNum = parseFloat(String(targetVal).replace(',', '.'));
+                                    if (!isNaN(cNum) && !isNaN(tNum)) {
+                                        if (operator === '>') return cNum > tNum; if (operator === '<') return cNum < tNum;
+                                        if (operator === '>=') return cNum >= tNum; if (operator === '<=') return cNum <= tNum;
+                                        if (operator === '=') return cNum === tNum; if (operator === '!=') return cNum !== tNum;
+                                    }
                                 }
                                 
-                                if (operator === '!=') return String(displayVal || '').toLowerCase() !== targetVal.toLowerCase();
-                                if (operator === '=') return String(displayVal || '').toLowerCase() === targetVal.toLowerCase();
+                                const strA = String(displayVal || '').toLowerCase();
+                                const strB = String(targetVal || '').toLowerCase();
+
+                                if (operator === '=') return strA === strB;
+                                if (operator === '!=') return !strA.includes(strB);
+
+                                const cmp = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+                                if (operator === '>') return cmp > 0;
+                                if (operator === '<') return cmp < 0;
+                                if (operator === '>=') return cmp >= 0;
+                                if (operator === '<=') return cmp <= 0;
                             }
                             return String(displayVal || '').toLowerCase().includes(term.toLowerCase());
                         });

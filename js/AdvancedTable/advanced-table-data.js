@@ -8,6 +8,10 @@
  * evitando fallimenti causati da parole chiave descrittive composite.
  * PERF & DOM SHIELD: Uscita immediata (early-exit) in updateData se il valore non è cambiato,
  * prevenendo la distruzione accidentale del DOM e consentendo il click singolo sui campi interattivi.
+ * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano in modo intelligente su tutti i tipi:
+ * - Numeri: confronto matematico.
+ * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
+ * LIVE REFRESH DA DISCO: forceRecalculate ricarica i dati freschi dal file system (evitando sovrascritture concorrenti).
  */
 
 Object.assign(AdvancedTable, {
@@ -424,14 +428,28 @@ Object.assign(AdvancedTable, {
         }
     },
 
-    forceRecalculate: (tableId) => {
+    forceRecalculate: async (tableId) => {
         if (!tableId) return;
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
 
+        // Ricarica reale e sicura dal disco locale se è presente un Workspace
+        if (AppState.workspaceHandle && typeof Store.readDatabaseFromDisk === 'function') {
+            const freshState = await Store.readDatabaseFromDisk(realTableId);
+            if (freshState) {
+                AppState.databases[realTableId] = freshState;
+                const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
+                Store._diskHashes.databases[realTableId] = Store._hashObj(freshState, cryptoPrefix);
+            }
+        }
+
+        // Ricalcola le dipendenze e ridisegna tutte le viste collegate senza forzare sovrascritture sporche
         AdvancedTable.updateDependentViews(realTableId);
-        Store.triggerAutoSave();
         if (typeof AdvancedPivot !== 'undefined') AdvancedPivot.updateDependent(realTableId);
+
+        if (typeof UI !== 'undefined' && UI.showToast) {
+            UI.showToast("Tabella e dati ricaricati con successo.", "info");
+        }
     },
 
     changePage: (tableId, delta) => {
@@ -584,6 +602,12 @@ Object.assign(AdvancedTable, {
 
         let filtered = [...viewRows];
         
+        const isStrictNumeric = (str) => {
+            if (str === null || str === undefined) return false;
+            const s = String(str).trim().replace(',', '.');
+            return s !== '' && !isNaN(s) && !isNaN(parseFloat(s)) && isFinite(Number(s));
+        };
+
         Object.keys(state.filters).forEach(cId => {
             const rawTerm = state.filters[cId].trim();
             if (!rawTerm) return;
@@ -637,7 +661,7 @@ Object.assign(AdvancedTable, {
                         const operator = matchOp[1];
                         let targetVal = matchOp[2].trim();
 
-                        // RISOLUZIONE ACCURATA BOOLEANA PER CHECKBOX
+                        // 1. Checkbox (Booleani)
                         if (colDef.type === 'checkbox') {
                             const isChecked = cellVal === true;
                             const lowerTarget = targetVal.toLowerCase();
@@ -652,6 +676,7 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
+                        // 2. Date e Datetime
                         if (isDateType) {
                             let rawDateForMath = cellVal;
                             if (typeof cellVal === 'object' && cellVal !== null) rawDateForMath = cellVal.start;
@@ -684,18 +709,25 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
-                        const cNum = parseFloat(cellVal);
-                        const tNum = parseFloat(targetVal);
+                        // 3. Numeri Puri (Matematico)
+                        const isColNumeric = ['number', 'formula', 'rollup'].includes(colDef.type);
+                        const isBothNumeric = isStrictNumeric(cellVal) && isStrictNumeric(targetVal);
 
-                        if (!isNaN(cNum) && !isNaN(tNum)) {
-                            if (operator === '>') return cNum > tNum;
-                            if (operator === '<') return cNum < tNum;
-                            if (operator === '>=') return cNum >= tNum;
-                            if (operator === '<=') return cNum <= tNum;
-                            if (operator === '=') return cNum === tNum;
-                            if (operator === '!=') return cNum !== tNum;
+                        if (isColNumeric || isBothNumeric) {
+                            const cNum = parseFloat(String(cellVal).replace(',', '.'));
+                            const tNum = parseFloat(String(targetVal).replace(',', '.'));
+
+                            if (!isNaN(cNum) && !isNaN(tNum)) {
+                                if (operator === '>') return cNum > tNum;
+                                if (operator === '<') return cNum < tNum;
+                                if (operator === '>=') return cNum >= tNum;
+                                if (operator === '<=') return cNum <= tNum;
+                                if (operator === '=') return cNum === tNum;
+                                if (operator === '!=') return cNum !== tNum;
+                            }
                         }
                         
+                        // 4. Testo, Alfanumerici (es. 1A, 1B), Liste e Select
                         let resolvedArrayForExactMatch = null;
                         if (!isPivotContext) {
                             if (colDef.type === 'relation' || colDef.type === 'relation_backlink') {
@@ -705,18 +737,34 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
-                        if (operator === '!=') {
-                            if (resolvedArrayForExactMatch) {
-                                return !resolvedArrayForExactMatch.some(v => String(v).toLowerCase() === targetVal.toLowerCase());
-                            }
-                            return String(displayStr || '').toLowerCase() !== targetVal.toLowerCase();
-                        }
+                        const strA = String(displayStr || '').toLowerCase();
+                        const strB = String(targetVal || '').toLowerCase();
+
+                        // Uguaglianza esatta su stringhe/tag
                         if (operator === '=') {
                             if (resolvedArrayForExactMatch) {
-                                return resolvedArrayForExactMatch.some(v => String(v).toLowerCase() === targetVal.toLowerCase());
+                                return resolvedArrayForExactMatch.some(v => String(v).toLowerCase() === strB);
                             }
-                            return String(displayStr || '').toLowerCase() === targetVal.toLowerCase();
+                            return strA === strB;
                         }
+
+                        // Disuguaglianza: esclude se coincide o se contiene la parola (es. != rosso)
+                        if (operator === '!=') {
+                            if (resolvedArrayForExactMatch) {
+                                return !resolvedArrayForExactMatch.some(v => {
+                                    const low = String(v).toLowerCase();
+                                    return low === strB || low.includes(strB);
+                                });
+                            }
+                            return !strA.includes(strB);
+                        }
+
+                        // Confronto lessicografico naturale (<, >, <=, >=) su testo
+                        const cmp = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
+                        if (operator === '>') return cmp > 0;
+                        if (operator === '<') return cmp < 0;
+                        if (operator === '>=') return cmp >= 0;
+                        if (operator === '<=') return cmp <= 0;
                     }
 
                     return String(displayStr || '').toLowerCase().includes(term.toLowerCase());

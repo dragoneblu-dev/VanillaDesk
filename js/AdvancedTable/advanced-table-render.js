@@ -9,6 +9,7 @@
  * FEAT: Icona e layout per colonna 'note_link'.
  * FEAT TREE VIEW: Routing automatico verso AdvancedTree.render quando viewType === 'tree'.
  * RESTORE ATTACH CELL EVENTS: Ripristinata integralmente la funzione attachCellEvents e il mouseover globale.
+ * FIX LIVE REFRESH: Il pulsante refresh ora ricarica e sincronizza fedelmente i dati dal disco.
  */
 
 Object.assign(AdvancedTable, {
@@ -164,9 +165,8 @@ Object.assign(AdvancedTable, {
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
             tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: 'Viste / Filtri Salvati', active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
             
-            if (hasCalculatedFields) {
-                tools.push({ icon: Icons.refresh, title: 'Aggiorna Dati Calcolati', onClick: () => AdvancedTable.forceRecalculate(tableId) });
-            }
+            // Pulsante di ricarica e sincronizzazione con il disco
+            tools.push({ icon: Icons.refresh, title: 'Ricarica dal disco e aggiorna dati', onClick: () => AdvancedTable.forceRecalculate(tableId) });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
