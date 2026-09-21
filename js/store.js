@@ -5,7 +5,7 @@
  * 1. Database: Field-Level LWW Merge automatico solo in caso di divergenza disco reale (Zero overhead locale).
  * 2. Note: Generazione automatica di Copia di Conflitto ('[Conflitto...] Titolo') per impedire la perdita di dati.
  * 3. Media & Storage: Ripristinata utility _base64ToBlob per retrocompatibilità.
- * Normalizzazione carriage return (\r\n -> \n) e hashing deterministico per prevenire falsi conflitti.
+ * 4. Live Sync: Ascolto BroadcastChannel 'vanilladesk_sync' e funzione readDatabaseFromDisk per ricarica concorrente.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -73,6 +73,7 @@ const Store = {
     _isSavingFile: false,
     _saveQueuePending: false,
     _pendingRecoveryData: null,
+    _syncChannel: null,
     
     _diskHashes: { notes: {}, databases: {}, index: "" },
 
@@ -319,10 +320,20 @@ const Store = {
         }
     },
 
-    /**
-     * Algoritmo di Riconciliazione Database a Livello di Cella e di Riga (Field-Level Merge).
-     * Si attiva solo ed esclusivamente quando un file esterno differisce sia dalla RAM che dalla base.
-     */
+    readDatabaseFromDisk: async (dbId) => {
+        if (!AppState.workspaceHandle) return null;
+        try {
+            const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: false });
+            const res = await Store._readFragmentFromDisk(dbDir, `${dbId}.json`);
+            if (res.status === 'success') {
+                return JSON.parse(res.data);
+            }
+        } catch(e) {
+            console.warn(`[STORE] Impossibile ricaricare il database ${dbId} dal disco:`, e);
+        }
+        return null;
+    },
+
     _mergeDatabaseStates: (diskState, ramState) => {
         const merged = { ...diskState, ...ramState };
 
@@ -411,9 +422,7 @@ const Store = {
 
             const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
 
-            // =========================================================================
-            // 1. SALVATAGGIO INDEX (MULTI-UTENTE ABILITATO LWW E MIGRAZIONE CRITTOGRAFIA)
-            // =========================================================================
+            // 1. SALVATAGGIO INDEX
             const indexPayload = { templates: AppState.templates || [], homeCitations: AppState.homeCitations || [], noteOrder: AppState.notes.map(n => n.id) };
             const indexStr = JSON.stringify(indexPayload, null, 2);
             const indexHash = Store._hashObj(indexPayload, cryptoPrefix);
@@ -433,9 +442,6 @@ const Store = {
                             const diskHash = Store._hashObj(diskData, cryptoPrefix);
                             
                             if (Store._diskHashes.index && diskHash !== Store._diskHashes.index) {
-                                console.warn(`🚨 [SYNC LOG] Conflitto reale su index.json.`);
-                                console.log(`Hash in RAM: ${Store._diskHashes.index}`);
-                                console.log(`Hash su Disco: ${diskHash}`);
 
                                 // LWW: Integra i dati del disco con le modifiche locali
                                 AppState.templates = diskData.templates || AppState.templates;
@@ -452,7 +458,6 @@ const Store = {
                 } else if (diskResult.status === 'not_found') {
                     shouldWriteIndex = true;
                 } else {
-                    console.warn(`🟠 [SYNC LOG] File index.json bloccato o inaccessibile. Salto la scrittura per prevenire corruzioni.`);
                     hasWriteErrors = true;
                 }
 
@@ -471,9 +476,7 @@ const Store = {
                 }
             }
 
-            // =========================================================================
-            // 2. SALVATAGGIO DATABASE CON FIELD-LEVEL MERGE IBRIDO
-            // =========================================================================
+            // 2. SALVATAGGIO DATABASE CON FIELD-LEVEL MERGE
             let syncedDatabasesCount = 0;
 
             for (const [dbId, ramState] of Object.entries(AppState.databases || {})) {
@@ -481,7 +484,6 @@ const Store = {
 
                 // FAST-PATH: se lo stato in RAM non è mutato, salta senza fare calcoli
                 if (Store._diskHashes.databases[dbId] !== currentRamHash) {
-                    
                     const diskResult = await Store._readFragmentFromDisk(dbDir, `${dbId}.json`);
                     let finalStateToWrite = ramState;
 
@@ -524,6 +526,11 @@ const Store = {
                         await writable.write(dataToWrite);
                         await writable.close();
                         Store._diskHashes.databases[dbId] = Store._hashObj(finalStateToWrite, cryptoPrefix);
+
+                        // Notifica broadcast alle altre finestre connesse (es. Workflow Studio)
+                        if (Store._syncChannel) {
+                            Store._syncChannel.postMessage({ type: 'db_saved', tableId: dbId });
+                        }
                     } catch (writeErr) {
                         console.error(`Errore scrittura DB ${dbId}.json:`, writeErr);
                         hasWriteErrors = true;
@@ -535,9 +542,7 @@ const Store = {
                 UI.showToast(`Sincronizzazione: Fusi ${syncedDatabasesCount} database concorrenti a livello di cella.`, "info");
             }
 
-            // =========================================================================
             // 3. SALVATAGGIO NOTE CON COPIA DI CONFLITTO AUTOMATICA
-            // =========================================================================
             const ramNotes = AppState.notes.map(note => {
                 const cleanNote = { ...note };
                 Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
@@ -565,7 +570,6 @@ const Store = {
                                 
                                 // Conflitto reale su testo: il file su disco è cambiato mentre l'utente editava in locale
                                 if (Store._diskHashes.notes[note.id] && currentDiskHash !== Store._diskHashes.notes[note.id]) {
-                                    
                                     const now = new Date();
                                     const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
                                     
@@ -1225,3 +1229,19 @@ const Store = {
         }
     }
 };
+
+// Inizializzazione ricevitore sincronizzazione live tra finestre (Workflow Studio <-> VanillaDesk)
+if (typeof BroadcastChannel !== 'undefined') {
+    try {
+        Store._syncChannel = new BroadcastChannel('vanilladesk_sync');
+        Store._syncChannel.onmessage = (event) => {
+            const data = event.data;
+            if (!data) return;
+            if (data.type === 'db_saved' && data.tableId) {
+                if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.forceRecalculate === 'function') {
+                    AdvancedTable.forceRecalculate(data.tableId);
+                }
+            }
+        };
+    } catch(e) {}
+}
