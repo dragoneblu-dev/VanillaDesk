@@ -36,6 +36,92 @@ header {
     flex-shrink: 0;
     z-index: 200;
     touch-action: none;
+    transition: background-color 0.3s ease, border-color 0.3s ease;
+}
+
+/* --- HEADER ALLERTA: SESSIONE RIPRISTINATA (SENZA WORKSPACE / SOLO RAM) --- */
+header.header-unsaved {
+    background-color: #fee2e2 !important;
+    border-bottom: 1px solid #fca5a5 !important;
+    color: #991b1b !important;
+}
+
+header.header-unsaved .brand,
+header.header-unsaved .brand span#fileNameDisplay {
+    color: #991b1b !important;
+}
+
+header.header-unsaved .icon-btn {
+    color: #991b1b !important;
+}
+
+header.header-unsaved .icon-btn:hover {
+    background-color: rgba(153, 27, 27, 0.12) !important;
+    color: #7f1d1d !important;
+}
+
+header.header-unsaved .separator {
+    background-color: rgba(153, 27, 27, 0.25) !important;
+}
+
+header.header-unsaved .status-pill.status-error {
+    background-color: #fecaca !important;
+    color: #7f1d1d !important;
+    border: 1px solid #ef4444;
+}
+
+header.header-unsaved .btn:not(.btn-primary) {
+    background-color: #ffffff !important;
+    border-color: #fca5a5 !important;
+    color: #991b1b !important;
+}
+
+header.header-unsaved .btn:not(.btn-primary):hover {
+    background-color: #fef2f2 !important;
+}
+
+[data-theme="dark"] header.header-unsaved,
+[data-theme="notion-dark"] header.header-unsaved {
+    background-color: #7f1d1d !important;
+    border-bottom: 1px solid #991b1b !important;
+    color: #fca5a5 !important;
+}
+
+[data-theme="dark"] header.header-unsaved .brand,
+[data-theme="dark"] header.header-unsaved .brand span#fileNameDisplay,
+[data-theme="notion-dark"] header.header-unsaved .brand,
+[data-theme="notion-dark"] header.header-unsaved .brand span#fileNameDisplay {
+    color: #fca5a5 !important;
+}
+
+[data-theme="dark"] header.header-unsaved .icon-btn,
+[data-theme="notion-dark"] header.header-unsaved .icon-btn {
+    color: #fca5a5 !important;
+}
+
+[data-theme="dark"] header.header-unsaved .icon-btn:hover,
+[data-theme="notion-dark"] header.header-unsaved .icon-btn:hover {
+    background-color: rgba(254, 202, 202, 0.15) !important;
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] header.header-unsaved .separator,
+[data-theme="notion-dark"] header.header-unsaved .separator {
+    background-color: rgba(254, 202, 202, 0.25) !important;
+}
+
+[data-theme="dark"] header.header-unsaved .status-pill.status-error,
+[data-theme="notion-dark"] header.header-unsaved .status-pill.status-error {
+    background-color: #991b1b !important;
+    color: #fee2e2 !important;
+    border: 1px solid #f87171;
+}
+
+[data-theme="dark"] header.header-unsaved .btn:not(.btn-primary),
+[data-theme="notion-dark"] header.header-unsaved .btn:not(.btn-primary) {
+    background-color: #272c34 !important;
+    border-color: #991b1b !important;
+    color: #fca5a5 !important;
 }
 
 .brand {
@@ -327,7 +413,6 @@ aside.collapsed {
     display: flex;
     gap: 2px;
     padding: 8px 10px;
-    /*border-bottom: 1px solid var(--border-color);*/
     overflow-x: auto;
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE/Edge */
@@ -628,13 +713,6 @@ aside.collapsed {
 .adv-action-button-wrapper .btn.action-btn-run:hover {
     filter: brightness(1.15); transform: translateY(-2px); box-shadow: 0 6px 12px rgba(0,0,0,0.15) !important;
 }
-.adv-action-button-wrapper .btn.action-btn-run:active {
-    transform: translateY(0); box-shadow: 0 2px 4px rgba(0,0,0,0.1) !important;
-}
-.adv-btn-icon-trigger {
-    display: inline-flex; align-items: center; justify-content: center;
-    border-radius: 4px; padding: 2px; margin-left: -2px; transition: background 0.2s;
-}
 .adv-action-button-wrapper .btn:not(.action-btn-run) .adv-btn-icon-trigger:hover {
     background: rgba(0,0,0,0.2); box-shadow: 0 0 0 2px rgba(0,0,0,0.2);
 }
@@ -671,7 +749,6 @@ details > summary { list-style: none; }
 
 @media (pointer: coarse) {
     /* 1. VISIBILITÀ ELEMENTI "HOVER-ONLY" */
-    /* Rende visibili in modo permanente ma discreto i pulsanti che su PC appaiono solo al passaggio del mouse */
     .node-add-btn,
     .widget-drag-handle,
     .widget-options-btn,
@@ -680,17 +757,16 @@ details > summary { list-style: none; }
         opacity: 0.6 !important;
         visibility: visible !important;
         pointer-events: auto !important;
-        transform: scale(1) !important; /* Disabilita riduzioni di scala per i trigger tabella */
+        transform: scale(1) !important;
     }
 
     /* 2. ESPANSIONE AREE DI TOCCO (RESIZER E DRAG) */
-    /* I resizer tabelle e colonne passano da 5px a 20px per essere presi col dito */
     .adv-col-resizer,
     .std-col-resizer,
     .col-resizer {
         width: 20px !important;
-        transform: translateX(10px) !important; /* Li sposta leggermente a destra per centrarli sulla riga */
-        background-color: transparent; /* Mantiene la trasparenza finché non viene toccato */
+        transform: translateX(10px) !important;
+        background-color: transparent;
     }
     .adv-col-resizer:active,
     .std-col-resizer:active,
@@ -699,14 +775,12 @@ details > summary { list-style: none; }
         opacity: 0.3 !important;
     }
 
-    /* Allarga il pulsante per collassare i rami dell'albero */
     .toggle-btn {
         width: 30px !important; 
         height: 30px !important;
     }
 
     /* 3. AUMENTO SPAZIATURA MENU CONTESTUALI E TENDINE */
-    /* Aumenta l'altezza delle singole voci per evitare click accidentali sulla voce sbagliata */
     .adv-menu-item {
         padding: 10px 14px !important; 
         margin-bottom: 4px !important;
@@ -717,7 +791,6 @@ details > summary { list-style: none; }
         padding: 10px 12px !important;
     }
 
-    /* I quadretti dei colori (Color Picker) devono essere più distanziati */
     .color-option, .color-swatch {
         width: 28px !important;
         height: 28px !important;
@@ -725,22 +798,19 @@ details > summary { list-style: none; }
     }
 
     /* 4. TOOLBAR MOBILE-FRIENDLY */
-    /* Aumenta il padding dei pulsanti della toolbar superiore */
     .toolbar button, 
     .toolbar .btn-color-main {
         padding: 8px 10px !important;
     }
     
     .btn-color-arrow {
-        width: 24px !important; /* Freccia per aprire il menu colori più facile da colpire */
+        width: 24px !important;
     }
 
     /* 5. GESTIONE MIGLIORE DELLO SCROLL ORIZZONTALE SUI WIDGET */
-    /* Assicura uno scrolling inerziale nativo come se fosse un'app iOS/Android nativa */
     .adv-scroll-container,
     .toolbar {
         -webkit-overflow-scrolling: touch;
-        /* Nasconde le scrollbar native tozze che alcuni tablet Android potrebbero mostrare */
         scrollbar-width: none; 
     }
     .adv-scroll-container::-webkit-scrollbar,
@@ -752,8 +822,6 @@ details > summary { list-style: none; }
 /* =========================================================================
    TABLET PORTRAIT LAYOUT FIX (Larghezze 768px - 900px)
    ========================================================================= */
-/* Estendiamo il comportamento Mobile (Sidebar che sparisce e fa da drawer) 
-   anche agli iPad/Tablet tenuti in verticale, liberando spazio per l'editor */
 @media (max-width: 900px) {
     aside {
         position: absolute;
@@ -777,7 +845,7 @@ details > summary { list-style: none; }
     }
     
     .status-pill {
-        display: none; /* Nasconde il badge salvataggio per salvare spazio prezioso */
+        display: none;
     }
 }
 

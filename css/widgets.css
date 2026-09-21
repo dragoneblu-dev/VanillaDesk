@@ -52,6 +52,9 @@
 .code-wrapper pre,
 .block-citation .citation-body,
 .adv-journal-wrapper .journal-content,
+.adv-journal-wrapper .journal-search-input,
+.journal-search-wrapper,
+.journal-search-input,
 .widget-editable-area,
 .simple-table-wrapper td,
 .simple-table-wrapper th {
@@ -78,6 +81,8 @@
 .editor-container.read-mode .adv-widget-shell .adv-table-footer-controls button,
 .editor-container.read-mode .adv-widget-shell .adv-table-footer-controls .adv-add-btn,
 .editor-container.read-mode .adv-widget-shell .columns-opt-btn,
+.editor-container.read-mode .adv-widget-shell .journal-search-input,
+.editor-container.read-mode .adv-widget-shell .journal-search-wrapper,
 .editor-container.read-mode .widget-type-audio audio,
 .editor-container.read-mode .widget-type-video iframe,
 .editor-container.read-mode .snippet-copy-btn,
@@ -248,12 +253,12 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
     opacity: 1;
 }
 .journal-priority-btn.prio-high { color: var(--danger-color); }
-.journal-priority-btn.prio-low { color: var(--tx-c7); /* Un bel blu/azzurro per la bassa priorità */ }
+.journal-priority-btn.prio-low { color: var(--tx-c7); }
 
 /* --- BARRA DI RICERCA DIARIO/LOG --- */
-.journal-search-wrapper { margin-bottom: 10px; position: relative; width: 100%; }
+.journal-search-wrapper { margin-bottom: 10px; position: relative; width: 100%; pointer-events: auto !important; }
 .journal-search-icon { position: absolute; left: 8px; top: 50%; transform: translateY(-50%); color: var(--text-secondary); opacity: 0.7; pointer-events: none; }
-.journal-search-input { width: 100%; box-sizing: border-box !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 0.85rem; padding: 8px 10px 8px 32px !important; border: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px; color: var(--text-primary); outline: none; transition: all 0.2s ease; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); }
+.journal-search-input { width: 100%; box-sizing: border-box !important; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; font-size: 0.85rem; padding: 8px 10px 8px 32px !important; border: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px; color: var(--text-primary); outline: none; transition: all 0.2s ease; box-shadow: inset 0 1px 2px rgba(0,0,0,0.02); user-select: text !important; -webkit-user-select: text !important; pointer-events: auto !important; }
 .journal-search-input:focus { border-color: var(--accent-color); background: var(--bg-color); box-shadow: inset 0 1px 2px rgba(0,0,0,0.02), 0 0 0 3px rgba(37, 99, 235, 0.1); }
 [data-theme="dark"] .journal-search-input, [data-theme="notion-dark"] .journal-search-input { background: rgba(0, 0, 0, 0.2); }
 
@@ -270,10 +275,6 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 
 .adv-columns-continuous { column-gap: 30px; column-width: 250px; width: 100%; outline: none; }
 
-/* FIX ALLINEAMENTO COLONNE INDIPENDENTI:
-   Rimosso il grid-column-gap per far coincidere perfettamente le percentuali
-   del CSS Grid con i calcoli assoluti del JS per i resizer.
-   Il gap visivo è gestito tramite padding sulle singole colonne. */
 .adv-columns-independent { display: grid; width: 100%; position: relative; }
 .adv-columns-independent > div.col-box { 
     outline: none; 

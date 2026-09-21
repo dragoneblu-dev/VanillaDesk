@@ -608,6 +608,9 @@ select optgroup,
     transition: transform 0.15s ease, background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease, opacity 0.2s ease;
     cursor: crosshair;
     box-sizing: border-box;
+    /* A riposo rimangono rigorosamente invisibili e non intercettano eventi */
+    opacity: 0;
+    pointer-events: none;
 }
 
 .wf-port.top {
@@ -634,16 +637,11 @@ select optgroup,
     transform: translateY(-50%);
 }
 
-/* --- VISIBILITÀ: NASCOSTE A RIPOSO, VISIBILI ALL'HOVER DEL BLOCCO --- */
-.wf-port.is-idle {
-    opacity: 0;
-    pointer-events: none;
-}
-
-.wf-node:hover .wf-port.is-idle {
+/* --- VISIBILITÀ: MOSTRATE SOLO SU SELEZIONE NODO, HOVER O DURANTE DRAG FRECCIA --- */
+.wf-node:hover .wf-port,
+.wf-node.selected .wf-port {
     opacity: 1;
     pointer-events: auto;
-    border-color: var(--accent-color);
 }
 
 .wf-port:hover {
@@ -658,11 +656,9 @@ select optgroup,
 
 /* Stato: Uscita Attiva (Out) */
 .wf-port.is-out {
-    opacity: 1;
     background: var(--accent-color);
     border-color: var(--accent-color);
     cursor: crosshair;
-    pointer-events: auto;
 }
 .wf-port.is-out::after {
     content: '';
@@ -674,11 +670,9 @@ select optgroup,
 
 /* Stato: Ingresso Attivo (In) - Esclusivo */
 .wf-port.is-in {
-    opacity: 1;
     background: var(--sidebar-bg);
     border-color: #10b981;
     cursor: default;
-    pointer-events: auto;
 }
 .wf-port.is-in::after {
     content: '';
@@ -688,7 +682,7 @@ select optgroup,
     border-radius: 50%;
 }
 
-/* Durante il trascinamento (Drag-to-connect): evidenziazione bersagli validi */
+/* Durante il trascinamento (Drag-to-connect): evidenziazione bersagli validi su tutti i blocchi */
 body.is-linking .wf-port.is-idle,
 body.is-linking .wf-port.is-in {
     opacity: 1;
@@ -699,7 +693,8 @@ body.is-linking .wf-port.is-in {
     cursor: pointer;
 }
 body.is-linking .wf-port.is-out {
-    opacity: 0.25;
+    opacity: 0.15;
+    pointer-events: none;
     cursor: not-allowed;
 }
 

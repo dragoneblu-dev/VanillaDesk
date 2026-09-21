@@ -2,6 +2,11 @@
  * workflow-core.js
  * Modulo Core di Workflow Studio: Stato, Inizializzazione, Sincronizzazione,
  * Gestione Schermate, Persistenza automatica e Navigazione Canvas non distruttiva.
+ * FEAT AUTO-LAUNCH: Riconoscimento parametri da URL hash (#db=...&rel=...&dir=...) 
+ * ed ereditarietà trasparente dello stato/handle dal genitore (window.opener) per l'apertura immediata.
+ * FEAT MULTI-RELATION WORKFLOW: Supporto completo a workflow multipli e indipendenti per database aventi
+ * diverse auto-relazioni. Ogni relazione dispone del proprio layout spaziale, collegamenti, stile e impostazioni.
+ * FIX PERSISTENZA: Salvataggio automatico nativo su assets/workflow/{dbId}.json con architettura multi-layout.
  */
 
 window.WorkflowApp = {
@@ -13,6 +18,14 @@ window.WorkflowApp = {
     syncChannel: null,
     _syncPollTimer: null,
     _lastDbContentHash: '',
+    
+    // Mappa persistita dei layout per ciascun campo di relazione auto-referenziale
+    layoutsByRelation: {},
+
+    // Parametri di avvio rapido da URL hash
+    _pendingTargetDbId: null,
+    _pendingTargetRelId: null,
+    _pendingTargetDir: null,
     
     layout: {
         zoom: 1,
@@ -106,6 +119,145 @@ window.WorkflowApp = {
         return Math.round(val / step) * step;
     },
 
+    // Salva una copia del layout corrente nella mappa in memoria del campo di relazione attivo
+    saveCurrentRelationLayout: () => {
+        if (WorkflowApp.selfRelCol && WorkflowApp.selfRelCol.id) {
+            if (!WorkflowApp.layoutsByRelation) WorkflowApp.layoutsByRelation = {};
+            WorkflowApp.layoutsByRelation[WorkflowApp.selfRelCol.id] = JSON.parse(JSON.stringify(WorkflowApp.layout));
+        }
+    },
+
+    // Commuta il workflow attivo su un'altra auto-relazione dello stesso database
+    switchRelation: (newRelColId) => {
+        const db = WorkflowApp.currentDbState;
+        if (!db || !newRelColId) return;
+
+        if (WorkflowApp.selfRelCol && WorkflowApp.selfRelCol.id === newRelColId) return;
+
+        const newRelCol = (db.columns || []).find(c => c.id === newRelColId);
+        if (!newRelCol) return;
+
+        // Salva lo stato del workflow corrente prima dello switch
+        WorkflowApp.saveCurrentRelationLayout();
+
+        WorkflowApp.selfRelCol = newRelCol;
+        WorkflowApp.clearFocusBranch();
+        WorkflowApp.clearSelection();
+
+        // Recupera o inizializza il layout associato a questa specifica relazione
+        if (WorkflowApp.layoutsByRelation && WorkflowApp.layoutsByRelation[newRelColId]) {
+            WorkflowApp.layout = JSON.parse(JSON.stringify(WorkflowApp.layoutsByRelation[newRelColId]));
+            WorkflowApp.applyCanvasBackground(WorkflowApp.layout.backgroundColor);
+            WorkflowApp.applyLayoutLockState();
+            WorkflowApp.buildNodesDOM();
+            WorkflowApp.renderConnections();
+            WorkflowApp.renderClusters();
+            WorkflowApp.updateCanvasTransform();
+            WorkflowApp.fitToView();
+        } else {
+            const defaultCols = (db.columns || []).filter(c => c.id !== newRelCol.id && !['formula', 'rollup'].includes(c.type)).slice(1, 4).map(c => c.id);
+            WorkflowApp.layout = {
+                zoom: 1,
+                pan: { x: 72, y: 72 },
+                visibleColumns: defaultCols,
+                relationDirection: 'successor',
+                connectionStyle: 'orthogonal',
+                clusterColId: null,
+                backgroundColor: null,
+                borderColor: null,
+                locked: false,
+                nodes: {}
+            };
+            WorkflowApp.applyCanvasBackground(null);
+            WorkflowApp.applyLayoutLockState();
+            WorkflowApp.buildNodesDOM();
+            WorkflowApp.runOrganicAutoLayout(true);
+            WorkflowApp.fitToView();
+        }
+
+        const titleEl = document.getElementById('activeDbTitle');
+        if (titleEl) {
+            titleEl.innerText = `${db.title || 'Database'} [${newRelCol.name}]`;
+        }
+
+        WorkflowApp.saveWorkflowAuto();
+        UI.showToast(`Visualizzazione Workflow per: "${newRelCol.name}"`, "info");
+    },
+
+    // =========================================================================
+    // RICONOSCIMENTO PARAMETRI DI AVVIO E COLLEGAMENTO WORKSPACE
+    // =========================================================================
+    checkUrlParams: async () => {
+        const hash = window.location.hash ? window.location.hash.substring(1) : '';
+        const search = window.location.search ? window.location.search.substring(1) : '';
+        const queryString = hash || search;
+
+        let targetDbId = null;
+        let targetRelId = null;
+        let targetDir = null;
+
+        if (queryString) {
+            const params = new URLSearchParams(queryString);
+            targetDbId = params.get('db');
+            targetRelId = params.get('rel');
+            targetDir = params.get('dir');
+        }
+
+        if (targetDbId) {
+            WorkflowApp._pendingTargetDbId = targetDbId;
+            WorkflowApp._pendingTargetRelId = targetRelId;
+            WorkflowApp._pendingTargetDir = targetDir;
+        }
+
+        // Tenta l'aggancio diretto a window.opener se disponibile
+        if (window.opener && window.opener.AppState) {
+            try {
+                if (window.opener.AppState.workspaceHandle) {
+                    const handle = window.opener.AppState.workspaceHandle;
+                    AppState.workspaceHandle = handle;
+                    const wsLabel = document.getElementById('wsBtnLabel');
+                    if (wsLabel) wsLabel.innerText = handle.name;
+
+                    // Legge tutti i database dal disco usando l'handle
+                    try {
+                        const dbDir = await handle.getDirectoryHandle('databases');
+                        for await (const entry of dbDir.values()) {
+                            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+                                const dbId = entry.name.replace('.json', '');
+                                const fileHandle = await dbDir.getFileHandle(entry.name);
+                                const file = await fileHandle.getFile();
+                                const text = await file.text();
+                                try {
+                                    const dbState = JSON.parse(text);
+                                    if (!dbState.isPivot && !dbState.isLinkedView && !dbId.includes('adv_btnbar_') && !dbId.includes('adv_code_') && !dbId.includes('adv_cols_') && dbId !== 'SYS_PROPERTIES_DB') {
+                                        AppState.databases[dbId] = dbState;
+                                    }
+                                } catch (err) {}
+                            }
+                        }
+                    } catch(readErr) {
+                        if (window.opener.AppState.databases) {
+                            AppState.databases = Object.assign({}, window.opener.AppState.databases);
+                        }
+                    }
+
+                    if (window.opener.AppState.notes) {
+                        AppState.notes = [...(window.opener.AppState.notes || [])];
+                    }
+
+                    // Se il database target è presente, caricalo immediatamente sul canvas
+                    if (targetDbId && AppState.databases[targetDbId]) {
+                        WorkflowApp._pendingTargetDbId = null;
+                        await WorkflowApp.loadDatabaseForWorkflow(targetDbId);
+                        return;
+                    }
+                }
+            } catch (err) {
+                console.warn("[WORKFLOW] Accesso a window.opener non consentito:", err);
+            }
+        }
+    },
+
     // =========================================================================
     // INIZIALIZZAZIONE GLOBALE EVENTI CANVAS
     // =========================================================================
@@ -175,7 +327,7 @@ window.WorkflowApp = {
                 return;
             }
 
-            // Innesco del pan: NON deselezioniamo subito per consentire lo spostamento vista senza perdere il ramo evidenziato
+            // Innesco del pan: non deseleziona subito per consentire lo spostamento vista senza perdere il ramo evidenziato
             WorkflowApp.panState = {
                 active: true,
                 startX: e.clientX,
@@ -310,6 +462,9 @@ window.WorkflowApp = {
                 WorkflowApp.handleMinimapClick(e);
             });
         }
+
+        // Controllo automatico dei parametri URL/hash all'avvio
+        WorkflowApp.checkUrlParams();
     },
 
     initLiveSync: () => {
@@ -385,7 +540,13 @@ window.WorkflowApp = {
                 }
             } catch(e) {}
 
-            WorkflowApp.showDbPicker();
+            if (WorkflowApp._pendingTargetDbId && AppState.databases[WorkflowApp._pendingTargetDbId]) {
+                const targetDbId = WorkflowApp._pendingTargetDbId;
+                WorkflowApp._pendingTargetDbId = null;
+                await WorkflowApp.loadDatabaseForWorkflow(targetDbId);
+            } else {
+                WorkflowApp.showDbPicker();
+            }
         } catch (e) {
             if (e.name !== 'AbortError') alert("Errore apertura Workspace: " + e.message);
         }
@@ -423,7 +584,8 @@ window.WorkflowApp = {
         dbKeys.forEach(id => {
             const db = AppState.databases[id];
             const rowCount = (db.rows || []).length;
-            const selfRel = (db.columns || []).find(c => c.type === 'relation' && (c.targetTableId === id || c.targetTableId === db.id));
+            const selfRels = (db.columns || []).filter(c => c.type === 'relation' && (c.targetTableId === id || c.targetTableId === db.id));
+            const relNames = selfRels.map(r => r.name).join(', ');
 
             const card = document.createElement('div');
             card.className = 'db-card';
@@ -436,7 +598,7 @@ window.WorkflowApp = {
                     <b>${rowCount}</b> record &bull; <b>${(db.columns || []).length}</b> colonne
                 </div>
                 <div>
-                    <span class="db-card-badge badge-ready">🌟 Workflow Pronto (${UI.escapeHTML(selfRel ? selfRel.name : 'Relazione')})</span>
+                    <span class="db-card-badge badge-ready">🌟 Workflow Pronto (${UI.escapeHTML(relNames || 'Relazione')})</span>
                 </div>
             `;
 
@@ -454,16 +616,33 @@ window.WorkflowApp = {
         WorkflowApp.currentDbId = dbId;
         WorkflowApp.currentDbState = db;
         WorkflowApp._lastDbContentHash = JSON.stringify(db);
-        document.getElementById('activeDbTitle').innerText = db.title || 'Database';
 
-        let selfRel = (db.columns || []).find(c => c.type === 'relation' && (c.targetTableId === dbId || c.targetTableId === db.id));
-        if (!selfRel) selfRel = (db.columns || []).find(c => c.type === 'relation');
-        WorkflowApp.selfRelCol = selfRel;
+        // Raccolta di tutte le auto-relazioni presenti nel DB
+        const selfRels = (db.columns || []).filter(c => c.type === 'relation' && (c.targetTableId === dbId || c.targetTableId === db.id));
+        let activeRel = selfRels.length > 0 ? selfRels[0] : (db.columns || []).find(c => c.type === 'relation');
 
+        // Assegna la colonna target specificata se invocata dall'URL
+        if (WorkflowApp._pendingTargetRelId) {
+            const specificRel = (db.columns || []).find(c => c.id === WorkflowApp._pendingTargetRelId);
+            if (specificRel) activeRel = specificRel;
+            WorkflowApp._pendingTargetRelId = null;
+        }
+        WorkflowApp.selfRelCol = activeRel;
+
+        const titleEl = document.getElementById('activeDbTitle');
+        if (titleEl) {
+            titleEl.innerText = activeRel ? `${db.title || 'Database'} [${activeRel.name}]` : (db.title || 'Database');
+        }
+
+        // Inizializza il contenitore multi-layout per le relazioni
+        WorkflowApp.layoutsByRelation = {};
+
+        // Inizializza il layout corrente di fallback
+        const defaultCols = (db.columns || []).filter(c => c.id !== activeRel?.id && !['formula', 'rollup'].includes(c.type)).slice(1, 4).map(c => c.id);
         WorkflowApp.layout = {
             zoom: 1,
             pan: { x: 72, y: 72 },
-            visibleColumns: [],
+            visibleColumns: defaultCols,
             relationDirection: 'successor',
             connectionStyle: 'orthogonal',
             clusterColId: null,
@@ -473,8 +652,10 @@ window.WorkflowApp = {
             nodes: {}
         };
 
-        const defaultCols = (db.columns || []).filter(c => c.id !== selfRel?.id && !['formula', 'rollup'].includes(c.type)).slice(1, 4).map(c => c.id);
-        WorkflowApp.layout.visibleColumns = defaultCols;
+        if (WorkflowApp._pendingTargetDir) {
+            WorkflowApp.layout.relationDirection = (WorkflowApp._pendingTargetDir === 'parent' || WorkflowApp._pendingTargetDir === 'predecessor') ? 'predecessor' : 'successor';
+            WorkflowApp._pendingTargetDir = null;
+        }
 
         // CARICAMENTO AUTOMATICO NATIVO DA assets/workflow/{dbId}.json
         const hasLoadedCustomLayout = await WorkflowApp.loadWorkflowFromFile(dbId);
@@ -524,9 +705,19 @@ window.WorkflowApp = {
             AppState.databases[WorkflowApp.currentDbId] = freshDbState;
             WorkflowApp.currentDbState = freshDbState;
 
-            let selfRel = (freshDbState.columns || []).find(c => c.type === 'relation' && (c.targetTableId === WorkflowApp.currentDbId || c.targetTableId === freshDbState.id));
-            if (!selfRel) selfRel = (freshDbState.columns || []).find(c => c.type === 'relation');
+            // Preserva la relazione attualmente attiva se esiste ancora, altrimenti fallback
+            const currentRelId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null;
+            let selfRel = (freshDbState.columns || []).find(c => c.id === currentRelId);
+            if (!selfRel) {
+                selfRel = (freshDbState.columns || []).find(c => c.type === 'relation' && (c.targetTableId === WorkflowApp.currentDbId || c.targetTableId === freshDbState.id));
+                if (!selfRel) selfRel = (freshDbState.columns || []).find(c => c.type === 'relation');
+            }
             WorkflowApp.selfRelCol = selfRel;
+
+            const titleEl = document.getElementById('activeDbTitle');
+            if (titleEl) {
+                titleEl.innerText = selfRel ? `${freshDbState.title || 'Database'} [${selfRel.name}]` : (freshDbState.title || 'Database');
+            }
 
             WorkflowApp.buildNodesDOM();
 
@@ -552,7 +743,7 @@ window.WorkflowApp = {
     },
 
     // =========================================================================
-    // I/O AUTOMATICO SU assets/workflow/{tableId}.json
+    // I/O AUTOMATICO SU assets/workflow/{tableId}.json (CON MULTI-RELATION SUPPORT)
     // =========================================================================
     getWorkflowFolderHandle: async () => {
         if (!AppState.workspaceHandle) return null;
@@ -571,16 +762,20 @@ window.WorkflowApp = {
             const wfDir = await WorkflowApp.getWorkflowFolderHandle();
             if (!wfDir) return;
 
+            WorkflowApp.saveCurrentRelationLayout();
+
             const fileHandle = await wfDir.getFileHandle(`${WorkflowApp.currentDbId}.json`, { create: true });
             const writable = await fileHandle.createWritable();
             
             const exportObj = {
                 type: "vanilladesk_workflow_layout",
-                version: "3.0",
+                version: "3.1",
                 databaseId: WorkflowApp.currentDbId,
                 databaseTitle: WorkflowApp.currentDbState ? WorkflowApp.currentDbState.title : 'database',
+                activeRelationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
                 relationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
-                layout: WorkflowApp.layout
+                layout: WorkflowApp.layout,
+                layoutsByRelation: WorkflowApp.layoutsByRelation || {}
             };
 
             await writable.write(JSON.stringify(exportObj, null, 2));
@@ -600,9 +795,29 @@ window.WorkflowApp = {
             const text = await file.text();
             const parsed = JSON.parse(text);
 
-            if (parsed && parsed.layout) {
-                WorkflowApp.layout = parsed.layout;
-                return true;
+            if (parsed) {
+                if (parsed.layoutsByRelation) {
+                    WorkflowApp.layoutsByRelation = parsed.layoutsByRelation;
+                } else {
+                    WorkflowApp.layoutsByRelation = {};
+                }
+
+                const targetRelId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : (parsed.activeRelationColId || parsed.relationColId);
+
+                // Se esiste un layout memorizzato specificamente per la relazione attiva
+                if (targetRelId && WorkflowApp.layoutsByRelation[targetRelId]) {
+                    WorkflowApp.layout = WorkflowApp.layoutsByRelation[targetRelId];
+                    return true;
+                }
+
+                // Fallback per file legacy con layout singolo
+                if (parsed.layout) {
+                    WorkflowApp.layout = parsed.layout;
+                    if (targetRelId) {
+                        WorkflowApp.layoutsByRelation[targetRelId] = JSON.parse(JSON.stringify(parsed.layout));
+                    }
+                    return true;
+                }
             }
         } catch(e) {
             return false;
@@ -618,12 +833,23 @@ window.WorkflowApp = {
         reader.onload = (e) => {
             try {
                 const parsed = JSON.parse(e.target.result);
-                if (parsed.type !== 'vanilladesk_workflow_layout' || !parsed.layout) {
+                if (parsed.type !== 'vanilladesk_workflow_layout') {
                     alert("Il file caricato non è una configurazione di layout Workflow valida.");
                     return;
                 }
 
-                WorkflowApp.layout = parsed.layout;
+                if (parsed.layoutsByRelation) {
+                    WorkflowApp.layoutsByRelation = parsed.layoutsByRelation;
+                }
+
+                const targetRelId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : (parsed.activeRelationColId || parsed.relationColId);
+                
+                if (targetRelId && WorkflowApp.layoutsByRelation[targetRelId]) {
+                    WorkflowApp.layout = WorkflowApp.layoutsByRelation[targetRelId];
+                } else if (parsed.layout) {
+                    WorkflowApp.layout = parsed.layout;
+                }
+
                 WorkflowApp.applyCanvasBackground(WorkflowApp.layout.backgroundColor);
                 WorkflowApp.applyLayoutLockState();
 

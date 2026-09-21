@@ -11,6 +11,9 @@
  * - Evitamento ostacoli reale tramite Channel Routing perimetrale a clearance fissa (R >= 12px).
  * - Selezione intelligente delle porte con penalità di collisione (Obstacle Crossing Penalty)
  *   e tangenti Bézier proiettate per impedire sovrapposizioni e sbandate su nodi intermedi.
+ * - FIX DIFENSIVO ROBUSTO: Filtraggio preventivo degli archi per verificare l'esistenza fisica 
+ *   di entrambi i nodi in db.rows prima del calcolo di portRoles, eliminando alla radice l'errore "Cannot read properties of undefined (reading 'top')".
+ * - FIX GEOMETRICO: Ripristinato il confronto corretto sull'asse Y (cornerY !== q2.y) per le uscite verticali.
  */
 
 Object.assign(WorkflowApp, {
@@ -19,13 +22,13 @@ Object.assign(WorkflowApp, {
     // GEOMETRIA DEI 4 PUNTI CARDINALI SULLE SCHEDE
     // =========================================================================
     getNodePortGeometry: (nodeId, side) => {
-        const nodePos = WorkflowApp.layout.nodes[nodeId];
+        const nodePos = WorkflowApp.layout.nodes ? WorkflowApp.layout.nodes[nodeId] : null;
         const nodeEl = document.getElementById(`wf_node_${nodeId}`);
         const nodeW = 288;
         const nodeH = nodeEl ? nodeEl.offsetHeight : 80;
 
         if (!nodePos || !isFinite(nodePos.x) || !isFinite(nodePos.y)) {
-            return { x: 0, y: 0, normal: { x: 1, y: 0 }, side };
+            return { x: 0, y: 0, normal: { x: 1, y: 0 }, side: side || 'right' };
         }
 
         switch (side) {
@@ -75,8 +78,8 @@ Object.assign(WorkflowApp, {
     },
 
     /**
-     * Verifica rapida ed efficiente delle collisioni di una traiettoria candidata
-     * contro un insieme di ostacoli noti sul canvas.
+     * Verifica rapida delle collisioni di una traiettoria candidata
+     * contro gli ostacoli noti sul canvas.
      */
     _checkTrajectoryCollisions: (p1, n1, p2, n2, obstacles, styleMode) => {
         if (!obstacles || obstacles.length === 0) return 0;
@@ -520,6 +523,7 @@ Object.assign(WorkflowApp, {
             } else {
                 const cornerY = feederY !== null ? feederY : q2.y;
                 waypoints.push({ x: q1.x, y: cornerY });
+                // FIX GEOMETRICO: Confronto corretto tra ordinate sull'asse Y (cornerY !== q2.y)
                 if (cornerY !== q2.y) {
                     waypoints.push({ x: q2.x, y: cornerY });
                 }
@@ -636,17 +640,17 @@ Object.assign(WorkflowApp, {
 
         const db = WorkflowApp.currentDbState;
         const relCol = WorkflowApp.selfRelCol;
-        if (!db || !relCol) return;
+        if (!db || !relCol || !db.rows) return;
 
         const isPredecessorMode = WorkflowApp.layout.relationDirection === 'predecessor';
         const styleMode = WorkflowApp.layout.connectionStyle;
 
         // Bounding box degli ostacoli reali sul canvas (con clearance di 12px)
         const obstacles = [];
-        db.rows.forEach(r => {
-            const pos = WorkflowApp.layout.nodes[r.id];
+        (db.rows || []).forEach(r => {
+            const pos = WorkflowApp.layout.nodes ? WorkflowApp.layout.nodes[r.id] : null;
             const el = document.getElementById(`wf_node_${r.id}`);
-            if (pos && el) {
+            if (pos && el && isFinite(pos.x) && isFinite(pos.y)) {
                 obstacles.push({
                     id: r.id,
                     x: pos.x - 12,
@@ -657,27 +661,34 @@ Object.assign(WorkflowApp, {
             }
         });
 
-        // Raccolta archi
+        // 1. Indice delle righe valide presenti nel database
+        const validRowIds = new Set((db.rows || []).map(r => r && r.id).filter(Boolean));
+
+        // 2. Raccolta archi validi: ENTRAMBI gli estremi DEVONO esistere fisicamente in validRowIds
         const rawEdges = [];
-        db.rows.forEach(row => {
-            if (!row.cells) return;
+        (db.rows || []).forEach(row => {
+            if (!row || !row.id || !row.cells) return;
             let targets = row.cells[relCol.id];
             if (!targets) return;
             if (!Array.isArray(targets)) targets = [targets];
 
             targets.forEach(targetRowId => {
+                if (!targetRowId || typeof targetRowId !== 'string') return;
                 const fromId = isPredecessorMode ? targetRowId : row.id;
                 const toId = isPredecessorMode ? row.id : targetRowId;
-                if (WorkflowApp.layout.nodes[fromId] && WorkflowApp.layout.nodes[toId]) {
+
+                // Entrambi gli estremi devono esistere sia nei record che nelle coordinate di layout
+                if (validRowIds.has(fromId) && validRowIds.has(toId) && 
+                    WorkflowApp.layout.nodes && WorkflowApp.layout.nodes[fromId] && WorkflowApp.layout.nodes[toId]) {
                     rawEdges.push({ fromId, toId });
                 }
             });
         });
 
-        // Registro di esclusività delle porte (IN != OUT)
+        // 3. Registro di esclusività delle porte (IN != OUT)
         const portRoles = {};
-        db.rows.forEach(r => {
-            portRoles[r.id] = { top: null, right: null, bottom: null, left: null };
+        validRowIds.forEach(id => {
+            portRoles[id] = { top: null, right: null, bottom: null, left: null };
         });
 
         const sides = ['top', 'right', 'bottom', 'left'];
@@ -687,10 +698,13 @@ Object.assign(WorkflowApp, {
             const u = edge.fromId;
             const v = edge.toId;
 
-            let validSourceSides = sides.filter(s => portRoles[u][s] !== 'in');
+            // Protezione assoluta: se uno dei due nodi non è nel registro ruoli, ignora l'arco
+            if (!portRoles[u] || !portRoles[v]) return;
+
+            let validSourceSides = sides.filter(s => portRoles[u] && portRoles[u][s] !== 'in');
             if (validSourceSides.length === 0) validSourceSides = sides;
 
-            let validTargetSides = sides.filter(s => portRoles[v][s] !== 'out');
+            let validTargetSides = sides.filter(s => portRoles[v] && portRoles[v][s] !== 'out');
             if (validTargetSides.length === 0) validTargetSides = sides;
 
             let bestSourceSide = validSourceSides[0];
@@ -764,10 +778,11 @@ Object.assign(WorkflowApp, {
         });
 
         // Aggiornamento classi di stato delle porte nel DOM
-        db.rows.forEach(r => {
-            const roles = portRoles[r.id];
+        validRowIds.forEach(id => {
+            const roles = portRoles[id];
+            if (!roles) return;
             sides.forEach(s => {
-                const portEl = document.querySelector(`#wf_node_${r.id} .wf-port.${s}`);
+                const portEl = document.querySelector(`#wf_node_${id} .wf-port.${s}`);
                 if (portEl) {
                     portEl.classList.remove('is-in', 'is-out', 'is-idle');
                     if (roles[s] === 'in') {
@@ -802,10 +817,8 @@ Object.assign(WorkflowApp, {
                 const n2 = sample.n2;
 
                 if (n2.x !== 0) {
-                    // Porta orizzontale (es. 'left'): tronco di approccio a 36px
                     trunkFeederMap.set(key, { axis: 'x', coord: p2.x + (n2.x * 36) });
                 } else if (n2.y !== 0) {
-                    // Porta verticale (es. 'top'): tronco di approccio a 36px
                     trunkFeederMap.set(key, { axis: 'y', coord: p2.y + (n2.y * 36) });
                 }
             }

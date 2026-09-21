@@ -8,6 +8,7 @@
  * - Delega nativa ad AdvancedTable.openRecordView per il Dettaglio Record (Sola Lettura).
  * - Ricerca istantanea Like con suggerimenti e navigazione nodi.
  * - Esportazione del Grafo in formato Vettoriale SVG (Fedele 1:1, risoluzione infinita).
+ * - FEAT MULTI-RELATION MENU: Selezione del campo relazione attivo direttamente dal menu ad hamburger.
  * - Innesco finale DOMContentLoaded al termine della catena di montaggio.
  */
 
@@ -181,7 +182,7 @@ Object.assign(WorkflowApp, {
     openBlockBorderDrawer: () => WorkflowApp.openColorsDrawer(),
 
     // =========================================================================
-    // MENU AD HAMBURGER CON SOTTOMENÙ ACCORPATI
+    // MENU AD HAMBURGER CON SOTTOMENÙ ACCORPATI & SELETTORE MULTI-RELAZIONE
     // =========================================================================
     openMainMenu: (e) => {
         if (e) e.stopPropagation();
@@ -194,124 +195,144 @@ Object.assign(WorkflowApp, {
         const dir = WorkflowApp.layout.relationDirection;
         const isLocked = !!WorkflowApp.layout.locked;
 
-        const items = [
-            // 1. SOTTOMENÙ: Disposizione & Layout
-            {
-                icon: Icons.layoutAuto || Icons.tablePivot,
-                label: 'Disposizione & Layout',
-                type: 'submenu',
-                items: [
-                    {
-                        icon: Icons.tablePivot,
-                        label: 'Auto-Disponi Organico',
-                        disabled: isLocked,
-                        onClick: () => WorkflowApp.runOrganicAutoLayout(true)
-                    },
-                    {
-                        icon: Icons.focus,
-                        label: 'Centra e Adatta Grafo (Fit)',
-                        onClick: () => WorkflowApp.fitToView()
-                    },
-                    {
-                        icon: Icons.group || Icons.folder,
-                        label: 'Raggruppa in Cluster (Box)...',
-                        disabled: isLocked,
-                        onClick: () => WorkflowApp.openClusterDrawer()
-                    },
-                    { type: 'divider' },
-                    {
-                        icon: Icons.lock,
-                        label: 'Blocca Disposizione (Lock)' + (isLocked ? chk : ''),
-                        onClick: () => WorkflowApp.toggleLayoutLock()
-                    }
-                ]
-            },
+        // Tutte le relazioni auto-referenziali disponibili in questo database
+        const selfRels = (WorkflowApp.currentDbState?.columns || []).filter(c => 
+            c.type === 'relation' && (c.targetTableId === WorkflowApp.currentDbId || c.targetTableId === WorkflowApp.currentDbState.id)
+        );
 
-            // 2. SOTTOMENÙ: Stile Connessioni & Flusso
-            {
+        const items = [];
+
+        // 1. SOTTOMENÙ: Selezione Campo Relazione (solo se sono presenti auto-relazioni)
+        if (selfRels.length > 0) {
+            const currentRelName = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.name : 'Nessuna';
+            items.push({
                 icon: Icons.relation || Icons.link,
-                label: 'Stile Connessioni & Flusso',
+                label: `Relazione Workflow (${currentRelName})`,
                 type: 'submenu',
-                items: [
-                    {
-                        label: 'Curve Morbide (Bézier)' + (style === 'bezier' ? chk : ''),
-                        onClick: () => WorkflowApp.setConnectionStyle('bezier')
-                    },
-                    {
-                        label: 'Linee Ortogonali (Canalizzate R12)' + (style === 'orthogonal' ? chk : ''),
-                        onClick: () => WorkflowApp.setConnectionStyle('orthogonal')
-                    },
-                    {
-                        label: 'Ortogonali (Evita Ostacoli R12)' + (style === 'avoidance' ? chk : ''),
-                        onClick: () => WorkflowApp.setConnectionStyle('avoidance')
-                    },
-                    { type: 'divider' },
-                    {
-                        label: 'Verso: A ➔ B (Successore)' + (dir === 'successor' ? chk : ''),
-                        onClick: () => WorkflowApp.setRelationDirection('successor')
-                    },
-                    {
-                        label: 'Verso: B ➔ A (Predecessore)' + (dir === 'predecessor' ? chk : ''),
-                        onClick: () => WorkflowApp.setRelationDirection('predecessor')
+                items: selfRels.map(rel => ({
+                    label: rel.name + (WorkflowApp.selfRelCol?.id === rel.id ? chk : ''),
+                    onClick: () => WorkflowApp.switchRelation(rel.id)
+                }))
+            });
+            items.push({ type: 'divider' });
+        }
+
+        // 2. SOTTOMENÙ: Disposizione & Layout
+        items.push({
+            icon: Icons.layoutAuto || Icons.tablePivot,
+            label: 'Disposizione & Layout',
+            type: 'submenu',
+            items: [
+                {
+                    icon: Icons.tablePivot,
+                    label: 'Auto-Disponi Organico',
+                    disabled: isLocked,
+                    onClick: () => WorkflowApp.runOrganicAutoLayout(true)
+                },
+                {
+                    icon: Icons.focus,
+                    label: 'Centra e Adatta Grafo (Fit)',
+                    onClick: () => WorkflowApp.fitToView()
+                },
+                {
+                    icon: Icons.group || Icons.folder,
+                    label: 'Raggruppa in Cluster (Box)...',
+                    disabled: isLocked,
+                    onClick: () => WorkflowApp.openClusterDrawer()
+                },
+                { type: 'divider' },
+                {
+                    icon: Icons.lock,
+                    label: 'Blocca Disposizione (Lock)' + (isLocked ? chk : ''),
+                    onClick: () => WorkflowApp.toggleLayoutLock()
+                }
+            ]
+        });
+
+        // 3. SOTTOMENÙ: Stile Connessioni & Flusso
+        items.push({
+            icon: Icons.relation || Icons.link,
+            label: 'Stile Connessioni & Flusso',
+            type: 'submenu',
+            items: [
+                {
+                    label: 'Curve Morbide (Bézier)' + (style === 'bezier' ? chk : ''),
+                    onClick: () => WorkflowApp.setConnectionStyle('bezier')
+                },
+                {
+                    label: 'Linee Ortogonali (Canalizzate R12)' + (style === 'orthogonal' ? chk : ''),
+                    onClick: () => WorkflowApp.setConnectionStyle('orthogonal')
+                },
+                {
+                    label: 'Ortogonali (Evita Ostacoli R12)' + (style === 'avoidance' ? chk : ''),
+                    onClick: () => WorkflowApp.setConnectionStyle('avoidance')
+                },
+                { type: 'divider' },
+                {
+                    label: 'Verso: A ➔ B (Successore)' + (dir === 'successor' ? chk : ''),
+                    onClick: () => WorkflowApp.setRelationDirection('successor')
+                },
+                {
+                    label: 'Verso: B ➔ A (Predecessore)' + (dir === 'predecessor' ? chk : ''),
+                    onClick: () => WorkflowApp.setRelationDirection('predecessor')
+                }
+            ]
+        });
+
+        items.push({ type: 'divider' });
+
+        // 4. SOTTOMENÙ: Personalizzazione Visiva
+        items.push({
+            icon: Icons.palette,
+            label: 'Personalizzazione Visiva',
+            type: 'submenu',
+            items: [
+                {
+                    icon: Icons.palette,
+                    label: 'Colori (Sfondo & Bordi Schede)...',
+                    onClick: () => WorkflowApp.openColorsDrawer()
+                },
+                { type: 'divider' },
+                {
+                    icon: Icons.filter,
+                    label: 'Campi Visibili sulle Card...',
+                    onClick: () => WorkflowApp.openPropertiesDrawer()
+                }
+            ]
+        });
+
+        items.push({ type: 'divider' });
+
+        // 5. SOTTOMENÙ: Esportazione Vettoriale & File
+        items.push({
+            icon: Icons.export || Icons.file,
+            label: 'Esporta & Condividi',
+            type: 'submenu',
+            items: [
+                {
+                    icon: Icons.image || Icons.export,
+                    label: 'Esporta Grafo Vettoriale (SVG)...',
+                    onClick: () => WorkflowApp.exportGraphToSVG()
+                },
+                { type: 'divider' },
+                {
+                    icon: Icons.save,
+                    label: 'Esporta Copia Layout JSON',
+                    onClick: () => WorkflowApp.saveLayoutFileManualDownload()
+                },
+                {
+                    icon: Icons.download,
+                    label: 'Carica Layout JSON Esterno...',
+                    onClick: () => {
+                        const inp = document.createElement('input');
+                        inp.type = 'file';
+                        inp.accept = '.json';
+                        inp.onchange = (ev) => WorkflowApp.loadLegacyLayoutFile(ev);
+                        inp.click();
                     }
-                ]
-            },
-
-            { type: 'divider' },
-
-            // 3. SOTTOMENÙ: Personalizzazione Visiva
-            {
-                icon: Icons.palette,
-                label: 'Personalizzazione Visiva',
-                type: 'submenu',
-                items: [
-                    {
-                        icon: Icons.palette,
-                        label: 'Colori (Sfondo & Bordi Schede)...',
-                        onClick: () => WorkflowApp.openColorsDrawer()
-                    },
-                    { type: 'divider' },
-                    {
-                        icon: Icons.filter,
-                        label: 'Campi Visibili sulle Card...',
-                        onClick: () => WorkflowApp.openPropertiesDrawer()
-                    }
-                ]
-            },
-
-            { type: 'divider' },
-
-            // 4. SOTTOMENÙ: Esportazione Vettoriale & File
-            {
-                icon: Icons.export || Icons.file,
-                label: 'Esporta & Condividi',
-                type: 'submenu',
-                items: [
-                    {
-                        icon: Icons.image || Icons.export,
-                        label: 'Esporta Grafo Vettoriale (SVG)...',
-                        onClick: () => WorkflowApp.exportGraphToSVG()
-                    },
-                    { type: 'divider' },
-                    {
-                        icon: Icons.save,
-                        label: 'Esporta Copia Layout JSON',
-                        onClick: () => WorkflowApp.saveLayoutFileManualDownload()
-                    },
-                    {
-                        icon: Icons.download,
-                        label: 'Carica Layout JSON Esterno...',
-                        onClick: () => {
-                            const inp = document.createElement('input');
-                            inp.type = 'file';
-                            inp.accept = '.json';
-                            inp.onchange = (ev) => WorkflowApp.loadLegacyLayoutFile(ev);
-                            inp.click();
-                        }
-                    }
-                ]
-            }
-        ];
+                }
+            ]
+        });
 
         UI.Menu.buildContextMenu('btnHamburgerMenu', items);
         
@@ -324,13 +345,17 @@ Object.assign(WorkflowApp, {
     saveLayoutFileManualDownload: () => {
         if (!WorkflowApp.currentDbState) return;
 
+        WorkflowApp.saveCurrentRelationLayout();
+
         const exportObj = {
             type: "vanilladesk_workflow_layout",
-            version: "3.0",
+            version: "3.1",
             databaseId: WorkflowApp.currentDbId,
             databaseTitle: WorkflowApp.currentDbState.title,
+            activeRelationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
             relationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
-            layout: WorkflowApp.layout
+            layout: WorkflowApp.layout,
+            layoutsByRelation: WorkflowApp.layoutsByRelation || {}
         };
 
         const blob = new Blob([JSON.stringify(exportObj, null, 2)], { type: 'application/json' });
