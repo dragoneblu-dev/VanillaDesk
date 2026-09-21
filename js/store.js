@@ -6,6 +6,7 @@
  * 2. Note: Generazione automatica di Copia di Conflitto ('[Conflitto...] Titolo') per impedire la perdita di dati.
  * 3. Media & Storage: Ripristinata utility _base64ToBlob per retrocompatibilità.
  * 4. Live Sync: Ascolto BroadcastChannel 'vanilladesk_sync' e funzione readDatabaseFromDisk per ricarica concorrente.
+ * FEAT AUTO-EDIT ON WORKSPACE CREATE: Abilita automaticamente l'Edit Continuo quando viene creato un nuovo Workspace.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -905,6 +906,14 @@ const Store = {
 
             if (typeof AdvancedTable !== 'undefined') {
                 AdvancedTable.ensureSystemPropertiesDB();
+            }
+
+            // Abilitazione automatica della modalità Edit Continuo per il nuovo Workspace
+            if (typeof UI !== 'undefined' && typeof UI.setContinuousEdit === 'function') {
+                UI.setContinuousEdit(true);
+            } else {
+                AppState.continuousEditMode = true;
+                localStorage.setItem('pronotes_continuous', 'true');
             }
 
             Store.isDirty = true;
