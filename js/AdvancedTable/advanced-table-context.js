@@ -9,13 +9,70 @@
  * prevenendo il bug di concatenazione testuale ("10" + 10 = "1010").
  * FIX TRASHED NOTE LINK: getFormatDisplayValue allineato con renderCell nel restituire 'Nota nel Cestino'
  * se la nota referenziata possiede l'attributo deletedAt.
+ * FIX ROBUST DATE FORMATTING: formatTime reso completamente idempotente;
+ * eliminata alla radice la generazione della stringa "Invalid Date Invalid Date" in presenza di date italiane o ri-formattate.
+ * CONTRACT RESTORATION: Ripristinato il contratto canonico di getFormatDisplayValue per date singole (stringa inalterata)
+ * e range temporali (start ➔ end in formato ISO), garantendo la conformità con la suite di test e l'interscambio dati.
  */
 
 Object.assign(AdvancedTable, {
 
     formatTime: (ts) => {
-        if (!ts) return '';
-        const d = new Date(ts);
+        if (!ts && ts !== 0) return '';
+        
+        // 1. Se è un oggetto con intervallo (start / end)
+        if (typeof ts === 'object' && ts !== null) {
+            if (ts.start && ts.end) {
+                return `${AdvancedTable.formatTime(ts.start)} ➔ ${AdvancedTable.formatTime(ts.end)}`;
+            }
+            if (ts.start) return AdvancedTable.formatTime(ts.start);
+            return '';
+        }
+
+        // 2. Se è già una stringa formattata con freccia di intervallo o formato italiano DD/MM/YYYY
+        if (typeof ts === 'string') {
+            ts = ts.trim();
+            if (ts.includes('➔')) {
+                return ts;
+            }
+            if (/^\d{1,2}\/\d{1,2}\/\d{4}/.test(ts)) {
+                return ts;
+            }
+            // Normalizzazione se contiene slashes DD/MM/YYYY
+            if (ts.includes('/')) {
+                const parts = ts.split(' ');
+                const dParts = parts[0].split('/');
+                if (dParts.length === 3) {
+                    const iso = `${dParts[2]}-${dParts[1]}-${dParts[0]}` + (parts[1] ? `T${parts[1]}` : '');
+                    const dIso = new Date(iso);
+                    if (!isNaN(dIso.getTime())) {
+                        return dIso.toLocaleDateString('it-IT') + (parts[1] ? ' ' + dIso.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '');
+                    }
+                }
+            }
+        }
+
+        // 3. Gestione timestamp numerico o stringa numerica
+        let d;
+        if (typeof ts === 'number' || (typeof ts === 'string' && /^\d+$/.test(ts.trim()))) {
+            d = new Date(Number(ts));
+        } else {
+            d = new Date(ts);
+        }
+
+        // 4. Protezione contro date non valide: non restituire mai "Invalid Date Invalid Date"
+        if (isNaN(d.getTime())) {
+            return typeof ts === 'string' ? ts : '';
+        }
+
+        // 5. Se è una data pura ISO (senza orario es: 2026-09-18), formatta solo come data
+        if (typeof ts === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(ts)) {
+            const parts = ts.split('-');
+            const dPure = new Date(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2]), 12, 0, 0);
+            return dPure.toLocaleDateString('it-IT');
+        }
+
+        // 6. Formattazione standard completa data e ora
         return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
     },
 
@@ -124,14 +181,25 @@ Object.assign(AdvancedTable, {
         }
 
         // Supporto per date, datetime e oggetti intervallo temporale generati anche da formule
+        // CONTRATTO CANONICO: gli oggetti intervallo restituiscono start ➔ end, mentre i singoli rimangono inalterati
         if (colDef.type === 'date' || colDef.type === 'datetime' || (typeof rawValue === 'object' && rawValue !== null && (rawValue.start !== undefined || rawValue.end !== undefined))) {
              if (typeof rawValue === 'object' && rawValue !== null) {
                  return (rawValue.start || '') + (rawValue.end ? ' ➔ ' + rawValue.end : '');
+             }
+             if (typeof rawValue === 'number' || (typeof rawValue === 'string' && /^\d+$/.test(rawValue.trim()))) {
+                 const d = new Date(Number(rawValue));
+                 if (!isNaN(d.getTime())) {
+                     d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+                     return colDef.type === 'datetime' ? d.toISOString().slice(0, 16) : d.toISOString().split('T')[0];
+                 }
              }
              return String(rawValue);
         }
 
         if (colDef.type === 'created_time' || colDef.type === 'last_edited_time') {
+             if (typeof rawValue === 'string' && /^\d{1,2}\/\d{1,2}\/\d{4}/.test(rawValue.trim())) {
+                 return rawValue.trim();
+             }
              return AdvancedTable.formatTime(rawValue);
         }
 
@@ -287,14 +355,18 @@ Object.assign(AdvancedTable, {
     buildVirtualRow: (tableId, row, state, renderCache = {}) => {
         let vRow = { ...row, virtualCells: { ...(row.cells || {}) } };
 
+        // Inizializzazione protettiva per garantire che i record non abbiano timestamp indefiniti
+        const rowCreated = row.createdAt || (row.createdAt = Date.now());
+        const rowUpdated = row.updatedAt || (row.updatedAt = rowCreated);
+
         (state.columns ||[]).forEach(col => {
             // Popolamento unificato e coerente dei timestamp di sistema
             if (col.type === 'created_time') {
-                vRow.virtualCells[col.id] = row.createdAt ? AdvancedTable.formatTime(row.createdAt) : '';
+                vRow.virtualCells[col.id] = rowCreated ? AdvancedTable.formatTime(rowCreated) : '';
                 return;
             }
             if (col.type === 'last_edited_time') {
-                vRow.virtualCells[col.id] = row.updatedAt ? AdvancedTable.formatTime(row.updatedAt) : '';
+                vRow.virtualCells[col.id] = rowUpdated ? AdvancedTable.formatTime(rowUpdated) : '';
                 return;
             }
 

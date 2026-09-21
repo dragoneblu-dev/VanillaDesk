@@ -7,6 +7,9 @@
  * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano coerentemente anche nei filtri live:
  * - Numeri: confronto matematico.
  * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
+ * FIX AUTOCOMPLETE DATES: Allineamento parsing delle date con estrazione sicura di intervalli {start, end}
+ * e timestamp di sistema in buildFilteredRows; rimozione automatica di stringhe "Invalid Date" dai suggerimenti unici.
+ * FEAT DATE RANGE FILTERING: buildFilteredRows allineato all'algebra degli intervalli di advanced-table-data.js.
  */
 
 Object.assign(AdvancedTable, {
@@ -33,7 +36,7 @@ Object.assign(AdvancedTable, {
 
         if (!state.filters) state.filters = {};
 
-        const safeTooltipText = "Usa i simboli &gt;, &lt;, != o dividi con ; per cercare più termini.\nInizia con = per match esatto.";
+        const safeTooltipText = "Usa i simboli &gt;, &lt;, != o dividi con ; per cercare più termini.\nInizia con = per match esatto.\nPer i range di date puoi usare la freccia ➔";
         
         let html = `<div class="adv-dropdown-title" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; text-transform:uppercase; letter-spacing:0.05em;">
                     <span>Filtra Dati per Campo</span>
@@ -353,12 +356,41 @@ Object.assign(AdvancedTable, {
                                 }
 
                                 if (isDateType) {
-                                    let cellDate = (cellVal && typeof cellVal === 'string' && cellVal.includes('/')) ? new Date(cellVal.split(' ')[0].split('/').reverse().join('-')).getTime() : new Date(cellVal).getTime();
-                                    let tgtDate = (targetVal.includes('/')) ? new Date(targetVal.split(' ')[0].split('/').reverse().join('-')).getTime() : new Date(targetVal).getTime();
-                                    if (!isNaN(cellDate) && !isNaN(tgtDate)) {
-                                        if (operator === '>') return cellDate > tgtDate; if (operator === '<') return cellDate < tgtDate;
-                                        if (operator === '>=') return cellDate >= tgtDate; if (operator === '<=') return cellDate <= tgtDate;
-                                        if (operator === '=') return cellDate === tgtDate; if (operator === '!=') return cellDate !== tgtDate;
+                                    const cellInterval = AdvancedTable._extractIntervalFromValue(cellVal, colDef, r, isPivot);
+                                    const targetInterval = AdvancedTable._extractIntervalFromValue(targetVal);
+
+                                    if (cellInterval && targetInterval) {
+                                        const isTargetRange = targetInterval.startMs !== targetInterval.endMs;
+
+                                        if (isTargetRange) {
+                                            const overlaps = (cellInterval.startMs <= targetInterval.endMs) && (cellInterval.endMs >= targetInterval.startMs);
+                                            if (operator === '=') return overlaps;
+                                            if (operator === '!=') return !overlaps;
+                                            if (operator === '>') return cellInterval.startMs > targetInterval.endMs;
+                                            if (operator === '<') return cellInterval.endMs < targetInterval.startMs;
+                                            if (operator === '>=') return cellInterval.endMs >= targetInterval.startMs;
+                                            if (operator === '<=') return cellInterval.startMs <= targetInterval.endMs;
+                                        } else {
+                                            const hasExplicitTime = targetVal.includes(':');
+                                            let dayStart = targetInterval.startMs;
+                                            let dayEnd = targetInterval.endMs;
+
+                                            if (!hasExplicitTime) {
+                                                const d = new Date(targetInterval.startMs);
+                                                d.setHours(0, 0, 0, 0);
+                                                dayStart = d.getTime();
+                                                d.setHours(23, 59, 59, 999);
+                                                dayEnd = d.getTime();
+                                            }
+
+                                            const isInDayOrOverlaps = (cellInterval.startMs <= dayEnd) && (cellInterval.endMs >= dayStart);
+                                            if (operator === '=') return isInDayOrOverlaps;
+                                            if (operator === '!=') return !isInDayOrOverlaps;
+                                            if (operator === '>') return cellInterval.startMs > dayEnd;
+                                            if (operator === '<') return cellInterval.endMs < dayStart;
+                                            if (operator === '>=') return cellInterval.endMs >= dayStart;
+                                            if (operator === '<=') return cellInterval.startMs <= dayEnd;
+                                        }
                                     }
                                 }
 
@@ -438,11 +470,7 @@ Object.assign(AdvancedTable, {
                         if (resolvedNames.length > 0) return resolvedNames;
                     }
                     if (isDateCache[gColId] && val) {
-                        const d = new Date(val);
-                        if (!isNaN(d.getTime())) {
-                            if (val.includes('T') || val.length > 10) return d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                            else return d.toLocaleDateString('it-IT');
-                        }
+                        return AdvancedTable.formatTime(val);
                     }
                     if (Array.isArray(val)) return val.join(', ');
                     return String(val || '(Vuoto)').trim() || '(Vuoto)';
@@ -478,11 +506,7 @@ Object.assign(AdvancedTable, {
                                     }).join(', ');
                                 }
                             } else if (sCol && ['date', 'datetime', 'time', 'created_time', 'last_edited_time'].includes(sCol.type) && v) {
-                                const d = new Date(v);
-                                if (!isNaN(d.getTime())) {
-                                    if (v.includes('T') || v.length > 10) v = d.toLocaleDateString('it-IT') + ' ' + d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
-                                    else v = d.toLocaleDateString('it-IT');
-                                }
+                                return AdvancedTable.formatTime(v);
                             } else if (Array.isArray(v)) v = v.join(', ');
                             return String(v || '').trim();
                         }).filter(s => s !== '');
@@ -497,9 +521,11 @@ Object.assign(AdvancedTable, {
                             else if (agg.type === 'sum') result = nums.reduce((a, b) => a + b, 0);
                             else if (agg.type === 'avg') result = (nums.reduce((a, b) => a + b, 0) / nums.length);
                         } else if (agg.type === 'max' || agg.type === 'min') {
-                            // Precedenza assoluta alle date per evitare che stringhe ISO vengano scambiate per numeri da parseFloat
                             if (sourceCol && ['date', 'datetime', 'time', 'created_time', 'last_edited_time'].includes(sourceCol.type)) {
-                                let times = vals.map(v => { const d = new Date(v); return isNaN(d.getTime()) ? null : d.getTime(); }).filter(t => t !== null);
+                                let times = vals.map(v => {
+                                    const intv = AdvancedTable._extractIntervalFromValue(v);
+                                    return intv ? intv.startMs : null;
+                                }).filter(t => t !== null);
                                 if (times.length === 0) result = '-';
                                 else {
                                     let targetTime = agg.type === 'max' ? Math.max(...times) : Math.min(...times);
@@ -527,7 +553,7 @@ Object.assign(AdvancedTable, {
             const filteredRows = buildFilteredRows(rawPivotRows, true);
             filteredRows.forEach(r => {
                 let extractedVal = r.virtualCells[targetColId];
-                if (extractedVal !== undefined && extractedVal !== null && extractedVal !== '' && extractedVal !== '-') {
+                if (extractedVal !== undefined && extractedVal !== null && extractedVal !== '' && extractedVal !== '-' && !String(extractedVal).includes('Invalid Date')) {
                     uniqueVals.add(String(extractedVal).trim());
                 }
             });
@@ -549,19 +575,30 @@ Object.assign(AdvancedTable, {
                     if (tgtColDef.type === 'relation' || (tgtColDef.type === 'relation_backlink' && (!tgtColDef.backlinkDisplay || tgtColDef.backlinkDisplay === 'list'))) {
                         // Per le relazioni vogliamo i singoli nomi esposti separatamente nell'autocomplete (non il listone aggregato)
                         const names = AdvancedTable._resolveRelationNames(tgtColDef, val);
-                        names.forEach(n => uniqueVals.add(String(n).trim()));
+                        names.forEach(n => {
+                            if (n && !String(n).includes('Invalid Date')) uniqueVals.add(String(n).trim());
+                        });
                     } else if (tgtColDef.type === 'multi-select') {
                         // Stessa cosa per i multi-select, vogliamo poter filtrare per singolo TAG
                         const valArr = Array.isArray(val) ? val : (val ? [val] : []);
-                        valArr.forEach(v => uniqueVals.add(String(v).trim()));
+                        valArr.forEach(v => {
+                            if (v && !String(v).includes('Invalid Date')) uniqueVals.add(String(v).trim());
+                        });
                     } else {
                         // Per tutto il resto usiamo il Core (Date formattate, Record Note, ecc)
                         val = AdvancedTable.getFormatDisplayValue(tgtColDef, val);
-                        if (val !== undefined && val !== null && val !== '') uniqueVals.add(String(val).trim());
+                        if (val !== undefined && val !== null && val !== '' && !String(val).includes('Invalid Date')) {
+                            uniqueVals.add(String(val).trim());
+                        }
                     }
                 } else {
-                     if (Array.isArray(val)) val.forEach(v => uniqueVals.add(String(v).trim()));
-                     else if (val !== undefined && val !== null && val !== '') uniqueVals.add(String(val).trim());
+                     if (Array.isArray(val)) {
+                         val.forEach(v => {
+                             if (v && !String(v).includes('Invalid Date')) uniqueVals.add(String(v).trim());
+                         });
+                     } else if (val !== undefined && val !== null && val !== '' && !String(val).includes('Invalid Date')) {
+                         uniqueVals.add(String(val).trim());
+                     }
                 }
             });
         }
@@ -592,7 +629,7 @@ Object.assign(AdvancedTable, {
         let html = '';
         valArray.forEach(v => {
             let displayVal = v;
-            if (displayVal.length > 35) displayVal = displayVal.substring(0, 35) + '...';
+            if (displayVal.length > 45) displayVal = displayVal.substring(0, 45) + '...';
             html += `<div class="adv-filter-autocomplete-item" title="${v.replace(/"/g, '&quot;')}" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', '${v.replace(/'/g, "\\'")}')">${displayVal.replace(/</g, '&lt;')}</div>`;
         });
 
@@ -611,8 +648,8 @@ Object.assign(AdvancedTable, {
 
         let currentVal = inputEl.value.trim();
         
-        // Match Esatto forzato
         let exactValue = value;
+        // Se non contiene operatori logici espliciti, assegna operatore di uguaglianza/match
         if (!/^(>=|<=|!=|>|<|=)\s*/.test(exactValue)) {
             exactValue = '= ' + exactValue;
         }

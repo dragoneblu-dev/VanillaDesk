@@ -10,6 +10,8 @@
  * - Differenziazione cromatica per livelli di profondità (Livello 0..4) applicata a freccia, pallino e badge.
  * - FIX HEADER TOOLTIPS & COMMENTS: Mostra i tooltip informativi dei campi, i commenti colonna e l'icona informativa nell'intestazione <th>.
  * - LIVE REFRESH: Pulsante refresh aggiornato per ricaricare fedelmente i dati dal disco.
+ * - FEAT CANCEL SELECTION: Aggiunto pulsante accanto all'eliminazione per annullare la selezione attiva delle righe.
+ * - FIX TIMESTAMPS: Inizializzazione garantita di createdAt e updatedAt all'apertura della vista per prevenire anomalie di formattazione date.
  */
 
 const AdvancedTree = {
@@ -183,6 +185,13 @@ const AdvancedTree = {
 
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         const isSysDB = realTableId === 'SYS_PROPERTIES_DB';
+
+        // Inizializzazione difensiva dei timestamp per tutte le righe
+        const now = Date.now();
+        state.rows.forEach(r => {
+            if (!r.createdAt) r.createdAt = now;
+            if (!r.updatedAt) r.updatedAt = now;
+        });
 
         // 1. Identificazione Colonna Auto-Relazione
         let relColId = state.treeRelationColId;
@@ -603,8 +612,12 @@ const AdvancedTree = {
                 html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova Attività Radice</span></button>`;
 
                 if (state.selectedRows && state.selectedRows.length > 0) {
+                    if (state.selectedRows.length === 1) {
+                        html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} Apri Record</span></button>`;
+                    }
                     const btnLabel = state.selectedRows.length === 1 ? 'Elimina 1 riga' : `Elimina ${state.selectedRows.length} righe`;
                     html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
+                    html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
                 }
             }
 

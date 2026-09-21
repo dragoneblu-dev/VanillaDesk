@@ -355,6 +355,7 @@ Object.assign(AdvancedTable, {
                     }
                     const btnLabel = state.selectedRows.length === 1 ? 'Elimina 1 riga' : `Elimina ${state.selectedRows.length} righe`;
                     html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
+                    html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
                 }
             } else if (isSysDB) {
                 html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">Il numero di record riflette le pagine. Le righe non possono essere aggiunte o rimosse manualmente.</div>`;

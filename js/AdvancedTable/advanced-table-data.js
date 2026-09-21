@@ -12,9 +12,77 @@
  * - Numeri: confronto matematico.
  * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
  * LIVE REFRESH DA DISCO: forceRecalculate ricarica i dati freschi dal file system (evitando sovrascritture concorrenti).
+ * FEAT CLEAR SELECTION: Aggiunta funzione clearSelectedRows per azzerare tutte le righe selezionate.
+ * FEAT INTERVAL ALGEBRA: Supporto completo e unificato per filtri su intervalli temporali e range con delimitatore ➔.
  */
 
 Object.assign(AdvancedTable, {
+
+    // Helper interno per l'estrazione millimetrica degli intervalli temporali in millisecondi
+    _parseDateStringToMs: (str) => {
+        if (!str && str !== 0) return NaN;
+        str = String(str).trim();
+        if (str.includes('/')) {
+            const parts = str.split(' ');
+            const dParts = parts[0].split('/');
+            if (dParts.length === 3) {
+                const iso = `${dParts[2]}-${dParts[1].padStart(2, '0')}-${dParts[0].padStart(2, '0')}` + (parts[1] ? `T${parts[1]}` : '');
+                const d = new Date(iso);
+                if (!isNaN(d.getTime())) return d.getTime();
+            }
+        }
+        if (/^\d{11,}$/.test(str)) {
+            return Number(str);
+        }
+        const d = new Date(str);
+        return isNaN(d.getTime()) ? NaN : d.getTime();
+    },
+
+    _extractIntervalFromValue: (val, colDef = null, row = null, isPivotContext = false) => {
+        if (!val && val !== 0) return null;
+
+        if (colDef && !isPivotContext) {
+            if (colDef.type === 'created_time' && row && row.createdAt) {
+                const t = typeof row.createdAt === 'number' ? row.createdAt : AdvancedTable._parseDateStringToMs(row.createdAt);
+                return { startMs: t, endMs: t };
+            }
+            if (colDef.type === 'last_edited_time' && row && row.updatedAt) {
+                const t = typeof row.updatedAt === 'number' ? row.updatedAt : AdvancedTable._parseDateStringToMs(row.updatedAt);
+                return { startMs: t, endMs: t };
+            }
+        }
+
+        if (typeof val === 'object' && val !== null) {
+            const s = AdvancedTable._parseDateStringToMs(val.start);
+            const e = val.end ? AdvancedTable._parseDateStringToMs(val.end) : s;
+            if (isNaN(s) && isNaN(e)) return null;
+            const startMs = !isNaN(s) ? s : e;
+            const endMs = !isNaN(e) ? e : s;
+            return {
+                startMs: Math.min(startMs, endMs),
+                endMs: Math.max(startMs, endMs)
+            };
+        }
+
+        const strVal = String(val).trim();
+        if (strVal.includes('➔') || strVal.includes('->')) {
+            const parts = strVal.split(/➔|->/);
+            const s = AdvancedTable._parseDateStringToMs(parts[0]);
+            const e = AdvancedTable._parseDateStringToMs(parts[1]);
+            if (!isNaN(s) || !isNaN(e)) {
+                const startMs = !isNaN(s) ? s : e;
+                const endMs = !isNaN(e) ? e : s;
+                return {
+                    startMs: Math.min(startMs, endMs),
+                    endMs: Math.max(startMs, endMs)
+                };
+            }
+        }
+
+        const t = AdvancedTable._parseDateStringToMs(strVal);
+        if (isNaN(t)) return null;
+        return { startMs: t, endMs: t };
+    },
 
     touchRecordUpdate: (tableId, rowId) => {
         if (!tableId || !rowId) return;
@@ -324,6 +392,24 @@ Object.assign(AdvancedTable, {
         AdvancedTable.renderTable(tableId);
     },
 
+    clearSelectedRows: (tableId) => {
+        if (!tableId) return;
+        let viewState = AdvancedTable.getState(tableId);
+        if (!viewState || viewState.isPivot) return;
+
+        viewState.selectedRows = [];
+
+        const globalSelector = document.getElementById('adv-global-row-selector');
+        if (globalSelector) {
+            globalSelector.classList.remove('selected');
+            const cb = globalSelector.querySelector('input');
+            if (cb) cb.checked = false;
+        }
+
+        AdvancedTable.setState(tableId, viewState);
+        AdvancedTable.renderTable(tableId);
+    },
+
     deleteSelectedRows: (tableId) => {
         if (!tableId) return;
         const realTableId = AdvancedTable._resolveSourceId(tableId);
@@ -543,8 +629,8 @@ Object.assign(AdvancedTable, {
                 if (colDef.type === 'created_time' || colDef.type === 'last_edited_time') {
                     const valA = colDef.type === 'created_time' ? a.createdAt : a.updatedAt;
                     const valB = colDef.type === 'created_time' ? b.createdAt : b.updatedAt;
-                    const tA = new Date(valA).getTime() || 0;
-                    const tB = new Date(valB).getTime() || 0;
+                    const tA = typeof valA === 'number' ? valA : AdvancedTable._parseDateStringToMs(valA) || 0;
+                    const tB = typeof valB === 'number' ? valB : AdvancedTable._parseDateStringToMs(valB) || 0;
                     diff = tA - tB;
                 }
                 // Gestione Speciale Pagine Record Note
@@ -560,23 +646,13 @@ Object.assign(AdvancedTable, {
                     const strB = AdvancedTable.getFormatDisplayValue(colDef, vb).toLowerCase();
                     diff = strA.localeCompare(strB, undefined, {numeric: true, sensitivity: 'base'});
                 }
-                // Gestione Date Standard e Datetime (Supporto italiano DD/MM/YYYY)
+                // Gestione Date Standard e Datetime (Supporto italiano DD/MM/YYYY e Intervalli)
                 else if (isDateCol) {
-                    if (typeof va === 'object' && va !== null) va = va.start;
-                    if (typeof vb === 'object' && vb !== null) vb = vb.start;
-
-                    let tA = va ? new Date(va).getTime() : 0;
-                    let tB = vb ? new Date(vb).getTime() : 0;
-                    
-                    if (isNaN(tA) && typeof va === 'string' && va.includes('/')) {
-                        const pA = va.split(' ')[0].split('/'); 
-                        if(pA.length === 3) tA = new Date(`${pA[2]}-${pA[1]}-${pA[0]}`).getTime();
-                    }
-                    if (isNaN(tB) && typeof vb === 'string' && vb.includes('/')) {
-                        const pB = vb.split(' ')[0].split('/'); 
-                        if(pB.length === 3) tB = new Date(`${pB[2]}-${pB[1]}-${pB[0]}`).getTime();
-                    }
-                    diff = (isNaN(tA) ? 0 : tA) - (isNaN(tB) ? 0 : tB);
+                    const intA = AdvancedTable._extractIntervalFromValue(va);
+                    const intB = AdvancedTable._extractIntervalFromValue(vb);
+                    const tA = intA ? intA.startMs : 0;
+                    const tB = intB ? intB.startMs : 0;
+                    diff = tA - tB;
                 }
                 // Numeri e Formule Matematiche
                 else if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb)) && va !== '' && vb !== '') {
@@ -634,7 +710,6 @@ Object.assign(AdvancedTable, {
                 if (isPivotContext) {
                     displayStr = String(cellVal || '');
                 } else {
-                    // Delega tutta la risoluzione complessa alla funzione centrale
                     displayStr = AdvancedTable.getFormatDisplayValue(colDef, cellVal);
                     
                     if (colDef.type === 'checkbox') {
@@ -642,10 +717,8 @@ Object.assign(AdvancedTable, {
                         if (cellVal === false) displayStr += ' falso false unchecked no';
                     }
                     if (isDateType) {
-                        displayStr += " " + cellVal; 
+                        displayStr += " " + (typeof cellVal === 'object' && cellVal !== null ? `${cellVal.start || ''} ${cellVal.end || ''}` : cellVal); 
                     }
-                    // FIX RECORD NOTE SEARCH: Estraiamo il corpo della nota per permettere 
-                    // la ricerca profonda all'interno dei record
                     if (colDef.type === 'record_note' && cellVal) {
                         const linkedNote = typeof Store !== 'undefined' ? Store.getNote(cellVal) : null;
                         if (linkedNote && typeof UI !== 'undefined') {
@@ -676,36 +749,48 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
-                        // 2. Date e Datetime
+                        // 2. Date e Datetime (Algebra degli Intervalli Temporali)
                         if (isDateType) {
-                            let rawDateForMath = cellVal;
-                            if (typeof cellVal === 'object' && cellVal !== null) rawDateForMath = cellVal.start;
-                            if (colDef.type === 'created_time' && !isPivotContext) rawDateForMath = r.createdAt;
-                            if (colDef.type === 'last_edited_time' && !isPivotContext) rawDateForMath = r.updatedAt;
+                            const cellInterval = AdvancedTable._extractIntervalFromValue(cellVal, colDef, r, isPivotContext);
+                            const targetInterval = AdvancedTable._extractIntervalFromValue(targetVal);
 
-                            let cellDate = null;
-                            if (rawDateForMath && typeof rawDateForMath === 'string' && rawDateForMath.includes('/')) {
-                                const p = rawDateForMath.split(' ')[0].split('/');
-                                if(p.length === 3) cellDate = new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime();
-                            } else {
-                                cellDate = new Date(rawDateForMath).getTime();
-                            }
+                            if (cellInterval && targetInterval) {
+                                const isTargetRange = targetInterval.startMs !== targetInterval.endMs;
+                                
+                                if (isTargetRange) {
+                                    // Se il filtro è un Range (F_start ➔ F_end):
+                                    const overlaps = (cellInterval.startMs <= targetInterval.endMs) && (cellInterval.endMs >= targetInterval.startMs);
 
-                            let targetDate = null;
-                            if (targetVal.includes('/')) {
-                                const p = targetVal.split(' ')[0].split('/');
-                                if(p.length === 3) targetDate = new Date(`${p[2]}-${p[1]}-${p[0]}`).getTime();
-                            } else {
-                                targetDate = new Date(targetVal).getTime();
-                            }
+                                    if (operator === '=') return overlaps;
+                                    if (operator === '!=') return !overlaps;
+                                    if (operator === '>') return cellInterval.startMs > targetInterval.endMs;
+                                    if (operator === '<') return cellInterval.endMs < targetInterval.startMs;
+                                    if (operator === '>=') return cellInterval.endMs >= targetInterval.startMs;
+                                    if (operator === '<=') return cellInterval.startMs <= targetInterval.endMs;
+                                } else {
+                                    // Se il filtro è una data singola:
+                                    // Se non ha orario esplicito nel testo target, consideriamo l'intera giornata di 24h
+                                    const hasExplicitTime = targetVal.includes(':');
+                                    let dayStart = targetInterval.startMs;
+                                    let dayEnd = targetInterval.endMs;
 
-                            if (cellDate && targetDate && !isNaN(cellDate) && !isNaN(targetDate)) {
-                                if (operator === '>') return cellDate > targetDate;
-                                if (operator === '<') return cellDate < targetDate;
-                                if (operator === '>=') return cellDate >= targetDate;
-                                if (operator === '<=') return cellDate <= targetDate;
-                                if (operator === '=') return cellDate === targetDate;
-                                if (operator === '!=') return cellDate !== targetDate;
+                                    if (!hasExplicitTime) {
+                                        const d = new Date(targetInterval.startMs);
+                                        d.setHours(0, 0, 0, 0);
+                                        dayStart = d.getTime();
+                                        d.setHours(23, 59, 59, 999);
+                                        dayEnd = d.getTime();
+                                    }
+
+                                    const isInDayOrOverlaps = (cellInterval.startMs <= dayEnd) && (cellInterval.endMs >= dayStart);
+
+                                    if (operator === '=') return isInDayOrOverlaps;
+                                    if (operator === '!=') return !isInDayOrOverlaps;
+                                    if (operator === '>') return cellInterval.startMs > dayEnd;
+                                    if (operator === '<') return cellInterval.endMs < dayStart;
+                                    if (operator === '>=') return cellInterval.endMs >= dayStart;
+                                    if (operator === '<=') return cellInterval.startMs <= dayEnd;
+                                }
                             }
                         }
 
@@ -727,7 +812,7 @@ Object.assign(AdvancedTable, {
                             }
                         }
                         
-                        // 4. Testo, Alfanumerici (es. 1A, 1B), Liste e Select
+                        // 4. Testo, Alfanumerici, Liste e Select
                         let resolvedArrayForExactMatch = null;
                         if (!isPivotContext) {
                             if (colDef.type === 'relation' || colDef.type === 'relation_backlink') {
