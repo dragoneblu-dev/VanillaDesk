@@ -3,6 +3,9 @@
  * Import, Export, Conversione in Database e Copia Clipboard per Tabelle Semplici.
  * FIX CONVERSIONE DB: Aggiunto blocco severo per prevenire la conversione di tabelle
  * contenenti immagini, audio, o iframes, che distruggerebbero i dati e orfanerebbero i file fisici.
+ * FEAT PRESERVAZIONE FORMATTAZIONE: Nella funzione "Modifica Massiva dati (CSV/Testo)",
+ * aggiunta opzione e algoritmo _updateTablePreservingFormatting per mantenere stili,
+ * classi colore (hl-c*), allineamenti e tag d'intestazione (th/td) esistenti.
  */
 
 Object.assign(TableManager.CSV, {
@@ -84,16 +87,100 @@ Object.assign(TableManager.CSV, {
         document.execCommand('insertHTML', false, html);
     },
 
+    _updateTablePreservingFormatting: (table, rows) => {
+        const validRows = rows.filter(r => r.length > 0 && !(r.length === 1 && r[0].trim() === ''));
+        if (validRows.length === 0) return;
+
+        const oldRows = Array.from(table.rows);
+        const oldRow0 = oldRows[0];
+        const oldRow0IsHeader = oldRow0 ? Array.from(oldRow0.cells).every(c => c.tagName.toLowerCase() === 'th') : true;
+
+        const newTable = document.createElement('table');
+        newTable.className = table.className; // Preserva classi di stile generali come table-striped
+        if (table.style.cssText) newTable.style.cssText = table.style.cssText;
+
+        const tbody = document.createElement('tbody');
+        newTable.appendChild(tbody);
+
+        validRows.forEach((rowCells, rIdx) => {
+            const tr = document.createElement('tr');
+            const oldRow = oldRows[rIdx];
+
+            rowCells.forEach((cellText, cIdx) => {
+                const oldCell = oldRow ? oldRow.cells[cIdx] : null;
+
+                let tag = 'td';
+                if (oldCell) {
+                    tag = oldCell.tagName.toLowerCase();
+                } else if (rIdx === 0 && oldRow0IsHeader) {
+                    tag = 'th';
+                } else {
+                    tag = 'td';
+                }
+
+                const cellEl = document.createElement(tag);
+                cellEl.setAttribute('contenteditable', 'true');
+
+                // Preserva classi CSS esistenti (colori di sfondo hl-c*, allineamenti text-*)
+                if (oldCell && oldCell.className) {
+                    const cleanClasses = oldCell.className.replace(/\badv-cell-selected\b/g, '').trim();
+                    if (cleanClasses) cellEl.className = cleanClasses;
+                }
+
+                // Preserva stili inline specifici della cella
+                if (oldCell && oldCell.style.cssText) {
+                    cellEl.style.cssText = oldCell.style.cssText;
+                }
+
+                let cellContent = cellText.replace(/\n/g, '<br>').trim();
+                if (!cellContent) cellContent = "<br>";
+                cellEl.innerHTML = cellContent;
+
+                tr.appendChild(cellEl);
+            });
+
+            tbody.appendChild(tr);
+        });
+
+        // Gestione coerente del <colgroup> per il dimensionamento delle colonne
+        const oldColgroup = table.querySelector('colgroup');
+        const newColCount = validRows[0] ? validRows[0].length : 0;
+
+        if (oldColgroup && oldColgroup.children.length === newColCount) {
+            newTable.insertBefore(oldColgroup.cloneNode(true), tbody);
+        } else if (oldColgroup && oldColgroup.children.length !== newColCount) {
+            // Se il numero di colonne è mutato, adatta il layout per evitare sfasamenti
+            newTable.style.tableLayout = 'auto';
+            newTable.style.width = '100%';
+        }
+
+        table.parentNode.replaceChild(newTable, table);
+        TableManager.currentTable = newTable;
+    },
+
     updateCurrentTableFromCSV: () => {
-        if (!TableManager.editingTable) return;
+        const table = TableManager.editingTable;
+        if (!table) return;
 
         const sepVal = document.getElementById('tblCsvSeparator').value;
-        const html = TableManager.CSV._generateHTMLFromCSV(sepVal === 'TAB' ? '\t' : ';', false); 
-        if (!html) return;
+        const keepFormatting = document.getElementById('tblCsvKeepFormatting') ? document.getElementById('tblCsvKeepFormatting').checked : false;
+        const csvText = document.getElementById('tblCsvInput').value.trim();
+        if (!csvText) return;
+
+        const separatorChar = sepVal === 'TAB' ? '\t' : ';';
+        const rows = TableManager.CSV.parseFullCSV(csvText, separatorChar);
+        if (rows.length < 1) return;
 
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
 
-        TableManager.editingTable.outerHTML = html;
+        if (keepFormatting) {
+            TableManager.CSV._updateTablePreservingFormatting(table, rows);
+        } else {
+            const html = TableManager.CSV._generateHTMLFromCSV(separatorChar, false); 
+            if (!html) return;
+            table.outerHTML = html;
+        }
+
         UI.closeDrawer();
         TableManager.editingTable = null;
         if (typeof Store !== 'undefined') Store.triggerAutoSave();
@@ -234,7 +321,7 @@ Object.assign(TableManager.CSV, {
         const initialCsvContent = TableManager.CSV.getTableAsCSVText(table, ';');
 
         const bodyHTML = `
-            <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.85rem; color: var(--text-primary);">
+            <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-primary);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
                     <span><b>Attenzione:</b> Modifica i dati mantenendo il separatore di colonna.</span>
                     <select id="tblCsvSeparator" class="modern-input" style="padding:2px 5px;" onchange="TableManager.CSV.refreshCsvTextarea(this.value)">
@@ -242,6 +329,12 @@ Object.assign(TableManager.CSV, {
                         <option value="TAB">Usa Tabulazione (TAB)</option>
                     </select>
                 </div>
+            </div>
+            <div style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
+                <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
+                    <input type="checkbox" id="tblCsvKeepFormatting" checked style="transform: scale(1.15); cursor: pointer;">
+                    Mantieni formattazione celle (colori, allineamenti e intestazioni)
+                </label>
             </div>
             <textarea id="tblCsvInput" class="modern-input" placeholder="Dati in formato testuale..." style="font-family: monospace; resize:vertical; min-height: 250px; width:100%; white-space: pre;">${initialCsvContent}</textarea>
         `;

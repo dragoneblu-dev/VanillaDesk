@@ -7,6 +7,7 @@
  * FIX DRAWER CONFLICT: Il motore di selezione ignora totalmente le tabelle presenti nel pannello laterale (Drawer).
  * REFACTOR UX CONTESTO: La toolbar fluttuante orizzontale compare ESCLUSIVAMENTE quando sono selezionate 
  * due o più celle, rimanendo perfettamente opaca e ad alto contrasto. Su cella singola la toolbar viene nascosta.
+ * FIX DIFENSIVO: Verifica sicura sull'esistenza di Editor.saveSnapshot per evitare eccezioni in ambienti modulari o headless.
  */
 
 Object.assign(TableManager.Selection, {
@@ -34,7 +35,7 @@ Object.assign(TableManager.Selection, {
         if (!AppState.isEditMode) return;
         const cell = e.target.closest('td, th');
         
-        // FIX DRAWER: Ignora sia i Database Avanzati che qualsiasi tabella dentro il Drawer laterale
+        // Ignora sia i Database Avanzati che qualsiasi tabella dentro il Drawer laterale
         if (!cell || cell.closest('.adv-table') || cell.closest('.adv-drawer')) {
             if (!e.target.closest('#adv-tbl-selection-popover') && !e.target.closest('.color-swatch')) {
                 TableManager.Selection.clearSelection();
@@ -277,7 +278,9 @@ Object.assign(TableManager.Selection, {
         const table = cells[0].closest('table');
         if (!table) return;
 
-        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+        if (typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
+            Editor.saveSnapshot();
+        }
 
         const { cellData } = TableManager.getGridMap(table);
 
@@ -354,9 +357,11 @@ Object.assign(TableManager.Selection, {
         const table = cell.closest('table');
         if (!table) return;
 
-        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+        if (typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
+            Editor.saveSnapshot();
+        }
 
-        // 1. Estraiamo la mappa della griglia *prima* di rimuovere gli attributi
+        // Estraiamo la mappa della griglia *prima* di rimuovere gli attributi
         // per avere le coordinate fisiche (x, y) della cella da dividere.
         const { cellData } = TableManager.getGridMap(table);
         const pos = cellData.get(cell);
@@ -368,7 +373,7 @@ Object.assign(TableManager.Selection, {
         cell.removeAttribute('rowspan');
         cell.removeAttribute('colspan');
 
-        // 2. Aggiungiamo le celle mancanti sulla STESSA riga
+        // Aggiunta celle mancanti sulla stessa riga
         for (let c = 1; c < cs; c++) {
             const newCell = document.createElement(cellType);
             newCell.innerHTML = '<br>';
@@ -376,7 +381,7 @@ Object.assign(TableManager.Selection, {
             cell.parentNode.insertBefore(newCell, cell.nextSibling);
         }
 
-        // 3. Aggiungiamo le celle mancanti sulle righe SOTTOSTANTI generate dal rowspan
+        // Aggiunta celle mancanti sulle righe sottostanti generate dal rowspan
         for (let r = 1; r < rs; r++) {
             const targetRow = table.rows[startY + r];
             if (!targetRow) continue;
