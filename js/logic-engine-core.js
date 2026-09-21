@@ -4,7 +4,10 @@
  * Esecuzione prioritaria di Formule JS e supporto calcolo dinamico offset per Oggi (+/- giorni) e Adesso (+/- minuti).
  * Integrazione supporto e confronto per la colonna 'note_link' (Collegamento a Nota).
  * FIX RESILIENZA DATE MULTIPLE: Gestione del merge parziale/totale per campi con Data di Fine (hasEndDate)
- * quando aggiornati tramite "Formula JS (Sovrascrive tutto...)".
+ * con controllo universale di coerenza (start <= end) su tutte le mutazioni.
+ * FIX INSERT_SELECT: Supporto per la lettura corretta dei valori delle celle sorgente tramite _rawRow.
+ * FIX ARRAY CONTAINS: Esteso l'operatore 'contains' e 'not_contains' sulle colonne multi-select e relation
+ * per verificare la presenza di sottostringhe tra gli elementi dell'array.
  */
 
 // UTILITY GLOBALE PER XSS (Scudo Iniezioni HTML)
@@ -168,6 +171,8 @@ const LogicEngine = {
             if (operator === '!=') return !contains;
             if (operator === 'empty') return arr.length === 0;
             if (operator === 'not_empty') return arr.length > 0;
+            if (operator === 'contains') return arr.some(v => String(v).toLowerCase().includes(tgtValLower));
+            if (operator === 'not_contains') return !arr.some(v => String(v).toLowerCase().includes(tgtValLower));
             
             if (operator === 'changed') {
                 const cJson = JSON.stringify([...arr].sort());
@@ -212,8 +217,15 @@ const LogicEngine = {
     calculateNewValue: async (actType, val1, val2, currentVal, colDef, rowContext, targetState, sourceRowOrOrigineContext = null) => {
         
         if (actType === 'set_from_source_col') {
-            if (sourceRowOrOrigineContext && sourceRowOrOrigineContext.cells && sourceRowOrOrigineContext.cells[val1] !== undefined) {
-                return sourceRowOrOrigineContext.cells[val1];
+            const rawSourceRow = (sourceRowOrOrigineContext && sourceRowOrOrigineContext._rawRow) 
+                ? sourceRowOrOrigineContext._rawRow 
+                : sourceRowOrOrigineContext;
+                
+            if (rawSourceRow && rawSourceRow.cells && rawSourceRow.cells[val1] !== undefined) {
+                return rawSourceRow.cells[val1];
+            }
+            if (sourceRowOrOrigineContext && sourceRowOrOrigineContext[val1] !== undefined) {
+                return sourceRowOrOrigineContext[val1];
             }
             return '';
         }
@@ -249,7 +261,7 @@ const LogicEngine = {
             isFormulaExec = true;
         }
 
-        // 2. GESTIONE DATE E DATE-TIME (Con supporto a Shift giorni / minuti)
+        // 2. GESTIONE DATE E DATE-TIME (Con supporto a Shift giorni / minuti e range coherence)
         if (['date', 'datetime'].includes(colDef.type)) {
             const isDateTime = colDef.type === 'datetime';
             let dateObj = (typeof currentVal === 'object' && currentVal !== null) ? { ...currentVal } : { start: currentVal || '', end: '' };
@@ -291,23 +303,9 @@ const LogicEngine = {
             // Applica Formula Risultato
             if (actType === 'set_start_formula') {
                 dateObj.start = formulaResult;
-                if (colDef.hasEndDate && dateObj.start && dateObj.end) {
-                    if (new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                        dateObj.end = dateObj.start;
-                    }
-                }
-                return colDef.hasEndDate ? dateObj : dateObj.start;
-            }
-            if (actType === 'set_end_formula') {
+            } else if (actType === 'set_end_formula') {
                 dateObj.end = formulaResult;
-                if (colDef.hasEndDate && dateObj.start && dateObj.end) {
-                    if (new Date(dateObj.start).getTime() < new Date(dateObj.end).getTime()) {
-                        dateObj.start = dateObj.end;
-                    }
-                }
-                return colDef.hasEndDate ? dateObj : dateObj.start;
-            }
-            if (actType === 'set_formula') {
+            } else if (actType === 'set_formula') {
                 try {
                     const parsed = typeof formulaResult === 'string' ? JSON.parse(formulaResult) : formulaResult;
                     if (parsed && typeof parsed === 'object' && (parsed.start !== undefined || parsed.end !== undefined)) {
@@ -318,78 +316,56 @@ const LogicEngine = {
                     }
                 } catch(e) {}
                 dateObj.start = formulaResult;
-                return colDef.hasEndDate ? dateObj : dateObj.start;
-            }
-
-            // Operatori Dinamici con Spostamento Giorni / Minuti
-            if (actType === 'set_today') {
-                const dayShift = parseInt(val1, 10) || 0;
-                const td = getShiftedDate(dayShift);
-                if (colDef.hasEndDate) {
-                    dateObj.start = td;
-                    if (dateObj.end && new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                        dateObj.end = dateObj.start;
-                    }
-                    return dateObj;
-                } else return td;
-            } 
-            else if (actType === 'set_datetime') {
-                const minShift = parseInt(val1, 10) || 0;
-                const ns = getShiftedDateTime(minShift);
-                if (colDef.hasEndDate) {
-                    dateObj.start = ns;
-                    if (dateObj.end && new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                        dateObj.end = dateObj.start;
-                    }
-                    return dateObj;
-                } else return ns;
-            }
-            else if (actType === 'set_start_today') {
+            } else if (actType === 'set_today') {
                 const dayShift = parseInt(val1, 10) || 0;
                 dateObj.start = getShiftedDate(dayShift);
-                if (colDef.hasEndDate && dateObj.end && new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                    dateObj.end = dateObj.start;
-                }
-            }
-            else if (actType === 'set_end_today') {
-                const dayShift = parseInt(val1, 10) || 0;
-                dateObj.end = getShiftedDate(dayShift);
-                if (colDef.hasEndDate && dateObj.start && new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                    dateObj.start = dateObj.end;
-                }
-            }
-            else if (actType === 'set_start_now') {
+            } else if (actType === 'set_datetime') {
                 const minShift = parseInt(val1, 10) || 0;
                 dateObj.start = getShiftedDateTime(minShift);
-                if (colDef.hasEndDate && dateObj.end && new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                    dateObj.end = dateObj.start;
-                }
-            }
-            else if (actType === 'set_end_now') {
+            } else if (actType === 'set_start_today') {
+                const dayShift = parseInt(val1, 10) || 0;
+                dateObj.start = getShiftedDate(dayShift);
+            } else if (actType === 'set_end_today') {
+                const dayShift = parseInt(val1, 10) || 0;
+                dateObj.end = getShiftedDate(dayShift);
+            } else if (actType === 'set_start_now') {
+                const minShift = parseInt(val1, 10) || 0;
+                dateObj.start = getShiftedDateTime(minShift);
+            } else if (actType === 'set_end_now') {
                 const minShift = parseInt(val1, 10) || 0;
                 dateObj.end = getShiftedDateTime(minShift);
-                if (colDef.hasEndDate && dateObj.start && new Date(dateObj.start).getTime() > new Date(dateObj.end).getTime()) {
-                    dateObj.start = dateObj.end;
+            } else if (actType === 'math_date_add') {
+                dateObj.start = doMath(dateObj.start, val1, val2, false);
+            } else if (actType === 'math_date_sub') {
+                dateObj.start = doMath(dateObj.start, val1, val2, true);
+            } else if (actType === 'math_start_add') {
+                dateObj.start = doMath(dateObj.start, val1, val2, false);
+            } else if (actType === 'math_start_sub') {
+                dateObj.start = doMath(dateObj.start, val1, val2, true);
+            } else if (actType === 'math_end_add') {
+                dateObj.end = doMath(dateObj.end, val1, val2, false);
+            } else if (actType === 'math_end_sub') {
+                dateObj.end = doMath(dateObj.end, val1, val2, true);
+            } else if (actType === 'set_fixed') {
+                dateObj.start = isFormulaExec ? formulaResult : val1;
+            } else if (actType === 'set_start_fixed') {
+                dateObj.start = isFormulaExec ? formulaResult : val1;
+            } else if (actType === 'set_end_fixed') {
+                dateObj.end = isFormulaExec ? formulaResult : val1;
+            }
+
+            // CONTROLLO UNIVERSALE DI COERENZA INTERVALLO (start <= end)
+            if (colDef.hasEndDate && dateObj.start && dateObj.end) {
+                const sTime = new Date(dateObj.start).getTime();
+                const eTime = new Date(dateObj.end).getTime();
+                if (!isNaN(sTime) && !isNaN(eTime)) {
+                    if (actType.includes('end')) {
+                        if (sTime > eTime) dateObj.start = dateObj.end;
+                    } else {
+                        if (sTime > eTime) dateObj.end = dateObj.start;
+                    }
                 }
             }
-            else if (actType === 'math_date_add') {
-                if (colDef.hasEndDate) dateObj.start = doMath(dateObj.start, val1, val2, false);
-                else return doMath(dateObj.start, val1, val2, false);
-            }
-            else if (actType === 'math_date_sub') {
-                if (colDef.hasEndDate) dateObj.start = doMath(dateObj.start, val1, val2, true);
-                else return doMath(dateObj.start, val1, val2, true);
-            }
-            else if (actType === 'math_start_add') dateObj.start = doMath(dateObj.start, val1, val2, false);
-            else if (actType === 'math_start_sub') dateObj.start = doMath(dateObj.start, val1, val2, true);
-            else if (actType === 'math_end_add') dateObj.end = doMath(dateObj.end, val1, val2, false);
-            else if (actType === 'math_end_sub') dateObj.end = doMath(dateObj.end, val1, val2, true);
-            else if (actType === 'set_fixed') {
-                if (colDef.hasEndDate) dateObj.start = isFormulaExec ? formulaResult : val1; 
-                else return isFormulaExec ? formulaResult : val1;
-            }
-            else if (actType === 'set_start_fixed') dateObj.start = isFormulaExec ? formulaResult : val1;
-            else if (actType === 'set_end_fixed') dateObj.end = isFormulaExec ? formulaResult : val1;
 
             return colDef.hasEndDate ? dateObj : dateObj.start;
         }

@@ -4,8 +4,10 @@
  * FIX POSIZIONAMENTO MENU: Logica di ricalcolo ancoraggio per i menu ricostruiti all'interno del Drawer.
  * FEAT ORDINAMENTO A-Z PERSISTENTE: Inserimento e rinomina opzioni mantengono sempre ordinato
  * l'array state.selectOptions[colId] da A alla Z in memoria e a video.
- * FIX SEARCH INPUT RESET: Azzeramento automatico dell'input "Cerca o Crea Opzione" dopo la creazione
- * e selezione di una nuova etichetta, ripristinando l'elenco completo delle opzioni.
+ * FIX SEARCH INPUT RESET: Azzeramento sicuro di tutti gli elementi #advCreateSelectInput nel DOM,
+ * prevenendo mancate pulizie dovute a collisioni di ID nel documento.
+ * FIX HEADLESS CLEANUP: In setTagColor la riapertura del menu avviene solo se è presente un'ancora reale.
+ * FIX DEFENSIVO ROW CRASH: openSelectMenu gestisce in modo resiliente l'eventuale assenza del record specificato.
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
@@ -20,10 +22,15 @@ Object.assign(AdvancedTable, {
         UI.Menu.closeAll(true);
 
         let state = AdvancedTable.getState(tableId);
-        const col = state.columns.find(c => c.id === colId);
-        const row = state.rows.find(r => r.id === rowId);
+        if (!state) return;
+
+        const col = state.columns ? state.columns.find(c => c.id === colId) : null;
+        const row = state.rows ? state.rows.find(r => r.id === rowId) : null;
         
+        if (!col) return;
+
         // Garantisce l'ordinamento A-Z immediato dell'elenco memorizzato
+        if (!state.selectOptions) state.selectOptions = {};
         if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
         state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
         const options = [...state.selectOptions[colId]];
@@ -31,7 +38,7 @@ Object.assign(AdvancedTable, {
         if (!state.selectColors) state.selectColors = {};
         if (!state.selectColors[colId]) state.selectColors[colId] = {};
 
-        let currentVals = row.cells[colId];
+        let currentVals = (row && row.cells) ? row.cells[colId] : [];
         if (!Array.isArray(currentVals)) currentVals = currentVals ? [currentVals] : [];
 
         const dropdown = document.createElement('div');
@@ -142,11 +149,10 @@ Object.assign(AdvancedTable, {
         const newOpt = value.trim();
         if (!newOpt) return;
 
-        // Pulizia immediata dell'input per evitare la persistenza visiva del testo digitato
-        const inputEl = document.getElementById('advCreateSelectInput');
-        if (inputEl) {
-            inputEl.value = '';
-        }
+        // Azzeramento garantito di tutti gli input advCreateSelectInput presenti nel documento
+        document.querySelectorAll('#advCreateSelectInput').forEach(el => {
+            el.value = '';
+        });
         
         let state = AdvancedTable.getState(tableId);
         const options = state.selectOptions[colId] || [];
@@ -249,6 +255,7 @@ Object.assign(AdvancedTable, {
     setTagColor: (e, tableId, rowId, colId, optName, newColorClass, parentAnchorId) => {
         if (e) e.stopPropagation();
         let state = AdvancedTable.getState(tableId);
+        if (!state) return;
 
         if (!state.selectColors) state.selectColors = {};
         if (!state.selectColors[colId]) state.selectColors[colId] = {};
@@ -259,8 +266,11 @@ Object.assign(AdvancedTable, {
         AdvancedTable.renderTable(tableId);
         Store.triggerAutoSave();
 
-        // Riallegamento rigoroso usando il parametro ID fisico conservato in catena
-        AdvancedTable.openSelectMenu(null, tableId, rowId, colId, parentAnchorId);
+        // Riapre il menu a tendina solo se è presente un'ancora visibile reale nel DOM
+        const hasAnchor = parentAnchorId || document.getElementById(`adv-sel-${tableId}-${rowId}-${colId}`) || document.getElementById(`adv-sel-rec-${tableId}-${rowId}-${colId}`);
+        if (hasAnchor) {
+            AdvancedTable.openSelectMenu(null, tableId, rowId, colId, parentAnchorId);
+        }
     },
 
     createSelectOption: (tableId, rowId, colId, newOpt) => {
@@ -320,14 +330,14 @@ Object.assign(AdvancedTable, {
         let finalValue = value;
 
         if (col.type === 'select') {
-            if (row.cells[colId] === value) {
+            if (row && row.cells[colId] === value) {
                 finalValue = '';
             } else {
                 finalValue = value;
             }
             UI.Menu.closeAll(true);
         } else if (col.type === 'multi-select') {
-            let current = Array.isArray(row.cells[colId]) ? [...row.cells[colId]] : [];
+            let current = (row && Array.isArray(row.cells[colId])) ? [...row.cells[colId]] : [];
             if (current.includes(value)) current = current.filter(v => v !== value);
             else current.push(value);
             finalValue = current;
@@ -349,17 +359,17 @@ Object.assign(AdvancedTable, {
             state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
             const options = [...state.selectOptions[colId]];
             
-            let currentVals = state.rows.find(r => r.id === rowId).cells[colId];
+            const freshRow = state.rows.find(r => r.id === rowId);
+            let currentVals = (freshRow && freshRow.cells) ? freshRow.cells[colId] : [];
             if (!Array.isArray(currentVals)) currentVals = currentVals ? [currentVals] : [];
             
             AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, options, currentVals, col, null);
             
-            const input = document.getElementById('advCreateSelectInput');
-            if (input) { 
+            document.querySelectorAll('#advCreateSelectInput').forEach(input => {
                 input.value = ''; // Svuota completamente l'input per il prossimo inserimento
-                input.focus(); 
-                AdvancedTable.filterSelectOptions(''); // Ripristina la visibilità di tutte le opzioni
-            }
+                input.focus();
+            });
+            AdvancedTable.filterSelectOptions(''); // Ripristina la visibilità di tutte le opzioni
         }
     },
 

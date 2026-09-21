@@ -3,6 +3,7 @@
  * Modulo Filtri Avanzato con Autocompletamento e Gestione Filtri Salvati.
  * FIX CHECKBOX SUGGESTIONS: Normalizzati i suggerimenti per i campi checkbox (Sì / No)
  * evitando simboli o stringhe descrittive composite che bloccavano il match esatto.
+ * FIX PIVOT MAX/MIN DATE: Risolto bug per cui le date venivano scambiate per numeri da parseFloat.
  */
 
 Object.assign(AdvancedTable, {
@@ -471,10 +472,8 @@ Object.assign(AdvancedTable, {
                             else if (agg.type === 'sum') result = nums.reduce((a, b) => a + b, 0);
                             else if (agg.type === 'avg') result = (nums.reduce((a, b) => a + b, 0) / nums.length);
                         } else if (agg.type === 'max' || agg.type === 'min') {
-                            if ((sourceCol && ['number'].includes(sourceCol.type)) || vals.every(v => !isNaN(parseFloat(v)))) {
-                                let nums = vals.map(v => parseFloat(v));
-                                result = agg.type === 'max' ? Math.max(...nums) : Math.min(...nums);
-                            } else if (sourceCol && ['date', 'datetime', 'time', 'created_time', 'last_edited_time'].includes(sourceCol.type)) {
+                            // Precedenza assoluta alle date per evitare che stringhe ISO vengano scambiate per numeri da parseFloat
+                            if (sourceCol && ['date', 'datetime', 'time', 'created_time', 'last_edited_time'].includes(sourceCol.type)) {
                                 let times = vals.map(v => { const d = new Date(v); return isNaN(d.getTime()) ? null : d.getTime(); }).filter(t => t !== null);
                                 if (times.length === 0) result = '-';
                                 else {
@@ -484,6 +483,9 @@ Object.assign(AdvancedTable, {
                                     else if (sourceCol.type === 'date') result = resDate.toLocaleDateString('it-IT');
                                     else result = AdvancedTable.formatTime(resDate);
                                 }
+                            } else if ((sourceCol && ['number'].includes(sourceCol.type)) || vals.every(v => !isNaN(parseFloat(v)))) {
+                                let nums = vals.map(v => parseFloat(v));
+                                result = agg.type === 'max' ? Math.max(...nums) : Math.min(...nums);
                             } else {
                                 let strings = vals.map(v => String(v));
                                 strings.sort((a, b) => a.localeCompare(b));

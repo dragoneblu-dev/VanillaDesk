@@ -1,6 +1,8 @@
 /**
  * ui-core.js
  * Core dell'Interfaccia Utente: Handler Base dell'Editor e dell'oggetto window.UI.
+ * FEEDBACK VISIVO HEADER: Sincronizzazione automatica della classe header-unsaved
+ * per colorare l'intera prima riga di rosso quando la sessione è ripristinata o non salvata su disco.
  */
 
 window.UI = {
@@ -57,6 +59,17 @@ window.UI = {
 
     showStatus: (state) => {
         const el = document.getElementById('saveStatus');
+        const headerEl = document.querySelector('header');
+
+        // Colorazione dell'intera prima riga (Header) in caso di sessione temporanea in RAM
+        if (headerEl) {
+            if (state === 'unsaved') {
+                headerEl.classList.add('header-unsaved');
+            } else {
+                headerEl.classList.remove('header-unsaved');
+            }
+        }
+
         if (!el) return;
 
         el.className = 'status-pill';

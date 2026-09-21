@@ -4,6 +4,8 @@
  * Inserimento e manipolazione dei segnalibri nel testo,
  * cronjob globale in background per la notifica dei timer scaduti,
  * gestione resiliente dello Snooze e aggiornamento dinamico della sidebar.
+ * Gestione note e commenti sui segnalibri con apertura Drawer dedicato,
+ * avvisi di conferma su sovrascrizione o eliminazione e posizionamento esatto del cursore.
  */
 
 Object.assign(Editor, {
@@ -11,12 +13,42 @@ Object.assign(Editor, {
     _bookmarkInterval: null,
     _lastTreeMinute: null,
 
+    getBookmarkComment: (marker) => {
+        if (!marker) return '';
+        const dataSpan = marker.querySelector('.bookmark-comment-data');
+        if (dataSpan) return dataSpan.innerHTML.trim();
+        return marker.getAttribute('data-comment') || '';
+    },
+
+    hasBookmarkComment: (marker) => {
+        const raw = Editor.getBookmarkComment(marker);
+        if (!raw) return false;
+        const temp = document.createElement('div');
+        temp.innerHTML = raw;
+        return temp.textContent.replace(/[\u200B\n\r]/g, '').trim().length > 0;
+    },
+
     insertBookmark: () => {
-        Editor.saveSnapshot();
         const editor = document.getElementById('noteContent');
         if (!editor) return;
 
+        // Controllo preventivo: se esiste già un segnalibro con commenti, chiedi conferma prima di sovrascriverlo
         const existingBookmarks = editor.querySelectorAll('.adv-bookmark-marker');
+        let hasCommentedExisting = false;
+        existingBookmarks.forEach(b => {
+            if (Editor.hasBookmarkComment(b)) hasCommentedExisting = true;
+        });
+
+        if (hasCommentedExisting) {
+            if (!confirm("Il segnalibro presente in questa pagina contiene un appunto o commento. Vuoi procedere e sostituirlo? La nota andrà persa.")) {
+                return;
+            }
+        }
+
+        // Ripristina la selezione prima di scattare lo snapshot per non invalidare il range
+        Editor.restoreSelection();
+        Editor.saveSnapshot();
+
         existingBookmarks.forEach(el => el.remove());
 
         const marker = document.createElement('span');
@@ -27,10 +59,9 @@ Object.assign(Editor, {
         const now = new Date();
         const dateStr = now.toLocaleDateString('it-IT') + ' ' + now.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'});
 
-        marker.innerHTML = `<span class="bookmark-icon">${Icons.bookmark}</span>`;
+        marker.innerHTML = `<span class="bookmark-icon">${Icons.bookmark}</span><span class="bookmark-comment-data" style="display:none;"></span>`;
         marker.setAttribute('data-date', dateStr);
 
-        Editor.restoreSelection();
         const sel = window.getSelection();
 
         if (sel.rangeCount > 0) {
@@ -203,6 +234,10 @@ Object.assign(Editor, {
             Store.triggerAutoSave();
         }
 
+        const hasComment = Editor.hasBookmarkComment(marker);
+        const commentColor = hasComment ? 'color:var(--accent-color);' : 'color:var(--text-secondary);';
+        const commentTitle = hasComment ? 'Modifica appunto del segnalibro' : 'Aggiungi appunto al segnalibro';
+
         const popover = document.createElement('div');
         popover.id = 'adv-bookmark-popover';
         popover.className = 'adv-floating-popover';
@@ -214,6 +249,10 @@ Object.assign(Editor, {
             </button>
             <button id="bkm-timer-clear" class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0; display:none;" onclick="Editor.clearBookmarkTimer('${marker.id}')" title="Azzera Timer">${Icons.close}</button>
             
+            <button id="bkm-comment-btn" class="adv-icon-btn" style="padding: 2px 6px; margin: 0; ${commentColor} font-size:0.75rem;" onclick="Editor.openBookmarkCommentDrawer('${marker.id}')" title="${commentTitle}">
+                <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.noteInline}</span>
+            </button>
+
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
             <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: bold; margin: 0 6px; white-space: nowrap;">Piazzato il: ${dateStr}</span>
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
@@ -238,6 +277,97 @@ Object.assign(Editor, {
         popover.addEventListener('click', e => e.stopPropagation());
     },
 
+    openBookmarkCommentDrawer: (markerId) => {
+        if (!AppState.isEditMode) return;
+
+        const marker = document.getElementById(markerId);
+        if (!marker) return;
+
+        Editor.hideBookmarkMenu();
+        Editor.activeBookmark = marker;
+
+        const currentHTML = Editor.getBookmarkComment(marker);
+
+        const bodyHTML = `
+            <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display:flex; flex-direction:column;">
+                <div class="toolbar" style="margin-bottom: 10px; padding: 0; border: none; background: transparent;">
+                    <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="Grassetto"><b>B</b></button>
+                    <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="Corsivo"><i>I</i></button>
+                    <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="Sottolineato"><u>U</u></button>
+                    <div style="width:1px; height:15px; background:var(--border-color); margin:0 5px;"></div>
+                    <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista Puntata"><b>•</b></button>
+                </div>
+                <div id="bookmarkCommentInput" class="editor-content" contenteditable="true" style="outline: none; flex:1; background:var(--bg-color); border:1px solid var(--border-color); padding:10px; border-radius:4px; overflow-y:auto; min-height:150px;">${currentHTML}</div>
+            </div>
+            <p style="font-size:0.75rem; color:var(--text-secondary); margin-top:10px; margin-bottom:0;">L'appunto resterà salvato all'interno del segnalibro. Apparirà come suggerimento al passaggio del mouse e nell'indice dei segnalibri.</p>
+        `;
+
+        const footerHTML = `
+            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
+            <button class="btn btn-primary" onclick="Editor.saveBookmarkComment('${markerId}')">Salva Appunto</button>
+        `;
+
+        UI.openDrawer('💬 Appunto Segnalibro', bodyHTML, footerHTML);
+
+        setTimeout(() => {
+            const input = document.getElementById('bookmarkCommentInput');
+            if (input) input.focus();
+        }, 50);
+    },
+
+    saveBookmarkComment: (markerId) => {
+        const input = document.getElementById('bookmarkCommentInput');
+        const marker = document.getElementById(markerId);
+        if (!input || !marker) return;
+
+        let newHTML = input.innerHTML;
+
+        newHTML = newHTML.replace(/<div[^>]*>/gi, '<br>')
+                         .replace(/<\/div>/gi, '')
+                         .replace(/<p[^>]*>/gi, '<br>')
+                         .replace(/<\/p>/gi, '')
+                         .replace(/<li[^>]*>/gi, '<br>• ')
+                         .replace(/<\/li>/gi, '')
+                         .replace(/<\/?(ul|ol|h[1-6]|blockquote)[^>]*>/gi, '');
+
+        newHTML = newHTML.replace(/^(<br\s*\/?>)+/i, '');
+
+        Editor.saveSnapshot();
+
+        let dataSpan = marker.querySelector('.bookmark-comment-data');
+        if (!dataSpan) {
+            dataSpan = document.createElement('span');
+            dataSpan.className = 'bookmark-comment-data';
+            dataSpan.style.display = 'none';
+            marker.appendChild(dataSpan);
+        }
+        dataSpan.innerHTML = newHTML;
+
+        // Imposta o rimuove il tooltip dinamico per l'hover testuale
+        const temp = document.createElement('div');
+        temp.innerHTML = newHTML;
+        const plain = temp.textContent.replace(/[\u200B\n\r]/g, ' ').trim();
+        if (plain) {
+            marker.setAttribute('data-tooltip', `<b>Segnalibro:</b> ${UI.escapeHTML(plain)}`);
+        } else {
+            marker.removeAttribute('data-tooltip');
+        }
+
+        // Sincronizza nel content della nota corrente
+        if (AppState.currentNoteId) {
+            const curNote = Store.getNote(AppState.currentNoteId);
+            const editorEl = document.getElementById('noteContent');
+            if (curNote && editorEl) {
+                curNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                curNote.updatedAt = new Date().toISOString();
+            }
+        }
+
+        Store.triggerAutoSave();
+        if (typeof UI !== 'undefined' && UI.renderTree) UI.renderTree();
+        UI.closeDrawer();
+    },
+
     hideBookmarkMenu: () => {
         const existing = document.getElementById('adv-bookmark-popover');
         if (existing) existing.remove();
@@ -246,6 +376,11 @@ Object.assign(Editor, {
 
     deleteBookmark: () => {
         if (Editor.activeBookmark) {
+            if (Editor.hasBookmarkComment(Editor.activeBookmark)) {
+                if (!confirm("Questo segnalibro contiene un appunto o commento. Sei sicuro di volerlo eliminare?")) {
+                    return;
+                }
+            }
             Editor.saveSnapshot();
             Editor.activeBookmark.remove();
             Store.triggerAutoSave();

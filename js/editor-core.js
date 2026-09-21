@@ -1,6 +1,6 @@
 /**
- * EditorCore.js
- * Inizializzazione editor e core engine (Caret, Boundaries e Sanificazione JSON).
+ * editor-core.js
+ * Inizializzazione editor e core engine (Caret, Boundaries, RawText e Sanificazione JSON).
  * Scansione transitiva nel Garbage Collector per tutelare database relazionali, template e asset.
  * Re-idratazione immediata post-salvataggio.
  * Estirpazione degli Zero-Width Space (\u200B) orfani dal DOM.
@@ -8,6 +8,8 @@
  * Normalizzazione retroattiva degli appunti inline salvati con tag a blocco.
  * FIX CARET: Integrato l'estrattore geometrico assoluto basato su Range.cloneContents per il calcolo infallibile degli offset.
  * FIX UNDO/REDO CARET: minifyHTMLForStorage preserva il marcatore di cronologia quando richiesto dagli snapshot RAM.
+ * FIX ARCHITETTURA: Ricollocato _getRawText nativamente in editor-core per garantire disponibilità globale.
+ * FIX RESTORE SELECTION: Invocazione del focus prima dell'assegnazione del range per evitare il reset all'inizio del blocco.
  */
 
 const Editor = {
@@ -17,6 +19,19 @@ const Editor = {
 
     audioCache: {}, 
     imageCache: {},
+
+    // Helper per estrarre il testo esattamente come lo legge il motore delle coordinate (_getCodeOffset),
+    // bypassando i problemi del getter nativo 'innerText' dei browser sui tag <br> annidati negli span.
+    _getRawText: (node) => {
+        let text = '';
+        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null, false);
+        let curr;
+        while ((curr = walker.nextNode())) {
+            if (curr.nodeType === 3) text += curr.nodeValue;
+            else if (curr.nodeName === 'BR') text += '\n';
+        }
+        return text;
+    },
 
     hydrateMedia: (container) => {
         container.querySelectorAll('img[data-image-ref]').forEach(img => {
@@ -102,8 +117,10 @@ const Editor = {
 
         Editor.clearWidgetSelection();
 
-        if (typeof WidgetManager !== 'undefined' && WidgetManager.isInsideEditableWidgetArea(e.target)) {
-            return;
+        if (typeof WidgetManager !== 'undefined') {
+            if (WidgetManager.isInsideEditableWidgetArea(e.target)) {
+                return;
+            }
         }
 
         // Whitelist per permettere l'interazione HTML5 Drag e Click su controlli di modulo
@@ -148,16 +165,18 @@ const Editor = {
 
     restoreSelection: () => {
         if (Editor.savedRange) {
+            let node = Editor.savedRange.commonAncestorContainer;
+            if (node.nodeType === 3) node = node.parentNode;
+            const editableElement = node.closest('[contenteditable="true"]') || document.getElementById('noteContent');
+            
+            // Focus impostato prima di addRange per evitare reset a offset 0
+            if (editableElement) editableElement.focus({ preventScroll: true });
+
             const sel = window.getSelection();
             sel.removeAllRanges();
             sel.addRange(Editor.savedRange);
-            let node = Editor.savedRange.commonAncestorContainer;
-            if (node.nodeType === 3) node = node.parentNode;
-            const editableElement = node.closest('[contenteditable="true"]');
-            if (editableElement) editableElement.focus();
-            else document.getElementById('noteContent')?.focus();
         } else {
-            document.getElementById('noteContent')?.focus();
+            document.getElementById('noteContent')?.focus({ preventScroll: true });
         }
     },
 

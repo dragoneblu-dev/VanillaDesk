@@ -2,6 +2,9 @@
  * logic-engine-macro.js
  * Esecuzione Massiva: Applica i blocchi di azioni (Macro) su centinaia di record.
  * Isolato per gestire effetti collaterali (Side Effects) come l'invio di Email e la Creazione Record.
+ * FIX ERROR TRAP: Riconoscimento delle stringhe di errore restituite dalle formule
+ * per impedire la corruzione delle celle del DB e garantire il popolamento di errorsLog.
+ * FIX INSERT_SELECT: Associazione di _rawRow al contesto di origine per la risoluzione corretta di set_from_source_col.
  */
 
 Object.assign(LogicEngine, {
@@ -18,7 +21,10 @@ Object.assign(LogicEngine, {
         let origineContext = {};
         if (sourceRow) {
             const sourceState = AdvancedTable.getTableState(defaultTargetDbId);
-            if (sourceState) origineContext = AdvancedTable._buildRigaContext(sourceRow, sourceState.columns);
+            if (sourceState) {
+                origineContext = AdvancedTable._buildRigaContext(sourceRow, sourceState.columns);
+                origineContext._rawRow = sourceRow;
+            }
         }
 
         for (const blk of actionBlocks) {
@@ -86,6 +92,14 @@ Object.assign(LogicEngine, {
                     const subVal = await LogicEngine.calculateNewValue(subAct.type, subAct.value, subAct.value2, '', dummyCol, rowToUse, targetState, origineContext);
                     const bodyVal = await LogicEngine.calculateNewValue(bodyAct.type, bodyAct.value, bodyAct.value2, '', dummyCol, rowToUse, targetState, origineContext);
 
+                    // Verifica presenza errori nelle formule email
+                    const emailParts = [toVal, ccVal, subVal, bodyVal];
+                    const hasError = emailParts.some(p => typeof p === 'string' && (p.includes('Async Err') || p.includes('Err</span>')));
+                    if (hasError) {
+                        errorsLog.push(`Generazione Email fallita: Una o più formule contengono errori di sintassi o riferimenti non validi.`);
+                        continue;
+                    }
+
                     let mailto = `mailto:${toVal}?subject=${encodeURIComponent(subVal)}&body=${encodeURIComponent(bodyVal)}`;
                     if (ccVal) mailto += `&cc=${encodeURIComponent(ccVal)}`;
                     
@@ -111,12 +125,21 @@ Object.assign(LogicEngine, {
                 });
 
                 try {
+                    let hasFormulaError = false;
+
                     for (const act of blk.actions) {
                         const targetColDef = targetState.columns.find(c => c.id === act.colId);
                         if (!targetColDef) continue;
 
                         let finalVal = await LogicEngine.calculateNewValue(act.type, act.value, act.value2, newRow.cells[act.colId], targetColDef, newRow, targetState, origineContext);
                         
+                        // Intercettazione formula non valida
+                        if (typeof finalVal === 'string' && (finalVal.includes('Async Err') || finalVal.includes('Err</span>'))) {
+                            errorsLog.push(`Errore Formula nella creazione riga [DB: ${UI.escapeHTML(targetState.title)} - Colonna: ${UI.escapeHTML(targetColDef.name)}]`);
+                            hasFormulaError = true;
+                            break;
+                        }
+
                         if (['select', 'multi-select'].includes(targetColDef.type)) {
                             const valArray = Array.isArray(finalVal) ? finalVal : (finalVal ? [finalVal] : []);
                             valArray.forEach(strVal => {
@@ -129,13 +152,15 @@ Object.assign(LogicEngine, {
                         newRow.cells[act.colId] = finalVal;
                     }
 
-                    targetState.rows.push(newRow);
-                    totalRowsAffected++;
-                    updatedDbIds.add(targetDbId);
+                    if (!hasFormulaError) {
+                        targetState.rows.push(newRow);
+                        totalRowsAffected++;
+                        updatedDbIds.add(targetDbId);
 
-                    if (typeof AdvancedAutomations !== 'undefined') {
-                        AdvancedAutomations.evaluate(targetDbId, newRow.id, true);
-                        AdvancedAutomations.triggerCrossDB(targetDbId);
+                        if (typeof AdvancedAutomations !== 'undefined') {
+                            AdvancedAutomations.evaluate(targetDbId, newRow.id, true);
+                            AdvancedAutomations.triggerCrossDB(targetDbId);
+                        }
                     }
                 } catch(err) {
                     errorsLog.push(`Creazione Riga [DB: ${targetState.title}]: ${err.message || String(err)}`);
@@ -169,16 +194,24 @@ Object.assign(LogicEngine, {
                         else newRow.cells[c.id] = '';
                     });
 
-                    // Modifichiamo il contesto di origine, la riga sorgente di questo ciclo "diventa" l'origine
                     const dynamicOrigineContext = AdvancedTable._buildRigaContext(sRow, sourceDbState.columns);
+                    dynamicOrigineContext._rawRow = sRow; // Passaggio del record nativo per set_from_source_col
 
                     try {
+                        let hasFormulaError = false;
+
                         for (const act of blk.actions) {
                             const targetColDef = targetState.columns.find(c => c.id === act.colId);
                             if (!targetColDef) continue;
 
                             let finalVal = await LogicEngine.calculateNewValue(act.type, act.value, act.value2, newRow.cells[act.colId], targetColDef, newRow, targetState, dynamicOrigineContext);
                             
+                            if (typeof finalVal === 'string' && (finalVal.includes('Async Err') || finalVal.includes('Err</span>'))) {
+                                errorsLog.push(`Errore Formula nel travaso riga [DB: ${UI.escapeHTML(targetState.title)} - Colonna: ${UI.escapeHTML(targetColDef.name)}]`);
+                                hasFormulaError = true;
+                                break;
+                            }
+
                             if (['select', 'multi-select'].includes(targetColDef.type)) {
                                 const arr = Array.isArray(finalVal) ? finalVal : (finalVal ? [finalVal] : []);
                                 arr.forEach(strVal => {
@@ -191,13 +224,15 @@ Object.assign(LogicEngine, {
                             newRow.cells[act.colId] = finalVal;
                         }
 
-                        targetState.rows.push(newRow);
-                        totalRowsAffected++;
-                        updatedDbIds.add(targetDbId);
+                        if (!hasFormulaError) {
+                            targetState.rows.push(newRow);
+                            totalRowsAffected++;
+                            updatedDbIds.add(targetDbId);
 
-                        if (typeof AdvancedAutomations !== 'undefined') {
-                            AdvancedAutomations.evaluate(targetDbId, newRow.id, true);
-                            AdvancedAutomations.triggerCrossDB(targetDbId);
+                            if (typeof AdvancedAutomations !== 'undefined') {
+                                AdvancedAutomations.evaluate(targetDbId, newRow.id, true);
+                                AdvancedAutomations.triggerCrossDB(targetDbId);
+                            }
                         }
                     } catch(err) {
                         errorsLog.push(`Creazione Multipla [Riga Sorgente: ${sRow.id}]: ${err.message || String(err)}`);
@@ -233,6 +268,14 @@ Object.assign(LogicEngine, {
 
                             let currentVal = r.cells[act.colId];
                             let newVal = await LogicEngine.calculateNewValue(act.type, act.value, act.value2, currentVal, targetColDef, r, targetState, origineContext);
+
+                            // Intercettazione stringhe di errore: impedisce la scrittura di markup errato nella cella
+                            if (typeof newVal === 'string' && (newVal.includes('Async Err') || newVal.includes('Err</span>'))) {
+                                const titleCol = targetState.columns[0];
+                                const rowTitle = titleCol ? r.cells[titleCol.id] : r.id;
+                                errorsLog.push(`Errore Formula in riga "<b>${UI.escapeHTML(String(rowTitle).substring(0,30))}</b>" [DB: ${UI.escapeHTML(targetState.title)} - Colonna: ${UI.escapeHTML(targetColDef.name)}]`);
+                                continue;
+                            }
 
                             if (['select', 'multi-select'].includes(targetColDef.type)) {
                                 const valArray = Array.isArray(newVal) ? newVal : (newVal ? [newVal] : []);

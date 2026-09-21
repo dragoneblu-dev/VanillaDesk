@@ -8,6 +8,7 @@
  * - Collasso automatico di tutti i rami genitore alla prima apertura della vista WBS.
  * - Tasto rapido Espandi Tutto / Comprimi Tutto nella barra della tabella.
  * - Differenziazione cromatica per livelli di profondità (Livello 0..4) applicata a freccia, pallino e badge.
+ * - FIX HEADER TOOLTIPS & COMMENTS: Mostra i tooltip informativi dei campi, i commenti colonna e l'icona informativa nell'intestazione <th>.
  */
 
 const AdvancedTree = {
@@ -346,7 +347,7 @@ const AdvancedTree = {
             rootRowIds = rootRowIds.filter(id => visibleInTreeSet.has(id));
         }
 
-        // 9. Paginazione basata sulle sole Radici di Livello 0 (Decisione 4.A)
+        // 9. Paginazione basata sulle sole Radici di Livello 0
         let pageSize = state.pageSize || 'all';
         let currentPage = state.currentPage || 1;
         let totalRoots = rootRowIds.length;
@@ -438,15 +439,36 @@ const AdvancedTree = {
             const filterIconHtml = isFiltered ? `<span style="opacity:0.5; color:var(--accent-color); margin-left:2px; font-size:0.8rem;">${Icons.filter}</span>` : '';
 
             const safeColName = String(col.name || 'Senza Nome').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            
+            // GESTIONE TOOLTIP, COMMENTO E FILTRO ATTIVO NELL'INTESTAZIONE
+            let tooltipHTML = `<div style='margin-bottom:4px; font-size:1.1em;'><b>${safeColName}</b></div>`;
+            let hasTooltipInfo = false;
+
+            if (col.comment) {
+                const safeComment = col.comment.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                tooltipHTML += `<div style='color:var(--text-secondary); margin-bottom:4px;'>${safeComment}</div>`;
+                hasTooltipInfo = true;
+            }
+
+            if (isFiltered) {
+                const safeFilterTerm = state.filters[col.id].replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                tooltipHTML += `<div style='color:var(--accent-color); border-top:1px solid rgba(150,150,150,0.2); padding-top:4px;'><b>Filtro attivo:</b> ${safeFilterTerm}</div>`;
+                hasTooltipInfo = true;
+            }
+
+            const tooltipAttr = hasTooltipInfo ? `data-tooltip="${tooltipHTML}"` : '';
+            const commentIcon = col.comment ? `<span style="opacity:0.5; margin-left:4px; display:inline-flex; align-items:center;">${Icons.info}</span>` : '';
+
             const isReadonlySystemCol = isSysDB && col.id === 'sys_c_note';
             const pointerStyle = isEdit && !isReadonlySystemCol ? 'cursor:pointer;' : 'cursor:default;';
             const clickEvent = isEdit && !isReadonlySystemCol ? `onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')"` : '';
 
-            html += `<th id="adv-th-${tableId}-${col.id}" style="width: ${col.width || 150}px; ${pointerStyle} ${thStyleOverrides}" data-col="${col.id}" ${clickEvent}>
+            html += `<th id="adv-th-${tableId}-${col.id}" style="width: ${col.width || 150}px; ${pointerStyle} ${thStyleOverrides}" data-col="${col.id}" ${clickEvent} ${tooltipAttr}>
                         <div class="adv-th-content">
                             <span style="display:flex; align-items:center; gap:5px;">
                                 <span style="display:inline-flex;">${icon}</span> 
                                 ${safeColName} 
+                                ${commentIcon}
                                 ${col.id === titleCol.id ? '<span style="font-size:0.7rem; color:var(--accent-color); margin-left:4px;">(WBS)</span>' : ''}
                                 ${filterIconHtml}
                             </span>
@@ -572,7 +594,7 @@ const AdvancedTree = {
 
         html += `</tbody></table></div>`;
 
-        // 12. Footer Controls (Decisione 4.A: Paginazione per sole Radici)
+        // 12. Footer Controls (Paginazione per sole Radici)
         if (!state.hideFooterControls && (isEdit || pageSize !== 'all')) {
             html += `<div class="adv-table-footer-controls">`;
             html += `<div class="adv-footer-left">`;

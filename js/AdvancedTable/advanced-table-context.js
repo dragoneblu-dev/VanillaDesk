@@ -7,6 +7,8 @@
  * FIX TIMESTAMPS: Inserimento automatico di created_time e last_edited_time in virtualCells.
  * FIX NUMBER CAST: Conversione automatica in Number dei valori numerici letti da formule concatenate,
  * prevenendo il bug di concatenazione testuale ("10" + 10 = "1010").
+ * FIX TRASHED NOTE LINK: getFormatDisplayValue allineato con renderCell nel restituire 'Nota nel Cestino'
+ * se la nota referenziata possiede l'attributo deletedAt.
  */
 
 Object.assign(AdvancedTable, {
@@ -98,8 +100,10 @@ Object.assign(AdvancedTable, {
             }
             if (linkObj && linkObj.noteId) {
                 const note = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
-                if (note) {
+                if (note && !note.deletedAt) {
                     return linkObj.anchor ? `${note.title} > ${linkObj.anchor}` : (note.title || 'Senza Titolo');
+                } else if (note && note.deletedAt) {
+                    return 'Nota nel Cestino';
                 }
                 return linkObj.title || 'Nota Mancante';
             }

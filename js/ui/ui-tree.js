@@ -2,6 +2,7 @@
  * ui-tree.js
  * Modulo dedicato al DOM dell'albero gerarchico laterale e Drag&Drop delle Note.
  * Rendering reattivo e isolato dei tempi residui per i segnalibri temporizzati.
+ * Integrazione visiva della nuvoletta per i segnalibri provvisti di note/commenti.
  * FIX SEARCH: extractSearchableText ora estrae il testo dei blocchi di codice 
  * e dei diari leggendoli direttamente da AppState.databases.
  */
@@ -190,11 +191,11 @@ Object.assign(UI, {
 
         let pureText = temp.textContent || temp.innerText || "";
         
-        temp.querySelectorAll('.inline-note-data').forEach(el => {
+        temp.querySelectorAll('.inline-note-data, .bookmark-comment-data').forEach(el => {
             pureText += " " + (el.innerHTML || "");
         });
         
-        temp.querySelectorAll('.inline-note-marker[data-tooltip]').forEach(el => {
+        temp.querySelectorAll('.inline-note-marker[data-tooltip], .adv-bookmark-marker[data-tooltip]').forEach(el => {
             pureText += " " + (el.getAttribute('data-tooltip') || "");
         });
         
@@ -669,8 +670,20 @@ Object.assign(UI, {
 
         title.innerHTML = `<span style="opacity:0.8; ${iconColorStyle}">${customIcon}</span> <span>${node.title || 'Senza Titolo'}</span>`;
 
-        // ISOLAMENTO RIGOROSO: il timer viene calcolato unicamente dal contenuto della specifica nota 'node'
+        // ISOLAMENTO RIGOROSO: il timer e l'appunto del segnalibro vengono calcolati unicamente dal contenuto della specifica nota 'node'
         if (reqBook && !isGhost && node.content) {
+            // Rilevamento presenza di un appunto/commento nel segnalibro per mostrare la nuvoletta con tooltip
+            const commentMatch = node.content.match(/<span[^>]*class=["'][^"']*bookmark-comment-data[^"']*["'][^>]*>(.*?)<\/span>/i);
+            if (commentMatch && commentMatch[1]) {
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = commentMatch[1];
+                const cleanComm = tempDiv.textContent.replace(/[\u200B\n\r]/g, ' ').trim();
+                if (cleanComm) {
+                    const safeTooltip = cleanComm.replace(/"/g, '&quot;');
+                    title.innerHTML += `<span style="margin-left:6px; font-size:0.75rem; color:var(--accent-color); opacity:0.85;" title="Appunto Segnalibro: ${safeTooltip}">💬</span>`;
+                }
+            }
+
             const timerMatch = node.content.match(/data-timer-expire=["'](\d+)["']/);
             if (timerMatch) {
                 const expireMs = parseInt(timerMatch[1], 10);

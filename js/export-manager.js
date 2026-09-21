@@ -4,6 +4,10 @@
  * Supporto ai percorsi relativi "assets/" per i file multimediali locali.
  * Parser completo per la re-importazione di tabelle Markdown in componenti nativi.
  * Supporto alla conservazione del valore di partenza (start) negli elenchi numerati.
+ * FIX TOKEN CORRUPTION: I token temporanei per codice e tabelle usano identificatori privi di underscore (%%%TABLEBLOCK...%%%)
+ * per prevenire la corruzione accidentale causata dalle regex del corsivo (_..._).
+ * FIX DELIMITER: Corretta la chiusura delle liste ordinate nel convertitore.
+ * FIX INTEGRITÀ: Ripristinata integralmente la funzione processMarkdownImport con controlli difensivi.
  */
 
 const ExportManager = {
@@ -706,7 +710,7 @@ const ExportManager = {
             }
             return line;
         }).join('\n');
-        if (inOl) html += '</ul>';
+        if (inOl) htmlStr += '\n';
 
         htmlStr = htmlStr.replace(/<\/?ul[^>]*>/gi, '\n');
         htmlStr = htmlStr.replace(/<\/?(p|div)[^>]*>/gi, '\n');
@@ -772,19 +776,20 @@ const ExportManager = {
         AppState.notes.push(newNote);
         
         if (typeof UI !== 'undefined') {
-            UI.renderTree();
-            UI.selectNote(noteId);
-            UI.showToast(`File Markdown importato come nuova nota: "${title}"`, 'success');
+            if (typeof UI.renderTree === 'function') UI.renderTree();
+            if (typeof UI.selectNote === 'function') UI.selectNote(noteId);
+            if (typeof UI.showToast === 'function') UI.showToast(`File Markdown importato come nuova nota: "${title}"`, 'success');
         }
         
-        Store.triggerAutoSave();
+        if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+            Store.triggerAutoSave();
+        }
     },
 
-    // Parser di supporto per convertire una singola cella Markdown preservando formattazioni e line break
     _parseMarkdownCellText: (cellText) => {
         if (!cellText || cellText.trim() === '') return '<br>';
         let t = cellText.trim();
-        t = t.replace(/<br\s*\/?>/gi, '<br>');
+        t = t.replace(/<br\s*[\/]?>/gi, '<br>');
         t = t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
         t = t.replace(/\*(.*?)\*/g, '<i>$1</i>');
         t = t.replace(/~~(.*?)~~/g, '<s>$1</s>');
@@ -794,14 +799,13 @@ const ExportManager = {
     },
 
     parseMarkdownToHTML: (md) => {
-        let html = md.replace(/\r\n/g, '\n');
+        let html = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-        // 1. TOKENIZZAZIONE DEI BLOCCHI DI CODICE (Fenced Code Blocks)
+        // 1. TOKENIZZAZIONE DEI BLOCCHI DI CODICE (Token privi di underscore per non interferire con le regex del corsivo)
         const codeBlocks = [];
         html = html.replace(/```([\w-]*)\n([\s\S]*?)```/gm, (match, lang, code) => {
             const blockId = 'adv_code_' + Store.generateId();
             const cleanLang = lang || 'none';
-            const cleanCode = code.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             
             if (!AppState.databases) AppState.databases = {};
             AppState.databases[blockId] = { title: 'Codice Importato', language: cleanLang, content: code };
@@ -809,7 +813,7 @@ const ExportManager = {
             const shell = `<div id="${blockId}" class="adv-widget-shell widget-type-code code-wrapper" data-widget-type="code" contenteditable="false"></div>`;
             
             codeBlocks.push(shell);
-            return `%%%CODE_BLOCK_${codeBlocks.length - 1}%%%`;
+            return `\n\n%%%CODEBLOCK${codeBlocks.length - 1}%%%\n\n`;
         });
 
         // 2. TOKENIZZAZIONE DELLE TABELLE MARKDOWN (Pipe Tables)
@@ -851,7 +855,7 @@ const ExportManager = {
                 // Righe di dati
                 dataLines.forEach(dLine => {
                     const cleanDLine = dLine.trim().replace(/^\|/, '').replace(/\|$/, '');
-                    const cells = cleanDLine.split('|');
+                    const cells = cleanDLine.split('|').map(c => c.trim());
                     
                     tblHTML += `<tr>`;
                     for (let c = 0; c < headers.length; c++) {
@@ -864,7 +868,7 @@ const ExportManager = {
                 tblHTML += `</tbody></table></div>`;
                 
                 tableBlocks.push(tblHTML);
-                outputLines.push(`%%%TABLE_BLOCK_${tableBlocks.length - 1}%%%`);
+                outputLines.push(`\n\n%%%TABLEBLOCK${tableBlocks.length - 1}%%%\n\n`);
             } else {
                 // Se non era una tabella valida con divisore conforme, rilascia le righe inalterate
                 tableBuffer.forEach(tblLine => outputLines.push(tblLine));
@@ -946,19 +950,19 @@ const ExportManager = {
         html = blocks.map(block => {
             const t = block.trim();
             if (!t) return '';
-            if (t.startsWith('%%%CODE_BLOCK_') || t.startsWith('%%%TABLE_BLOCK_') || t.startsWith('<h') || t.startsWith('<ul') || t.startsWith('<ol') || t.startsWith('<blockquote') || t.startsWith('<hr')) {
+            if (t.startsWith('%%%CODEBLOCK') || t.startsWith('%%%TABLEBLOCK') || t.startsWith('<h') || t.startsWith('<ul') || t.startsWith('<ol') || t.startsWith('<blockquote') || t.startsWith('<hr')) {
                 return t;
             }
             return `<p>${t.replace(/\n/g, '<br>')}</p>`;
         }).join('');
 
-        // 4. RE-INIEZIONE DEI BLOCCHI CODICE E TABELLE
-        html = html.replace(/%%%CODE_BLOCK_(\d+)%%%/g, (match, idx) => {
-            return codeBlocks[parseInt(idx)];
+        // 4. RE-INIEZIONE DEI BLOCCHI CODICE E TABELLE (Match affidabile e senza conflitti)
+        html = html.replace(/%%%CODEBLOCK(\d+)%%%/g, (match, idx) => {
+            return codeBlocks[parseInt(idx, 10)];
         });
 
-        html = html.replace(/%%%TABLE_BLOCK_(\d+)%%%/g, (match, idx) => {
-            return tableBlocks[parseInt(idx)];
+        html = html.replace(/%%%TABLEBLOCK(\d+)%%%/g, (match, idx) => {
+            return tableBlocks[parseInt(idx, 10)];
         });
 
         return html;

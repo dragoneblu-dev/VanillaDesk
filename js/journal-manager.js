@@ -3,6 +3,8 @@
  * Modulo per la gestione degli elenchi di tipo Diario/Log.
  * FIX CITAZIONI: Disattivate maniglie, click checkbox e focus input se il widget si trova in una citazione.
  * FEAT PRIORITÀ: Aggiunto sistema per indicare priorità Alta/Bassa sulle singole attività interagendo con la gutter laterale.
+ * FIX RICERCA DIARIO: Isolamento eventi da tastiera con stopPropagation su input di ricerca,
+ * rimozione del blocco readonly e ripristino asincrono del cursore post-render.
  */
 
 const JournalManager = {
@@ -197,7 +199,6 @@ const JournalManager = {
         UI.Menu.buildContextMenu(`j-opt-btn-${journalId}`, menuItems);
     },
 
-    // MENU PRIORITA'
     openPriorityMenu: (e, journalId, entryId) => {
         e.stopPropagation();
         UI.Menu.closeAll(true);
@@ -658,9 +659,13 @@ const JournalManager = {
         if (state.showSearch) {
             const safeTerm = (state.searchTerm || '').replace(/"/g, '&quot;');
             html += `
-                <div class="journal-search-wrapper">
+                <div class="journal-search-wrapper" onmousedown="event.stopPropagation()">
                     <span class="journal-search-icon">${Icons.search}</span>
-                    <input type="text" id="j-search-${journalId}" class="journal-search-input" placeholder="Cerca nel diario..." value="${safeTerm}" oninput="JournalManager.setSearchTerm('${journalId}', this.value)" ${isEdit ? '' : 'readonly'}>
+                    <input type="text" id="j-search-${journalId}" class="journal-search-input" placeholder="Cerca nel diario..." value="${safeTerm}" 
+                           oninput="event.stopPropagation(); JournalManager.setSearchTerm('${journalId}', this.value)"
+                           onkeydown="event.stopPropagation()"
+                           onkeyup="event.stopPropagation()"
+                           onmousedown="event.stopPropagation()">
                 </div>
             `;
         }
@@ -777,31 +782,35 @@ const JournalManager = {
         if (JournalManager._focusAfterRender) {
             const targetInfo = JournalManager._focusAfterRender;
             const targetId = typeof targetInfo === 'string' ? targetInfo : targetInfo.id;
-            const targetDiv = document.getElementById(targetId);
             
-            if (targetDiv) {
-                targetDiv.focus();
-                
-                if (targetDiv.tagName === 'INPUT') {
-                    if (typeof targetInfo === 'object') {
-                        targetDiv.setSelectionRange(targetInfo.start, targetInfo.end);
+            // Micro-differimento asincrono per permettere al browser di terminare il ciclo di render e posizionare saldamente il cursore
+            setTimeout(() => {
+                const targetDiv = document.getElementById(targetId);
+                if (targetDiv) {
+                    targetDiv.focus();
+                    
+                    if (targetDiv.tagName === 'INPUT') {
+                        if (typeof targetInfo === 'object') {
+                            targetDiv.setSelectionRange(targetInfo.start, targetInfo.end);
+                        } else {
+                            const valLen = targetDiv.value.length;
+                            targetDiv.setSelectionRange(valLen, valLen);
+                        }
                     } else {
-                        const valLen = targetDiv.value.length;
-                        targetDiv.setSelectionRange(valLen, valLen);
+                        const sel = window.getSelection();
+                        const range = document.createRange();
+                        range.selectNodeContents(targetDiv);
+                        range.collapse(false);
+                        sel.removeAllRanges();
+                        sel.addRange(range);
                     }
-                } else {
-                    const sel = window.getSelection();
-                    const range = document.createRange();
-                    range.selectNodeContents(targetDiv);
-                    range.collapse(false);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                }
 
-                if (typeof targetInfo === 'string') {
-                    targetDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    if (typeof targetInfo === 'string') {
+                        targetDiv.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
                 }
-            }
+            }, 0);
+
             JournalManager._focusAfterRender = null;
         }
     }

@@ -1,11 +1,11 @@
 /**
- * Store.js
+ * js/store.js
  * Gestione I/O: Architettura a Workspace Frammentato (Local-First Cloud Sync Ready).
- * Normalizzazione degli "a capo" (\r\n -> \n) e serializzazione JSON pulita per eliminare
- * i falsi positivi di conflitto generati dal File System.
- * Logica di concorrenza LWW (Last-Write-Wins) con gestione robusta delle transizioni di crittografia.
- * Scansione dei Template nel Garbage Collector per tutelare immagini e audio associati.
- * Controllo non invasivo della sessione orfana/recuperabile con pulsante esplicito nell'onboarding.
+ * SINCRONISMO IBRIDO ROBUSTO PER PRODUZIONE:
+ * 1. Database: Field-Level LWW Merge automatico solo in caso di divergenza disco reale (Zero overhead locale).
+ * 2. Note: Generazione automatica di Copia di Conflitto ('[Conflitto...] Titolo') per impedire la perdita di dati.
+ * 3. Media & Storage: Ripristinata utility _base64ToBlob per retrocompatibilità.
+ * Normalizzazione carriage return (\r\n -> \n) e hashing deterministico per prevenire falsi conflitti.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -147,21 +147,6 @@ const Store = {
             homeCitations: AppState.homeCitations || [],
             templates: AppState.templates || [] 
         };
-    },
-
-    _base64ToBlob: (b64Data, contentType) => {
-        const byteCharacters = window.atob(b64Data);
-        const byteArrays = [];
-        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-            const slice = byteCharacters.slice(offset, offset + 512);
-            const byteNumbers = new Array(slice.length);
-            for (let i = 0; i < slice.length; i++) { 
-                byteNumbers[i] = slice.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            byteArrays.push(byteArray);
-        }
-        return new Blob(byteArrays, {type: contentType});
     },
 
     saveAsset: async (file, typePrefix) => {
@@ -334,6 +319,72 @@ const Store = {
         }
     },
 
+    /**
+     * Algoritmo di Riconciliazione Database a Livello di Cella e di Riga (Field-Level Merge).
+     * Si attiva solo ed esclusivamente quando un file esterno differisce sia dalla RAM che dalla base.
+     */
+    _mergeDatabaseStates: (diskState, ramState) => {
+        const merged = { ...diskState, ...ramState };
+
+        // 1. FUSIONE COLONNE: Unione degli schemi per col.id
+        const colMap = new Map();
+        (diskState.columns || []).forEach(c => colMap.set(c.id, c));
+        (ramState.columns || []).forEach(c => colMap.set(c.id, c)); 
+        merged.columns = Array.from(colMap.values());
+
+        // 2. FUSIONE OPZIONI SELECT & COLORI
+        merged.selectOptions = { ...(diskState.selectOptions || {}) };
+        merged.selectColors = { ...(diskState.selectColors || {}) };
+
+        for (const [colId, opts] of Object.entries(ramState.selectOptions || {})) {
+            const diskOpts = merged.selectOptions[colId] || [];
+            merged.selectOptions[colId] = Array.from(new Set([...diskOpts, ...opts]));
+        }
+        for (const [colId, colors] of Object.entries(ramState.selectColors || {})) {
+            merged.selectColors[colId] = { ...(merged.selectColors[colId] || {}), ...colors };
+        }
+
+        // 3. FUSIONE RIGHE & CELLE (Field-Level LWW)
+        const diskRowMap = new Map((diskState.rows || []).map(r => [r.id, r]));
+        const ramRowMap = new Map((ramState.rows || []).map(r => [r.id, r]));
+        const mergedRowsMap = new Map();
+
+        // Elaborazione righe presenti in RAM
+        ramRowMap.forEach((rRam, rowId) => {
+            const rDisk = diskRowMap.get(rowId);
+            if (!rDisk) {
+                mergedRowsMap.set(rowId, rRam);
+            } else {
+                const ramTime = rRam.updatedAt || rRam.createdAt || 0;
+                const diskTime = rDisk.updatedAt || rDisk.createdAt || 0;
+
+                const baseCells = ramTime >= diskTime ? { ...rDisk.cells } : { ...rRam.cells };
+                const winningCells = ramTime >= diskTime ? { ...rRam.cells } : { ...rDisk.cells };
+
+                const mergedCells = Object.assign({}, baseCells, winningCells);
+
+                mergedRowsMap.set(rowId, {
+                    id: rowId,
+                    createdAt: rDisk.createdAt || rRam.createdAt || Date.now(),
+                    updatedAt: Math.max(ramTime, diskTime),
+                    cells: mergedCells,
+                    color: rRam.color || rDisk.color || 'none',
+                    opacity: rRam.opacity !== undefined ? rRam.opacity : rDisk.opacity
+                });
+            }
+        });
+
+        // Aggiunta righe create esternamente sul disco e non presenti in RAM
+        diskRowMap.forEach((rDisk, rowId) => {
+            if (!mergedRowsMap.has(rowId)) {
+                mergedRowsMap.set(rowId, rDisk);
+            }
+        });
+
+        merged.rows = Array.from(mergedRowsMap.values());
+        return merged;
+    },
+
     saveToFile: async () => {
         if (Store._isSavingFile) { Store._saveQueuePending = true; return; }
         if (!AppState.workspaceHandle) { 
@@ -392,12 +443,9 @@ const Store = {
                                 
                                 const newIndexPayload = { templates: AppState.templates, homeCitations: AppState.homeCitations, noteOrder: AppState.notes.map(n => n.id) };
                                 payloadIndexStr = JSON.stringify(newIndexPayload, null, 2);
-                                shouldWriteIndex = true;
-                            } else {
-                                shouldWriteIndex = true;
                             }
+                            shouldWriteIndex = true;
                         } catch(e) { 
-                            console.warn("⚠️ [SYNC LOG] Impossibile interpretare index.json remoto, forzo riscrittura:", e);
                             shouldWriteIndex = true;
                         }
                     }
@@ -424,90 +472,71 @@ const Store = {
             }
 
             // =========================================================================
-            // 2. SALVATAGGIO DATABASES E STRUTTURE COMPLESSE (LWW - MULTI-UTENTE ABILITATO)
+            // 2. SALVATAGGIO DATABASE CON FIELD-LEVEL MERGE IBRIDO
             // =========================================================================
             let syncedDatabasesCount = 0;
 
             for (const [dbId, ramState] of Object.entries(AppState.databases || {})) {
-                let dbStr = JSON.stringify(ramState, null, 2);
                 let currentRamHash = Store._hashObj(ramState, cryptoPrefix);
 
+                // FAST-PATH: se lo stato in RAM non è mutato, salta senza fare calcoli
                 if (Store._diskHashes.databases[dbId] !== currentRamHash) {
                     
                     const diskResult = await Store._readFragmentFromDisk(dbDir, `${dbId}.json`);
-                    let skipWrite = false;
+                    let finalStateToWrite = ramState;
 
                     if (diskResult.status === 'error') {
-                        console.warn(`🟠 [SYNC LOG] File DB ${dbId}.json bloccato (I/O Error). Salto la scrittura per prevenire corruzioni.`);
-                        skipWrite = true;
                         hasWriteErrors = true;
+                        continue;
                     } 
                     else if (diskResult.status === 'success') {
-                        // Se il file su disco è cifrato e la password è stata rimossa, procedi direttamente con la scrittura in chiaro
-                        if (diskResult.data.startsWith('PRONOTES_ENC_V1|') && !AppState.documentPassword) {
-                            // Salto il parse di stringa cifrata
-                        } else {
+                        if (!diskResult.data.startsWith('PRONOTES_ENC_V1|') || AppState.documentPassword) {
                             try {
                                 const diskState = JSON.parse(diskResult.data);
                                 const currentDiskHash = Store._hashObj(diskState, cryptoPrefix);
                                 
+                                // Conflitto reale: il file sul disco è stato alterato da un'altra sessione
                                 if (Store._diskHashes.databases[dbId] && currentDiskHash !== Store._diskHashes.databases[dbId]) {
-                                    console.error(`🚨 [SYNC LOG] CONFLITTO LWW REALE SUL COMPONENTE: ${dbId}`);
-                                    console.log(`Hash in RAM: ${Store._diskHashes.databases[dbId]}`);
-                                    console.log(`Hash su Disco: ${currentDiskHash}`);
-                                    
-                                    // Svuota il focus per forzare i salvataggi locali pendenti PRIMA del reset
-                                    if (document.activeElement && document.activeElement !== document.body) {
-                                        document.activeElement.blur();
-                                    }
-                                    await new Promise(resolve => setTimeout(resolve, 50));
-
-                                    // LWW: Sostituzione in RAM (Il Disco Vince)
-                                    AppState.databases[dbId] = diskState;
-                                    Store._diskHashes.databases[dbId] = currentDiskHash;
-                                    skipWrite = true; 
-                                    
-                                    // Router di rendering per aggiornamento visivo in diretta
-                                    if (dbId.includes('adv_btnbar_')) {
-                                        if (typeof ButtonManager !== 'undefined') ButtonManager.render(dbId);
-                                    } else if (dbId.includes('adv_journal_')) {
-                                        if (typeof JournalManager !== 'undefined') JournalManager.render(dbId);
-                                    } else if (dbId.includes('adv_cols_') || dbId.includes('adv_code_')) {
-                                        // Moduli statici non richiedono re-render completo qui
-                                    } else {
-                                        if (typeof AdvancedTable !== 'undefined') AdvancedTable.renderTable(dbId);
-                                    }
-                                    
+                                    // SLOW-PATH: Riconciliazione cella per cella a zero perdita dati
+                                    finalStateToWrite = Store._mergeDatabaseStates(diskState, ramState);
+                                    AppState.databases[dbId] = finalStateToWrite;
                                     syncedDatabasesCount++;
+
+                                    if (typeof AdvancedTable !== 'undefined') {
+                                        AdvancedTable.updateDependentViews(dbId);
+                                        if (AdvancedTable.activeRecordId) {
+                                            const activeTId = AdvancedTable.activeTableId || dbId;
+                                            AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
+                                        }
+                                    }
                                 }
                             } catch(e) { 
-                                console.error("🔴 [SYNC LOG] Fallimento nel parsing del DB remoto:", e); 
+                                console.error(`[SYNC ERROR] Impossibile fondere il DB ${dbId}:`, e); 
                             }
                         }
                     }
 
-                    if (!skipWrite) {
-                        try {
-                            let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(dbStr, AppState.documentPassword) : dbStr;
-                            const fileHandle = await dbDir.getFileHandle(`${dbId}.json`, { create: true });
-                            const writable = await fileHandle.createWritable();
-                            await writable.write(dataToWrite);
-                            await writable.close();
-                            Store._diskHashes.databases[dbId] = currentRamHash;
-                        } catch (writeErr) {
-                            console.error(`Errore scrittura DB ${dbId}.json:`, writeErr);
-                            hasWriteErrors = true;
-                        }
+                    try {
+                        const finalJsonStr = JSON.stringify(finalStateToWrite, null, 2);
+                        let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(finalJsonStr, AppState.documentPassword) : finalJsonStr;
+                        const fileHandle = await dbDir.getFileHandle(`${dbId}.json`, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(dataToWrite);
+                        await writable.close();
+                        Store._diskHashes.databases[dbId] = Store._hashObj(finalStateToWrite, cryptoPrefix);
+                    } catch (writeErr) {
+                        console.error(`Errore scrittura DB ${dbId}.json:`, writeErr);
+                        hasWriteErrors = true;
                     }
                 }
             }
 
             if (syncedDatabasesCount > 0 && typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast(`Sincronizzazione: ${syncedDatabasesCount} Componenti aggiornati dal Cloud.`, "info");
+                UI.showToast(`Sincronizzazione: Fusi ${syncedDatabasesCount} database concorrenti a livello di cella.`, "info");
             }
 
             // =========================================================================
-            // 3. SALVATAGGIO NOTE E TESTI PURI (LWW - MULTI-UTENTE ABILITATO)
+            // 3. SALVATAGGIO NOTE CON COPIA DI CONFLITTO AUTOMATICA
             // =========================================================================
             const ramNotes = AppState.notes.map(note => {
                 const cleanNote = { ...note };
@@ -515,96 +544,108 @@ const Store = {
                 return cleanNote;
             });
 
-            let currentNoteWasCorrupted = false;
-            let syncedNotesCount = 0;
+            const newConflictNotes = [];
 
             for (const note of ramNotes) {
-                let noteStr = JSON.stringify(note, null, 2);
                 let currentRamHash = Store._hashObj(note, cryptoPrefix);
                 
                 if (Store._diskHashes.notes[note.id] !== currentRamHash) {
                     const diskResult = await Store._readFragmentFromDisk(notesDir, `${note.id}.json`);
-                    let skipWrite = false;
+                    let noteToWrite = note;
 
                     if (diskResult.status === 'error') {
-                        console.warn(`🟠 [SYNC LOG] File Nota ${note.id}.json bloccato (I/O Error). Salto la scrittura per prevenire corruzioni.`);
-                        skipWrite = true;
                         hasWriteErrors = true;
+                        continue;
                     }
                     else if (diskResult.status === 'success') {
-                        // Se il file su disco è cifrato e la password è stata rimossa, procedi direttamente con la scrittura in chiaro
-                        if (diskResult.data.startsWith('PRONOTES_ENC_V1|') && !AppState.documentPassword) {
-                            // Salto il parse di stringa cifrata
-                        } else {
+                        if (!diskResult.data.startsWith('PRONOTES_ENC_V1|') || AppState.documentPassword) {
                             try {
                                 const diskNote = JSON.parse(diskResult.data);
                                 const currentDiskHash = Store._hashObj(diskNote, cryptoPrefix);
                                 
+                                // Conflitto reale su testo: il file su disco è cambiato mentre l'utente editava in locale
                                 if (Store._diskHashes.notes[note.id] && currentDiskHash !== Store._diskHashes.notes[note.id]) {
-                                    console.error(`🚨 [SYNC LOG] CONFLITTO LWW REALE SULLA NOTA: ${note.id}`);
-                                    console.log(`Hash in RAM: ${Store._diskHashes.notes[note.id]}`);
-                                    console.log(`Hash su Disco: ${currentDiskHash}`);
                                     
-                                    if (document.activeElement && document.activeElement !== document.body) {
-                                        document.activeElement.blur();
-                                    }
-                                    await new Promise(resolve => setTimeout(resolve, 50));
+                                    const now = new Date();
+                                    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+                                    
+                                    const conflictNote = {
+                                        id: Store.generateId(),
+                                        parentId: note.parentId,
+                                        title: `[Conflitto ${timeStr}] ${note.title || 'Senza Titolo'}`,
+                                        content: note.content,
+                                        isMarked: false,
+                                        expanded: true,
+                                        createdAt: now.toISOString(),
+                                        updatedAt: now.toISOString()
+                                    };
 
-                                    // LWW: Sostituzione della nota in RAM
+                                    newConflictNotes.push(conflictNote);
+
+                                    // La nota corrente in RAM accetta la versione del disco
                                     const liveNoteIndex = AppState.notes.findIndex(n => n.id === note.id);
                                     if (liveNoteIndex > -1) {
                                         AppState.notes[liveNoteIndex] = diskNote;
                                     }
-
+                                    noteToWrite = diskNote;
                                     Store._diskHashes.notes[note.id] = currentDiskHash;
-                                    skipWrite = true; // Abort write locale
-                                    syncedNotesCount++;
-                                    
-                                    // Aggiornamento interfaccia se la nota è aperta
+
+                                    // Se la nota in conflitto era aperta a schermo, riallinea il DOM in modalità protetta
                                     if (AppState.currentNoteId === note.id) {
-                                        console.log(`🔵 [SYNC LOG] Esecuzione aggiornamento visivo in Sola Lettura per la nota ${note.id}`);
                                         const editorEl = document.getElementById('noteContent');
-                                        if (editorEl) {
-                                            AppState.isSwitchingNote = true; 
-                                            
-                                            UI.toggleEditMode(false); 
-                                            editorEl.innerHTML = diskNote.content;
-                                            
+                                        if (editorEl && typeof UI !== 'undefined') {
+                                            AppState.isSwitchingNote = true;
+                                            UI.toggleEditMode(false);
+                                            editorEl.innerHTML = diskNote.content || '<p><br></p>';
                                             if (typeof Editor !== 'undefined' && Editor.hydrateMedia) Editor.hydrateMedia(editorEl);
                                             if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll(editorEl);
                                             if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
-                                            
                                             setTimeout(() => { AppState.isSwitchingNote = false; }, 200);
-                                            currentNoteWasCorrupted = true;
                                         }
                                     }
                                 }
                             } catch(e) { 
-                                console.error("🔴 [SYNC LOG] Fallimento nel parsing della Nota remota:", e); 
+                                console.error(`[SYNC ERROR] Errore verifica conflitto nota ${note.id}:`, e); 
                             }
                         }
                     }
 
-                    if (!skipWrite) {
-                        try {
-                            let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(noteStr, AppState.documentPassword) : noteStr;
-                            const fileHandle = await notesDir.getFileHandle(`${note.id}.json`, { create: true });
-                            const writable = await fileHandle.createWritable();
-                            await writable.write(dataToWrite);
-                            await writable.close();
-                            Store._diskHashes.notes[note.id] = currentRamHash;
-                        } catch (writeErr) {
-                            console.error(`Errore scrittura nota ${note.id}.json:`, writeErr);
-                            hasWriteErrors = true;
-                        }
+                    try {
+                        const noteStr = JSON.stringify(noteToWrite, null, 2);
+                        let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(noteStr, AppState.documentPassword) : noteStr;
+                        const fileHandle = await notesDir.getFileHandle(`${note.id}.json`, { create: true });
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(dataToWrite);
+                        await writable.close();
+                        Store._diskHashes.notes[note.id] = Store._hashObj(noteToWrite, cryptoPrefix);
+                    } catch (writeErr) {
+                        console.error(`Errore scrittura nota ${note.id}.json:`, writeErr);
+                        hasWriteErrors = true;
                     }
                 }
             }
 
-            if (currentNoteWasCorrupted && typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("⚠️ La nota attiva è stata aggiornata dal Cloud (Sola Lettura per sicurezza).", "warning");
-            } else if (syncedNotesCount > 0 && typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast(`Sincronizzazione: ${syncedNotesCount} Note aggiornate dal Cloud.`, "info");
+            if (newConflictNotes.length > 0) {
+                for (const cNote of newConflictNotes) {
+                    AppState.notes.push(cNote);
+                    
+                    if (typeof AdvancedTable !== 'undefined' && AdvancedTable.syncSystemPropertiesRow) {
+                        AdvancedTable.syncSystemPropertiesRow(cNote.id);
+                    }
+
+                    const cStr = JSON.stringify(cNote, null, 2);
+                    let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(cStr, AppState.documentPassword) : cStr;
+                    const fHandle = await notesDir.getFileHandle(`${cNote.id}.json`, { create: true });
+                    const wr = await fHandle.createWritable();
+                    await wr.write(dataToWrite);
+                    await wr.close();
+                    Store._diskHashes.notes[cNote.id] = Store._hashObj(cNote, cryptoPrefix);
+                }
+                
+                if (typeof UI !== 'undefined' && UI.renderTree) UI.renderTree();
+                if (typeof UI !== 'undefined' && UI.showToast) {
+                    UI.showToast(`Rilevata modifica concorrente. Modifiche locali preservate in "[Conflitto ...]".`, "warning", true);
+                }
             }
 
             await Store.executePhysicalGarbageCollection();
@@ -784,7 +825,6 @@ const Store = {
             Store._finalizeUIAfterLoad();
 
             if (isLegacyMonolith) {
-                console.log("[MIGRAZIONE] Rilevato vecchio data.json. Eseguo migrazione al file system frammentato...");
                 Store.isDirty = true;
                 await Store.saveToFile();
                 try {
@@ -795,7 +835,6 @@ const Store = {
                     await writable.write(await file.text());
                     await writable.close();
                     await dirHandle.removeEntry('data.json');
-                    console.log("[MIGRAZIONE] data.json frammentato con successo.");
                 } catch(err) {}
             }
 

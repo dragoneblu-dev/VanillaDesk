@@ -6,6 +6,11 @@
  * Mappatura ID garantita per la generazione dei Prompt AI.
  * Integrazione selettore per colonna 'note_link' (Collegamento a Nota).
  * FIX MODAL READONLY: openLongTextModal mostra sola lettura senza tasto Salva per campi calcolati (Rollup/Formula).
+ * FIX SELEZIONE RELAZIONI: Clonazione difensiva degli array in openRelationSelector e toggleRelationValue
+ * per impedire mutazioni in-place che bloccavano il re-render automatico della vista WBS / Albero.
+ * FEAT WBS AUTO-EXPAND: L'aggiunta di un figlio o genitore espande automaticamente il ramo nell'albero WBS.
+ * FIX CHECK CIRCULAR MULTI-RELATION: checkCircularRelation riceve colId e circoscrive la ricerca di cicli
+ * esclusivamente alla catena semantica del campo in modifica, consentendo relazioni multiple distinte sullo stesso DB.
  */
 
 Object.assign(AdvancedTable, {
@@ -360,7 +365,7 @@ Object.assign(AdvancedTable, {
             
             if (targetRow) {
                 let vals = targetRow.cells[targetColId];
-                vals = Array.isArray(vals) ? vals : (vals ? [vals] : []);
+                vals = Array.isArray(vals) ? [...vals] : (vals ? [vals] : []);
                 vals = vals.filter(id => id !== srcRowId);
                 AdvancedTable.updateData(targetDbId, targetIdToUnlink, targetColId, vals);
             }
@@ -368,7 +373,7 @@ Object.assign(AdvancedTable, {
             const srcRow = srcState.rows.find(r => r.id === srcRowId);
             if (srcRow) {
                 let vals = srcRow.cells[srcColId];
-                vals = Array.isArray(vals) ? vals : (vals ? [vals] : []);
+                vals = Array.isArray(vals) ? [...vals] : (vals ? [vals] : []);
                 vals = vals.filter(id => id !== targetIdToUnlink);
                 AdvancedTable.updateData(realSrcTable, srcRowId, srcColId, vals);
             }
@@ -621,7 +626,7 @@ Object.assign(AdvancedTable, {
         const targetColName = targetColDef ? targetColDef.name : 'Sconosciuta';
         const targetTabName = targetState.title || 'Sorgente Dati Sconosciuta';
 
-        let currentVals = Array.isArray(row.cells[colId]) ? row.cells[colId] : (row.cells[colId] ? [row.cells[colId]] : []);
+        let currentVals = Array.isArray(row.cells[colId]) ? [...row.cells[colId]] : (row.cells[colId] ? [row.cells[colId]] : []);
 
         // Il parametro currentLimit definisce lo scaglione di rendering inziale per proteggere la CPU
         AdvancedTable._pendingRelSelect = { 
@@ -706,7 +711,6 @@ Object.assign(AdvancedTable, {
 
             // Usa l'estrattore per gestire Date e Record Note
             let displayVal = AdvancedTable.getFormatDisplayValue(targetColDef, rawVal, renderCache);
-            
             if (!displayVal) displayVal = 'Senza Nome';
 
             if (filter && !displayVal.toLowerCase().includes(lowerFilter)) {
@@ -759,7 +763,8 @@ Object.assign(AdvancedTable, {
         listEl.innerHTML = html;
     },
 
-    checkCircularRelation: (sourceTableId, sourceRowId, targetTableId, targetRowId, visited = new Set()) => {
+    checkCircularRelation: (sourceTableId, sourceRowId, targetTableId, targetRowId, colId = null, visited = new Set()) => {
+        // Auto-riferimento riflessivo diretto (un record non può essere padre o dipendente di se stesso)
         if (sourceTableId === targetTableId && sourceRowId === targetRowId) return true;
 
         const visitKey = `${targetTableId}_${targetRowId}`;
@@ -772,16 +777,39 @@ Object.assign(AdvancedTable, {
         const targetRow = targetState.rows.find(r => r.id === targetRowId);
         if (!targetRow) return false;
 
+        // Se è specificata la colonna lungo la quale si sta navigando il grafo all'interno dello stesso database,
+        // circoscrive la ricerca di cicli esclusivamente a quel campo, consentendo relazioni distinte ortogonali o inverse
+        if (colId && sourceTableId === targetTableId) {
+            const targetCol = targetState.columns.find(c => c.id === colId);
+            if (targetCol && targetCol.type === 'relation') {
+                let vals = targetRow.cells[colId];
+                if (!Array.isArray(vals)) vals = vals ? [vals] : [];
+
+                for (let relatedRowId of vals) {
+                    if (relatedRowId === sourceRowId) {
+                        return true;
+                    }
+                    if (AdvancedTable.checkCircularRelation(sourceTableId, sourceRowId, targetTableId, relatedRowId, colId, new Set(visited))) {
+                        return true;
+                    }
+                }
+            }
+            return false;
+        }
+
+        // Fallback protettivo per chiamate non vincolate a colId specifico
         for (let col of targetState.columns) {
-            if (col.type === 'relation' && col.targetTableId) {
+            if (col.type === 'relation' && col.targetTableId === sourceTableId) {
+                if (colId && col.id !== colId) continue;
+
                 let vals = targetRow.cells[col.id];
                 if (!Array.isArray(vals)) vals = vals ? [vals] : [];
 
                 for (let relatedRowId of vals) {
-                    if (col.targetTableId === sourceTableId && relatedRowId === sourceRowId) {
+                    if (relatedRowId === sourceRowId) {
                         return true;
                     }
-                    if (AdvancedTable.checkCircularRelation(sourceTableId, sourceRowId, col.targetTableId, relatedRowId, new Set(visited))) {
+                    if (AdvancedTable.checkCircularRelation(sourceTableId, sourceRowId, col.targetTableId, relatedRowId, colId, new Set(visited))) {
                         return true;
                     }
                 }
@@ -796,19 +824,35 @@ Object.assign(AdvancedTable, {
         const state = AdvancedTable.getState(realTableId);
         const col = state.columns.find(c => c.id === colId);
 
+        // CLONAZIONE DIFENSIVA PER EVITARE MUTAZIONI IN-PLACE
+        currentVals = Array.isArray(currentVals) ? [...currentVals] : [];
+        let isAdding = false;
+
         if (currentVals.includes(targetRowId)) {
             currentVals = currentVals.filter(id => id !== targetRowId);
         } else {
-            const isCircular = AdvancedTable.checkCircularRelation(realTableId, rowId, targetDbId, targetRowId);
+            isAdding = true;
+            const isCircular = AdvancedTable.checkCircularRelation(realTableId, rowId, targetDbId, targetRowId, colId);
             if (isCircular) {
-                alert("Operazione bloccata: L'aggiunta di questo record genererebbe un Riferimento Circolare (loop) tra i database.");
+                alert("Operazione bloccata: L'aggiunta di questo record genererebbe un Riferimento Circolare (loop) lungo questo campo di relazione.");
                 return;
             }
             
             if (col.singleRecord && !isBacklink) {
                 currentVals = [targetRowId];
             } else {
-                currentVals.push(targetRowId);
+                currentVals = [...currentVals, targetRowId];
+            }
+
+            // AUTO-EXPAND WBS: Se siamo in vista ad albero WBS e abbiamo appena collegato un figlio/genitore,
+            // espandi automaticamente il nodo affinché l'utente veda subito l'aggiornamento a schermo
+            const viewState = AdvancedTable.getState(tableId);
+            if (viewState && viewState.viewType === 'tree' && viewState.treeRelationColId === colId) {
+                const parentNodeId = (viewState.treeRelationDirection === 'parent') ? targetRowId : rowId;
+                if (viewState.treeCollapsedNodes && viewState.treeCollapsedNodes.includes(parentNodeId)) {
+                    viewState.treeCollapsedNodes = viewState.treeCollapsedNodes.filter(id => id !== parentNodeId);
+                    AdvancedTable.setState(tableId, viewState);
+                }
             }
         }
 
@@ -819,7 +863,7 @@ Object.assign(AdvancedTable, {
             let remoteRow = remoteState.rows.find(r => r.id === targetRowId);
             if (remoteRow) {
                 let remoteArr = remoteRow.cells[targetColId];
-                if (!Array.isArray(remoteArr)) remoteArr = remoteArr ? [remoteArr] : [];
+                remoteArr = Array.isArray(remoteArr) ? [...remoteArr] : (remoteArr ? [remoteArr] : []);
                 
                 if (remoteArr.includes(rowId)) {
                     remoteArr = remoteArr.filter(id => id !== rowId);
@@ -828,7 +872,7 @@ Object.assign(AdvancedTable, {
                     if (remoteColDef && remoteColDef.singleRecord) {
                         remoteArr = [rowId];
                     } else {
-                        remoteArr.push(rowId);
+                        remoteArr = [...remoteArr, rowId];
                     }
                 }
                 AdvancedTable.updateData(targetDbId, targetRowId, targetColId, remoteArr);
@@ -1128,7 +1172,6 @@ Object.assign(AdvancedTable, {
         if (hostState) hostState.id = tableId;
 
         const dbList = AutomationUIBuilder.getAvailableDatabases();
-
         const isAestheticOpen = window._openAesthetic !== undefined ? window._openAesthetic : true;
 
         const buttonColors = [

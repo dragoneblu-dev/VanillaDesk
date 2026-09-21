@@ -3,6 +3,7 @@
  * Sottomodulo di Editor.
  * Gestione formattazioni inline, Menu Stile, Font e la "Gomma Draconiana" (Deep Sanitization).
  * Tutela dell'infrastruttura Widget e dell'attributo 'start' degli elenchi numerati (OL).
+ * Inclusione classi e attributi per segnalibri e note commentate.
  */
 
 Object.assign(Editor, {
@@ -298,7 +299,7 @@ Object.assign(Editor, {
             // Tabelle Semplici
             'simple-table-wrapper', 'table-row-trigger', 'table-col-trigger', 'table-move-trigger',
             // Appunti Nascosti e Segnalibri
-            'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon',
+            'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon', 'bookmark-comment-data',
             // Checklist
             'adv-checklist', 'adv-checklist-item', 'adv-checklist-cb', 'checklist-text',
             // Diario
@@ -311,7 +312,7 @@ Object.assign(Editor, {
             'adv-columns-container-wrap', 'adv-columns-continuous', 'adv-columns-independent', 'col-box', 'col-resizer'
         ];
         
-        const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
+        const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
 
         let container = range.commonAncestorContainer;
         if (container.nodeType === 3) container = container.parentNode;
@@ -410,7 +411,7 @@ Object.assign(Editor, {
                     if (classes.length > 0) currentEl.setAttribute('class', classes.join(' '));
                     else currentEl.removeAttribute('class');
                 } else if (attr.name === 'style') {
-                    if (currentEl.classList.contains('inline-note-data') && attr.value.includes('none')) {
+                    if ((currentEl.classList.contains('inline-note-data') || currentEl.classList.contains('bookmark-comment-data')) && attr.value.includes('none')) {
                         currentEl.setAttribute('style', 'display: none;'); 
                     } else if (isInternalWidget) {
                         return;

@@ -5,6 +5,7 @@
  * FIX: Messaggio informativo in rosso quando non è presente alcuna colonna di relazione con se stesso.
  * PERF: Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
  * Protegge le prestazioni del browser con migliaia di record e mantiene intatta la posizione di scroll.
+ * FEAT: Lancio diretto di Workflow Studio con ancoraggio al database e relazione selezionata.
  */
 
 const AdvancedBoard = {
@@ -74,6 +75,14 @@ const AdvancedBoard = {
                                 AdvancedTree.setView(tableId, c.id, 'parent');
                             }
                         } 
+                    },
+                    { type: 'divider' },
+                    {
+                        icon: Icons.data || Icons.tablePivot,
+                        label: 'Apri in Workflow Graph Studio ↗',
+                        onClick: () => {
+                            AdvancedBoard.openInWorkflowStudio(tableId, c.id, state.treeRelationDirection || 'children');
+                        }
                     }
                 ];
 
@@ -131,6 +140,22 @@ const AdvancedBoard = {
 
         const anchorId = e && e.currentTarget ? e.currentTarget.id : `adv-view-btn-${tableId}`;
         UI.Menu.buildContextMenu(anchorId, menuItems);
+    },
+
+    openInWorkflowStudio: (tableId, relColId, direction = 'children') => {
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        
+        // Salva le modifiche pendenti su disco in VanillaDesk prima dell'apertura
+        if (typeof Store !== 'undefined' && Store.isDirty && AppState.workspaceHandle) {
+            Store.saveToFile();
+        }
+
+        const dirParam = direction === 'parent' ? 'parent' : 'children';
+        const hash = `db=${encodeURIComponent(realTableId)}&rel=${encodeURIComponent(relColId)}&dir=${encodeURIComponent(dirParam)}`;
+        const targetUrl = `workflow/index.html#${hash}`;
+
+        window.open(targetUrl, 'VanillaDeskWorkflow');
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
     },
 
     setView: (tableId, type, groupColId = null, timelineDateColId = null, calendarDateColId = null) => {

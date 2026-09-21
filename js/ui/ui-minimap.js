@@ -4,6 +4,7 @@
  * FIX BUG DUPLICATE IDs: L'algoritmo di sync ora strappa via o rinomina tutti gli ID 
  * dal DOM clonato prima di agganciarlo alla minimappa, prevenendo i Warning 
  * del browser legati all'Autofill e preservando l'integrità strutturale dell'Editor primario.
+ * FIX DEFENSIVO: toggle verifica la presenza degli elementi nel DOM prima di accedere a .classList.
  */
 
 UI.Minimap = {
@@ -16,13 +17,13 @@ UI.Minimap = {
         const btn = document.getElementById('minimapBtn');
         
         if (AppState.showMinimap) {
-            container.classList.remove('hidden');
-            btn.classList.add('active');
+            if (container) container.classList.remove('hidden');
+            if (btn) btn.classList.add('active');
             UI.Minimap.sync();
             UI.Minimap.initObserver();
         } else {
-            container.classList.add('hidden');
-            btn.classList.remove('active');
+            if (container) container.classList.add('hidden');
+            if (btn) btn.classList.remove('active');
             if (UI.Minimap._observer) {
                 UI.Minimap._observer.disconnect();
             }

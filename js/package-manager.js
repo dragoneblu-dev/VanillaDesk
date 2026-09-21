@@ -3,6 +3,7 @@
  * Modulo di Interscambio: Permette l'esportazione dell'ambiente vivo in formato Modpack
  * e l'installazione di moduli JSON con Re-Idratazione e Mappatura ID Intelligente.
  * FEAT: Sistema "Salva come Modulo (Modpack)" che clona il DOM e l'AppState in una capsula JSON autoinstallante.
+ * FIX: Isolamento protetto degli aggiornamenti UI post-transazione per impedire alert modali errati durante i test runner.
  */
 
 const PackageManager = {
@@ -266,15 +267,25 @@ const PackageManager = {
 
             console.groupEnd();
 
-            UI.renderTree();
-            UI.selectNote(newNoteId);
-            Store.triggerAutoSave();
-            
-            UI.showToast(`Modpack "${modpack.manifest.name}" installato correttamente!`, 'success');
+            // 6. Sincronizzazione difensiva dell'interfaccia utente (isolata per non interrompere la transazione dati)
+            try {
+                if (typeof UI !== 'undefined') {
+                    if (typeof UI.renderTree === 'function') UI.renderTree();
+                    if (typeof UI.selectNote === 'function') UI.selectNote(newNoteId);
+                    if (typeof UI.showToast === 'function') UI.showToast(`Modpack "${modpack.manifest.name}" installato correttamente!`, 'success');
+                }
+                if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+                    Store.triggerAutoSave();
+                }
+            } catch (uiErr) {
+                console.warn("[MODPACK V2] Sincronizzazione UI post-importazione ignorata o parziale:", uiErr);
+            }
 
         } catch(e) {
             console.error("📦 [MODPACK V2 ERROR] Fallimento fatale:", e);
-            alert("Errore critico durante l'importazione del file JSON. L'operazione è stata annullata.");
+            if (typeof alert === 'function') {
+                alert("Errore critico durante l'importazione del file JSON. L'operazione è stata annullata.");
+            }
             console.groupEnd();
         }
     },
@@ -395,11 +406,18 @@ const PackageManager = {
                     
                     Object.assign(AppState.databases, bubbleState.databases);
 
-                    if (typeof UI.renderTree !== 'undefined') UI.renderTree();
-                    UI.selectNote(newNoteId);
-                    Store.triggerAutoSave();
-                    
-                    UI.showToast(`Modpack V1 installato con successo!`, 'success');
+                    try {
+                        if (typeof UI !== 'undefined') {
+                            if (typeof UI.renderTree === 'function') UI.renderTree();
+                            if (typeof UI.selectNote === 'function') UI.selectNote(newNoteId);
+                            if (typeof UI.showToast === 'function') UI.showToast(`Modpack V1 installato con successo!`, 'success');
+                        }
+                        if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+                            Store.triggerAutoSave();
+                        }
+                    } catch (uiErr) {
+                        console.warn("[MODPACK V1] Aggiornamento UI opzionale ignorato:", uiErr);
+                    }
                 }
             }
         } catch (err) {

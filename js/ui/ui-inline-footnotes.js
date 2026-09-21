@@ -2,6 +2,8 @@
  * ui-inline-footnotes.js
  * Sottomodulo di UI.
  * Rendering visivo delle Note a piè di pagina generate dagli "Appunti Nascosti".
+ * FIX DEFENSIVO DOM: Fallback automatico per l'append di inline-footnotes-area
+ * qualora .editor-scroll-content non sia presente nel DOM o in ambienti headless.
  */
 
 Object.assign(UI, {
@@ -20,6 +22,13 @@ Object.assign(UI, {
             const editorWrapper = document.querySelector('.editor-scroll-content');
             if (editorWrapper) {
                 editorWrapper.appendChild(area);
+            } else {
+                const noteContent = document.getElementById('noteContent');
+                if (noteContent && noteContent.parentNode) {
+                    noteContent.parentNode.appendChild(area);
+                } else {
+                    document.body.appendChild(area);
+                }
             }
         }
 

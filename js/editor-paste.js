@@ -251,7 +251,7 @@ Object.assign(Editor, {
                     // Tabelle Semplici
                     'simple-table-wrapper', 'table-row-trigger', 'table-col-trigger', 'table-move-trigger',
                     // Appunti Nascosti e Segnalibri
-                    'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon',
+                    'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon', 'bookmark-comment-data',
                     // Checklist
                     'adv-checklist', 'adv-checklist-item', 'adv-checklist-cb', 'checklist-text',
                     // Diario
@@ -265,7 +265,7 @@ Object.assign(Editor, {
                 ];
                 
                 // Whitelist rigorosa per attributi Data (elimina data-id di altri siti web)
-                const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
+                const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
 
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(pastedHTML, 'text/html');
@@ -374,7 +374,7 @@ Object.assign(Editor, {
                             } 
                             // Gestione Stili Inline
                             else if (attr.name === 'style') {
-                                if (node.classList.contains('inline-note-data') && attr.value.includes('none')) {
+                                if ((node.classList.contains('inline-note-data') || node.classList.contains('bookmark-comment-data')) && attr.value.includes('none')) {
                                     node.setAttribute('style', 'display: none;'); 
                                 } else if (isInternalWidget) {
                                     return; // I widget mantengono gli stili (es. larghezza colonne)
@@ -440,7 +440,7 @@ Object.assign(Editor, {
                     // per evitare che vengano trasformati in <p> distruggendo l'HTML valido.
                     let tempWrapper = document.createElement('div');
                     tempWrapper.innerHTML = finalHTML;
-                    tempWrapper.querySelectorAll('.adv-inline-shell, .inline-note-data, .snippet-text').forEach(el => {
+                    tempWrapper.querySelectorAll('.adv-inline-shell, .inline-note-data, .bookmark-comment-data, .snippet-text').forEach(el => {
                         el.innerHTML = el.innerHTML.replace(/<br\s*\/?>/gi, '%%%BR_SAFE%%%');
                     });
                     finalHTML = tempWrapper.innerHTML;
@@ -468,7 +468,7 @@ Object.assign(Editor, {
         };
 
         if (isHeavyLoad) {
-            if (typeof UI !== 'undefined') UI.showToast("⏳ Incollando e ripulendo grande quantità di dati...", "warning");
+            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("⏳ Incollando e ripulendo grande quantità di dati...", "warning");
             setTimeout(processPaste, 50); 
         } else {
             processPaste();

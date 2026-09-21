@@ -781,7 +781,7 @@ const EventsGlobal = {
             hideDropIndicator();
             AppState.draggedBlockId = null;
             AppState.draggedBlockType = null;
-            document.querySelectorAll('.node-content').forEach(el => el.classList.remove('drag-middle', 'drag-top', 'drag-bottom'));
+            document.querySelectorAll('.node-content').forEach(el => el.classList.remove('drag-top', 'drag-bottom', 'drag-middle'));
             const tc = document.getElementById('treeContainer');
             if (tc) tc.classList.remove('drag-over-root');
             

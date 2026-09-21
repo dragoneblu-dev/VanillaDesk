@@ -5,6 +5,8 @@
  * FIX DRY (Refactoring): Rimossa l'intera duplicazione di codice per Filtri e Sorting.
  * FEAT COLORI: Aggiunto calcolo dell'Opacità Condizionale tramite CSS color-mix sulle righe Pivot.
  * FIX RELAZIONI FORMULE: Risoluzione tramite l'engine centrale 'resolveRelationDetails' (Sostituito codice duplicato).
+ * FIX AGGREGAZIONI DATA MAX/MIN: Il controllo isDateCol ha la precedenza assoluta sul controllo numerico,
+ * evitando che date ISO (es. '2026-05-20') vengano scambiate per numeri da parseFloat.
  */
 
 const AdvancedPivot = {
@@ -134,7 +136,6 @@ const AdvancedPivot = {
 
                 if (relationCache[gColId]) {
                     const tCache = relationCache[gColId];
-                    // LA MODIFICA: Usiamo il core
                     const details = AdvancedTable.resolveRelationDetails(tCache.srcColDef, val, renderCache);
                     if (details.length > 0) return details.map(d => d.name);
                 }
@@ -203,7 +204,7 @@ const AdvancedPivot = {
                 } else {
                     const sourceCol = sourceState.columns.find(c => c.id === agg.sourceColId);
                     const isNumberCol = sourceCol && ['number'].includes(sourceCol.type);
-                    const isDateCol = sourceCol &&['date', 'datetime', 'time', 'created_time', 'last_edited_time'].includes(sourceCol.type);
+                    const isDateCol = sourceCol && ['date', 'datetime', 'time', 'created_time', 'last_edited_time'].includes(sourceCol.type);
 
                     let vals = data.rows.map(r => r.virtualCells[agg.sourceColId]).filter(v => v !== undefined && v !== null && v !== '');
 
@@ -215,10 +216,8 @@ const AdvancedPivot = {
                         else if (agg.type === 'sum') result = nums.reduce((a, b) => a + b, 0);
                         else if (agg.type === 'avg') result = (nums.reduce((a, b) => a + b, 0) / nums.length);
                     } else if (agg.type === 'max' || agg.type === 'min') {
-                        if (isNumberCol || vals.every(v => !isNaN(parseFloat(v)))) {
-                            let nums = vals.map(v => parseFloat(v));
-                            result = agg.type === 'max' ? Math.max(...nums) : Math.min(...nums);
-                        } else if (isDateCol) {
+                        // Precedenza assoluta alle date per evitare che stringhe ISO vengano scambiate per numeri da parseFloat
+                        if (isDateCol) {
                             let times = vals.map(v => {
                                 const d = new Date(v);
                                 return isNaN(d.getTime()) ? null : d.getTime();
@@ -236,6 +235,9 @@ const AdvancedPivot = {
                                     result = AdvancedTable.formatTime(resDate);
                                 }
                             }
+                        } else if (isNumberCol || vals.every(v => !isNaN(parseFloat(v)))) {
+                            let nums = vals.map(v => parseFloat(v));
+                            result = agg.type === 'max' ? Math.max(...nums) : Math.min(...nums);
                         } else {
                             let strings = vals.map(v => String(v));
                             strings.sort((a, b) => a.localeCompare(b));
@@ -467,7 +469,7 @@ const AdvancedPivot = {
                             }
                             else if (srcColDef && srcColDef.type === 'relation') {
                                 let content = '';
-                                // LA MODIFICA: Se è una relazione, le stringhe arrivate qui sono già state decodificate e risolte dal Core!
+                                // Se è una relazione, le stringhe arrivate qui sono già state decodificate e risolte dal Core!
                                 // Possiamo limitarci a splittarle sulla virgola e stamparle come pillole distinte.
                                 const rawArray = Array.isArray(row.rawGroupKeys[idx]) ? row.rawGroupKeys[idx] : [row.rawGroupKeys[idx]];
                                 rawArray.forEach(v => { 

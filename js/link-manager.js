@@ -7,6 +7,7 @@
  * evitando la duplicazione di \u200B e la fastidiosa permanenza in caso di cancellazione del testo.
  * FEAT UX: Aggiunta indicazione visiva della shortcut "[[" nel pannello di selezione link.
  * FEAT MIDDLE-CLICK: Centralizzata la funzione openLinkDirect per consentire l'apertura rapida tramite rotella mouse.
+ * FIX REGEX URL: Raggruppamento con ancora iniziale esplicita per impedire che percorsi locali (es. C:\notepad.exe) vengano scambiati per URL web.
  */
 
 const LinkManager = {
@@ -34,7 +35,7 @@ const LinkManager = {
         }
 
         const localPathRegex = /^([a-zA-Z]:[\\/]|\\\\|file:\/\/\/|\.\/|\.\.\/|[\w\-]+\/)/i;
-        const urlRegex = /^(https?:\/\/[^\s]+)|((www\.)?[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(\/[^\s]*)?(\.(html|php|jsp|asp|aspx))?)$/i;
+        const urlRegex = /^((https?:\/\/[^\s]+)|((www\.)?[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,}(\/[^\s]*)?(\.(html|php|jsp|asp|aspx))?))$/i;
         
         // Match base per catturare se l'utente ha evidenziato direttamente un link YT
         const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
