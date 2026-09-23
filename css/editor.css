@@ -152,7 +152,7 @@ main {
 }
 
 .editor-content.monospace { font-family: var(--font-editor); }
-.editor-content p, .editor-content div { margin: 0; padding: 1px 0; min-height: 1.4em; }
+.editor-content p, .editor-content div { margin: 0; padding: 0px; min-height: 1.4em; }
 .editor-content.no-wrap { white-space: pre !important; }
 .editor-content.no-wrap>* { white-space: pre !important; max-width: none !important; }
 
