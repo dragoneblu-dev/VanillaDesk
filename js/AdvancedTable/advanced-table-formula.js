@@ -202,7 +202,7 @@ Object.assign(AdvancedTable, {
                 </div>
 
                 <div style="background: rgba(37, 99, 235, 0.05); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(37, 99, 235, 0.2); font-size: 0.8rem; display:flex; align-items:center; gap:8px;">
-                    <span style="flex:1; color:var(--text-secondary);">Se vuoi farti aiutare da un LLM per scrivere la formula, copia questo testo e chiedilo all'intelligenza artificiale:</span>
+                    <span style="flex:1; color:var(--text-secondary);">Se vuoi farti aiutare da un LLM per scrivere la formula, copia questo prompt e chiedilo all'intelligenza artificiale:</span>
                     <button id="btnCopyAIPrompt" class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="AdvancedTable.copyAIPrompt('${tableId}')" title="Copia Prompt per AI"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} Copia Prompt</span></button>
                 </div>
 
