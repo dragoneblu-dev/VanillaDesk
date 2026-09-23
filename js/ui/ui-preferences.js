@@ -4,6 +4,7 @@
  * Gestione delle impostazioni dell'utente (Salvataggio in LocalStorage), 
  * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
  * REFACTOR CENTRALIZZATO: Menu principale (hamburger) gestito interamente tramite UI.Menu.buildContextMenu.
+ * FEAT CONTINUOUS EDIT: Modularizzazione di setContinuousEdit per attivazione programmatica all'apertura del Workspace.
  */
 
 Object.assign(UI, {
@@ -25,7 +26,7 @@ Object.assign(UI, {
             {
                 icon: Icons.folderOpen,
                 label: 'Nuovo Workspace...',
-                onClick: () => Store.createWorkspace()
+                onClick: () => Store.createWorkspace(true)
             },
             {
                 icon: Icons.folder,
@@ -157,8 +158,8 @@ Object.assign(UI, {
         }
     },
 
-    toggleContinuousEdit: () => {
-        AppState.continuousEditMode = !AppState.continuousEditMode;
+    setContinuousEdit: (enable = true) => {
+        AppState.continuousEditMode = enable;
 
         const icon = document.getElementById('continuousEditIcon');
         if (icon) {
@@ -170,8 +171,11 @@ Object.assign(UI, {
             UI.toggleEditMode(true);
         }
 
-        // Salvataggio permanente nelle preferenze del browser
         localStorage.setItem('pronotes_continuous', AppState.continuousEditMode);
+    },
+
+    toggleContinuousEdit: () => {
+        UI.setContinuousEdit(!AppState.continuousEditMode);
     },
 
     toggleWordWrap: () => {
@@ -383,6 +387,12 @@ Object.assign(UI, {
         const savedSize = localStorage.getItem('pronotes_fontsize');
         if (savedSize) {
             UI.currentFontSize = parseInt(savedSize);
+            const parsed = parseInt(savedSize, 10);
+            if (!isNaN(parsed) && parsed >= 10 && parsed <= 32) {
+                UI.currentFontSize = parsed;
+            } else {
+                UI.currentFontSize = 16;
+            }
             document.documentElement.style.setProperty('--reading-font-size', UI.currentFontSize + 'px');
         }
 
