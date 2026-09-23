@@ -3,6 +3,7 @@
  * Interfaccia Utente per la generazione di Linked Views e Tabelle Pivot.
  * FIX VISIBILITÀ: Inserito sottomenu "Visualizza Campo" per nascondere colonne anche nelle Viste Analitiche e Board.
  * FIX CONTROLLI: Reintegrato il comando per abilitare/disabilitare l'aggiunta di nuove righe dalle Viste Collegate.
+ * FEAT WBS LINKED VIEW: Aggiunta la possibilità di creare Viste Collegate in formato Gerarchia WBS (Albero).
  */
 
 const AdvancedPivotMenus = {
@@ -30,6 +31,7 @@ const AdvancedPivotMenus = {
         if (state.viewType === 'board') viewId = 'board_' + state.boardGroupBy;
         else if (state.viewType === 'calendar') viewId = 'calendar_' + state.calendarDateCol;
         else if (state.viewType === 'timeline') viewId = 'timeline_' + state.timelineDateCol;
+        else if (state.viewType === 'tree') viewId = 'table';
 
         const hiddenList = state.viewConfig && state.viewConfig[viewId] ? state.viewConfig[viewId].hiddenCols : [];
         const visibleItems = [];
@@ -47,16 +49,14 @@ const AdvancedPivotMenus = {
             visibilityItems.push({ type: 'custom', html: '<div style="font-size:0.65rem; font-weight:bold; color:var(--text-secondary); padding:4px 8px; text-transform:uppercase; letter-spacing:0.05em;">Campi Nascosti</div>' });
             visibilityItems = visibilityItems.concat(hiddenItems);
         }
-        // ----------------------------------
 
-        const menuItems =[
+        const menuItems = [
             { icon: Icons.eye, label: 'Visualizza campo', type: 'submenu', items: visibilityItems },
             { type: 'divider' },
             { icon: Icons.widthFit, label: widthLabel, onClick: () => AdvancedTable.toggleFreeWidth(tableId) },
             { icon: Icons.zebra, label: zebraLabel, onClick: () => AdvancedPivotMenus.toggleZebra(tableId) }
         ];
 
-        // FIX: Reintegrato il toggle per i controlli a pié di pagina (Solo per Viste normali, non Pivot)
         if (!state.isPivot) {
             menuItems.push({ icon: Icons.layoutAuto, label: footerLabel, onClick: () => AdvancedTableMenus.toggleFooterControls(tableId) });
         }
@@ -129,7 +129,7 @@ const AdvancedPivotMenus = {
 
     openCreateWizard: (editTableId = null, chartOnlyMode = false) => {
         AdvancedTable.closeDropdowns(true);
-        const dbList =[];
+        const dbList = [];
         let sourceDbTitle = '';
         let sourceState = null;
 
@@ -146,7 +146,7 @@ const AdvancedPivotMenus = {
             tableId: editTableId,
             sourceId: null,
             groupBy: [],
-            aggregations:[],
+            aggregations: [],
             chartConfig: { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default' }
         };
 
@@ -257,7 +257,7 @@ const AdvancedPivotMenus = {
 
                 <div id="linkedStep2" style="display:none;">
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin-bottom:10px; display:block;">2. Seleziona il Layout per la Vista Sincronizzata:</label>
-                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom: 20px;" id="linkedViewButtonsArea"></div>
+                    <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom: 20px;" id="linkedViewButtonsArea"></div>
                     <div class="separator-h" style="margin:20px 0;"></div>
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--tx-c4); margin-bottom:10px; display:block;">Vista Analitica (Somme, Raggruppamenti e KPI):</label>
                     <button class="btn" style="width:100%; justify-content:center; padding:15px; border-radius:8px; border:1px dashed var(--tx-c4); background:rgba(255, 134, 0, 0.05);" onclick="AdvancedPivotMenus.showPivotConfig()">
@@ -402,15 +402,20 @@ const AdvancedPivotMenus = {
         }
 
         const sourceState = AdvancedTable.getTableState(sourceId);
-        if(!sourceState) return;
+        if (!sourceState) return;
 
         AdvancedPivotMenus.pendingConfig.sourceId = sourceId;
-        AdvancedPivotMenus.pendingConfig.groupBy =[];
-        AdvancedPivotMenus.pendingConfig.aggregations =[];
+        AdvancedPivotMenus.pendingConfig.groupBy = [];
+        AdvancedPivotMenus.pendingConfig.aggregations = [];
 
         const hasSelect = sourceState.columns.some(c => c.type === 'select');
         const hasCalendarDate = sourceState.columns.some(c => c.type === 'date' || c.type === 'datetime');
         const hasTimelineDate = sourceState.columns.some(c => (c.type === 'date' || c.type === 'datetime') && c.hasEndDate);
+        
+        // Rilevamento presenza auto-relazione per abilitare la Gerarchia WBS
+        const realSourceId = (typeof AdvancedTable._resolveSourceId === 'function') ? AdvancedTable._resolveSourceId(sourceId) : sourceId;
+        const selfRelCol = (sourceState.columns || []).find(c => c.type === 'relation' && (c.targetTableId === sourceId || c.targetTableId === realSourceId));
+        const hasTreeRelation = !!selfRelCol;
 
         let buttonsHTML = `
             <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('table')">
@@ -419,6 +424,22 @@ const AdvancedPivotMenus = {
                 </span>
             </button>
         `;
+
+        if (hasTreeRelation) {
+            buttonsHTML += `
+            <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('tree')">
+                <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--accent-color);">
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.treeNode}</span> Gerarchia WBS
+                </span>
+            </button>`;
+        } else {
+            buttonsHTML += `
+            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="Nessuna colonna 'Relazione' che punta a questo stesso database">
+                <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--text-secondary);">
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.treeNode}</span> Gerarchia WBS
+                </span>
+            </button>`;
+        }
 
         if (hasSelect) {
             buttonsHTML += `
@@ -499,7 +520,7 @@ const AdvancedPivotMenus = {
             striped: true,
             textClamp: 1,
             filters: {},
-            sorts:[],
+            sorts: [],
             viewConfig: {},
             hideFooterControls: true 
         };
@@ -516,6 +537,23 @@ const AdvancedPivotMenus = {
             const timelineDateCol = sourceState.columns.find(c => (c.type === 'date' || c.type === 'datetime') && c.hasEndDate);
             if (timelineDateCol) {
                 linkedState.timelineDateCol = timelineDateCol.id;
+            }
+        } else if (type === 'tree') {
+            const realSourceId = (typeof AdvancedTable._resolveSourceId === 'function') ? AdvancedTable._resolveSourceId(sourceId) : sourceId;
+            const selfRelCol = (sourceState.columns || []).find(c => c.type === 'relation' && (c.targetTableId === sourceId || c.targetTableId === realSourceId));
+            if (selfRelCol) {
+                linkedState.treeRelationColId = selfRelCol.id;
+                linkedState.treeRelationDirection = 'children';
+
+                // Collasso automatico iniziale dei nodi genitore
+                const allParentIds = new Set();
+                (sourceState.rows || []).forEach(r => {
+                    let targets = r.cells[selfRelCol.id];
+                    if (!targets) return;
+                    if (!Array.isArray(targets)) targets = [targets];
+                    if (targets.length > 0) allParentIds.add(r.id);
+                });
+                linkedState.treeCollapsedNodes = Array.from(allParentIds);
             }
         }
 

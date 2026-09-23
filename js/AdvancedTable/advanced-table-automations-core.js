@@ -391,7 +391,7 @@ const AdvancedAutomations = {
         return new Date(dateStr).getTime();
     },
 
-    evaluate: async (tableId, rowId, isNewRow = false, oldRowContext = null, crossDbTriggerId = null, isTimerEvent = false, noteChangeOverride = null, targetAutoId = null, isOnLoadEvent = false, recursionDepth = 0, isSystemActionOnly = false) => {
+    evaluate: async (tableId, rowId, isNewRow = false, oldRowContext = null, crossDbTriggerId = null, isTimerEvent = false, noteChangeOverride = null, targetAutoId = null, isOnLoadEvent = false, recursionDepth = 0, isSystemActionOnly = false, executedAutoIds = null) => {
         
         // Controllo del loop dipendente dalla profondità di ricorsione
         if (recursionDepth > 10) {
@@ -411,6 +411,11 @@ const AdvancedAutomations = {
         let rowChanged = false;
         let visualChanged = false;
         
+        // Tracciamento delle regole già eseguite per la stessa riga in questa catena
+        if (!executedAutoIds) {
+            executedAutoIds = new Set();
+        }
+        
         try {
             let stopAllExecution = false;
             let vRow = AdvancedTable.buildVirtualRow(tableId, row, state);
@@ -420,6 +425,9 @@ const AdvancedAutomations = {
                 if (targetAutoId && auto.id !== targetAutoId) continue;
                 if (!auto.active || !auto.isValid) continue;
                 if (auto.actions.length === 0) continue;
+
+                // Evita di rieseguire la stessa identica regola nella stessa catena di eventi
+                if (executedAutoIds.has(auto.id)) continue;
 
                 const isTimerTriggered = auto.triggers.some(t => t.colId === 'SYS_TIMER');
                 const isOnLoadTriggered = auto.triggers.some(t => t.colId === 'SYS_ON_LOAD');
@@ -501,6 +509,8 @@ const AdvancedAutomations = {
                 }
 
                 if (allMatch) {
+                    executedAutoIds.add(auto.id);
+
                     for (const act of auto.actions) {
                         let actType = act.type || 'set_fixed';
 
@@ -586,10 +596,21 @@ const AdvancedAutomations = {
 
                         if (targetColDef.type === 'record_note') {
                             if (actType === 'set_empty') {
-                                if (currentVal && typeof UI !== 'undefined' && UI.Trash) {
-                                    UI.Trash.forceHardDeleteRecursive(currentVal);
-                                }
+                                const noteToDelete = currentVal;
                                 newVal = '';
+                                
+                                // Consolidamento preventivo della cella nel database per garantire coerenza
+                                row.cells[act.colId] = '';
+                                vRow.virtualCells[act.colId] = '';
+                                rowChanged = true;
+                                AdvancedTable.setState(tableId, state);
+
+                                if (noteToDelete && typeof UI !== 'undefined' && UI.Trash) {
+                                    UI.Trash.forceHardDeleteRecursive(noteToDelete);
+                                }
+
+                                // Riafferma lo stato del database post-eliminazione nota
+                                AdvancedTable.setState(tableId, state);
                             } else {
                                 let titleToSet = act.value;
                                 if (actType === 'set_formula') {
@@ -680,11 +701,11 @@ const AdvancedAutomations = {
                     }
                 }
 
-                if (!isTimerEvent && !isOnLoadEvent) {
+                // Inibisce la propagazione ricorsiva se stop_execution è intervenuto, mantenendo oldRowContext
+                if (!isTimerEvent && !isOnLoadEvent && !stopAllExecution) {
                     if (rowChanged) {
                         AdvancedAutomations._notifyFired();
-                        // Passaggio della profondità ricorsiva
-                        await AdvancedAutomations.evaluate(tableId, rowId, false, oldRowContext, crossDbTriggerId, false, null, null, false, recursionDepth + 1);
+                        await AdvancedAutomations.evaluate(tableId, rowId, false, oldRowContext, crossDbTriggerId, false, null, null, false, recursionDepth + 1, false, executedAutoIds);
                     }
                 }
             }
