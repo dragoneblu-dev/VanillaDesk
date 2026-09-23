@@ -41,7 +41,7 @@ Object.assign(Editor, {
 
         const items = [
             { icon: Icons.code, label: 'Blocco di Codice', onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
-            { icon: Icons.citation, label: 'Citazione', onClick: () => executeInsert(() => CitationManager.openModal()) },
+            { icon: Icons.citation, label: 'Citazione Live', onClick: () => executeInsert(() => CitationManager.openModal()) },
             { icon: Icons.columns, label: 'Testo in Colonne', onClick: () => executeInsert(() => ColumnManager.insert()) },
             { type: 'divider' },
             { icon: Icons.tableSimple, label: 'Tabella', onClick: () => executeInsert(() => TableManager.openCreationModal()) },

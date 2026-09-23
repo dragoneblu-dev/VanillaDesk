@@ -55,6 +55,10 @@ Object.assign(Editor, {
         const widgetsToDelete = [];
 
         allWidgets.forEach(widget => {
+            // Le tabelle semplici sono puro HTML ripristinabile al 100% con Ctrl+Z: nessun blocco di conferma
+            if (widget.classList.contains('simple-table-wrapper') || widget.getAttribute('data-widget-type') === 'simple-table') {
+                return;
+            }
             if (sel.containsNode(widget, true)) {
                 widgetsToDelete.push(widget);
             }

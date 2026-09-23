@@ -1,9 +1,9 @@
 /**
  * ButtonManager-core.js
  * Nucleo del modulo Barre di Pulsanti Programmabili.
- * REFACTOR: La funzione execute si avvale ora del motore centralizzato 'LogicEngine.executeMacroBlocks'
- * eliminando decine di righe di codice duplicato e uniformando il comportamento tra Widget Macro e Colonne Macro.
- * FIX DRAG & DROP: Estetica originale ripristinata. Inseriti log di tracciamento per il debug dello spostamento.
+ * Esecuzione macro con il motore centralizzato 'LogicEngine.executeMacroBlocks'
+ * uniformando il comportamento tra Widget Macro e Colonne Macro.
+ * Gestione corretta della persistenza su workspace tramite Store.triggerAutoSave.
  */
 
 const ButtonManager = {
@@ -359,9 +359,25 @@ const ButtonManager = {
                 const targetDOM = document.getElementById(dbId);
                 if (targetDOM) AdvancedTable.renderTable(dbId);
             });
+
+            // Se la macro è stata testata dal Drawer di configurazione, consolida anche il pulsante stesso
+            if (isTestMode && isPanelOpenForThis) {
+                let realState = ButtonManager.getState(barId);
+                if (realState && realState.buttons) {
+                    const idx = realState.buttons.findIndex(b => b.id === btnId);
+                    if (idx !== -1) {
+                        realState.buttons[idx] = JSON.parse(JSON.stringify(btnState));
+                        ButtonManager.setState(barId, realState);
+                        ButtonManager.render(barId);
+                    }
+                }
+                ButtonManager._draftBtnState = null;
+                ButtonManager._draftBarId = null;
+                UI.closeDrawer();
+            }
             
-            if (!isTestMode) Store.triggerAutoSave();
-            else UI.showStatus("unsaved");
+            // Persiste immediatamente su disco nel Workspace
+            Store.triggerAutoSave(true);
             
             if (response.errorsLog.length > 0) {
                 const errorHtml = `
@@ -378,7 +394,6 @@ const ButtonManager = {
                 let msg = `Macro completata: Elaborati ${response.totalRowsAffected} record in ${response.updatedDbIds.size} database.`;
                 if (response.emailsSent > 0) msg += ` Generate ${response.emailsSent} Email.`;
                 UI.showToast(msg, "success");
-                if (isTestMode && isPanelOpenForThis) UI.closeDrawer();
             }
         } else {
             if (response.errorsLog.length > 0) {

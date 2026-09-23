@@ -4,6 +4,7 @@
  * Gestione formattazioni inline, Menu Stile, Font e la "Gomma Draconiana" (Deep Sanitization).
  * Tutela dell'infrastruttura Widget e dell'attributo 'start' degli elenchi numerati (OL).
  * Inclusione classi e attributi per segnalibri e note commentate.
+ * FEAT: toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
  */
 
 Object.assign(Editor, {
@@ -67,7 +68,7 @@ Object.assign(Editor, {
         toggleBtn('btnFormatU', document.queryCommandState('underline'));
         toggleBtn('btnFormatS', document.queryCommandState('strikeThrough'));
 
-        let isH1 = false, isH2 = false, isCustomFont = false;
+        let isH1 = false, isH2 = false, isQuote = false, isCustomFont = false;
 
         const sel = window.getSelection();
         if (sel.rangeCount > 0) {
@@ -81,12 +82,19 @@ Object.assign(Editor, {
                 if (tag === 'h3') isH2 = true;
             }
 
+            // Verifica se il cursore si trova dentro un blockquote di formattazione testuale
+            const quoteBlock = node.closest('blockquote:not(.adv-widget-shell)');
+            if (quoteBlock) {
+                isQuote = true;
+            }
+
             const span = node.closest('span[class*="ff-"], span[class*="fs-"]');
             if (span) isCustomFont = true;
         }
 
         toggleBtn('btnFormatH1', isH1);
         toggleBtn('btnFormatH2', isH2);
+        toggleBtn('btnFormatQuote', isQuote);
         toggleBtn('btnFormatTMenu', isCustomFont);
     },
 
@@ -96,7 +104,7 @@ Object.assign(Editor, {
 
         const parentNode = selection.getRangeAt(0).commonAncestorContainer;
         const element = (parentNode.nodeType === 3) ? parentNode.parentNode : parentNode;
-        const blockElement = element.closest('h1, h2, h3, h4, h5, h6, p, div, li');
+        const blockElement = element.closest('h1, h2, h3, h4, h5, h6, p, div, li, blockquote');
 
         if (!blockElement) {
             Editor.saveSnapshot();
@@ -112,9 +120,141 @@ Object.assign(Editor, {
         const currentTag = blockElement.nodeName.toLowerCase();
         const targetTag = tag.toLowerCase();
         if (currentTag === targetTag) document.execCommand('formatBlock', false, 'p');
-        else document.execCommand('formatBlock', false, tag);
+        else document.execCommand('formatBlock', false, targetTag);
         
         Editor.healWidgetWrappers();
+        Editor.updateToolbarFormatting();
+    },
+
+    toggleBlockquote: () => {
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+
+        let range = selection.getRangeAt(0);
+        let container = range.commonAncestorContainer;
+        if (container.nodeType === 3) container = container.parentNode;
+
+        // Protezione: non alterare blocchi di codice, celle di tabelle complesse o liste
+        if (container.closest('.code-content') || container.closest('.adv-widget-shell:not(.block-citation)')) return;
+        if (container.closest('li')) return;
+
+        const editorRoot = document.getElementById('noteContent') || document.getElementById('inlineNoteInput');
+        if (!editorRoot || !editorRoot.contains(container)) return;
+
+        Editor.saveSnapshot();
+
+        // Marker temporaneo per conservare la posizione esatta del cursore
+        const marker = document.createElement('span');
+        marker.id = 'bkm-toggle-temp';
+        marker.style.display = 'none';
+
+        // 1. DISATTIVAZIONE / UNWRAP: Se siamo già dentro un blockquote, risaliamo all'antenato radice
+        let existingBq = container.closest('blockquote:not(.adv-widget-shell)');
+        if (existingBq) {
+            // Risalita all'antenato blockquote più esterno per appiattire l'intera catena nidificata
+            while (existingBq.parentElement && existingBq.parentElement.closest('blockquote:not(.adv-widget-shell)')) {
+                existingBq = existingBq.parentElement.closest('blockquote:not(.adv-widget-shell)');
+            }
+
+            // Appiattisce preventivamente tutti i blockquote nidificati interni
+            existingBq.querySelectorAll('blockquote').forEach(nested => {
+                const p = nested.parentNode;
+                while (nested.firstChild) p.insertBefore(nested.firstChild, nested);
+                nested.remove();
+            });
+
+            range.insertNode(marker);
+
+            const parent = existingBq.parentNode;
+            const hasBlockChildren = Array.from(existingBq.children).some(c => 
+                ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(c.tagName)
+            );
+
+            if (hasBlockChildren) {
+                while (existingBq.firstChild) {
+                    parent.insertBefore(existingBq.firstChild, existingBq);
+                }
+                existingBq.remove();
+            } else {
+                const paragraphs = [];
+                let currentP = document.createElement('p');
+
+                while (existingBq.firstChild) {
+                    const child = existingBq.firstChild;
+                    if (child.nodeType === 1 && child.tagName === 'BR') {
+                        child.remove();
+                        if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
+                        paragraphs.push(currentP);
+                        currentP = document.createElement('p');
+                    } else {
+                        currentP.appendChild(child);
+                    }
+                }
+                if (currentP.childNodes.length > 0) {
+                    paragraphs.push(currentP);
+                } else if (paragraphs.length === 0) {
+                    currentP.innerHTML = '<br>';
+                    paragraphs.push(currentP);
+                }
+
+                paragraphs.forEach(p => parent.insertBefore(p, existingBq));
+                existingBq.remove();
+            }
+
+        } else {
+            // 2. ATTIVAZIONE / WRAP: Raggruppa i blocchi selezionati in un unico <blockquote>
+            let blocksToWrap = [];
+
+            if (!range.collapsed && typeof Editor.getSelectedBlocks === 'function') {
+                blocksToWrap = Editor.getSelectedBlocks(range);
+            }
+
+            if (blocksToWrap.length === 0) {
+                let singleBlock = container.closest('p, div, h1, h2, h3, h4, h5, h6');
+                if (singleBlock && singleBlock !== editorRoot) {
+                    blocksToWrap.push(singleBlock);
+                }
+            }
+
+            if (blocksToWrap.length === 0) {
+                document.execCommand('formatBlock', false, 'blockquote');
+                Editor.healWidgetWrappers();
+                Editor.updateToolbarFormatting();
+                return;
+            }
+
+            range.insertNode(marker);
+
+            const bq = document.createElement('blockquote');
+            const firstBlock = blocksToWrap[0];
+            firstBlock.parentNode.insertBefore(bq, firstBlock);
+
+            blocksToWrap.forEach(b => {
+                // Preserva i paragrafi all'interno del riquadro evitando dispersioni
+                if (b.tagName === 'P') {
+                    bq.appendChild(b);
+                } else {
+                    const p = document.createElement('p');
+                    while (b.firstChild) p.appendChild(b.firstChild);
+                    b.remove();
+                    bq.appendChild(p);
+                }
+            });
+        }
+
+        // Ripristino del cursore
+        const savedMarker = document.getElementById('bkm-toggle-temp');
+        if (savedMarker) {
+            const newRange = document.createRange();
+            newRange.setStartBefore(savedMarker);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+            savedMarker.remove();
+        }
+
+        Editor.healWidgetWrappers();
+        Store.triggerAutoSave();
         Editor.updateToolbarFormatting();
     },
 
@@ -203,17 +343,20 @@ Object.assign(Editor, {
 
                 const isSmall = sizeAttr === '1' || fsStyle === 'x-small' || fsStyle === '10px';
                 const isLarge = sizeAttr === '5' || fsStyle === 'x-large' || fsStyle === '24px';
-                const isDefault = sizeAttr === '3' || fsStyle === 'medium' || fsStyle === '16px';
+                const isDefault = sizeAttr === '3' || fsStyle === 'medium' || fsStyle === '16px' || className === 'fs-standard';
 
                 if (isDefault) {
                     el.removeAttribute('size');
                     el.style.fontSize = '';
+                    el.classList.remove('fs-small', 'fs-large');
                 } else if (isSmall) {
                     el.classList.add('fs-small');
+                    el.classList.remove('fs-large');
                     el.removeAttribute('size');
                     el.style.fontSize = '';
                 } else if (isLarge) {
                     el.classList.add('fs-large');
+                    el.classList.remove('fs-small');
                     el.removeAttribute('size');
                     el.style.fontSize = '';
                 }

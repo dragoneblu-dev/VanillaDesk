@@ -1102,7 +1102,7 @@ const EventsGlobal = {
                 if (wrapper) {
                     const textSpan = wrapper.querySelector('.snippet-text');
                     if (textSpan) {
-                        const textToCopy = textSpan.innerText.trim();
+                        const textToCopy = textSpan.innerText.trim().replace(/\u00A0/g, ' ');
                         navigator.clipboard.writeText(textToCopy).then(() => {
                             btn.classList.add('copied');
                             btn.innerHTML = typeof Icons !== 'undefined' ? Icons.checkCircle : '✓';

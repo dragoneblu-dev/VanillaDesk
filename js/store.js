@@ -7,6 +7,8 @@
  * 3. Media & Storage: Ripristinata utility _base64ToBlob per retrocompatibilità.
  * 4. Live Sync: Ascolto BroadcastChannel 'vanilladesk_sync' e funzione readDatabaseFromDisk per ricarica concorrente.
  * FEAT AUTO-EDIT ON WORKSPACE CREATE: Abilita automaticamente l'Edit Continuo quando viene creato un nuovo Workspace.
+ * FEAT WORKSPACE GUIDE PROMPT: Mostra la guida esplicativa al centro dello schermo prima dell'apertura del selettore cartella.
+ * FEAT ONBOARDING NOTE: Generazione di una prima pagina ricca, formattata e accattivante con spiegazione su Viste e Database.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -120,7 +122,7 @@ const Store = {
         return Date.now().toString(36) + Math.random().toString(36).substring(2, 10);
     },
 
-    getNote: (id) => AppState.notes.find(n => n.id === id),
+    getNote: (id) => AppState.notes.find(n => n.id === id) || null,
 
     getChildren: (parentId, includeDeleted = false) => AppState.notes.filter(n => n.parentId === parentId && (includeDeleted || !n.deletedAt)),
 
@@ -443,7 +445,6 @@ const Store = {
                             const diskHash = Store._hashObj(diskData, cryptoPrefix);
                             
                             if (Store._diskHashes.index && diskHash !== Store._diskHashes.index) {
-
                                 // LWW: Integra i dati del disco con le modifiche locali
                                 AppState.templates = diskData.templates || AppState.templates;
                                 AppState.homeCitations = diskData.homeCitations || AppState.homeCitations;
@@ -853,6 +854,12 @@ const Store = {
             if (!confirm("Attenzione: Stai per cambiare Workspace. Le modifiche non salvate dell'ambiente attuale verranno chiuse. Procedere?")) return;
         }
 
+        // Guida visiva esplicativa al centro dello schermo prima di chiamare il selettore cartella nativo
+        if (typeof UI !== 'undefined' && typeof UI.promptWorkspaceGuide === 'function') {
+            const proceed = await UI.promptWorkspaceGuide();
+            if (!proceed) return;
+        }
+
         try {
             const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
             
@@ -868,10 +875,17 @@ const Store = {
                 if(!confirm("Attenzione: La cartella selezionata NON è vuota. L'app creerà o aggiornerà i propri file al suo interno. Vuoi procedere?")) return;
             }
 
+            // Se l'utente era già in un Workspace aperto o ha richiesto un ambiente pulito, azzera sempre la memoria
+            const isSwitchingFromExistingWorkspace = !!AppState.workspaceHandle;
             const hadExistingNotesInRAM = AppState.notes && AppState.notes.length > 0;
+            const shouldReset = forceFresh || isSwitchingFromExistingWorkspace || !hadExistingNotesInRAM;
 
-            if (forceFresh || !hadExistingNotesInRAM) {
-                if (typeof Editor !== 'undefined') Editor.clearHistory();
+            if (shouldReset) {
+                if (typeof Editor !== 'undefined') {
+                    Editor.clearHistory();
+                    Editor.imageCache = {};
+                    Editor.audioCache = {};
+                }
                 AppState.notes = []; 
                 AppState.databases = {}; 
                 AppState.homeCitations = []; 
@@ -892,12 +906,89 @@ const Store = {
                 const newNoteId = Store.generateId();
                 const now = new Date().toISOString();
 
+                // Creazione della prima nota informativa, formattata e accattivante
                 AppState.notes.push({
                     id: newNoteId,
                     parentId: null,
-                    title: "Prima Nota",
-                    content: "<p>Benvenuto nel tuo nuovo Workspace. Inizia a scrivere i tuoi appunti qui...</p><p><br></p>",
-                    isMarked: false,
+                    title: "Benvenuto in VanillaDesk",
+                    content: `
+                        <blockquote>
+                            <b>👋 Benvenuto nel tuo nuovo Workspace!</b><br>
+                            Questo workspace vive sul tuo computer nella cartella selezionata: massima velocità, nessun dato inviato a server esterni, zero abbonamenti. Questa pagina riassume le funzioni chiave e le viste a tua disposizione.
+                        </blockquote>
+
+                        <h2>1. La Magia dei Database: Viste Multiple</h2>
+                        <p>In VanillaDesk i <b>Database</b> non sono semplici tabelle, ma motori di dati flessibili. Se desideri una delle seguenti visualizzazioni, ti basta inserire un <b>Database</b> (dal menu <b>Blocchi ➔ Database</b>) e cliccare sul tasto <b>"Vista"</b> nell'intestazione:</p>
+                        <ul>
+                            <li><b>Bacheca Kanban:</b> Gestisci attività a schede trascinabili per stati o fasi (richiede un campo <i>Select</i>).</li>
+                            <li><b>Calendario:</b> Pianifica scadenze su vista Mese, Settimana o Giorno (richiede un campo <i>Data</i>).</li>
+                            <li><b>Timeline (Gantt):</b> Cronoprogramma con durate, milestone e frecce di dipendenza (richiede <i>Data con Fine</i>).</li>
+                            <li><b>Gerarchia WBS (Albero):</b> Struttura task e sotto-attività ad albero infinito (richiede una <i>Relazione</i> verso la tabella stessa).</li>
+                            <li><b>Workflow Studio:</b> Esplora la mappa concettuale e il grafo dei processi a nodi 2D interattivi.</li>
+                            <li><b>Viste Collegate:</b> Crea specchi dello stesso database, con filtri e ordinamenti indipendenti.</li>
+                            <li><b>Tabelle Pivot & Grafici:</b> Raggruppa e calcola totali, medie o percentuali trasformandoli in grafici.</li>
+                        </ul>
+
+                        <h2>2. Scorciatoie e Trucchi Rapidi</h2>
+                        <div class="adv-widget-shell simple-table-wrapper" data-widget-type="simple-table" contenteditable="false">
+                            <table class="table-striped" style="width:100%; table-layout:auto;">
+                                <tbody>
+                                    <tr>
+                                        <th style="width:25%;">Scorciatoia</th>
+                                        <th style="width:25%;">Funzionalità</th>
+                                        <th style="width:50%;">Descrizione Operativa</th>
+                                    </tr>
+                                    <tr>
+                                        <td><code>[[</code></td>
+                                        <td><span class="tx-c4"><b>Link Rapidi</b></span></td>
+                                        <td>Digita due quadre per cercare e collegare all'istante un'altra nota o capitolo.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><kbd>Ctrl</kbd> + <kbd>D</kbd></td>
+                                        <td><span class="tx-c3"><b>Cursori Multipli</b></span></td>
+                                        <td>Seleziona e modifica in contemporanea tutte le occorrenze identiche della parola.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><code>[] </code> o <code>- </code></td>
+                                        <td><span class="tx-c6"><b>Checklist & Liste</b></span></td>
+                                        <td>Inizia una to-do list o elenco puntato. Usa <kbd>Tab</kbd> / <kbd>Shift+Tab</kbd> per i sotto-livelli.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><kbd>Alt</kbd> + <kbd>⬆</kbd> / <kbd>⬇</kbd></td>
+                                        <td><span class="tx-c7"><b>Sposta Blocco</b></span></td>
+                                        <td>Sposta fisicamente il paragrafo o riga corrente in alto o in basso senza tagliare.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd></td>
+                                        <td><span class="tx-c8"><b>Segnalibro & Timer</b></span></td>
+                                        <td>Fissa un segnalibro nel testo ed imposta promemoria con allarme sonoro.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><kbd>Shift</kbd> + Rotella</td>
+                                        <td><span class="tx-c9"><b>Scroll Orizzontale</b></span></td>
+                                        <td>Scorri lateralmente tabelle, database e bacheche Kanban senza trascinare la scrollbar.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+
+                        <h2>3. Elementi Interattivi Dimostrativi</h2>
+                        <p>
+                            Snippet con copia rapida con un click:
+                            <span class="adv-copy-snippet adv-inline-shell" data-widget-type="snippet" contenteditable="false">
+                                <span class="snippet-text widget-editable-area" contenteditable="true">workspace-local-token-2026</span>
+                                <span class="snippet-copy-btn" title="Copia">📋</span>
+                            </span>
+                        </p>
+                        <p>
+                            Puoi nascondere note e approfondimenti a margine <span class="inline-note-wrapper adv-inline-shell" data-widget-type="inline-note" contenteditable="false"><span class="inline-note-marker">💬</span><span class="inline-note-data" style="display: none;">Questo appunto appare passando il mouse sopra l'icona e viene raccolto a fine pagina!</span></span> che non spezzano la lettura del testo principale.
+                        </p>
+
+                        <h2>4. Riservatezza Assoluta</h2>
+                        <p>Questo Workspace è salvato nella cartella del tuo computer che hai appena selezionato. <b>Nessun dato viene inviato a server esterni</b>: le tue note, i database e le immagini sono al sicuro e sotto il tuo esclusivo controllo.</p>
+                        <p><br></p>
+                    `.trim(),
+                    isMarked: true,
                     expanded: true,
                     createdAt: now,
                     updatedAt: now

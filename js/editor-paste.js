@@ -36,6 +36,7 @@ Object.assign(Editor, {
                 // Rimuoviamo gli Zero-Width Spaces e gli spazi unificatori usati dal DOM
                 plainText = plainText.replace(/<[^>]+>/g, '')
                                      .replace(/&nbsp;/g, ' ')
+                                     .replace(/\u00A0/g, ' ')
                                      .replace(/\u200B/g, '')
                                      .replace(/&lt;/g, '<')
                                      .replace(/&gt;/g, '>')
@@ -69,7 +70,7 @@ Object.assign(Editor, {
             cleanTextDiv.innerHTML = htmlStr;
             
             let plainText = cleanTextDiv.innerText || cleanTextDiv.textContent;
-            plainText = plainText.replace(/\u200B/g, ''); 
+            plainText = plainText.replace(/\u200B/g, '').replace(/\u00A0/g, ' '); 
 
             e.clipboardData.setData('text/html', tempDiv.innerHTML);
             e.clipboardData.setData('text/plain', plainText);
@@ -135,7 +136,6 @@ Object.assign(Editor, {
 
         const sel = window.getSelection();
         if (!sel.rangeCount) { 
-            //console.groupEnd(); 
             return;
         }
         
@@ -306,7 +306,6 @@ Object.assign(Editor, {
                         // Rilevamento di sicurezza: il nodo appartiene all'ecosistema di VanillaDesk?
                         const isInternalWidget = node.closest('.adv-widget-shell, .simple-table-wrapper, .adv-inline-shell');
 
-
                         // 1. Tag Non Ammessi (es. Article, Section, Nav da siti web)
                         if (!allowedTags.includes(tag)) {
                             if (['SCRIPT', 'STYLE', 'META', 'LINK', 'IFRAME', 'OBJECT', 'BUTTON', 'FORM'].includes(tag)) {
@@ -445,7 +444,6 @@ Object.assign(Editor, {
                     });
                     finalHTML = tempWrapper.innerHTML;
 
-                    //console.log("[PASTE-DEBUG] Cursore libero: Converto <br> in <p> per abilitare TAB.");
                     finalHTML = finalHTML.replace(/<br\s*\/?>/gi, '</p><p>');
                     finalHTML = finalHTML.replace(/<p>\s*<\/p>/gi, ''); // Pulisce gli artefatti
 
@@ -453,7 +451,6 @@ Object.assign(Editor, {
                     finalHTML = finalHTML.replace(/%%%BR_SAFE%%%/g, '<br>');
                 }
                 
-                //console.log("[DEBUG-PASTE] HTML finale pronto per l'inserimento:", finalHTML);
                 document.execCommand('insertHTML', false, finalHTML);
                 Editor._ensureLastLineBreak(document.getElementById('noteContent'));
 
@@ -461,7 +458,6 @@ Object.assign(Editor, {
                     WidgetManager.mountAll();
                     Store.triggerAutoSave();
                 }
-                //console.log("[PASTE-DEBUG] Deep Sanitization HTML Completata.");
                 
             } finally {
             }

@@ -320,6 +320,7 @@ const CodeManager = {
         }
         
         if (textToCopy.trim() === '') textToCopy = '';
+        textToCopy = textToCopy.replace(/\u00A0/g, ' ');
         
         navigator.clipboard.writeText(textToCopy).then(() => {
             if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Codice copiato negli appunti!", "success");
