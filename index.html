@@ -145,7 +145,7 @@
                         Imposta le tue automazioni e goditi un workspace che gira alla velocità della luce. Zero cloud, zero abbonamenti: <b>tutto resta al sicuro, solo sul tuo computer.</b>
                     </p>
                     <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
-                        <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.createWorkspace()">
+                        <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.createWorkspace(true)">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folderOpen)</script>
                             </span> Crea Nuovo Workspace
@@ -237,6 +237,9 @@
                     </button>
                     <button id="btnFormatH2" onclick="Editor.toggleHeader('h3')" title="Titolo Secondario (H2)">
                         <script>document.write(Icons.h2)</script>
+                    </button>
+                    <button id="btnFormatQuote" onclick="Editor.toggleBlockquote()" title="Citazione a Blocco / Riquadro (Quote)">
+                        <script>document.write(Icons.quote)</script>
                     </button>
 
                     <div class="color-picker-group" style="border:none;">
