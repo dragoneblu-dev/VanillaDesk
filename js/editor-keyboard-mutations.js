@@ -188,6 +188,46 @@ Object.assign(Editor, {
 
         if (WidgetManager.isProtectedBlock(node)) return;
 
+        // --- GESTIONE INVIO SU TITOLI (h1..h6) ---
+        const heading = node.closest('h1, h2, h3, h4, h5, h6');
+        if (heading && !heading.closest('.adv-widget-shell')) {
+            const range = selection.getRangeAt(0);
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(heading);
+            preRange.setEnd(range.startContainer, range.startOffset);
+            const isAtStart = !preRange.toString().replace(/[\u200B\uFEFF\u00A0\n\r]/g, '');
+
+            const postRange = range.cloneRange();
+            postRange.selectNodeContents(heading);
+            postRange.setStart(range.endContainer, range.endOffset);
+            const isAtEnd = !postRange.toString().replace(/[\u200B\uFEFF\u00A0\n\r]/g, '');
+
+            if (isAtStart || isAtEnd) {
+                e.preventDefault();
+                Editor.saveSnapshot();
+                const p = document.createElement('p');
+                p.innerHTML = '<br>';
+
+                if (isAtStart && !isAtEnd) {
+                    // Invio a inizio titolo: inserisci paragrafo vuoto sopra e mantieni il cursore sul titolo
+                    heading.parentNode.insertBefore(p, heading);
+                } else {
+                    // Invio a fine titolo o su titolo vuoto: inserisci paragrafo sotto e spostati lì
+                    if (isAtStart && isAtEnd) heading.parentNode.replaceChild(p, heading);
+                    else heading.parentNode.insertBefore(p, heading.nextSibling);
+
+                    const newRange = document.createRange();
+                    newRange.setStart(p, 0);
+                    newRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                }
+
+                Store.triggerAutoSave();
+                return;
+            }
+        }
+
         const closestLi = node.closest('li');
         const closestList = closestLi ? closestLi.parentElement : null;
 
@@ -255,19 +295,15 @@ Object.assign(Editor, {
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
 
-        //console.groupCollapsed('🔴 [DEBUG-BACKSPACE] Avvio Backspace');
-
         if (!selection.isCollapsed) {
             if (!Editor.handleBulkWidgetDeletion()) {
                 e.preventDefault();
-                //console.groupEnd();
                 return;
             }
             e.preventDefault();
             Editor.saveSnapshot();
             document.execCommand('delete', false, null);
             Store.triggerAutoSave();
-            //console.groupEnd();
             return;
         }
 
@@ -276,8 +312,8 @@ Object.assign(Editor, {
 
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
 
-        if (container.nodeType === 3 && WidgetManager.isProtectedBlock(container.parentNode) && !WidgetManager.isInsideEditableWidgetArea(container.parentNode)) { console.groupEnd(); return; }
-        if (container.closest && WidgetManager.isProtectedBlock(container) && !WidgetManager.isInsideEditableWidgetArea(container)) { console.groupEnd(); return; }
+        if (container.nodeType === 3 && WidgetManager.isProtectedBlock(container.parentNode) && !WidgetManager.isInsideEditableWidgetArea(container.parentNode)) { return; }
+        if (container.closest && WidgetManager.isProtectedBlock(container) && !WidgetManager.isInsideEditableWidgetArea(container)) { return; }
 
         const closestLi = container.nodeType === 3 ? container.parentNode.closest('li') : (container.closest ? container.closest('li') : null);
         const closestList = closestLi ? closestLi.parentElement : null;
@@ -330,18 +366,26 @@ Object.assign(Editor, {
                         }
                     }
                 }
-                //console.groupEnd();
                 return;
             }
         }
 
-        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3') : (container.closest ? container.closest('p, div, li, h1, h2, h3') : null);
+        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
         
-        if (block && range.startOffset === 0 && (container.nodeType !== 3 || container.previousSibling === null)) {
-            const isEmptyBlock = block.textContent.replace(/[\u200B\n\r]/g, '').trim() === '';
+        // Verifica se il cursore è all'inizio del blocco corrente
+        let isAtBlockStart = false;
+        if (block) {
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(block);
+            preRange.setEnd(range.startContainer, range.startOffset);
+            isAtBlockStart = !preRange.toString().replace(/[\u200B\uFEFF\u00A0\n\r]/g, '');
+        }
+
+        if (block && isAtBlockStart) {
+            const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+            const isEmptyBlock = cleanText(block.textContent) === '';
             
-            // FIX TREEWALKER: Usa un esploratore del DOM per trovare il VERO nodo precedente, 
-            // scavalcando le barriere strutturali (es. List item dentro a un UL/OL).
+            // Trova il blocco visivo precedente tramite TreeWalker
             let prevNode = null;
             const walker = document.createTreeWalker(document.getElementById('noteContent'), NodeFilter.SHOW_ELEMENT, null, false);
             walker.currentNode = block;
@@ -359,10 +403,32 @@ Object.assign(Editor, {
                 }
             }
 
-            //console.log("[DEBUG-BACKSPACE] prevNode individuato per Merge tramite TreeWalker:", prevNode);
+            // Se il blocco precedente è vuoto: rimuovilo senza spostare il cursore a fine riga
+            if (prevNode && !WidgetManager.isProtectedBlock(prevNode) && cleanText(prevNode.textContent) === '') {
+                e.preventDefault();
+                Editor.saveSnapshot();
+                prevNode.remove();
+                Store.triggerAutoSave();
+                return;
+            }
 
-            // FIX MANUAL MERGE (BACKSPACE): Se tiriamo su il blocco e il nodo precedente contiene Widget Inline
-            // Fondere nativamente distruggerebbe lo span contenteditable="false". Usiamo il Manual Merge!
+            // Se il blocco corrente è vuoto: rimuovilo e posiziona il cursore sul blocco precedente
+            if (isEmptyBlock && prevNode && !WidgetManager.isProtectedBlock(prevNode) && !block.closest('li, table, .adv-widget-shell')) {
+                e.preventDefault();
+                Editor.saveSnapshot();
+
+                const newRange = document.createRange();
+                newRange.selectNodeContents(prevNode);
+                newRange.collapse(false);
+
+                block.remove();
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+                Store.triggerAutoSave();
+                return;
+            }
+
+            // Merge protetto per blocchi contenenti widget inline
             if (prevNode && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(prevNode.tagName) && block.querySelector('.adv-inline-shell')) {
                  e.preventDefault();
                  Editor.saveSnapshot();
@@ -390,18 +456,13 @@ Object.assign(Editor, {
                  sel.addRange(newRange);
                  marker.remove();
                  Store.triggerAutoSave();
-                 //console.log("[DEBUG-BACKSPACE] Merge manuale eseguito per proteggere inline widget.");
-                 //console.groupEnd();
                  return;
             }
 
+            // Selezione / eliminazione sicura davanti a widget protetti
             if (prevNode && WidgetManager.isProtectedBlock(prevNode)) {
-                
-                // LA CORREZIONE: Se siamo dentro a un widget e il nodo precedente appartiene
-                // allo stesso widget, lasciamo che il browser faccia il suo lavoro nativo.
                 const targetWidget = prevNode.closest('.adv-widget-shell');
                 if (currentWidget && targetWidget && currentWidget === targetWidget) {
-                    //console.groupEnd();
                     return; 
                 }
 
@@ -419,7 +480,6 @@ Object.assign(Editor, {
 
                     block.remove();
                     Store.triggerAutoSave();
-                    //console.groupEnd();
                     return;
                 }
 
@@ -434,39 +494,30 @@ Object.assign(Editor, {
                         Editor.selectedWidget = shell;
                     }
                 }
-                //console.groupEnd();
                 return; 
             }
         }
-        //console.log("[DEBUG-BACKSPACE] Backspace gestito nativamente dal browser");
-        //console.groupEnd();
     },
 
     handleDeleteKey: (e) => {
-        //console.groupCollapsed('🔴 [DEBUG-DELETE] Avvio Tasto Delete (Canc)');
         const selection = window.getSelection();
-        if (!selection.rangeCount) { console.groupEnd(); return; }
+        if (!selection.rangeCount) return;
 
         if (!selection.isCollapsed) {
-            //console.log("[DEBUG-DELETE] Esecuzione Bulk Delete su selezione.");
             if (!Editor.handleBulkWidgetDeletion()) {
                 e.preventDefault();
-                //console.groupEnd();
                 return;
             }
             e.preventDefault();
             Editor.saveSnapshot();
             document.execCommand('delete', false, null);
             Store.triggerAutoSave();
-            //console.groupEnd();
             return;
         }
 
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
-        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3') : (container.closest ? container.closest('p, div, li, h1, h2, h3') : null);
-        
-        //console.log("[DEBUG-DELETE] Delete su Block:", block);
+        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
 
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
 
@@ -481,8 +532,6 @@ Object.assign(Editor, {
                 
                 // Se c'è un BR nativo che il browser può rimuovere, lasciamo fare a lui
                 if (nextTextNode && nextTextNode.nodeName === 'BR') {
-                    //console.log("[DEBUG-DELETE] Ignoro: sono davanti a un <br>");
-                    //console.groupEnd();
                     return; 
                 }
                 isAtEnd = true;
@@ -495,8 +544,6 @@ Object.assign(Editor, {
             if (isEmptyBlock) isAtEnd = true;
 
             if (isAtEnd) {
-                // FIX TREEWALKER: Invece di chiedere block.nextElementSibling (che in un LI restituisce null),
-                // usiamo un TreeWalker assoluto per scovare il VERO blocco fisico successivo nel documento!
                 let nextNode = null;
                 const walker = document.createTreeWalker(document.getElementById('noteContent'), NodeFilter.SHOW_ELEMENT, null, false);
                 walker.currentNode = block;
@@ -510,8 +557,6 @@ Object.assign(Editor, {
                         }
                     }
                 }
-
-                //console.log("[DEBUG-DELETE] NextNode individuato per Merge tramite TreeWalker:", nextNode);
 
                 // FIX MANUAL MERGE (DELETE): Se il nodo successivo contiene un widget inline (come un appunto o snippet),
                 // il merge nativo del browser distruggerebbe i tag contenteditable=false. Lo uniamo manualmente!
@@ -544,17 +589,14 @@ Object.assign(Editor, {
                     marker.remove();
                     
                     Store.triggerAutoSave();
-                    //console.log("[DEBUG-DELETE] Merge manuale eseguito con successo per salvare gli inline widget.");
-                    //console.groupEnd();
                     return;
                 }
 
                 if (nextNode && WidgetManager.isProtectedBlock(nextNode)) {
                     
-                    // LA CORREZIONE: Stesso principio del Backspace
+                    // Stesso principio del Backspace
                     const targetWidget = nextNode.closest('.adv-widget-shell');
                     if (currentWidget && targetWidget && currentWidget === targetWidget) {
-                        //console.groupEnd();
                         return; 
                     }
 
@@ -572,7 +614,6 @@ Object.assign(Editor, {
 
                         block.remove();
                         Store.triggerAutoSave();
-                        //console.groupEnd();
                         return;
                     }
 
@@ -587,12 +628,9 @@ Object.assign(Editor, {
                             Editor.selectedWidget = shell;
                         }
                     }
-                    //console.groupEnd();
                     return; 
                 }
             }
         }
-        //console.log("[DEBUG-DELETE] Delete gestito nativamente dal browser");
-        //console.groupEnd();
     }
 });

@@ -4,8 +4,10 @@
  * e Re-Idratazione dello stato RAM di tutti i Widget complessi.
  * FIX UNDO/REDO CARET: Ripristino matematico e infallibile della posizione del cursore
  * per elenchi numerati, liste, blocchi di testo e intestazioni tramite marcatore di cronologia preservato.
- * Gestione sicura del DOM vivo: l'iniezione del marcatore avviene solo se il cursore è collassato,
- * preservando integralmente le selezioni attive ed evitando la corruzione dei nodi su Taglia e Cancella.
+ * Gestione sicura del DOM vivo: salvataggio coordinate anche per selezioni estese (drag & drop di testo)
+ * con ripristino fedele del range, prevenendo il reset del cursore all'inizio della nota dopo Undo.
+ * FIX DRAG & DROP UNDO: Parametro forcePush su saveSnapshot per bypassare il controllo di deduplicazione
+ * durante le mutazioni asincrone da trascinamento testo, garantendo la creazione corretta del punto di ripristino.
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -197,7 +199,7 @@ Object.assign(Editor, {
         return Editor.minifyHTMLForStorage(tempDiv.innerHTML, true);
     },
 
-    saveSnapshot: () => {
+    saveSnapshot: (forcePush = false) => {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
 
@@ -210,50 +212,49 @@ Object.assign(Editor, {
 
         const sel = window.getSelection();
         if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-            // Se c'è una selezione estesa (testo evidenziato), NON iniettiamo il marker nel DOM vivo
-            // per evitare di spezzare i nodi di testo o collassare la selezione attiva
+            // SICUREZZA DOM: Il marcatore temporaneo viene inserito SOLO su cursore collassato
+            // per evitare di spezzare nodi di testo o corrompere le selezioni estese
             if (sel.isCollapsed) {
-                const node = sel.anchorNode;
-                
-                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-                
-                if (preNode) {
-                    const range = sel.getRangeAt(0);
-                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                    if (activeCodeBlockWrapper) {
-                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                        codeBlockCaret = true;
-                    }
-                } else {
-                    try {
-                        const range = sel.getRangeAt(0);
-                        origContainer = range.startContainer;
-                        origOffset = range.startOffset;
-
-                        const markerRange = range.cloneRange();
-                        markerRange.collapse(true);
-
-                        const marker = document.createElement('span');
-                        marker.id = 'history-undo-marker-temp';
-                        marker.style.display = 'none';
-
-                        markerRange.insertNode(marker);
-                        markerInserted = true;
-
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
-                            secondPart = marker.nextSibling;
-                        }
-                    } catch (e) { 
-                        console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
-                    }
+	            const node = sel.anchorNode;
+	            const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+	            
+	            if (preNode) {
+	                const range = sel.getRangeAt(0);
+	                const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+	                activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+	                if (activeCodeBlockWrapper) {
+	                    activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+	                    codeBlockCaret = true;
+	                }
+	            } else {
+	                try {
+	                    const range = sel.getRangeAt(0);
+	                        origContainer = range.startContainer;
+	                        origOffset = range.startOffset;
+	
+	                    const markerRange = range.cloneRange();
+	                    markerRange.collapse(true);
+	
+	                    const marker = document.createElement('span');
+	                    marker.id = 'history-undo-marker-temp';
+	                    marker.style.display = 'none';
+	
+	                    markerRange.insertNode(marker);
+	                    markerInserted = true;
+	
+	                        if (origContainer.nodeType === Node.TEXT_NODE) {
+	                        secondPart = marker.nextSibling;
+	                    }
+	                } catch (e) { 
+	                    console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
+	                }
                 }
             }
         }
 
         const htmlToSave = Editor._buildHistorySnapshot(editor);
 
-        // Nel DOM vivo: rimuoviamo il marker e ricongiungiamo i nodi di testo ripristinando il punto cursore
+        // Nel DOM vivo: rimuoviamo il marker e ricongiungiamo i nodi di testo ripristinando la selezione integra
         if (markerInserted) {
             const startM = document.getElementById('history-undo-marker-temp');
             if (startM) startM.remove();
@@ -266,14 +267,9 @@ Object.assign(Editor, {
             try {
                 if (origContainer && document.body.contains(origContainer)) {
                     const restoreRange = document.createRange();
-                    if (origContainer.nodeType === Node.TEXT_NODE) {
-                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                        restoreRange.setStart(origContainer, safeOffset);
-                    } else {
-                        const safeOffset = Math.min(origOffset, origContainer.childNodes.length);
-                        restoreRange.setStart(origContainer, safeOffset);
-                    }
-                    restoreRange.collapse(true);
+                    const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                    restoreRange.setStart(origContainer, safeOffset);
+                        restoreRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(restoreRange);
                 }
@@ -284,8 +280,8 @@ Object.assign(Editor, {
             activeCodeBlockWrapper.removeAttribute('data-undo-caret');
         }
 
-        // Evita duplicazioni di snapshot identici nel contenuto
-        if (Editor.undoStack.length > 0) {
+        // Evita duplicazioni di snapshot identici nel contenuto a meno che non sia forzato (es. Drag & Drop atomico)
+        if (!forcePush && Editor.undoStack.length > 0) {
             const cleanRegex = /<span id="history-undo-marker-temp"[^>]*><\/span>/gi;
             const cleanLast = Editor.undoStack[Editor.undoStack.length - 1].replace(cleanRegex, '');
             const cleanNew = htmlToSave.replace(cleanRegex, '');
@@ -461,6 +457,7 @@ Object.assign(Editor, {
 
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+                if (sel.isCollapsed) {
                 const node = sel.anchorNode;
                 const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
                 
@@ -475,8 +472,8 @@ Object.assign(Editor, {
                 } else {
                     try {
                         const range = sel.getRangeAt(0);
-                        origContainer = range.startContainer;
-                        origOffset = range.startOffset;
+                            origContainer = range.startContainer;
+                            origOffset = range.startOffset;
 
                         const markerRange = range.cloneRange();
                         markerRange.collapse(true);
@@ -488,11 +485,12 @@ Object.assign(Editor, {
                         markerRange.insertNode(marker);
                         markerInserted = true;
 
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            if (origContainer.nodeType === Node.TEXT_NODE) {
                             secondPart = marker.nextSibling;
                         }
                     } catch (e) { }
                 }
+            }
             }
 
             const htmlToSaveForRedo = Editor._buildHistorySnapshot(editor);
@@ -510,14 +508,9 @@ Object.assign(Editor, {
                 try {
                     if (origContainer && document.body.contains(origContainer)) {
                         const restoreRange = document.createRange();
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
-                            const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                            restoreRange.setStart(origContainer, safeOffset);
-                        } else {
-                            const safeOffset = Math.min(origOffset, origContainer.childNodes.length);
-                            restoreRange.setStart(origContainer, safeOffset);
-                        }
-                        restoreRange.collapse(true);
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                            restoreRange.collapse(true);
                         sel.removeAllRanges();
                         sel.addRange(restoreRange);
                     }
@@ -570,6 +563,7 @@ Object.assign(Editor, {
 
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+                if (sel.isCollapsed) {
                 const node = sel.anchorNode;
                 const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
                 
@@ -584,8 +578,8 @@ Object.assign(Editor, {
                 } else {
                     try {
                         const range = sel.getRangeAt(0);
-                        origContainer = range.startContainer;
-                        origOffset = range.startOffset;
+                            origContainer = range.startContainer;
+                            origOffset = range.startOffset;
 
                         const markerRange = range.cloneRange();
                         markerRange.collapse(true);
@@ -597,11 +591,12 @@ Object.assign(Editor, {
                         markerRange.insertNode(marker);
                         markerInserted = true;
 
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            if (origContainer.nodeType === Node.TEXT_NODE) {
                             secondPart = marker.nextSibling;
                         }
                     } catch (e) { }
                 }
+            }
             }
 
             const htmlToSaveForUndo = Editor._buildHistorySnapshot(editor);
@@ -619,14 +614,9 @@ Object.assign(Editor, {
                 try {
                     if (origContainer && document.body.contains(origContainer)) {
                         const restoreRange = document.createRange();
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
-                            const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                            restoreRange.setStart(origContainer, safeOffset);
-                        } else {
-                            const safeOffset = Math.min(origOffset, origContainer.childNodes.length);
-                            restoreRange.setStart(origContainer, safeOffset);
-                        }
-                        restoreRange.collapse(true);
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                            restoreRange.collapse(true);
                         sel.removeAllRanges();
                         sel.addRange(restoreRange);
                     }
