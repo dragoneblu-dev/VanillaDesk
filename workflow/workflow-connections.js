@@ -16,6 +16,9 @@
  * - FIX GEOMETRICO: Ripristinato il confronto corretto sull'asse Y (cornerY !== q2.y) per le uscite verticali.
  */
 
+// Inizializzazione del registro persistito dei ruoli delle porte
+WorkflowApp._portRoles = WorkflowApp._portRoles || {};
+
 Object.assign(WorkflowApp, {
 
     // =========================================================================
@@ -182,7 +185,7 @@ Object.assign(WorkflowApp, {
         path.setAttribute('stroke-dasharray', '5');
         path.setAttribute('fill', 'none');
         path.setAttribute('marker-end', 'url(#wfArrow)');
-        svg.appendChild(path);
+        if (svg) svg.appendChild(path);
 
         WorkflowApp.linkDragState = {
             active: true,
@@ -200,6 +203,8 @@ Object.assign(WorkflowApp, {
         if (!WorkflowApp.linkDragState.active) return;
 
         const viewport = document.getElementById('canvasViewport');
+        if (!viewport) return;
+
         const rect = viewport.getBoundingClientRect();
         const margin = 60;
         const maxSpeed = 16;
@@ -230,6 +235,8 @@ Object.assign(WorkflowApp, {
         if (!WorkflowApp.linkDragState.active || !WorkflowApp.linkDragState.tempPath) return;
 
         const plane = document.getElementById('canvasPlane');
+        if (!plane) return;
+
         const rect = plane.getBoundingClientRect();
         const zoom = WorkflowApp.layout.zoom || 1;
 
@@ -876,6 +883,8 @@ Object.assign(WorkflowApp, {
             svg.appendChild(path);
         });
 
+        if (typeof WorkflowApp.updateMinimap === 'function') {
         WorkflowApp.updateMinimap();
+        }
     }
 });

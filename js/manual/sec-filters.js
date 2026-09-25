@@ -1,17 +1,45 @@
 Manual.registerSection(
     'sec-6',
     '6. Ricerca, Filtri, Tag Globali e Paginazione',
-    `<p>L'applicazione distingue tra la ricerca generale (usata per trovare le Note) e la manipolazione matematica dei database tramite le condizioni WHERE.</p>
+    `<p>L'applicazione distingue tra la ricerca generale (usata per trovare le Note e filtrare tramite metadati globali) e la manipolazione analitica dei database tramite le condizioni WHERE.</p>
     
     <h4>Ricerca Globale e Autocompletamento Tag (Sidebar)</h4>
-    <p>La barra di ricerca in alto a sinistra scandaglia l'intero spazio di lavoro. Cerca le parole sia nei titoli che nei contenuti, <b>inclusi i testi degli appunti nascosti (Footnotes)</b>.</p>
-    <p><b>La Magia dei Filtri Strutturali (Tag):</b><br>
-    Non appena inizi a digitare nella barra di ricerca, l'applicazione aprirà un menu a tendina intelligente (Autocompletamento). Il sistema va a leggere il Database di Sistema (quello che gestisce le Proprietà e le Etichette delle Pagine) e ti suggerisce dei filtri basati su ciò che hai scritto.</p>
+    <p>La barra di ricerca in alto a sinistra (<i>"Cerca o digita Tag..."</i>) scandaglia l'intero spazio di lavoro. Cerca le parole in tempo reale sia nei titoli che nei contenuti, <b>inclusi i testi degli appunti nascosti (Footnotes), i blocchi di codice e i diari</b>.</p>
+    
+    <p><b>La Magia dei Filtri Strutturali (Tag e Proprietà):</b><br>
+    Non appena inizi a digitare nella barra di ricerca, compare una tendina ad alta visibilità (con capienza espansa a <b>7-8 righe visibili</b>). Il sistema legge in tempo reale il Database di Sistema (quello che gestisce le Proprietà e le Etichette di tutte le Note) e ti suggerisce filtri mirati:</p>
     <ul>
-        <li><b>Filtro per Valore Esatto:</b> Se hai assegnato il Tag "Urgente" a 5 note, digitando "urg" il sistema ti suggerirà la pillola colorata "Urgente". Cliccandola, l'albero mostrerà <i>esclusivamente</i> le 5 note che possiedono quel Tag.</li>
-        <li><b>Filtro di Esistenza (*EXISTS*):</b> Il sistema ti suggerirà anche l'etichetta 🏷️ della proprietà stessa (Es. "Qualsiasi valore in <i>Data Scadenza</i>"). Cliccandola, filtrerai l'albero per mostrare tutte le note che hanno quel campo compilato, a prescindere dal valore che contiene!</li>
-        <li>I filtri scelti diventano delle <b>Pillole Colorate</b> posizionate sotto la barra di ricerca. Puoi combinarne quanti ne vuoi per creare ricerche incrociate potentissime.</li>
+        <li><b>Filtro per Valore Specifico:</b> Se digiti una parola (es. <i>"Urgente"</i>), il sistema ti mostra la pillola colorata con il valore esatto e la colonna a cui appartiene (es. <code>Urgente in Priorità</code>). Cliccandola, l'albero mostrerà solo le note con quel valore.</li>
+        <li><b>Risoluzione Semantica delle Relazioni:</b> Se la proprietà è una <i>Relazione</i> verso un altro database o verso altre note, non vedrai mai codici tecnici incomprensibili (come <code>sys_r_*</code>). L'autocompletamento mostra sempre il <b>titolo reale e leggibile</b> del record o della pagina collegata.</li>
+        <li><b>Filtro di Esistenza (*EXISTS*):</b> Digitando il nome di una colonna (es. <i>"Scadenza"</i>), il sistema ti proporrà <code>🏷️ Scadenza (Mostra note con questo campo compilato)</code>. Cliccandolo, isolerai tutte le pagine che hanno quella proprietà valorizzata, a prescindere dal valore inserito.</li>
     </ul>
+
+    <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 25px 0;">
+
+    <h4>Pillole Filtro Interattive (Faceted Filter Chips)</h4>
+    <p>Quando selezioni un suggerimento, questo si trasforma in una <b>Pillola Attiva</b> collocata subito sotto la barra di ricerca. Le pillole utilizzano un'interfaccia a doppio comando studiata per evitare click accidentali:</p>
+    
+    <div style="background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 8px; padding: 15px; margin: 15px 0;">
+        <div style="display:flex; align-items:center; gap:8px; margin-bottom:10px;">
+            <span class="adv-select-pill default-color" style="display:inline-flex; align-items:center; gap:0; padding:2px 4px 2px 8px; border-radius:12px; font-weight:500;">
+                <span style="display:inline-flex; align-items:center; gap:4px;">Priorità: Alta <span style="opacity:0.6; font-size:0.7rem;">▾</span></span>
+                <span style="width:1px; height:12px; background:currentColor; opacity:0.25; margin:0 6px;"></span>
+                <span style="opacity:0.6; font-weight:bold; padding:0 2px;">✕</span>
+            </span>
+            <span style="font-size:0.8rem; color:var(--text-secondary);">Struttura della nuova pillola a due zone indipendenti</span>
+        </div>
+        <ul style="margin: 0; padding-left: 20px; font-size: 0.88rem; line-height: 1.6;">
+            <li><b>Corpo della Pillola (Click per aprire il menu ▾):</b> Cliccando sul testo della pillola si apre una tendina compatta ad alta densità informativa. Da qui puoi:
+                <ul>
+                    <li>Cambiare istantaneamente il valore del filtro (es. passare da <i>Alta</i> a <i>Bassa</i>) senza dover riscrivere nella barra di ricerca.</li>
+                    <li>Scegliere la prima voce <code>Qualsiasi valore (*EXISTS*)</code> per allargare il filtro a tutti i record compilati.</li>
+                    <li>Visualizzare l'elenco ordinato da A alla Z di tutti i valori realmente presenti nel workspace, con spunta di conferma sul valore attivo.</li>
+                </ul>
+            </li>
+            <li><b>Pulsante di Chiusura (Click isolato sulla ✕):</b> Separa fisicamente il comando di cancellazione dal corpo del testo. Cliccando sulla <code>✕</code>, il filtro viene rimosso immediatamente senza rischiare di aprire la tendina per errore.</li>
+            <li><b>Combinazione Multipla:</b> Puoi attivare contemporaneamente più pillole (es. <code>Priorità: Alta</code> + <code>Cliente: Acme</code> + <code>Approvato: Sì</code>) per ottenere ricerche incrociate capillari in un istante.</li>
+        </ul>
+    </div>
 
     <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 30px 0;">
 

@@ -101,11 +101,13 @@ const AdvancedPivotMenus = {
             if (card.dataset.type === type) {
                 card.style.borderColor = 'var(--accent-color)';
                 card.style.backgroundColor = 'rgba(37, 99, 235, 0.05)';
-                card.querySelector('.chart-type-icon').style.color = 'var(--accent-color)';
+                const icon = card.querySelector('.chart-type-icon');
+                if (icon) icon.style.color = 'var(--accent-color)';
             } else {
                 card.style.borderColor = 'var(--border-color)';
                 card.style.backgroundColor = 'var(--bg-color)';
-                card.querySelector('.chart-type-icon').style.color = 'var(--text-secondary)';
+                const icon = card.querySelector('.chart-type-icon');
+                if (icon) icon.style.color = 'var(--text-secondary)';
             }
         });
     },
@@ -116,15 +118,41 @@ const AdvancedPivotMenus = {
             if (card.dataset.palette === paletteKey) {
                 card.style.borderColor = 'var(--accent-color)';
                 card.style.backgroundColor = 'rgba(37, 99, 235, 0.05)';
-                card.querySelector('.palette-label').style.fontWeight = 'bold';
-                card.querySelector('.palette-label').style.color = 'var(--accent-color)';
+                const lbl = card.querySelector('.palette-label');
+                if (lbl) {
+                    lbl.style.fontWeight = 'bold';
+                    lbl.style.color = 'var(--accent-color)';
+                }
             } else {
                 card.style.borderColor = 'var(--border-color)';
                 card.style.backgroundColor = 'transparent';
-                card.querySelector('.palette-label').style.fontWeight = 'normal';
-                card.querySelector('.palette-label').style.color = 'var(--text-primary)';
+                const lbl = card.querySelector('.palette-label');
+                if (lbl) {
+                    lbl.style.fontWeight = 'normal';
+                    lbl.style.color = 'var(--text-primary)';
+            }
             }
         });
+    },
+
+    switchToFullConfig: (tableId) => {
+        // Preserva le opzioni estetiche correntemente modificate a video prima di cambiare schermata
+        if (AdvancedPivotMenus.pendingConfig) {
+            const chartTypeInput = document.getElementById('pivotChartStyle');
+            const stackCheck = document.getElementById('chartStacked');
+            const labelsCheck = document.getElementById('chartShowLabels');
+            const centerCheck = document.getElementById('chartCenterTotal');
+            const legendPosSel = document.getElementById('chartLegendPos');
+            const paletteSel = document.getElementById('chartColorPalette');
+
+            if (chartTypeInput) AdvancedPivotMenus.pendingConfig.chartConfig.type = chartTypeInput.value;
+            if (stackCheck) AdvancedPivotMenus.pendingConfig.chartConfig.stacked = stackCheck.checked;
+            if (labelsCheck) AdvancedPivotMenus.pendingConfig.chartConfig.showLabels = labelsCheck.checked;
+            if (centerCheck) AdvancedPivotMenus.pendingConfig.chartConfig.centerTotal = centerCheck.checked;
+            if (legendPosSel) AdvancedPivotMenus.pendingConfig.chartConfig.legendPos = legendPosSel.value;
+            if (paletteSel) AdvancedPivotMenus.pendingConfig.chartConfig.colorPalette = paletteSel.value;
+        }
+        AdvancedPivotMenus.openCreateWizard(tableId, false);
     },
 
     openCreateWizard: (editTableId = null, chartOnlyMode = false) => {
@@ -142,6 +170,7 @@ const AdvancedPivotMenus = {
             });
         }
 
+        if (!AdvancedPivotMenus.pendingConfig || AdvancedPivotMenus.pendingConfig.tableId !== editTableId) {
         AdvancedPivotMenus.pendingConfig = {
             tableId: editTableId,
             sourceId: null,
@@ -149,12 +178,14 @@ const AdvancedPivotMenus = {
             aggregations: [],
             chartConfig: { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default' }
         };
+        }
 
         let isEditing = false;
         if (editTableId) {
             const state = AdvancedTable.getState(editTableId);
             if (state && state.isPivot) {
                 isEditing = true;
+                if (!AdvancedPivotMenus.pendingConfig.sourceId) {
                 AdvancedPivotMenus.pendingConfig.sourceId = state.sourceTableId;
                 AdvancedPivotMenus.pendingConfig.groupBy = [...state.groupBy];
                 AdvancedPivotMenus.pendingConfig.aggregations = JSON.parse(JSON.stringify(state.aggregations));
@@ -164,6 +195,7 @@ const AdvancedPivotMenus = {
                         AdvancedPivotMenus.pendingConfig.chartConfig, 
                         JSON.parse(JSON.stringify(state.chartConfig))
                     );
+                }
                 }
 
                 const dbRef = dbList.find(d => d.id === state.sourceTableId);
@@ -228,7 +260,19 @@ const AdvancedPivotMenus = {
             let yLabels = AdvancedPivotMenus.pendingConfig.aggregations.map(agg => agg.label).join(', ');
 
             summaryHTML = `
-                <div style="background: rgba(0,0,0,0.02); padding: 12px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 20px; font-size:0.8rem;">
+                <div class="adv-card-interactive" onclick="AdvancedPivotMenus.switchToFullConfig('${editTableId}')"
+                     title="Clicca per modificare raggruppamenti, formule e metriche analitiche"
+                     style="background: var(--bg-color); padding: 12px 14px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 20px; font-size:0.8rem; cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 3px rgba(0,0,0,0.05);"
+                     onmouseenter="this.style.borderColor='var(--accent-color)'; this.style.backgroundColor='var(--item-hover)';"
+                     onmouseleave="this.style.borderColor='var(--border-color)'; this.style.backgroundColor='var(--bg-color)';">
+                    
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid var(--border-color); padding-bottom:6px;">
+                        <span style="font-weight:bold; color:var(--text-secondary); text-transform:uppercase; font-size:0.7rem; letter-spacing:0.05em;">Dati e Struttura Analitica</span>
+                        <span style="font-size:0.75rem; color:var(--accent-color); font-weight:bold; display:inline-flex; align-items:center; gap:4px;">
+                            ${Icons.edit} Modifica Dati & Gruppi ➔
+                        </span>
+                    </div>
+
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
                         <span style="opacity:0.6; display:inline-flex;">${Icons.tableDatabase}</span> 
                         <span style="color:var(--text-secondary);">Sorgente:</span> <b>${sourceDbTitle}</b>
@@ -724,7 +768,7 @@ const AdvancedPivotMenus = {
                         <button class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0;" onclick="AdvancedPivotMenus.removeItem('groupBy', ${idx})">${Icons.close}</button>
                     </div>`;
             });
-            gHtml += `<div class="drag-item" ondragover="AdvancedPivotMenus.onDragOver(event, 'groupBy')" ondragleave="AdvancedPivotMenus.onDragLeave(event)" ondrop="AdvancedPivotMenus.onDrop(event, 'groupBy', ${config.groupBy.length})" style="height:10px;"></div>`;
+            gHtml += `<div class="drag-item" ondragover="AdvancedPivotMenus.onDragOver(event)" ondragleave="AdvancedPivotMenus.onDragLeave(event)" ondrop="AdvancedPivotMenus.onDrop(event, 'groupBy', ${config.groupBy.length})" style="height:10px;"></div>`;
             if(gList) gList.innerHTML = gHtml;
         }
 
@@ -743,7 +787,7 @@ const AdvancedPivotMenus = {
                         <button class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0;" onclick="AdvancedPivotMenus.removeItem('aggregations', ${idx})">${Icons.close}</button>
                     </div>`;
             });
-            aHtml += `<div class="drag-item" ondragover="AdvancedPivotMenus.onDragOver(event, 'aggregations')" ondragleave="AdvancedPivotMenus.onDragLeave(event)" ondrop="AdvancedPivotMenus.onDrop(event, 'aggregations', ${config.aggregations.length})" style="height:10px;"></div>`;
+            aHtml += `<div class="drag-item" ondragover="AdvancedPivotMenus.onDragOver(event)" ondragleave="AdvancedPivotMenus.onDragLeave(event)" ondrop="AdvancedPivotMenus.onDrop(event, 'aggregations', ${config.aggregations.length})" style="height:10px;"></div>`;
             if(aList) aList.innerHTML = aHtml;
         }
     },

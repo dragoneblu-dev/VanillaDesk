@@ -3,8 +3,7 @@
  * Modulo dedicato al DOM dell'albero gerarchico laterale e Drag&Drop delle Note.
  * Rendering reattivo e isolato dei tempi residui per i segnalibri temporizzati.
  * Integrazione visiva della nuvoletta per i segnalibri provvisti di note/commenti.
- * FIX SEARCH: extractSearchableText ora estrae il testo dei blocchi di codice 
- * e dei diari leggendoli direttamente da AppState.databases.
+ * Tracciamento dello stato dirty su spostamento e riordino delle note nell'albero.
  */
 
 Object.assign(UI, {
@@ -874,6 +873,7 @@ Object.assign(UI, {
             if (position === 'top') AppState.notes.splice(targetIndex, 0, draggedNote); 
             else if (position === 'bottom') AppState.notes.splice(targetIndex + 1, 0, draggedNote); 
         } 
+        draggedNote._isDirty = true;
         UI.renderTree(); 
         if (typeof Store !== 'undefined') Store.triggerAutoSave(); 
     },

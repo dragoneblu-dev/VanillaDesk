@@ -154,9 +154,6 @@ Object.assign(Editor, {
             // Spoglia l'a capo strutturale del motore grafico per lavorare sui veri dati utente
             if (rawText.endsWith('\n')) rawText = rawText.slice(0, -1);
 
-            // FIX: Se l'utente clicca all'estrema fine del blocco codice, il browser posiziona
-            // il cursore DOPO il <br> strutturale invisibile. Dobbiamo clampare matematicamente 
-            // l'offset alla lunghezza reale del testo per evitare la scomparsa del cursore.
             if (currentPos > rawText.length) {
                 currentPos = rawText.length;
             }
@@ -382,6 +379,11 @@ Object.assign(Editor, {
         }
 
         if (block && isAtBlockStart) {
+            // Se il cursore si trova all'interno di un'area editabile di un widget (es. Diario, Cella, Codice),
+            // non permettere a Backspace di evadere per cancellare il guscio genitore o widget adiacenti
+            if (currentWidget) {
+                return;
+            }
             const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
             const isEmptyBlock = cleanText(block.textContent) === '';
             

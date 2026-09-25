@@ -2,6 +2,10 @@
  * AdvancedTableCore.js
  * Motore di Stato (State Management), Lifecycle e Inizializzazione RDBMS.
  * Supporto esteso ai parametri per la Vista Gerarchica ad Albero (Tree Table / WBS).
+ * FIX DEFENSIVE GUARDS: Inizializzazione difensiva e controlli rigorosi su Array.isArray(db.rows) 
+ * e r.cells in ensureSystemPropertiesDB, syncSystemPropertiesRow e deleteSystemPropertiesRow.
+ * FIX MULTI-WIDGET ROUTING: updateDependentViews ora riconosce esplicitamente i diari (JournalManager),
+ * blocchi codice (CodeManager) e button bar (ButtonManager), evitando che vengano ridisegnati come tabelle RDBMS.
  */
 
 const AdvancedTable = {
@@ -36,10 +40,13 @@ const AdvancedTable = {
         }
 
         const db = AppState.databases['SYS_PROPERTIES_DB'];
+        if (!Array.isArray(db.rows)) db.rows = [];
+        if (!db.selectOptions) db.selectOptions = { 'sys_c_tags': [] };
+        if (!db.selectColors) db.selectColors = { 'sys_c_tags': {} };
         
         if (AppState.notes) {
             AppState.notes.forEach(n => {
-                if (!n.deletedAt && !db.rows.find(r => r.cells['sys_c_note'] === n.id)) {
+                if (!n.deletedAt && !db.rows.find(r => r && r.cells && r.cells['sys_c_note'] === n.id)) {
                     db.rows.push({
                         id: 'sys_r_' + n.id,
                         createdAt: Date.now(),
@@ -54,7 +61,8 @@ const AdvancedTable = {
     syncSystemPropertiesRow: (noteId) => {
         if (!AppState.databases || !AppState.databases['SYS_PROPERTIES_DB']) return;
         const db = AppState.databases['SYS_PROPERTIES_DB'];
-        if (!db.rows.find(r => r.cells['sys_c_note'] === noteId)) {
+        if (!Array.isArray(db.rows)) db.rows = [];
+        if (!db.rows.find(r => r && r.cells && r.cells['sys_c_note'] === noteId)) {
             db.rows.push({
                 id: 'sys_r_' + noteId,
                 createdAt: Date.now(),
@@ -67,7 +75,11 @@ const AdvancedTable = {
     deleteSystemPropertiesRow: (noteId) => {
         if (!AppState.databases || !AppState.databases['SYS_PROPERTIES_DB']) return;
         const db = AppState.databases['SYS_PROPERTIES_DB'];
-        db.rows = db.rows.filter(r => r.cells['sys_c_note'] !== noteId);
+        if (!Array.isArray(db.rows)) {
+            db.rows = [];
+            return;
+        }
+        db.rows = db.rows.filter(r => r && r.cells && r.cells['sys_c_note'] !== noteId);
     },
 
     destroy: (id) => {
@@ -134,7 +146,13 @@ const AdvancedTable = {
                 if (wrapper) {
                     if (s.isPivot && typeof AdvancedPivot !== 'undefined') {
                         AdvancedPivot.render(id);
-                    } else {
+                    } else if (id.startsWith('adv_journal_') && typeof JournalManager !== 'undefined') {
+                        JournalManager.render(id);
+                    } else if (id.startsWith('adv_btnbar_') && typeof ButtonManager !== 'undefined') {
+                        ButtonManager.render(id);
+                    } else if (id.startsWith('adv_code_') && typeof CodeManager !== 'undefined') {
+                        CodeManager.mountAll(wrapper);
+                    } else if (typeof AdvancedTable.renderTable === 'function') {
                         AdvancedTable.renderTable(id);
                     }
                 }
@@ -143,7 +161,13 @@ const AdvancedTable = {
                 citations.forEach(cit => {
                     if (s.isPivot && typeof AdvancedPivot !== 'undefined') {
                         AdvancedPivot.render(cit.id);
-                    } else {
+                    } else if (id.startsWith('adv_journal_') && typeof JournalManager !== 'undefined') {
+                        JournalManager.render(cit.id);
+                    } else if (id.startsWith('adv_btnbar_') && typeof ButtonManager !== 'undefined') {
+                        ButtonManager.render(cit.id);
+                    } else if (id.startsWith('adv_code_') && typeof CodeManager !== 'undefined') {
+                        CodeManager.mountAll(cit);
+                    } else if (typeof AdvancedTable.renderTable === 'function') {
                         AdvancedTable.renderTable(cit.id);
                     }
                 });

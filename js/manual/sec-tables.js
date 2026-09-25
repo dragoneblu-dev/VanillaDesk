@@ -98,9 +98,9 @@ Manual.registerSection(
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Created / Last Edited Time:</b> Timestamp di sistema non alterabili.</div>
     </div>
 
-    <h4 id="sec-4-record-notes">Pagine Dedicate ai Record (Record Note - 📄)</h4>
+    <h4 id="sec-4-record-notes">Pagine Dedicate ai Record (Record Note)</h4>
     <p>Quando le informazioni relative a una riga non possono essere riassunte in una singola cella (ad esempio per una commessa, un contatto o un caso studio), la colonna <b>Pagina Record</b> genera una nota autonoma a pieno schermo ancorata a quel record. Cliccando sul pulsante <code>[📄 Apri Pagina]</code>, l'editor visualizza una pagina completa in cui è possibile inserire testi, immagini, allegati o ulteriori database annidati.</p>
 
-    <h4 id="sec-4-conditional-colors">Colorazione Condizionale con Opacità Dinamica (🎨)</h4>
+    <h4 id="sec-4-conditional-colors">Colorazione Condizionale con Opacità Dinamica</h4>
     <p>Dal menu opzioni del Database (⋮), la voce <b>Colorazione Condizionale</b> consente di creare regole di formattazione automatica in tempo reale. È possibile impostare sia un'opacità fissa percentuale (es. 30%), sia un'<b>Opacità Dinamica via Formula JS</b>: scrivendo ad esempio <code>riga["Avanzamento"]</code>, l'intensità del colore della riga varierà automaticamente da quasi trasparente a saturo man mano che la percentuale di completamento aumenta.</p>`
 );

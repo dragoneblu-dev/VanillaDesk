@@ -473,9 +473,12 @@ const JournalManager = {
         state.entries.splice(idx, 1);
 
         if (state.entries.length === 0) {
-            JournalManager.deleteJournal(journalId);
+            // Se tutte le voci vengono cancellate manualmente, mostra lo stato vuoto senza eliminare il widget
+            JournalManager._focusAfterRender = null;
+            JournalManager.setState(journalId, state);
+            JournalManager.render(journalId);
         } else {
-            const prevEntry = state.entries[idx - 1] || state.entries[state.entries.length - 1];
+            const prevEntry = state.entries[idx - 1] || state.entries[0];
             JournalManager._focusAfterRender = prevEntry.id;
             JournalManager.setState(journalId, state);
             JournalManager.render(journalId);

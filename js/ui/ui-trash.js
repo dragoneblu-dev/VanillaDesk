@@ -1,8 +1,7 @@
 /**
  * ui-trash.js
  * Modulo dedicato alla gestione del Cestino e alla Garbage Collection.
- * FIX: Ora innesca esplicitamente il Garbage Collector fisico su disco al termine
- * dello svuotamento.
+ * Impostazione del flag _isDirty su ripristino per consentire a saveToFile di propagare la rimozione di deletedAt.
  */
 
 Object.assign(UI, {
@@ -55,6 +54,7 @@ Object.assign(UI, {
             if (!note) return;
             
             delete note.deletedAt;
+            note._isDirty = true;
             
             const parent = Store.getNote(note.parentId);
             if (!parent || parent.deletedAt) {
@@ -93,7 +93,6 @@ Object.assign(UI, {
                 Editor.cleanOrphanedCaches();
             }
             if (typeof Store !== 'undefined') {
-                // FIX: Oltre all'autosave, lanciamo la pulizia fisica del disco
                 Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave();
             }

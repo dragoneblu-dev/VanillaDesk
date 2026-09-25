@@ -10,7 +10,7 @@ Manual.registerSection(
         
         <li><b>Il Pannello Laterale (Drawer) e l'Ergonomia:</b> Quando apri le impostazioni di un database o le proprietà di una nota, l'app utilizza un cassetto scorrevole (Drawer). Questo pannello è dotato di funzionalità avanzate per non farti perdere il focus:
             <ul style="margin-top:5px; margin-bottom:5px;">
-                <li><b>Dock Destra/Sinistra (↔️):</b> Cliccando sull'icona delle due frecce nell'intestazione del pannello, puoi sganciarlo e incollarlo sul lato destro o sinistro dello schermo, togliendolo da eventuali aree della tabella che ti serve leggere. L'app ricorderà la tua scelta.</li>
+                <li><b>Dock Destra/Sinistra:</b> Cliccando sull'icona delle due frecce nell'intestazione del pannello, puoi sganciarlo e incollarlo sul lato destro o sinistro dello schermo, togliendolo da eventuali aree della tabella che ti serve leggere. L'app ricorderà la tua scelta.</li>
                 <li><b>Modalità X-Ray / Ghost Mode (👁️):</b> Hai bisogno di copiare un testo o leggere una cella della tabella che si trova <b>esattamente</b> dietro al pannello che stai compilando? Clicca sull'icona dell'Occhio: il pannello svanirà temporaneamente diventando intangibile, lasciando galleggiare solo l'intestazione. Fai ciò che devi fare nell'editor sottostante, poi riclicca l'occhio per far riapparire il tuo modulo intatto!</li>
                 <li><b>Storico Nidificato (←):</b> Se da dentro il pannello apri un sottomenu o un'altra vista (es. apri un record, e da lì apri la scheda di un record collegato), apparirà una freccia indietro. Cliccandola tornerai al pannello precedente senza perdere ciò che stavi digitando.</li>
             </ul>
@@ -20,7 +20,7 @@ Manual.registerSection(
 
         <li><b>Minimappa (VS Code Style):</b> Per le note molto lunghe, in alto a destra troverai l'icona della Minimappa. Attivandola, comparirà una barra laterale destra che mostra un'anteprima in miniatura del documento. Clicca o trascina il riquadro grigio per scorrere velocemente il testo.</li>
         
-        <li><b>Temi Visivi e Interfaccia (🎨):</b> Dal menu principale (☰) sotto la voce "Aspetto", puoi adattare l'editor alle tue preferenze visive. Oltre ai font (Serif, Mono, EasyReading per dislessia), puoi scegliere tra 5 combinazioni cromatiche globali: <i>Bianco Puro, Carta Avorio (Light), Fresco Pastello, Blu Lavagna (Dark) e Notte Stellata (Notion-Dark)</i>. Tutti i colori delle tabelle e dei grafici si adatteranno magicamente per garantire sempre il massimo contrasto.</li>
+        <li><b>Temi Visivi e Interfaccia:</b> Dal menu principale (☰) sotto la voce "Aspetto", puoi adattare l'editor alle tue preferenze visive. Oltre ai font (Serif, Mono, EasyReading per dislessia), puoi scegliere tra 5 combinazioni cromatiche globali: <i>Bianco Puro, Carta Avorio (Light), Fresco Pastello, Blu Lavagna (Dark) e Notte Stellata (Notion-Dark)</i>. Tutti i colori delle tabelle e dei grafici si adatteranno magicamente per garantire sempre il massimo contrasto.</li>
 
         <li><b>Modelli (Templates):</b> Scrivi spesso lo stesso tipo di documento (es. Verbali o Schede)? Crea la struttura una volta, apri il menu delle opzioni della nota (⋮) in alto a destra e scegli <b>"Salva come Template Locale"</b>. La prossima volta che creerai una nota vuota, ti verrà proposto di applicarlo con un solo click.</li>
         

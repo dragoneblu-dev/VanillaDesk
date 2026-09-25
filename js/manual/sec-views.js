@@ -68,7 +68,7 @@ Manual.registerSection(
     <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 30px 0;">
 
     <h3 id="sec-5-workflow" style="color: var(--accent-color); display:flex; align-items:center; gap:8px;">
-        🌟 Workflow Studio: Visualizzatore a Grafo dei Nodi
+        Workflow Studio: Visualizzatore a Grafo dei Nodi
     </h3>
     <p>Workflow Studio (accessibile dalla cartella <code>workflow/</code>) è un'applicazione satellite modulare progettata per visualizzare ed esplorare le reti di dati complesse sotto forma di <b>Grafo di Nodi 2D Interattivo</b>.</p>
 

@@ -2,13 +2,13 @@
  * js/store.js
  * Gestione I/O: Architettura a Workspace Frammentato (Local-First Cloud Sync Ready).
  * SINCRONISMO IBRIDO ROBUSTO PER PRODUZIONE:
- * 1. Database: Field-Level LWW Merge automatico solo in caso di divergenza disco reale (Zero overhead locale).
- * 2. Note: Generazione automatica di Copia di Conflitto ('[Conflitto...] Titolo') per impedire la perdita di dati.
- * 3. Media & Storage: Ripristinata utility _base64ToBlob per retrocompatibilità.
- * 4. Live Sync: Ascolto BroadcastChannel 'vanilladesk_sync' e funzione readDatabaseFromDisk per ricarica concorrente.
- * FEAT AUTO-EDIT ON WORKSPACE CREATE: Abilita automaticamente l'Edit Continuo quando viene creato un nuovo Workspace.
- * FEAT WORKSPACE GUIDE PROMPT: Mostra la guida esplicativa al centro dello schermo prima dell'apertura del selettore cartella.
- * FEAT ONBOARDING NOTE: Generazione di una prima pagina ricca, formattata e accattivante con spiegazione su Viste e Database.
+ * 1. Database: 3-Way Field-Level Merge a livello di singola cella tramite tracciamento antenato comune (_baseDatabases).
+ * 2. Diario / Log: Supporto esplicito per la fusione LWW di state.entries in _mergeDatabaseStates (Zero perdita dati).
+ * 3. Note: Strategia rigorosa Last-Write-Wins (LWW) senza generazione di note di conflitto duplicate.
+ * 4. Autorità index.json: In fase di caricamento, solo le note censite in noteOrder vengono importate.
+ * 5. Verifica JIT su disco: Funzione syncNoteFromDisk per allineare le note all'apertura o rilevarne l'eliminazione remota.
+ * 6. Media & Storage: Utility _base64ToBlob per retrocompatibilità.
+ * 7. Live Sync: Ascolto e trasmissione su BroadcastChannel 'vanilladesk_sync' per eventi 'note_saved' e 'db_saved'.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -79,10 +79,10 @@ const Store = {
     _syncChannel: null,
     
     _diskHashes: { notes: {}, databases: {}, index: "" },
+    _baseDatabases: {},
 
     _simpleHash: (str) => {
         if (!str || typeof str !== 'string') return 0;
-        // Normalizzazione carriage return per coerenza tra File System Windows e RAM Browser
         str = str.replace(/\r\n/g, '\n');
         
         let hash = 0;
@@ -97,6 +97,22 @@ const Store = {
     // Crea l'Hash convertendo l'oggetto in stringa senza spazi (minificata)
     _hashObj: (obj, cryptoPrefix = "") => {
         return Store._simpleHash(cryptoPrefix + JSON.stringify(obj));
+    },
+
+    _base64ToBlob: (base64Data, contentType = '') => {
+        const sliceSize = 1024;
+        const byteCharacters = atob(base64Data.split(',')[1] || base64Data);
+        const byteArrays = [];
+        for (let offset = 0; offset < byteCharacters.length; offset += sliceSize) {
+            const slice = byteCharacters.slice(offset, offset + sliceSize);
+            const byteNumbers = new Array(slice.length);
+            for (let i = 0; i < slice.length; i++) {
+                byteNumbers[i] = slice.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            byteArrays.push(byteArray);
+        }
+        return new Blob(byteArrays, { type: contentType });
     },
 
     initDB: () => {
@@ -202,13 +218,17 @@ const Store = {
         if (!AppState.workspaceHandle) return;
 
         if (AppState.assetsHandle) {
+            const activeDbIds = new Set();
             const activeImageIds = new Set();
             const activeAudioIds = new Set(); 
 
             const extractIds = (htmlString) => {
                 if (!htmlString) return;
-                const imgRegex = /data-image-ref=["']([^"']+)["']/g;
+                const dbRegex = /id=["'](adv_tbl_[^"']+|adv_journal_[^"']+|adv_code_[^"']+|adv_btnbar_[^"']+|adv_pivot_[^"']+|adv_link_[^"']+|adv_cols_[^"']+|adv_audio_[^"']+|adv_vid_[^"']+)["']/g;
                 let match;
+                while ((match = dbRegex.exec(htmlString)) !== null) activeDbIds.add(match[1].split('_cited_')[0]);
+
+                const imgRegex = /data-image-ref=["']([^"']+)["']/g;
                 while ((match = imgRegex.exec(htmlString)) !== null) activeImageIds.add(match[1]);
 
                 const audRegex = /data-audio-ref=["']([^"']+)["']/g;
@@ -295,6 +315,7 @@ const Store = {
                     if (!validDbIds.has(dbId)) {
                         await dbDir.removeEntry(entry.name);
                         delete Store._diskHashes.databases[dbId];
+                        delete Store._baseDatabases[dbId];
                     }
                 }
             }
@@ -329,7 +350,9 @@ const Store = {
             const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: false });
             const res = await Store._readFragmentFromDisk(dbDir, `${dbId}.json`);
             if (res.status === 'success') {
-                return JSON.parse(res.data);
+                const fresh = JSON.parse(res.data);
+                Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(fresh));
+                return fresh;
             }
         } catch(e) {
             console.warn(`[STORE] Impossibile ricaricare il database ${dbId} dal disco:`, e);
@@ -337,16 +360,120 @@ const Store = {
         return null;
     },
 
-    _mergeDatabaseStates: (diskState, ramState) => {
+    syncNoteFromDisk: async (noteId) => {
+        if (!AppState.workspaceHandle) return { status: 'skipped' };
+        const localNote = Store.getNote(noteId);
+        if (localNote && localNote._isDraft) return { status: 'draft' };
+
+        try {
+            const notesDir = await AppState.workspaceHandle.getDirectoryHandle('notes', { create: false });
+            const res = await Store._readFragmentFromDisk(notesDir, `${noteId}.json`);
+            
+            if (res.status === 'not_found') {
+                return { status: 'deleted' };
+            }
+            if (res.status === 'error') {
+                console.error(`[SYNC] Errore lettura disco per nota ${noteId}:`, res.error);
+                return { status: 'error', error: res.error };
+            }
+            if (res.status === 'success') {
+                const diskNote = JSON.parse(res.data);
+                if (diskNote.deletedAt) {
+                    return { status: 'deleted' };
+                }
+                const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
+                Store._diskHashes.notes[noteId] = Store._hashObj(diskNote, cryptoPrefix);
+                return { status: 'success', note: diskNote };
+            }
+        } catch (e) {
+            console.warn(`[SYNC] Impossibile verificare nota ${noteId} su disco:`, e);
+            return { status: 'error', error: e };
+        }
+        return { status: 'unknown' };
+    },
+
+    checkWorkspaceChanges: async () => {
+        if (!AppState.workspaceHandle) return;
+        try {
+            const diskResult = await Store._readFragmentFromDisk(AppState.workspaceHandle, 'index.json');
+            if (diskResult.status === 'success') {
+                const diskData = JSON.parse(diskResult.data);
+                const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
+                const diskHash = Store._hashObj(diskData, cryptoPrefix);
+                if (Store._diskHashes.index && diskHash !== Store._diskHashes.index) {
+                    Store._diskHashes.index = diskHash;
+                    if (diskData.noteOrder && Array.isArray(diskData.noteOrder)) {
+                        const validIds = new Set(diskData.noteOrder);
+                        AppState.notes = AppState.notes.filter(n => validIds.has(n.id) || n._isDraft);
+                        AppState.notes.sort((a, b) => {
+                            let idxA = diskData.noteOrder.indexOf(a.id);
+                            let idxB = diskData.noteOrder.indexOf(b.id);
+                            if (idxA === -1) idxA = 999999;
+                            if (idxB === -1) idxB = 999999;
+                            return idxA - idxB;
+                        });
+                        if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+                            UI.renderTree();
+                        }
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("[STORE] checkWorkspaceChanges fallito:", e);
+        }
+    },
+
+    _mergeDatabaseStates: (dbId, diskState, ramState) => {
+        // 1. SUPPORTO FUSIONE PER WIDGET DIARIO / LOG (Struttura basata su 'entries')
+        if (ramState.entries || diskState.entries) {
+            const baseEntries = (Store._baseDatabases[dbId]?.entries) || [];
+            const baseEntryMap = new Map(baseEntries.map(e => [e.id, e]));
+            const diskEntryMap = new Map((diskState.entries || []).map(e => [e.id, e]));
+            const ramEntryMap = new Map((ramState.entries || []).map(e => [e.id, e]));
+            const mergedEntriesMap = new Map();
+
+            const allEntryIds = new Set([...ramEntryMap.keys(), ...diskEntryMap.keys()]);
+
+            allEntryIds.forEach(eId => {
+                const eRam = ramEntryMap.get(eId);
+                const eDisk = diskEntryMap.get(eId);
+                const eBase = baseEntryMap.get(eId);
+
+                if (eRam && !eDisk) {
+                    if (eBase && !diskEntryMap.has(eId)) {
+                        const ramChanged = JSON.stringify(eRam) !== JSON.stringify(eBase);
+                        if (ramChanged) mergedEntriesMap.set(eId, eRam);
+                    } else {
+                        mergedEntriesMap.set(eId, eRam);
+                    }
+                } else if (!eRam && eDisk) {
+                    if (eBase && !ramEntryMap.has(eId)) {
+                        // Cancellato da RAM
+                    } else {
+                        mergedEntriesMap.set(eId, eDisk);
+                    }
+                } else if (eRam && eDisk) {
+                    const ramTime = eRam.timestamp || 0;
+                    const diskTime = eDisk.timestamp || 0;
+                    mergedEntriesMap.set(eId, ramTime >= diskTime ? eRam : eDisk);
+                }
+            });
+
+            const merged = { ...diskState, ...ramState };
+            merged.entries = Array.from(mergedEntriesMap.values());
+            return merged;
+        }
+
+        // 2. FUSIONE PER TABELLE RDBMS (3-Way Field-Level Merge su singola cella)
         const merged = { ...diskState, ...ramState };
 
-        // 1. FUSIONE COLONNE: Unione degli schemi per col.id
+        // Fusione Colonne
         const colMap = new Map();
         (diskState.columns || []).forEach(c => colMap.set(c.id, c));
         (ramState.columns || []).forEach(c => colMap.set(c.id, c)); 
         merged.columns = Array.from(colMap.values());
 
-        // 2. FUSIONE OPZIONI SELECT & COLORI
+        // Fusione Opzioni Select & Colori
         merged.selectOptions = { ...(diskState.selectOptions || {}) };
         merged.selectColors = { ...(diskState.selectColors || {}) };
 
@@ -358,40 +485,71 @@ const Store = {
             merged.selectColors[colId] = { ...(merged.selectColors[colId] || {}), ...colors };
         }
 
-        // 3. FUSIONE RIGHE & CELLE (Field-Level LWW)
+        // Fusione Righe e Celle a livello di singola proprietà (3-Way Field Merge)
+        const baseRows = (Store._baseDatabases[dbId]?.rows) || [];
+        const baseRowMap = new Map(baseRows.map(r => [r.id, r]));
         const diskRowMap = new Map((diskState.rows || []).map(r => [r.id, r]));
         const ramRowMap = new Map((ramState.rows || []).map(r => [r.id, r]));
         const mergedRowsMap = new Map();
 
-        // Elaborazione righe presenti in RAM
-        ramRowMap.forEach((rRam, rowId) => {
+        const allRowIds = new Set([...ramRowMap.keys(), ...diskRowMap.keys()]);
+
+        allRowIds.forEach(rowId => {
+            const rRam = ramRowMap.get(rowId);
             const rDisk = diskRowMap.get(rowId);
-            if (!rDisk) {
-                mergedRowsMap.set(rowId, rRam);
-            } else {
+            const rBase = baseRowMap.get(rowId);
+
+            if (rRam && !rDisk) {
+                if (rBase && !diskRowMap.has(rowId)) {
+                    const ramChanged = JSON.stringify(rRam.cells) !== JSON.stringify(rBase.cells);
+                    if (ramChanged) mergedRowsMap.set(rowId, rRam);
+                } else {
+                    mergedRowsMap.set(rowId, rRam);
+                }
+            } else if (!rRam && rDisk) {
+                if (rBase && !ramRowMap.has(rowId)) {
+                    // Rimossa in RAM
+                } else {
+                    mergedRowsMap.set(rowId, rDisk);
+                }
+            } else if (rRam && rDisk) {
                 const ramTime = rRam.updatedAt || rRam.createdAt || 0;
                 const diskTime = rDisk.updatedAt || rDisk.createdAt || 0;
 
-                const baseCells = ramTime >= diskTime ? { ...rDisk.cells } : { ...rRam.cells };
-                const winningCells = ramTime >= diskTime ? { ...rRam.cells } : { ...rDisk.cells };
+                const baseCells = (rBase && rBase.cells) ? rBase.cells : {};
+                const diskCells = rDisk.cells || {};
+                const ramCells = rRam.cells || {};
 
-                const mergedCells = Object.assign({}, baseCells, winningCells);
+                const mergedCells = { ...diskCells, ...ramCells };
+                const allColIds = new Set([...Object.keys(diskCells), ...Object.keys(ramCells)]);
+
+                allColIds.forEach(colId => {
+                    const valDisk = diskCells[colId];
+                    const valRam = ramCells[colId];
+                    const valBase = baseCells[colId];
+
+                    const diskChanged = JSON.stringify(valDisk) !== JSON.stringify(valBase);
+                    const ramChanged = JSON.stringify(valRam) !== JSON.stringify(valBase);
+
+                    if (ramChanged && !diskChanged) {
+                        mergedCells[colId] = valRam;
+                    } else if (diskChanged && !ramChanged) {
+                        mergedCells[colId] = valDisk;
+                    } else if (diskChanged && ramChanged) {
+                        mergedCells[colId] = ramTime >= diskTime ? valRam : valDisk;
+                    } else {
+                        mergedCells[colId] = valDisk !== undefined ? valDisk : valRam;
+                    }
+                });
 
                 mergedRowsMap.set(rowId, {
                     id: rowId,
                     createdAt: rDisk.createdAt || rRam.createdAt || Date.now(),
                     updatedAt: Math.max(ramTime, diskTime),
                     cells: mergedCells,
-                    color: rRam.color || rDisk.color || 'none',
-                    opacity: rRam.opacity !== undefined ? rRam.opacity : rDisk.opacity
+                    color: ramTime >= diskTime ? (rRam.color || rDisk.color || 'none') : (rDisk.color || rRam.color || 'none'),
+                    opacity: ramTime >= diskTime ? (rRam.opacity !== undefined ? rRam.opacity : rDisk.opacity) : (rDisk.opacity !== undefined ? rDisk.opacity : rRam.opacity)
                 });
-            }
-        });
-
-        // Aggiunta righe create esternamente sul disco e non presenti in RAM
-        diskRowMap.forEach((rDisk, rowId) => {
-            if (!mergedRowsMap.has(rowId)) {
-                mergedRowsMap.set(rowId, rDisk);
             }
         });
 
@@ -415,7 +573,14 @@ const Store = {
 
             if (AppState.currentNoteId && AppState.isEditMode && !AppState.isSwitchingNote) {
                 const currentNote = Store.getNote(AppState.currentNoteId);
-                if (currentNote && typeof Editor !== 'undefined') currentNote.content = Editor.getCleanHTML();
+                if (currentNote && typeof Editor !== 'undefined') {
+                    const cleanHtml = Editor.getCleanHTML();
+                    if (cleanHtml && cleanHtml !== currentNote.content) {
+                        currentNote.content = cleanHtml;
+                        currentNote._isDirty = true;
+                        currentNote.updatedAt = new Date().toISOString();
+                    }
+                }
             }
 
             Store.saveLocalBackup(); 
@@ -426,59 +591,29 @@ const Store = {
             const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
 
             // 1. SALVATAGGIO INDEX
-            const indexPayload = { templates: AppState.templates || [], homeCitations: AppState.homeCitations || [], noteOrder: AppState.notes.map(n => n.id) };
+            const indexPayload = { 
+                templates: AppState.templates || [], 
+                homeCitations: AppState.homeCitations || [], 
+                noteOrder: AppState.notes.map(n => n.id) 
+            };
             const indexStr = JSON.stringify(indexPayload, null, 2);
             const indexHash = Store._hashObj(indexPayload, cryptoPrefix);
 
             if (Store._diskHashes.index !== indexHash) {
-                const diskResult = await Store._readFragmentFromDisk(AppState.workspaceHandle, 'index.json');
-                let shouldWriteIndex = false;
-                let payloadIndexStr = indexStr;
-
-                if (diskResult.status === 'success') {
-                    // Se il file su disco è cifrato ma la password è stata rimossa, sovrascrive direttamente in chiaro
-                    if (diskResult.data.startsWith('PRONOTES_ENC_V1|') && !AppState.documentPassword) {
-                        shouldWriteIndex = true;
-                    } else {
-                        try {
-                            const diskData = JSON.parse(diskResult.data);
-                            const diskHash = Store._hashObj(diskData, cryptoPrefix);
-                            
-                            if (Store._diskHashes.index && diskHash !== Store._diskHashes.index) {
-                                // LWW: Integra i dati del disco con le modifiche locali
-                                AppState.templates = diskData.templates || AppState.templates;
-                                AppState.homeCitations = diskData.homeCitations || AppState.homeCitations;
-                                
-                                const newIndexPayload = { templates: AppState.templates, homeCitations: AppState.homeCitations, noteOrder: AppState.notes.map(n => n.id) };
-                                payloadIndexStr = JSON.stringify(newIndexPayload, null, 2);
-                            }
-                            shouldWriteIndex = true;
-                        } catch(e) { 
-                            shouldWriteIndex = true;
-                        }
-                    }
-                } else if (diskResult.status === 'not_found') {
-                    shouldWriteIndex = true;
-                } else {
+                try {
+                    let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(indexStr, AppState.documentPassword) : indexStr;
+                    const fileHandle = await AppState.workspaceHandle.getFileHandle('index.json', { create: true });
+                    const writable = await fileHandle.createWritable();
+                    await writable.write(dataToWrite);
+                    await writable.close();
+                    Store._diskHashes.index = indexHash;
+                } catch (writeErr) {
+                    console.error("Errore scrittura index.json:", writeErr);
                     hasWriteErrors = true;
-                }
-
-                if (shouldWriteIndex) {
-                    try {
-                        let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(payloadIndexStr, AppState.documentPassword) : payloadIndexStr;
-                        const fileHandle = await AppState.workspaceHandle.getFileHandle('index.json', { create: true });
-                        const writable = await fileHandle.createWritable();
-                        await writable.write(dataToWrite);
-                        await writable.close();
-                        Store._diskHashes.index = Store._hashObj(JSON.parse(payloadIndexStr), cryptoPrefix);
-                    } catch (writeErr) {
-                        console.error("Errore scrittura index.json:", writeErr);
-                        hasWriteErrors = true;
-                    }
                 }
             }
 
-            // 2. SALVATAGGIO DATABASE CON FIELD-LEVEL MERGE
+            // 2. SALVATAGGIO DATABASE CON 3-WAY FIELD-LEVEL MERGE
             let syncedDatabasesCount = 0;
 
             for (const [dbId, ramState] of Object.entries(AppState.databases || {})) {
@@ -501,8 +636,7 @@ const Store = {
                                 
                                 // Conflitto reale: il file sul disco è stato alterato da un'altra sessione
                                 if (Store._diskHashes.databases[dbId] && currentDiskHash !== Store._diskHashes.databases[dbId]) {
-                                    // SLOW-PATH: Riconciliazione cella per cella a zero perdita dati
-                                    finalStateToWrite = Store._mergeDatabaseStates(diskState, ramState);
+                                    finalStateToWrite = Store._mergeDatabaseStates(dbId, diskState, ramState);
                                     AppState.databases[dbId] = finalStateToWrite;
                                     syncedDatabasesCount++;
 
@@ -528,6 +662,7 @@ const Store = {
                         await writable.write(dataToWrite);
                         await writable.close();
                         Store._diskHashes.databases[dbId] = Store._hashObj(finalStateToWrite, cryptoPrefix);
+                        Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(finalStateToWrite));
 
                         // Notifica broadcast alle altre finestre connesse (es. Workflow Studio)
                         if (Store._syncChannel) {
@@ -544,113 +679,32 @@ const Store = {
                 UI.showToast(`Sincronizzazione: Fusi ${syncedDatabasesCount} database concorrenti a livello di cella.`, "info");
             }
 
-            // 3. SALVATAGGIO NOTE CON COPIA DI CONFLITTO AUTOMATICA
-            const ramNotes = AppState.notes.map(note => {
+            // 3. SALVATAGGIO NOTE (LAST WRITE WINS RIGOROSO, NESSUN CONFLITTO DUPLICATO)
+            for (const note of AppState.notes) {
                 const cleanNote = { ...note };
                 Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
-                return cleanNote;
-            });
+                const currentHash = Store._hashObj(cleanNote, cryptoPrefix);
 
-            const newConflictNotes = [];
-
-            for (const note of ramNotes) {
-                let currentRamHash = Store._hashObj(note, cryptoPrefix);
-                
-                if (Store._diskHashes.notes[note.id] !== currentRamHash) {
-                    const diskResult = await Store._readFragmentFromDisk(notesDir, `${note.id}.json`);
-                    let noteToWrite = note;
-
-                    if (diskResult.status === 'error') {
-                        hasWriteErrors = true;
-                        continue;
-                    }
-                    else if (diskResult.status === 'success') {
-                        if (!diskResult.data.startsWith('PRONOTES_ENC_V1|') || AppState.documentPassword) {
-                            try {
-                                const diskNote = JSON.parse(diskResult.data);
-                                const currentDiskHash = Store._hashObj(diskNote, cryptoPrefix);
-                                
-                                // Conflitto reale su testo: il file su disco è cambiato mentre l'utente editava in locale
-                                if (Store._diskHashes.notes[note.id] && currentDiskHash !== Store._diskHashes.notes[note.id]) {
-                                    const now = new Date();
-                                    const timeStr = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')} ${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-                                    
-                                    const conflictNote = {
-                                        id: Store.generateId(),
-                                        parentId: note.parentId,
-                                        title: `[Conflitto ${timeStr}] ${note.title || 'Senza Titolo'}`,
-                                        content: note.content,
-                                        isMarked: false,
-                                        expanded: true,
-                                        createdAt: now.toISOString(),
-                                        updatedAt: now.toISOString()
-                                    };
-
-                                    newConflictNotes.push(conflictNote);
-
-                                    // La nota corrente in RAM accetta la versione del disco
-                                    const liveNoteIndex = AppState.notes.findIndex(n => n.id === note.id);
-                                    if (liveNoteIndex > -1) {
-                                        AppState.notes[liveNoteIndex] = diskNote;
-                                    }
-                                    noteToWrite = diskNote;
-                                    Store._diskHashes.notes[note.id] = currentDiskHash;
-
-                                    // Se la nota in conflitto era aperta a schermo, riallinea il DOM in modalità protetta
-                                    if (AppState.currentNoteId === note.id) {
-                                        const editorEl = document.getElementById('noteContent');
-                                        if (editorEl && typeof UI !== 'undefined') {
-                                            AppState.isSwitchingNote = true;
-                                            UI.toggleEditMode(false);
-                                            editorEl.innerHTML = diskNote.content || '<p><br></p>';
-                                            if (typeof Editor !== 'undefined' && Editor.hydrateMedia) Editor.hydrateMedia(editorEl);
-                                            if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll(editorEl);
-                                            if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
-                                            setTimeout(() => { AppState.isSwitchingNote = false; }, 200);
-                                        }
-                                    }
-                                }
-                            } catch(e) { 
-                                console.error(`[SYNC ERROR] Errore verifica conflitto nota ${note.id}:`, e); 
-                            }
-                        }
-                    }
-
+                if (note._isDirty || Store._diskHashes.notes[note.id] !== currentHash) {
                     try {
-                        const noteStr = JSON.stringify(noteToWrite, null, 2);
+                        const noteStr = JSON.stringify(cleanNote, null, 2);
                         let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(noteStr, AppState.documentPassword) : noteStr;
                         const fileHandle = await notesDir.getFileHandle(`${note.id}.json`, { create: true });
                         const writable = await fileHandle.createWritable();
                         await writable.write(dataToWrite);
                         await writable.close();
-                        Store._diskHashes.notes[note.id] = Store._hashObj(noteToWrite, cryptoPrefix);
+
+                        Store._diskHashes.notes[note.id] = currentHash;
+                        note._isDirty = false;
+                        delete note._isDraft;
+
+                        if (Store._syncChannel) {
+                            Store._syncChannel.postMessage({ type: 'note_saved', noteId: note.id });
+                        }
                     } catch (writeErr) {
                         console.error(`Errore scrittura nota ${note.id}.json:`, writeErr);
                         hasWriteErrors = true;
                     }
-                }
-            }
-
-            if (newConflictNotes.length > 0) {
-                for (const cNote of newConflictNotes) {
-                    AppState.notes.push(cNote);
-                    
-                    if (typeof AdvancedTable !== 'undefined' && AdvancedTable.syncSystemPropertiesRow) {
-                        AdvancedTable.syncSystemPropertiesRow(cNote.id);
-                    }
-
-                    const cStr = JSON.stringify(cNote, null, 2);
-                    let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(cStr, AppState.documentPassword) : cStr;
-                    const fHandle = await notesDir.getFileHandle(`${cNote.id}.json`, { create: true });
-                    const wr = await fHandle.createWritable();
-                    await wr.write(dataToWrite);
-                    await wr.close();
-                    Store._diskHashes.notes[cNote.id] = Store._hashObj(cNote, cryptoPrefix);
-                }
-                
-                if (typeof UI !== 'undefined' && UI.renderTree) UI.renderTree();
-                if (typeof UI !== 'undefined' && UI.showToast) {
-                    UI.showToast(`Rilevata modifica concorrente. Modifiche locali preservate in "[Conflitto ...]".`, "warning", true);
                 }
             }
 
@@ -742,6 +796,7 @@ const Store = {
 
             // Svuota i vecchi Hash per evitare interferenze
             Store._diskHashes = { notes: {}, databases: {}, index: "" };
+            Store._baseDatabases = {};
 
             // Rilevamento Architettura
             let isLegacyMonolith = false;
@@ -769,6 +824,13 @@ const Store = {
                     AppState.notes = []; 
                     for await (const entry of notesDir.values()) {
                         if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+                            const noteId = entry.name.replace('.json', '');
+                            // AUTORITÀ DELL'INDICE (INDEX.JSON): Importa solo le note censite in noteOrder
+                            if (AppState._noteOrderCache && Array.isArray(AppState._noteOrderCache)) {
+                                if (!AppState._noteOrderCache.includes(noteId)) {
+                                    continue;
+                                }
+                            }
                             const nHandle = await notesDir.getFileHandle(entry.name);
                             const nFile = await nHandle.getFile();
                             await Store._decryptAndProcessFragment(await nFile.text(), 'note');
@@ -901,6 +963,7 @@ const Store = {
             try { AppState.assetsHandle = await dirHandle.getDirectoryHandle('assets', { create: true }); } catch(e) {}
 
             Store._diskHashes = { notes: {}, databases: {}, index: "" };
+            Store._baseDatabases = {};
             
             if (AppState.notes.length === 0) {
                 const newNoteId = Store.generateId();
@@ -991,7 +1054,9 @@ const Store = {
                     isMarked: true,
                     expanded: true,
                     createdAt: now,
-                    updatedAt: now
+                    updatedAt: now,
+                    _isDraft: false,
+                    _isDirty: true
                 });
             }
 
@@ -1073,13 +1138,14 @@ const Store = {
             Store._diskHashes.notes[data.id] = Store._hashObj(data, cryptoPrefix);
         } else if (type === 'database') {
             const dbId = data._id_hack; 
-            delete data._id_hack; // Rimuove l'attributo fantasma PRIMA del parsing per riallineare l'Hash
+            delete data._id_hack;
             
             AppState.databases[dbId] = data;
             
             // HASH CANONICO
             const realHash = Store._hashObj(data, cryptoPrefix);
             Store._diskHashes.databases[dbId] = realHash;
+            Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(data));
         }
         return true;
     },
@@ -1126,6 +1192,10 @@ const Store = {
                 if (changed) note.content = doc.body.innerHTML;
             }
             return note;
+        });
+
+        Object.keys(AppState.databases).forEach(id => {
+            Store._baseDatabases[id] = JSON.parse(JSON.stringify(AppState.databases[id]));
         });
     },
 
@@ -1306,6 +1376,7 @@ const Store = {
             AppState.workspaceHandle = null;
             AppState.assetsHandle = null;
             Store._diskHashes = { notes: {}, databases: {}, index: "" };
+            Store._baseDatabases = {};
 
             const success = await Store._decryptAndProcess(text);
             if (!success) return;
@@ -1330,16 +1401,89 @@ const Store = {
     }
 };
 
-// Inizializzazione ricevitore sincronizzazione live tra finestre (Workflow Studio <-> VanillaDesk)
+// Inizializzazione ricevitore sincronizzazione live tra finestre (Workflow Studio <-> VanillaDesk <-> Multi-Schede)
 if (typeof BroadcastChannel !== 'undefined') {
     try {
         Store._syncChannel = new BroadcastChannel('vanilladesk_sync');
-        Store._syncChannel.onmessage = (event) => {
+        Store._syncChannel.onmessage = async (event) => {
             const data = event.data;
             if (!data) return;
+
             if (data.type === 'db_saved' && data.tableId) {
                 if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.forceRecalculate === 'function') {
                     AdvancedTable.forceRecalculate(data.tableId);
+                }
+            } 
+            else if (data.type === 'note_saved' && data.noteId) {
+                if (!AppState.workspaceHandle) return;
+                const noteId = data.noteId;
+                const currentOpenId = AppState.currentNoteId;
+
+                if (currentOpenId !== noteId) {
+                    // Nota NON correntemente aperta
+                    const syncRes = await Store.syncNoteFromDisk(noteId);
+                    if (syncRes.status === 'success' && syncRes.note) {
+                        const existingNote = Store.getNote(noteId);
+                        if (existingNote) {
+                            if (!existingNote._isDirty) {
+                                Object.assign(existingNote, syncRes.note);
+                                existingNote._isDirty = false;
+                            }
+                        } else {
+                            AppState.notes.push(syncRes.note);
+                        }
+                    } else if (syncRes.status === 'deleted') {
+                        const idx = AppState.notes.findIndex(n => n.id === noteId);
+                        if (idx > -1) AppState.notes.splice(idx, 1);
+                        if (typeof AdvancedTable !== 'undefined' && AdvancedTable.deleteSystemPropertiesRow) {
+                            AdvancedTable.deleteSystemPropertiesRow(noteId);
+                        }
+                    }
+                    if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+                        UI.renderTree();
+                    }
+                } else {
+                    // Nota aperta nella scheda corrente: ricarica dal disco solo se non ci sono modifiche pendenti
+                    const currentNote = Store.getNote(noteId);
+                    if (currentNote && !currentNote._isDirty) {
+                        const syncRes = await Store.syncNoteFromDisk(noteId);
+                        if (syncRes.status === 'success' && syncRes.note) {
+                            Object.assign(currentNote, syncRes.note);
+                            currentNote._isDirty = false;
+
+                            const titleInput = document.getElementById('noteTitle');
+                            const contentDiv = document.getElementById('noteContent');
+                            if (titleInput) titleInput.value = currentNote.title || "";
+                            if (contentDiv) {
+                                contentDiv.innerHTML = currentNote.content || "<p><br></p>";
+                                if (typeof Editor !== 'undefined' && Editor.hydrateMedia) {
+                                    Editor.hydrateMedia(contentDiv);
+                                }
+                                if (typeof WidgetManager !== 'undefined') {
+                                    WidgetManager.mountAll(contentDiv);
+                                }
+                                if (typeof CitationManager !== 'undefined') {
+                                    CitationManager.renderLiveCitations();
+                                }
+                            }
+                            if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+                                UI.renderTree();
+                            }
+                        } else if (syncRes.status === 'deleted') {
+                            const idx = AppState.notes.findIndex(n => n.id === noteId);
+                            if (idx > -1) AppState.notes.splice(idx, 1);
+                            if (typeof AdvancedTable !== 'undefined' && AdvancedTable.deleteSystemPropertiesRow) {
+                                AdvancedTable.deleteSystemPropertiesRow(noteId);
+                            }
+                            if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+                                UI.renderTree();
+                            }
+                            if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+                                UI.showToast("La nota non è più disponibile sul disco.", "warning");
+                            }
+                            UI.goHome();
+                        }
+                    }
                 }
             }
         };

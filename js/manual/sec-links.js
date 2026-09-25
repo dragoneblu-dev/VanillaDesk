@@ -20,10 +20,10 @@ Manual.registerSection(
         <li><b>Analisi Proprietà Sotto-note:</b> Una tabella riassuntiva che ti mostra a colpo d'occhio tutti i Tag (Proprietà) assegnati alle note figlie di questa pagina.</li>
     </ul>
 
-    <h4>Le Citazioni di Blocchi (Transclusion - 📑)</h4>
+    <h4>Le Citazioni Live di Blocchi (Transclusion)</h4>
     <p>A differenza di un link (che ti porta altrove), la Citazione <b>porta il contenuto qui da te</b> in tempo reale.</p>
     <ol>
-        <li>Premi l'icona Citazione <b>📑</b> e cerca la nota sorgente dall'elenco.</li>
+        <li>Premi sulla voce Citazione Live e cerca la nota sorgente dall'elenco.</li>
         <li>Puoi citare <em>tutta la nota</em>, un singolo capitolo (Titolo), una tabella o un blocco di codice.</li>
         <li><b>La Magia:</b> Questo testo è "vivo". Se modifichi il paragrafo nella nota originale, <b>tutte le citazioni sparse per il tuo intero spazio di lavoro si aggiorneranno automaticamente!</b> Perfetto per creare moduli riutilizzabili (es. un blocco "Firme" o "Procedure operative").</li>
     </ol>`

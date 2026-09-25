@@ -10,6 +10,7 @@
  * FIX UNDO/REDO CARET: minifyHTMLForStorage preserva il marcatore di cronologia quando richiesto dagli snapshot RAM.
  * FIX ARCHITETTURA: Ricollocato _getRawText nativamente in editor-core per garantire disponibilità globale.
  * FIX RESTORE SELECTION: Invocazione del focus prima dell'assegnazione del range per evitare il reset all'inizio del blocco.
+  * FEAT HEAL FONT ARTIFACTS: Rimozione chirurgica degli span parassiti con style="font-size: ..." generati da WebKit su unione blocchi.
  */
 
 const Editor = {
@@ -31,6 +32,24 @@ const Editor = {
             else if (curr.nodeName === 'BR') text += '\n';
         }
         return text;
+    },
+
+    // Funzione snella per auto-riparare ed eliminare gli span parassiti con font-size inline iniettati dal browser
+    healFontArtifacts: (container) => {
+        if (!container) return;
+        const badSpans = container.querySelectorAll('h1 span[style*="font-size"], h2 span[style*="font-size"], h3 span[style*="font-size"], h4 span[style*="font-size"], h5 span[style*="font-size"], h6 span[style*="font-size"], p > span[style*="font-size"]');
+        
+        badSpans.forEach(span => {
+            // VanillaDesk usa solo classi (fs-small, fs-large); qualsiasi style.fontSize inline puro è un artefatto del browser
+            if (!span.className && span.style.fontSize) {
+                const parent = span.parentNode;
+                while (span.firstChild) {
+                    parent.insertBefore(span.firstChild, span);
+                }
+                span.remove();
+                if (parent) parent.normalize();
+            }
+        });
     },
 
     hydrateMedia: (container) => {
@@ -109,22 +128,26 @@ const Editor = {
     handleSmartClickEscape: (e) => {
         if (!AppState.isEditMode) return;
         
-        // Non impedire il click nativo su campi di input o textarea
-        if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
+        let target = e.target;
+        if (target && target.nodeType === 3) target = target.parentNode;
+        if (!target || !target.closest) return;
 
-        const shell = e.target.closest('.adv-widget-shell, .adv-inline-shell');
+        // Non impedire il click nativo su campi di input o textarea
+        if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') return;
+
+        const shell = target.closest('.adv-widget-shell, .adv-inline-shell');
         if (!shell) return;
 
         Editor.clearWidgetSelection();
 
         if (typeof WidgetManager !== 'undefined') {
-            if (WidgetManager.isInsideEditableWidgetArea(e.target)) {
+            if (WidgetManager.isInsideEditableWidgetArea(target)) {
                 return;
             }
         }
 
         // Whitelist per permettere l'interazione HTML5 Drag e Click su controlli di modulo
-        if (e.target.closest('th, td, .widget-drag-handle, .widget-options-btn, .adv-tool-btn, .adv-add-btn, .adv-icon-btn, .adv-table-header, .btn, .action-btn-run, .adv-btn-icon-trigger, .snippet-copy-btn, .inline-note-marker, .adv-board-card, .adv-cal-event-std, .adv-cal-event-abs')) {
+        if (target.closest('th, td, .widget-drag-handle, .widget-options-btn, .adv-tool-btn, .adv-add-btn, .adv-icon-btn, .adv-table-header, .btn, .action-btn-run, .adv-btn-icon-trigger, .snippet-copy-btn, .inline-note-marker, .adv-board-card, .adv-cal-event-std, .adv-cal-event-abs')) {
             return;
         }
 
@@ -568,6 +591,8 @@ const Editor = {
                 el.parentNode.replaceChild(p, el);
             }
         });
+
+        Editor.healFontArtifacts(rootNode);
     },
 
     getCleanHTML: () => {
@@ -673,13 +698,15 @@ const Editor = {
                     }
                 }
             }
-            if (node.nodeValue.includes('\u00A0\u00A0')) node.nodeValue = node.nodeValue.replace(/\u00A0{2,}/g, ' ');
+            // distruzione delle sequenze di spazi non comprimibili (\u00A0).
+            //if (node.nodeValue.includes('\u00A0\u00A0')) node.nodeValue = node.nodeValue.replace(/\u00A0{2,}/g, ' ');
         }
         
         nodesToRemove.forEach(n => n.remove());
 
         editor.normalize();
         Editor._normalizeEmptyBlocks(editor);
+        Editor.healFontArtifacts(editor);
 
         Editor.hydrateMedia(editor);
 

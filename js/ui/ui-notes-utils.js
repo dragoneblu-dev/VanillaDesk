@@ -2,7 +2,7 @@
  * ui-notes-utils.js
  * Sottomodulo di UI.
  * Funzioni di supporto, formattazione, Breadcrumb e segnalibri della Nota (Utilities).
- * Integrazione del badge Cestino nel breadcrumb per le note eliminate.
+ * Integrazione del badge Cestino nel breadcrumb per le note eliminate e marcatura dirty su toggle preferiti.
  */
 
 Object.assign(UI, {
@@ -96,9 +96,10 @@ Object.assign(UI, {
     toggleMark: () => {
         if (!AppState.currentNoteId) return;
         const note = Store.getNote(AppState.currentNoteId);
-        if (!note || note.deletedAt) return; // Non consentire preferiti su note cestinate
+        if (!note || note.deletedAt) return;
 
         note.isMarked = !note.isMarked;
+        note._isDirty = true;
         
         UI.updateMarkBtn(note.isMarked);
         if (typeof UI.renderTree !== 'undefined') UI.renderTree();

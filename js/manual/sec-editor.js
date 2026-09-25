@@ -18,7 +18,7 @@ Manual.registerSection(
         <li><b>Segnalibri e Timer (⏱️):</b> Usa la scorciatoia <kbd>Ctrl+Shift+B</kbd> o il menu Inserisci per piazzare un Segnalibro nel testo. Cliccando sull'icona del segnalibro, puoi avviare un <b>Timer di 15 minuti</b> (sommabili). Anche se cambi nota, allo scadere del tempo il motore in background suonerà un allarme sonoro globale per avvisarti, permettendoti di saltare direttamente al punto in cui avevi lasciato il segnalibro!</li>
         <li><b>Snippet Copiabili (📋):</b> Dal menu Inserisci, puoi creare un piccolo blocco di testo grigio con un bottone affiancato. È l'ideale per conservare password, IP, codici cliente o comandi shell: con un solo click l'utente copierà l'esatto contenuto nella clipboard senza doverlo evidenziare a mano.</li>
         
-        <li><b>Il Diario / Log Operativo (📔):</b> Dal menu Blocchi puoi inserire un Diario. Questo strumento è perfetto per i meeting o il tracciamento attività:
+        <li><b>Il Diario / Log Operativo:</b> Dal menu Blocchi puoi inserire un Diario. Questo strumento è perfetto per i meeting o il tracciamento attività:
             <ul style="margin-top:5px; margin-bottom:10px;">
                 <li><b>Log Istantaneo:</b> Cliccando il +, viene registrata automaticamente l'ora. Scrivi l'appunto e premi Invio per creare la riga successiva in automatico.</li>
                 <li><b>Completamento:</b> Cliccando sull'orario, l'appunto verrà sbarrato, sbiadito, e verrà registrato il Timestamp di fine lavoro (calcolando la durata in background).</li>

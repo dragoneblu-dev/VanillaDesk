@@ -1,8 +1,9 @@
 /**
  * ui-notes-lifecycle.js
  * Sottomodulo di UI.
- * Gestione essenziale del ciclo di vita della nota: Selezione, Creazione, Home, Salto al Widget.
+ * Gestione essenziale del ciclo di vita della nota: Selezione JIT su disco, Creazione, Home, Salto al Widget.
  * Gestione sicura e visiva delle note visualizzate dal Cestino (Read-Only Guard, Danger Banner e Restore).
+ * Tracciamento del dirty state volatile (_isDirty, _isDraft) su modifiche al corpo testo e titolo.
  */
 
 Object.assign(UI, {
@@ -99,7 +100,11 @@ Object.assign(UI, {
                 
                 const editorEl = document.getElementById('noteContent');
                 if (editorEl && typeof Editor !== 'undefined') {
-                    currentNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    if (currentNote.content !== cleanHtml) {
+                        currentNote.content = cleanHtml;
+                        currentNote._isDirty = true;
+                    }
                     currentNote.updatedAt = new Date().toISOString();
                 }
             }
@@ -133,7 +138,9 @@ Object.assign(UI, {
             isMarked: false, 
             expanded: true, 
             createdAt: now, 
-            updatedAt: now
+            updatedAt: now,
+            _isDraft: true,
+            _isDirty: true
         };
         
         AppState.notes.push(newNote);
@@ -162,7 +169,7 @@ Object.assign(UI, {
         if (typeof Store !== 'undefined') Store.triggerAutoSave(true);
     },
 
-    selectNote: (id, anchorText = null, refId = null) => {
+    selectNote: async (id, anchorText = null, refId = null) => {
         AppState.isSwitchingNote = true;
         
         if (AppState.currentNoteId && AppState.currentNoteId !== id) {
@@ -175,7 +182,11 @@ Object.assign(UI, {
                 
                 const editorEl = document.getElementById('noteContent');
                 if (editorEl && typeof Editor !== 'undefined') {
-                    currentNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    if (currentNote.content !== cleanHtml) {
+                        currentNote.content = cleanHtml;
+                        currentNote._isDirty = true;
+                    }
                     currentNote.updatedAt = new Date().toISOString();
                 }
             }
@@ -210,8 +221,36 @@ Object.assign(UI, {
             Editor.clearHistory();
         }
 
-        const note = Store.getNote(id);
+        let note = Store.getNote(id);
         if (!note) { AppState.isSwitchingNote = false; return; }
+
+        // VERIFICA JIT SU DISCO (SPECIFICA TECNICA PUNTO 4)
+        if (AppState.workspaceHandle !== null) {
+            if (!note._isDraft) {
+                const syncRes = await Store.syncNoteFromDisk(id);
+                if (syncRes.status === 'deleted') {
+                    const idx = AppState.notes.findIndex(n => n.id === id);
+                    if (idx > -1) AppState.notes.splice(idx, 1);
+                    if (typeof AdvancedTable !== 'undefined' && AdvancedTable.deleteSystemPropertiesRow) {
+                        AdvancedTable.deleteSystemPropertiesRow(id);
+                    }
+                    if (typeof UI.renderTree !== 'undefined') UI.renderTree();
+                    if (typeof UI.showToast !== 'undefined') {
+                        UI.showToast("La nota non è più disponibile sul disco.", "warning");
+                    }
+                    if (AppState.currentNoteId === id) {
+                        UI.goHome();
+                    }
+                    AppState.isSwitchingNote = false;
+                    return;
+                } else if (syncRes.status === 'success' && syncRes.note) {
+                    if (!note._isDirty) {
+                        Object.assign(note, syncRes.note);
+                        note._isDirty = false;
+                    }
+                }
+            }
+        }
 
         const isTrashed = !!note.deletedAt;
 
@@ -456,7 +495,11 @@ Object.assign(UI, {
             if (editorEl && typeof Editor !== 'undefined') {
                 const currentNote = Store.getNote(AppState.currentNoteId);
                 if (currentNote) {
-                    currentNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    if (currentNote.content !== cleanHtml) {
+                        currentNote.content = cleanHtml;
+                        currentNote._isDirty = true;
+                    }
                     currentNote.updatedAt = new Date().toISOString();
                 }
                 Editor.clearHistory();
@@ -495,7 +538,10 @@ Object.assign(UI, {
         if (!note || note.deletedAt) return; // Blocco modifiche su note cestinate
 
         const titleInput = document.getElementById('noteTitle');
-        if (titleInput) note.title = titleInput.value;
+        if (titleInput && note.title !== titleInput.value) {
+            note.title = titleInput.value;
+            note._isDirty = true;
+        }
 
         const treeTitleContainer = document.querySelector(`.node-wrapper[data-id="${AppState.currentNoteId}"] > .node-content .node-title`);
         if (treeTitleContainer) {
@@ -526,13 +572,14 @@ Object.assign(UI, {
         clearTimeout(UI.updateCurrentNoteTimer);
         UI.updateCurrentNoteTimer = setTimeout(() => {
             note.updatedAt = new Date().toISOString();
+            note._isDirty = true;
+
             const dateEl = document.getElementById('noteLastUpdate');
             if (dateEl) {
                 dateEl.textContent = UI.formatDate(note.updatedAt);
                 dateEl.setAttribute('title', "Modificato il: " + UI.formatDate(note.updatedAt));
             }
 
-            // Aggiorna l'updatedAt del record nel database se è una pagina dedicata
             if (note.isRecordNote && note.linkedTableId && note.linkedRowId) {
                 if (typeof AdvancedTable !== 'undefined') {
                     AdvancedTable.touchRecordUpdate(note.linkedTableId, note.linkedRowId);
@@ -578,6 +625,7 @@ Object.assign(UI, {
             const n = Store.getNote(id);
             if (n) {
                 n.deletedAt = now;
+                n._isDirty = true;
                 if (typeof AdvancedTable !== 'undefined') AdvancedTable.deleteSystemPropertiesRow(id);
                 AppState.notes.filter(child => child.parentId === id).forEach(child => traverse(child.id));
             }
@@ -591,7 +639,7 @@ Object.assign(UI, {
         if (parentIdToReturn && Store.getNote(parentIdToReturn) && !Store.getNote(parentIdToReturn).deletedAt) {
             UI.selectNote(parentIdToReturn);
         } else {
-            UI.goHome(); // Fallback sicuro alla home invocando la GC
+            UI.goHome();
         }
     },
 
@@ -602,7 +650,13 @@ Object.assign(UI, {
 
         const contentEl = document.getElementById('noteContent');
         
-        if (contentEl) note.content = Editor.minifyHTMLForStorage(contentEl.innerHTML);
+        if (contentEl) {
+            const newContent = Editor.minifyHTMLForStorage(contentEl.innerHTML);
+            if (note.content !== newContent) {
+                note.content = newContent;
+                note._isDirty = true;
+            }
+        }
         note.updatedAt = new Date().toISOString();
         
         const dateEl = document.getElementById('noteLastUpdate');
@@ -619,7 +673,6 @@ Object.assign(UI, {
             UI.renderInlineFootnotes();
             if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
 
-            // Aggiorna l'updatedAt del record nel database se è una pagina dedicata
             if (note.isRecordNote && note.linkedTableId && note.linkedRowId) {
                 if (typeof AdvancedTable !== 'undefined') {
                     AdvancedTable.touchRecordUpdate(note.linkedTableId, note.linkedRowId);

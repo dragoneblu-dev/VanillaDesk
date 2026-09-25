@@ -12,6 +12,9 @@
  * RESTORE AUTOFIT DBLCLICK: Ripristinato l'ascoltatore per l'auto-fit delle colonne al doppio click sul resizer.
  * RESTORE SMART CLICK ESCAPE: Ripristinato il listener mousedown su editorEl.
  * FEAT HORIZONTAL WHEEL SCROLL: Scorrimento orizzontale continuo su Kanban e Timeline tramite mouse wheel.
+ * FIX TEXTNODE TARGET CLOSEST: Normalizzazione difensiva di e.target nei listener dragstart, dblclick e wheel.
+ * FIX ISOLAMENTO INPUT WIDGET: Impedisce all'evento input scatenato dentro celle di database o diari
+ * di risalire verso l'editor principale, azzerando le false sporcature di note.updatedAt e i falsi conflitti concorrenti.
  */
 
 const EventsGlobal = {
@@ -376,6 +379,14 @@ const EventsGlobal = {
             // Blocco di sicurezza anti-crash per eventi sintetici scatenati dal Browser Autocomplete
             if (!e.key) return; 
 
+            // ISOLAMENTO RIGOROSO INPUT NATIVI: Se l'utente sta digitando in un input o textarea
+            // (es. Titolo nota, barre di ricerca, campi form, modali), lascia che il browser gestisca
+            // nativamente testo, tasti freccia, cancellazione e virgolette senza intromissioni dell'editor.
+            const isNativeInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
+            if (isNativeInput) {
+                return;
+            }
+
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
             const key = e.key.toLowerCase();
 
@@ -535,7 +546,12 @@ const EventsGlobal = {
 
         document.addEventListener('dblclick', (e) => {
             if (!AppState.isEditMode) return;
-            const resizer = e.target.closest('.adv-col-resizer');
+
+            let target = e.target;
+            if (target && target.nodeType === 3) target = target.parentNode;
+            if (!target || !target.closest) return;
+
+            const resizer = target.closest('.adv-col-resizer');
             if (resizer) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -557,26 +573,30 @@ const EventsGlobal = {
         // =========================================================================
         editorEl.addEventListener('dragstart', (e) => {
             if (!AppState.isEditMode) return;
+
+            let target = e.target;
+            if (target && target.nodeType === 3) target = target.parentNode;
+            if (!target || !target.closest) return;
             
             // CITAZIONI: Mai avviare un drag per nulla che si trovi in una citazione,
             // TRANNE per la maniglia di trascinamento della citazione stessa!
-            if (e.target.closest('.block-citation') && !e.target.closest('.widget-drag-handle')) {
+            if (target.closest('.block-citation') && !target.closest('.widget-drag-handle')) {
                 e.preventDefault();
                 return;
             }
 
-            const thElement = e.target.closest('th');
+            const thElement = target.closest('th');
             
-            if (e.target.closest('.adv-col-resizer') || 
-                e.target.closest('.adv-board-card') || 
+            if (target.closest('.adv-col-resizer') || 
+                target.closest('.adv-board-card') || 
                (thElement && thElement.hasAttribute('data-col')) || 
-                e.target.classList.contains('table-row-trigger') || 
-                e.target.classList.contains('table-col-trigger') ||
-                e.target.classList.contains('table-move-trigger')) {
+                (target.classList && (
+                    target.classList.contains('table-row-trigger') || 
+                    target.classList.contains('table-col-trigger') ||
+                    target.classList.contains('table-move-trigger')
+                ))) {
                 return; 
             }
-
-            let target = e.target;
             
             if (target.tagName === 'IMG' && target.hasAttribute('data-image-ref')) {
                 AppState.draggedBlockId = target.getAttribute('data-image-ref');
@@ -585,9 +605,6 @@ const EventsGlobal = {
                 e.dataTransfer.setData('text/plain', AppState.draggedBlockId);
                 return;
             }
-
-            if (target.nodeType === 3) target = target.parentNode;
-            if (!target || !target.closest) return; 
             
             const widgetWrapper = target.closest(WidgetManager.blockSelector + ', .simple-table-wrapper');
             
@@ -613,6 +630,34 @@ const EventsGlobal = {
                 // DRAG ASSIST: Attiviamo lo scudo e il motore per i widget complessi
                 toggleDragShield(true, AppState.draggedBlockType);
                 return;
+            }
+
+            // GESTIONE TRASCINAMENTO TESTO SELEZIONATO (INLINE TEXT DRAG)
+            // Previene che il browser serializzi i tag contenitore (es. <ul><li>) spezzando l'elenco al rilascio
+            const sel = window.getSelection();
+            if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+                if (typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
+                    Editor.saveSnapshot(true);
+                }
+
+                const range = sel.getRangeAt(0);
+                let common = range.commonAncestorContainer;
+                if (common.nodeType === 3) common = common.parentNode;
+
+                const singleBlock = common ? common.closest('li, p, h1, h2, h3, h4, h5, h6, td, th') : null;
+                if (singleBlock) {
+                    const tempDiv = document.createElement('div');
+                    tempDiv.appendChild(range.cloneContents());
+
+                    // Rimuove tag di blocco che provocherebbero lo split del contenitore di destinazione
+                    let cleanHtml = tempDiv.innerHTML.replace(/<\/?(ul|ol|li|p|div)[^>]*>/gi, '');
+                    const plainText = sel.toString();
+
+                    e.dataTransfer.setData('text/plain', plainText);
+                    if (cleanHtml) {
+                        e.dataTransfer.setData('text/html', cleanHtml);
+                    }
+                }
             }
         });
 
@@ -643,8 +688,8 @@ const EventsGlobal = {
                 const scrollContainer = document.getElementById('editorScrollContent');
                 if (scrollContainer) {
                     const rect = scrollContainer.getBoundingClientRect();
-                    const threshold = 100; // Zona attiva in pixel dai bordi
-                    const maxSpeed = 30; // Pixel massimi per ciclo
+                    const threshold = 100;
+                    const maxSpeed = 30;
 
                     dragScrollSpeed = 0;
                     if (e.clientY - rect.top < threshold) {
@@ -668,7 +713,6 @@ const EventsGlobal = {
                         }
                     }
                 }
-                // ==============================================================
 
                 let dropNode = null;
                 if (document.caretRangeFromPoint) {
@@ -679,6 +723,11 @@ const EventsGlobal = {
                     if (pos) dropNode = pos.offsetNode;
                 }
                 if (!dropNode) dropNode = e.target;
+                if (dropNode && dropNode.nodeType === 3) dropNode = dropNode.parentNode;
+                if (!dropNode || !dropNode.closest) {
+                    hideDropIndicator();
+                    return;
+                }
 
                 let sourceBlock = null;
                 if (AppState.draggedBlockType === 'image') {
@@ -692,7 +741,7 @@ const EventsGlobal = {
                     return;
                 }
 
-                let protectedParent = dropNode.nodeType === 3 ? dropNode.parentNode.closest(WidgetManager.blockSelector + ', .simple-table-wrapper') : dropNode.closest(WidgetManager.blockSelector + ', .simple-table-wrapper');
+                let protectedParent = dropNode.closest(WidgetManager.blockSelector + ', .simple-table-wrapper');
                 let targetElement = null;
 
                 // DRAG & DROP: Ignora lo scudo se rilasciamo l'immagine in una tabella semplice
@@ -708,8 +757,7 @@ const EventsGlobal = {
                     targetElement = protectedParent;
                 } else {
                     if (!targetElement) {
-                        let targetBlock = dropNode.nodeType === 3 ? dropNode.parentNode : dropNode;
-                        targetElement = targetBlock.closest('p, div, li, td, th, h1, h2, h3, blockquote');
+                        targetElement = dropNode.closest('p, div, li, td, th, h1, h2, h3, blockquote');
                     }
                 }
 
@@ -812,7 +860,7 @@ const EventsGlobal = {
                 stopDragAssist();
 
                 let target = e.target;
-                if (target.nodeType === 3) target = target.parentNode;
+                if (target && target.nodeType === 3) target = target.parentNode;
                 if (!target || !target.closest) return;
 
                 // CITAZIONI: Rilascio bloccato
@@ -852,6 +900,7 @@ const EventsGlobal = {
                 }
 
                 if (!dropNode) dropNode = target; 
+                if (dropNode && dropNode.nodeType === 3) dropNode = dropNode.parentNode;
 
                 if (dropNode === sourceBlock || sourceBlock.contains(dropNode)) {
                     AppState.draggedBlockId = null;
@@ -859,7 +908,7 @@ const EventsGlobal = {
                     return;
                 }
 
-                let protectedParent = dropNode.nodeType === 3 ? dropNode.parentNode.closest(WidgetManager.blockSelector + ', .simple-table-wrapper') : dropNode.closest(WidgetManager.blockSelector + ', .simple-table-wrapper');
+                let protectedParent = dropNode && dropNode.closest ? dropNode.closest(WidgetManager.blockSelector + ', .simple-table-wrapper') : null;
                 let targetElement = null;
 
                 // DRAG & DROP: Ignora lo scudo se rilasciamo l'immagine in una tabella semplice
@@ -929,7 +978,7 @@ const EventsGlobal = {
             stopDragAssist();
 
             let targetNode = e.target;
-            if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
+            if (targetNode && targetNode.nodeType === 3) targetNode = targetNode.parentNode;
             if (!targetNode || !targetNode.closest) return;
 
             if (targetNode.closest('.block-citation')) {
@@ -959,7 +1008,11 @@ const EventsGlobal = {
                 return;
             }
 
+            // Consolidamento stato post-spostamento testo per abilitare Undo (Ctrl+Z)
             setTimeout(() => {
+                if (AppState.isEditMode && typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
+                    Editor.saveSnapshot(true);
+                }
                 if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll();
                 if (typeof Store !== 'undefined') Store.triggerAutoSave();
             }, 10);
@@ -971,7 +1024,7 @@ const EventsGlobal = {
         document.addEventListener('auxclick', (e) => {
             if (e.button === 1 || e.which === 2) {
                 let target = e.target;
-                if (target.nodeType === 3) target = target.parentNode;
+                if (target && target.nodeType === 3) target = target.parentNode;
                 if (!target || !target.closest) return;
 
                 const link = target.tagName === 'A' ? target : target.closest('a');
@@ -994,11 +1047,15 @@ const EventsGlobal = {
         // SCROLL ORIZZONTALE FLUIDO CON MOUSE WHEEL (Shift + Wheel o Timeline/Kanban)
         // =========================================================================
         document.addEventListener('wheel', (e) => {
-            if (e.target.closest('#canvasViewport')) return;
+            let target = e.target;
+            if (target && target.nodeType === 3) target = target.parentNode;
+            if (!target || !target.closest) return;
 
-            const timelineScroll = e.target.closest('[id^="timeline-scroll-"]');
-            const boardContainer = e.target.closest('.adv-board-container');
-            const scrollContainer = e.target.closest('.adv-scroll-container');
+            if (target.closest('#canvasViewport')) return;
+
+            const timelineScroll = target.closest('[id^="timeline-scroll-"]');
+            const boardContainer = target.closest('.adv-board-container');
+            const scrollContainer = target.closest('.adv-scroll-container');
 
             if (e.shiftKey && scrollContainer) {
                 if (scrollContainer.scrollWidth > scrollContainer.clientWidth) {
@@ -1007,7 +1064,7 @@ const EventsGlobal = {
                 }
             } else if (timelineScroll) {
                 // Sulla Timeline, se l'utente usa la rotella del mouse sull'intestazione o nell'area libera
-                if (e.target.closest('.adv-timeline-header-sticky') || !e.target.closest('.adv-cal-week-container')) {
+                if (target.closest('.adv-timeline-header-sticky') || !target.closest('.adv-cal-week-container')) {
                     if (timelineScroll.scrollWidth > timelineScroll.clientWidth) {
                         e.preventDefault();
                         timelineScroll.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
@@ -1015,7 +1072,7 @@ const EventsGlobal = {
                 }
             } else if (boardContainer) {
                 // Nella bacheca Kanban, se l'utente usa la rotella sull'intestazione o tra le colonne
-                const kanbanCol = e.target.closest('.adv-kanban-col');
+                const kanbanCol = target.closest('.adv-kanban-col');
                 if (!kanbanCol || kanbanCol.scrollHeight <= kanbanCol.clientHeight) {
                     if (boardContainer.scrollWidth > boardContainer.clientWidth) {
                         e.preventDefault();
@@ -1031,8 +1088,19 @@ const EventsGlobal = {
             }
         });
 
-        editorEl.addEventListener('input', () => {
+        editorEl.addEventListener('input', (e) => {
             if (!AppState.isSwitchingNote) {
+                // Se l'evento input proviene dall'interno di un widget (database, diario, codice, ecc.)
+                // non aggiornare il testo della nota principale: il widget gestisce la propria persistenza!
+                const target = e.target;
+                const isInsideWidget = target && target.closest && !!target.closest(WidgetManager.blockSelector);
+                if (isInsideWidget) {
+                    return;
+                }
+
+                if (typeof Editor !== 'undefined' && typeof Editor.healFontArtifacts === 'function') {
+                    Editor.healFontArtifacts(editorEl);
+                }
                 if (typeof Editor !== 'undefined' && Editor.handleMarkdownShortcuts) {
                     Editor.handleMarkdownShortcuts();
                 }
@@ -1181,7 +1249,6 @@ const EventsGlobal = {
                     return;
                 }
 
-                // FIX: Mostra il floating menu di editing ESCLUSIVAMENTE per i link interni a #noteContent
                 if (AppState.isEditMode && !e.ctrlKey && !e.metaKey && link.closest('#noteContent')) {
                     // CITAZIONI: Se è dentro una citazione, clicca direttamente il link bypassando il menu fluttuante
                     if (link.closest('.block-citation')) {

@@ -90,6 +90,11 @@ Object.assign(Editor, {
     },
 
     handleBracketAutoClose: (e) => {
+        // GUARDIA DIFENSIVA: Se l'evento proviene da un input nativo (es. titolo nota, ricerca) o elemento non contenteditable, esci immediatamente
+        if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT' || e.target.isContentEditable === false)) {
+            return;
+        }
+
         const openPairs = { '(': ')', '{': '}', '"': '"', "'": "'" };
         const closeChars = [')', '}', '"', "'"];
         const quoteChars = ['"', "'"];
@@ -204,6 +209,43 @@ Object.assign(Editor, {
 
         if (WidgetManager.isProtectedBlock(node) && !WidgetManager.isInsideEditableWidgetArea(node)) return;
 
+        // WRAPPING DETERMINISTICO DI TESTO SELEZIONATO (PARENTESI E VIRGOLETTE)
+        if (!range.collapsed && openPairs[e.key]) {
+            e.preventDefault();
+            
+            // 1. Estrazione immediata del testo selezionato prima di qualsiasi mutazione
+            const textContent = range.toString();
+            if (!textContent) return;
+
+            const openChar = e.key;
+            const closeChar = openPairs[e.key];
+            Editor.saveSnapshot();
+
+            // 2. Sostituisce la sola selezione con il testo racchiuso
+            document.execCommand('insertText', false, openChar + textContent + closeChar);
+
+            // 3. Riposiziona la selezione esattamente sul testo interno escludendo i delimitatori
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                const newRange = sel.getRangeAt(0);
+                if (newRange.startContainer.nodeType === Node.TEXT_NODE) {
+                    const txtNode = newRange.startContainer;
+                    const endPos = newRange.startOffset - 1; 
+                    const startPos = endPos - textContent.length; 
+                    
+                    if (startPos >= 0 && endPos <= txtNode.nodeValue.length) {
+                        const wordRange = document.createRange();
+                        wordRange.setStart(txtNode, startPos);
+                        wordRange.setEnd(txtNode, endPos);
+                        sel.removeAllRanges();
+                        sel.addRange(wordRange);
+                    }
+                }
+            }
+            if (typeof Store !== 'undefined' && Store.triggerAutoSave) Store.triggerAutoSave();
+            return;
+        }
+
         const block = node.closest('p, div, pre, li, h1, h2, h3, td, th') || document.getElementById('noteContent');
         if (!block) return;
 
@@ -226,23 +268,6 @@ Object.assign(Editor, {
                 Editor._setAbsoluteCaretPosition(block, currentAbs + 1, currentAbs + 1);
                 return;
             }
-        }
-
-        if (!range.collapsed && openPairs[e.key]) {
-            e.preventDefault();
-            Editor.saveSnapshot();
-            
-            const openChar = e.key;
-            const closeChar = openPairs[e.key];
-            const textContent = range.toString();
-            
-            const startAbs = Editor._getAbsoluteCaretPosition(block, true);
-            document.execCommand('insertText', false, openChar + textContent + closeChar);
-            
-            const newStart = startAbs + 1;
-            const newEnd = newStart + textContent.length;
-            Editor._setAbsoluteCaretPosition(block, newStart, newEnd);
-            return;
         }
 
         if (range.collapsed && openPairs[e.key]) {

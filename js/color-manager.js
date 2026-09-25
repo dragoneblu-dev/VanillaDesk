@@ -156,7 +156,7 @@ const ColorManager = {
         }
     },
 
-    // FUNZIONE DI SICUREZZA: Determina se il nodo può essere manipolato dal ColorManager
+    // Determina se il nodo può essere manipolato dal ColorManager
     _isSafeToColor: (el) => {
         if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
         if (el.id === 'noteContent') return false;
@@ -257,6 +257,11 @@ const ColorManager = {
         }
         
         editor.normalize();
+
+        // RIPRISTINO MODALITÀ STANDARD: Disattiva styleWithCSS per non lasciare il browser in modalità inline-CSS
+        try { 
+            document.execCommand('styleWithCSS', false, false); 
+        } catch(e) {}
 
         Store.triggerAutoSave();
         Editor.updateToolbarFormatting();
