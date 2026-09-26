@@ -51,7 +51,7 @@ const AdvancedTableColumnMenus = {
 
         let targetState = AdvancedTable.getTableState(col.targetTableId);
         if (!targetState) {
-            alert("Il database di destinazione non esiste più.");
+            alert(I18n.t('adv_col_menu.target_db_missing'));
             return;
         }
 
@@ -114,7 +114,7 @@ const AdvancedTableColumnMenus = {
         const sourceState = AdvancedTable.getTableState(col.linkedTableId);
         if (!sourceState) return;
 
-        let optionsHTML = '<option value="">-- Seleziona Proprietà --</option>';
+        let optionsHTML = `<option value="">${I18n.t('adv_col_menu.backlink_select_prop')}</option>`;
         sourceState.columns.forEach(c => {
             optionsHTML += `<option value="${c.id}" data-type="${c.type}" ${col.backlinkPropertyId === c.id ? 'selected' : ''}>${c.name} (${c.type})</option>`;
         });
@@ -124,10 +124,10 @@ const AdvancedTableColumnMenus = {
 
         const bodyHTML = `
             <div style="background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; border: 1px solid rgba(37, 99, 235, 0.2);">
-                Invece di mostrare i nomi dei record, questa colonna estrarrà e aggregherà i valori della proprietà che selezionerai qui sotto.
+                ${I18n.t('adv_col_menu.backlink_drawer_desc')}
             </div>
             
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">1. Scegli la colonna da "${sourceState.title}":</label>
+            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_col_menu.backlink_choose_col', { tableTitle: sourceState.title })}</label>
             <select id="blPropConfigSelect" class="modern-input" style="margin-bottom: 15px;" onchange="
                 const t = this.options[this.selectedIndex].getAttribute('data-type'); 
                 const op = document.getElementById('blPropConfigOp');
@@ -142,23 +142,23 @@ const AdvancedTableColumnMenus = {
 
             <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer; color:var(--text-primary); margin-bottom:15px; padding: 10px; border: 1px solid var(--border-color); border-radius:6px; background: var(--item-hover);">
                 <input type="checkbox" id="blPropConfigDistinct" style="transform:scale(1.1);" ${isChecked}>
-                Rimuovi duplicati (Esegui Distinct)
+                ${I18n.t('adv_col_menu.backlink_distinct')}
             </label>
 
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">2. Operazione da eseguire sui valori trovati:</label>
+            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_col_menu.backlink_operation_label')}</label>
             <select id="blPropConfigOp" class="modern-input" style="margin-bottom: 20px;">
-                <option value="list" ${aggType === 'list' ? 'selected' : ''}>Uniscili in una lista testuale (A, B, C...)</option>
-                <option value="count" ${aggType === 'count' ? 'selected' : ''}>Conta Quanti Sono (N. Elementi)</option>
-                <option value="sum" ${aggType === 'sum' ? 'selected' : ''} style="display:none;">Sommali Matematicamente (+)</option>
+                <option value="list" ${aggType === 'list' ? 'selected' : ''}>${I18n.t('adv_col_menu.backlink_op_list')}</option>
+                <option value="count" ${aggType === 'count' ? 'selected' : ''}>${I18n.t('adv_col_menu.backlink_op_count')}</option>
+                <option value="sum" ${aggType === 'sum' ? 'selected' : ''} style="display:none;">${I18n.t('adv_col_menu.backlink_op_sum')}</option>
             </select>
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveBacklinkProperty('${realTableId}', '${colId}')">Salva Aggregazione</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveBacklinkProperty('${realTableId}', '${colId}')">${I18n.t('common.save')}</button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.relation} Estrai Proprietà Collegata</span>`, bodyHTML, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.relation} ${I18n.t('adv_col_menu.backlink_drawer_title')}</span>`, bodyHTML, footerHTML);
 
         setTimeout(() => {
             const sel = document.getElementById('blPropConfigSelect');
@@ -171,7 +171,7 @@ const AdvancedTableColumnMenus = {
         const isDistinct = document.getElementById('blPropConfigDistinct').checked;
         const aggType = document.getElementById('blPropConfigOp').value;
 
-        if (!propId) { alert("Seleziona una proprietà."); return; }
+        if (!propId) { alert(I18n.t('adv_col_menu.backlink_alert_select')); return; }
 
         let state = AdvancedTable.getState(realTableId);
         let col = state.columns.find(c => c.id === colId);
@@ -213,7 +213,7 @@ const AdvancedTableColumnMenus = {
         });
 
         if (hasData) {
-            if (!confirm("⚠️ ATTENZIONE: Questa colonna contiene già dei collegamenti ad un database.\nSe modifichi il Database di destinazione, tutti i collegamenti attuali verranno cancellati in modo irreversibile.\nSe però modifichi solo il campo che desideri visualizzare senza modificare il Database, tutti i collegamenti attuali verranno mantenuti.\n\nVuoi procedere con la configurazione?")) {
+            if (!confirm(I18n.t('adv_col_menu.warn_relation_change'))) {
                 AdvancedTable.closeDropdowns(true);
                 return;
             }
@@ -242,7 +242,7 @@ const AdvancedTableColumnMenus = {
             hiddenList.splice(idx, 1);
         } else {
             if (state.columns.length - hiddenList.length <= 1) {
-                alert("Impossibile nascondere l'unica colonna visibile rimasta.");
+                alert(I18n.t('adv_col_menu.alert_min_visible'));
                 return;
             }
             hiddenList.push(colId);
@@ -269,25 +269,25 @@ const AdvancedTableColumnMenus = {
         UI.Menu.closeAll(true);
 
         const menuItems =[
-            { type: 'custom', html: `<div style="font-size:11px; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; padding:4px;">Seleziona Tipo Colonna</div>` },
-            { icon: Icons.text, label: 'Testo', onClick: () => AdvancedTable.addColumn(tableId, 'text') },
-            { icon: Icons.number, label: 'Numero', onClick: () => AdvancedTable.addColumn(tableId, 'number') },
-            { icon: Icons.select, label: 'Select Singola', onClick: () => AdvancedTable.addColumn(tableId, 'select') },
-            { icon: Icons.multiSelect, label: 'Multi Select', onClick: () => AdvancedTable.addColumn(tableId, 'multi-select') },
-            { icon: Icons.date, label: 'Data (GG/MM/AAAA)', onClick: () => AdvancedTable.addColumn(tableId, 'date') },
-            { icon: Icons.date, label: 'Data e Ora', onClick: () => AdvancedTable.addColumn(tableId, 'datetime') },
-            { icon: Icons.time, label: 'Solo Ora', onClick: () => AdvancedTable.addColumn(tableId, 'time') },
-            { icon: Icons.checkbox, label: 'Checkbox', onClick: () => AdvancedTable.addColumn(tableId, 'checkbox') },
-            { icon: Icons.formula, label: 'Formula (Javascript)', onClick: () => AdvancedTable.addColumn(tableId, 'formula') },
-            { icon: Icons.relation, label: 'Relazione', onClick: () => AdvancedTable.addColumn(tableId, 'relation') },
-            { icon: Icons.rollup, label: 'Rollup (Lookup)', onClick: () => AdvancedTable.addColumn(tableId, 'rollup') },
-            { icon: Icons.url, label: 'URL / Link', onClick: () => AdvancedTable.addColumn(tableId, 'url') },
-            { icon: Icons.link, label: 'Collegamento a Nota', onClick: () => AdvancedTable.addColumn(tableId, 'note_link') },
-            { icon: Icons.recordPage, label: 'Pagina Dedicata', onClick: () => AdvancedTable.addColumn(tableId, 'record_note') },
-            { icon: Icons.play, label: 'Pulsante (Macro)', onClick: () => AdvancedTable.addColumn(tableId, 'button') },
+            { type: 'custom', html: `<div style="font-size:11px; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; padding:4px;">${I18n.t('adv_col_menu.add_col_title')}</div>` },
+            { icon: Icons.text, label: I18n.t('adv_col_menu.type_text'), onClick: () => AdvancedTable.addColumn(tableId, 'text') },
+            { icon: Icons.number, label: I18n.t('adv_col_menu.type_number'), onClick: () => AdvancedTable.addColumn(tableId, 'number') },
+            { icon: Icons.select, label: I18n.t('adv_col_menu.type_select'), onClick: () => AdvancedTable.addColumn(tableId, 'select') },
+            { icon: Icons.multiSelect, label: I18n.t('adv_col_menu.type_multi_select'), onClick: () => AdvancedTable.addColumn(tableId, 'multi-select') },
+            { icon: Icons.date, label: I18n.t('adv_col_menu.type_date'), onClick: () => AdvancedTable.addColumn(tableId, 'date') },
+            { icon: Icons.date, label: I18n.t('adv_col_menu.type_datetime'), onClick: () => AdvancedTable.addColumn(tableId, 'datetime') },
+            { icon: Icons.time, label: I18n.t('adv_col_menu.type_time'), onClick: () => AdvancedTable.addColumn(tableId, 'time') },
+            { icon: Icons.checkbox, label: I18n.t('adv_col_menu.type_checkbox'), onClick: () => AdvancedTable.addColumn(tableId, 'checkbox') },
+            { icon: Icons.formula, label: I18n.t('adv_col_menu.type_formula'), onClick: () => AdvancedTable.addColumn(tableId, 'formula') },
+            { icon: Icons.relation, label: I18n.t('adv_col_menu.type_relation'), onClick: () => AdvancedTable.addColumn(tableId, 'relation') },
+            { icon: Icons.rollup, label: I18n.t('adv_col_menu.type_rollup'), onClick: () => AdvancedTable.addColumn(tableId, 'rollup') },
+            { icon: Icons.url, label: I18n.t('adv_col_menu.type_url'), onClick: () => AdvancedTable.addColumn(tableId, 'url') },
+            { icon: Icons.link, label: I18n.t('adv_col_menu.type_note_link'), onClick: () => AdvancedTable.addColumn(tableId, 'note_link') },
+            { icon: Icons.recordPage, label: I18n.t('adv_col_menu.type_record_note'), onClick: () => AdvancedTable.addColumn(tableId, 'record_note') },
+            { icon: Icons.play, label: I18n.t('adv_col_menu.type_button'), onClick: () => AdvancedTable.addColumn(tableId, 'button') },
             { type: 'divider' },
-            { icon: Icons.time, label: 'Data Creazione', onClick: () => AdvancedTable.addColumn(tableId, 'created_time') },
-            { icon: Icons.time, label: 'Ultima Modifica', onClick: () => AdvancedTable.addColumn(tableId, 'last_edited_time') }
+            { icon: Icons.time, label: I18n.t('adv_col_menu.type_created_time'), onClick: () => AdvancedTable.addColumn(tableId, 'created_time') },
+            { icon: Icons.time, label: I18n.t('adv_col_menu.type_last_edited_time'), onClick: () => AdvancedTable.addColumn(tableId, 'last_edited_time') }
         ];
 
         const anchorId = e && e.currentTarget && e.currentTarget.id ? e.currentTarget.id : `adv-th-add-${tableId}`;
@@ -326,19 +326,19 @@ const AdvancedTableColumnMenus = {
                 type: 'custom',
                 html: `
                     <div style="padding: 2px;">
-                        <input type="text" class="adv-menu-input" value="${safeName}" placeholder="Rinomina e premi Invio..." id="editColNameInput" onkeydown="event.stopPropagation(); if(event.key === 'Enter') { event.preventDefault(); AdvancedTableColumnMenus.changeColName('${realTableId}', '${colId}'); }" style="margin:0; width:100%; font-weight:bold;">
+                        <input type="text" class="adv-menu-input" value="${safeName}" placeholder="${I18n.t('adv_col_menu.rename_placeholder')}" id="editColNameInput" onkeydown="event.stopPropagation(); if(event.key === 'Enter') { event.preventDefault(); AdvancedTableColumnMenus.changeColName('${realTableId}', '${colId}'); }" style="margin:0; width:100%; font-weight:bold;">
                     </div>
                 `
             },
             { type: 'divider' },
             {
                 icon: Icons.noteInline,
-                label: col.comment ? 'Modifica Commento...' : 'Aggiungi Commento...',
+                label: col.comment ? I18n.t('adv_col_menu.comment_edit') : I18n.t('adv_col_menu.comment_add'),
                 onClick: () => AdvancedTableColumnMenus.openColumnCommentModal(realTableId, colId)
             },
             {
                 icon: Icons.eyeOff,
-                label: 'Campo Nascosto' + (isHidden ? chk : ''),
+                label: I18n.t('adv_col_menu.hidden_field') + (isHidden ? chk : ''),
                 disabled: !canHide,
                 onClick: () => AdvancedTableColumnMenus.toggleVisibility(tableId, colId)
             },
@@ -346,25 +346,25 @@ const AdvancedTableColumnMenus = {
         ];
 
         if (col.type === 'date' || col.type === 'datetime') {
-            menuItems.push({ icon: Icons.time, label: 'Data di Fine' + (col.hasEndDate ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleEndDate(realTableId, colId) });
+            menuItems.push({ icon: Icons.time, label: I18n.t('adv_col_menu.end_date') + (col.hasEndDate ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleEndDate(realTableId, colId) });
             menuItems.push({ type: 'divider' });
         }
 
         if (col.type === 'relation') {
-            menuItems.push({ icon: Icons.relation, label: 'Configura Relazione', onClick: () => AdvancedTableColumnMenus.reconfigureRelation(realTableId, colId) });
-            menuItems.push({ icon: Icons.checkSquare, label: 'Limita a 1 solo record' + (col.singleRecord ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleRelationSingle(realTableId, colId) });
-            menuItems.push({ icon: Icons.relation, label: 'Mostra in DB destinazione' + (col.showBacklink ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleRelationBacklink(realTableId, colId) });
+            menuItems.push({ icon: Icons.relation, label: I18n.t('adv_col_menu.configure_relation'), onClick: () => AdvancedTableColumnMenus.reconfigureRelation(realTableId, colId) });
+            menuItems.push({ icon: Icons.checkSquare, label: I18n.t('adv_col_menu.single_record_limit') + (col.singleRecord ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleRelationSingle(realTableId, colId) });
+            menuItems.push({ icon: Icons.relation, label: I18n.t('adv_col_menu.show_backlink_in_target') + (col.showBacklink ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleRelationBacklink(realTableId, colId) });
             menuItems.push({ type: 'divider' });
         }
 
         if (col.type === 'relation_backlink') {
             menuItems.push({
-                icon: Icons.eye, label: 'Mostra come...', type: 'submenu',
+                icon: Icons.eye, label: I18n.t('adv_col_menu.display_as'), type: 'submenu',
                 items: [
-                    { label: 'Elenco Record' + (col.backlinkDisplay === 'list' || !col.backlinkDisplay ? chk : ''), onClick: () => AdvancedTableColumnMenus.setBacklinkDisplay(realTableId, colId, 'list') },
-                    { label: 'Conteggio Numerico' + (col.backlinkDisplay === 'count' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setBacklinkDisplay(realTableId, colId, 'count') },
+                    { label: I18n.t('adv_col_menu.records_list') + (col.backlinkDisplay === 'list' || !col.backlinkDisplay ? chk : ''), onClick: () => AdvancedTableColumnMenus.setBacklinkDisplay(realTableId, colId, 'list') },
+                    { label: I18n.t('adv_col_menu.numeric_count') + (col.backlinkDisplay === 'count' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setBacklinkDisplay(realTableId, colId, 'count') },
                     { type: 'divider' },
-                    { label: 'Proprietà Specifica...' + (col.backlinkDisplay === 'property' ? chk : ''), onClick: () => AdvancedTableColumnMenus.openBacklinkPropertyConfig(realTableId, colId) }
+                    { label: I18n.t('adv_col_menu.specific_property') + (col.backlinkDisplay === 'property' ? chk : ''), onClick: () => AdvancedTableColumnMenus.openBacklinkPropertyConfig(realTableId, colId) }
                 ]
             });
             menuItems.push({ type: 'divider' });
@@ -373,21 +373,21 @@ const AdvancedTableColumnMenus = {
         if (col.type === 'number' || col.type === 'rollup') {
             const dec = col.decimals !== undefined ? col.decimals : 'default';
             menuItems.push({
-                icon: Icons.number, label: 'Formato Decimali', type: 'submenu',
+                icon: Icons.number, label: I18n.t('adv_col_menu.decimal_format'), type: 'submenu',
                 items: [
-                    { label: 'Default' + (dec === 'default' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 'default') },
-                    { label: 'Nessun decimale (0)' + (dec === 0 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 0) },
-                    { label: '1 Decimale' + (dec === 1 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 1) },
-                    { label: '2 Decimali' + (dec === 2 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 2) },
-                    { label: '3 Decimali' + (dec === 3 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 3) },
-                    { label: '4 Decimali' + (dec === 4 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 4) }
+                    { label: I18n.t('adv_col_menu.decimal_default') + (dec === 'default' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 'default') },
+                    { label: I18n.t('adv_col_menu.decimal_zero') + (dec === 0 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 0) },
+                    { label: I18n.t('adv_col_menu.decimal_1') + (dec === 1 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 1) },
+                    { label: I18n.t('adv_col_menu.decimal_2') + (dec === 2 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 2) },
+                    { label: I18n.t('adv_col_menu.decimal_3') + (dec === 3 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 3) },
+                    { label: I18n.t('adv_col_menu.decimal_4') + (dec === 4 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 4) }
                 ]
             });
             menuItems.push({ type: 'divider' });
         }
         
         if (col.type === 'button') {
-            menuItems.push({ icon: Icons.settings, label: 'Configura Azioni Pulsante', onClick: () => AdvancedTable.openButtonColConfig(realTableId, colId) });
+            menuItems.push({ icon: Icons.settings, label: I18n.t('adv_col_menu.configure_btn_macro'), onClick: () => AdvancedTable.openButtonColConfig(realTableId, colId) });
             menuItems.push({ type: 'divider' });
         }
 
@@ -396,49 +396,49 @@ const AdvancedTableColumnMenus = {
         if (col.type !== 'relation_backlink') {
             menuItems.push(
                 {
-                    icon: Icons.settings, label: 'Cambia tipo dato', type: 'submenu',
+                    icon: Icons.settings, label: I18n.t('adv_col_menu.change_data_type'), type: 'submenu',
                     items:[
-                        { icon: Icons.text, label: 'Testo' + chkType('text'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'text') },
-                        { icon: Icons.number, label: 'Numero' + chkType('number'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'number') },
-                        { icon: Icons.select, label: 'Select Singola' + chkType('select'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'select') },
-                        { icon: Icons.multiSelect, label: 'Multi Select' + chkType('multi-select'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'multi-select') },
-                        { icon: Icons.date, label: 'Data (GG/MM/AAAA)' + chkType('date'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'date') },
-                        { icon: Icons.date, label: 'Data e Ora' + chkType('datetime'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'datetime') },
-                        { icon: Icons.time, label: 'Solo Ora' + chkType('time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'time') },
-                        { icon: Icons.checkbox, label: 'Checkbox' + chkType('checkbox'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'checkbox') },
-                        { icon: Icons.formula, label: 'Formula (Javascript)' + chkType('formula'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'formula') },
-                        { icon: Icons.relation, label: 'Relazione' + chkType('relation'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'relation') },
-                        { icon: Icons.rollup, label: 'Rollup (Lookup)' + chkType('rollup'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'rollup') },
-                        { icon: Icons.url, label: 'URL / Link' + chkType('url'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'url') },
-                        { icon: Icons.link, label: 'Collegamento a Nota' + chkType('note_link'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'note_link') },
-                        { icon: Icons.recordPage, label: 'Pagina Dedicata' + chkType('record_note'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'record_note') },
-                        { icon: Icons.play, label: 'Pulsante (Macro)' + chkType('button'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'button') },
+                        { icon: Icons.text, label: I18n.t('adv_col_menu.type_text') + chkType('text'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'text') },
+                        { icon: Icons.number, label: I18n.t('adv_col_menu.type_number') + chkType('number'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'number') },
+                        { icon: Icons.select, label: I18n.t('adv_col_menu.type_select') + chkType('select'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'select') },
+                        { icon: Icons.multiSelect, label: I18n.t('adv_col_menu.type_multi_select') + chkType('multi-select'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'multi-select') },
+                        { icon: Icons.date, label: I18n.t('adv_col_menu.type_date') + chkType('date'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'date') },
+                        { icon: Icons.date, label: I18n.t('adv_col_menu.type_datetime') + chkType('datetime'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'datetime') },
+                        { icon: Icons.time, label: I18n.t('adv_col_menu.type_time') + chkType('time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'time') },
+                        { icon: Icons.checkbox, label: I18n.t('adv_col_menu.type_checkbox') + chkType('checkbox'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'checkbox') },
+                        { icon: Icons.formula, label: I18n.t('adv_col_menu.type_formula') + chkType('formula'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'formula') },
+                        { icon: Icons.relation, label: I18n.t('adv_col_menu.type_relation') + chkType('relation'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'relation') },
+                        { icon: Icons.rollup, label: I18n.t('adv_col_menu.type_rollup') + chkType('rollup'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'rollup') },
+                        { icon: Icons.url, label: I18n.t('adv_col_menu.type_url') + chkType('url'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'url') },
+                        { icon: Icons.link, label: I18n.t('adv_col_menu.type_note_link') + chkType('note_link'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'note_link') },
+                        { icon: Icons.recordPage, label: I18n.t('adv_col_menu.type_record_note') + chkType('record_note'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'record_note') },
+                        { icon: Icons.play, label: I18n.t('adv_col_menu.type_button') + chkType('button'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'button') },
                         { type: 'divider' },
-                        { icon: Icons.time, label: 'Data Creazione' + chkType('created_time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'created_time') },
-                        { icon: Icons.time, label: 'Ultima Modifica' + chkType('last_edited_time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'last_edited_time') }
+                        { icon: Icons.time, label: I18n.t('adv_col_menu.type_created_time') + chkType('created_time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'created_time') },
+                        { icon: Icons.time, label: I18n.t('adv_col_menu.type_last_edited_time') + chkType('last_edited_time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'last_edited_time') }
                     ]
                 }
             );
         } else {
-            menuItems.push({ type: 'custom', html: '<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px; font-style:italic;">Questa colonna è gestita dall\'app.<br>Cambia le sue impostazioni<br>cliccando su "Mostra come...".</div>' });
+            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px; font-style:italic;">${I18n.t('adv_col_menu.managed_by_app')}</div>` });
         }
 
-        if (col.type === 'formula') menuItems.push({ icon: Icons.formula, label: 'Modifica Formula', onClick: () => AdvancedTable.editFormula(realTableId, colId) });
-        else if (col.type === 'rollup') menuItems.push({ icon: Icons.rollup, label: 'Configura Rollup', onClick: () => AdvancedTable.openRollupConfig(realTableId, colId) });
+        if (col.type === 'formula') menuItems.push({ icon: Icons.formula, label: I18n.t('adv_col_menu.edit_formula'), onClick: () => AdvancedTable.editFormula(realTableId, colId) });
+        else if (col.type === 'rollup') menuItems.push({ icon: Icons.rollup, label: I18n.t('adv_col_menu.configure_rollup'), onClick: () => AdvancedTable.openRollupConfig(realTableId, colId) });
 
         menuItems.push({ type: 'divider' });
 
         menuItems.push({
-            icon: Icons.moveArrow, label: 'Sposta Colonna', type: 'submenu',
+            icon: Icons.moveArrow, label: I18n.t('adv_col_menu.move_column'), type: 'submenu',
             items:[
-                { icon: Icons.arrowLeft, label: 'Sposta prima', disabled: colIndex === 0, onClick: () => AdvancedTableColumnMenus.moveCol(realTableId, colId, -1) },
-                { icon: Icons.arrowRight, label: 'Sposta dopo', disabled: colIndex === state.columns.length - 1, onClick: () => AdvancedTableColumnMenus.moveCol(realTableId, colId, 1) }
+                { icon: Icons.arrowLeft, label: I18n.t('adv_col_menu.move_before'), disabled: colIndex === 0, onClick: () => AdvancedTableColumnMenus.moveCol(realTableId, colId, -1) },
+                { icon: Icons.arrowRight, label: I18n.t('adv_col_menu.move_after'), disabled: colIndex === state.columns.length - 1, onClick: () => AdvancedTableColumnMenus.moveCol(realTableId, colId, 1) }
             ]
         });
 
         menuItems.push({ type: 'divider' });
         
-        const deleteLabel = col.type === 'relation_backlink' ? 'Nascondi Relazione Collegata' : 'Elimina Colonna';
+        const deleteLabel = col.type === 'relation_backlink' ? I18n.t('adv_col_menu.hide_backlink') : I18n.t('adv_col_menu.delete_column');
         menuItems.push({ icon: Icons.trash, label: deleteLabel, danger: true, onClick: () => AdvancedTableColumnMenus.deleteCol(realTableId, colId) });
 
         const anchorId = e && e.currentTarget && e.currentTarget.id ? e.currentTarget.id : `adv-th-${tableId}-${colId}`;
@@ -458,17 +458,17 @@ const AdvancedTableColumnMenus = {
 
         const bodyHTML = `
             <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px; line-height: 1.5;">
-                Aggiungi una descrizione o delle note per la colonna <b>${col.name}</b>. Questo testo apparirà come un suggerimento (tooltip) passando il mouse sull'intestazione della tabella.
+                ${I18n.t('adv_col_menu.comment_modal_desc', { colName: col.name })}
             </div>
-            <textarea id="advColCommentInput" class="modern-input" style="width: 100%; min-height: 120px; resize: vertical; padding: 10px; font-family: inherit; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px;" placeholder="Scrivi qui il commento...">${currentComment}</textarea>
+            <textarea id="advColCommentInput" class="modern-input" style="width: 100%; min-height: 120px; resize: vertical; padding: 10px; font-family: inherit; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px;" placeholder="${I18n.t('adv_col_menu.comment_placeholder')}">${currentComment}</textarea>
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveColumnComment('${tableId}', '${colId}')">Salva Commento</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveColumnComment('${tableId}', '${colId}')">${I18n.t('common.save')}</button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.noteInline} Commento Colonna</span>`, bodyHTML, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.noteInline} ${I18n.t('adv_col_menu.comment_modal_title')}</span>`, bodyHTML, footerHTML);
 
         setTimeout(() => {
             const input = document.getElementById('advColCommentInput');
@@ -659,7 +659,7 @@ const AdvancedTableColumnMenus = {
 
         // Conferma preventiva se presente perdita di dati
         if (hasDataLoss) {
-            const proceed = confirm("Attenzione: Alcuni dati in questa colonna non sono compatibili con il nuovo formato (o verranno distrutte le pagine associate) e andranno persi. Vuoi procedere comunque?");
+            const proceed = confirm(I18n.t('adv_col_menu.warn_data_loss'));
             if (!proceed) return;
         }
 
@@ -764,7 +764,7 @@ const AdvancedTableColumnMenus = {
         if (!col) return;
 
         if (col.type === 'relation_backlink') {
-            if (!confirm(`Nascondere questa colonna? (L'opzione "Mostra nel database collegato" verrà disattivata nell'origine).`)) {
+            if (!confirm(I18n.t('adv_col_menu.confirm_hide_backlink'))) {
                 AdvancedTable.closeDropdowns(true);
                 return;
             }
@@ -818,18 +818,18 @@ const AdvancedTableColumnMenus = {
         });
 
         if (isTargetOfRelation) {
-            alert(`🚫 IMPOSSIBILE ELIMINARE:\nLa colonna "${col.name}" è attualmente puntata dal database "${pointingTableName}" tramite una Relazione o un Rollup.\n\nRimuovi prima il campo collegato in quel database per poter procedere.`);
+            alert(I18n.t('adv_col_menu.warn_target_of_relation', { colName: col.name, tableName: pointingTableName }));
             AdvancedTable.closeDropdowns(true);
             return;
         }
 
         if (isUsedInFormula) {
-            if (!confirm(`⚠️ ATTENZIONE: La colonna "${col.name}" è utilizzata all'interno di una o più Formule.\nSe la elimini, smetteranno di funzionare.\n\nSei sicuro di volerla eliminare comunque?`)) {
+            if (!confirm(I18n.t('adv_col_menu.warn_used_in_formula', { colName: col.name }))) {
                 AdvancedTable.closeDropdowns(true);
                 return;
             }
         } else {
-            if (!confirm(`Eliminare intera colonna e tutti i suoi dati?`)) {
+            if (!confirm(I18n.t('adv_col_menu.confirm_delete_column'))) {
                 AdvancedTable.closeDropdowns(true);
                 return;
             }

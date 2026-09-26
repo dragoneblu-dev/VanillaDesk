@@ -31,8 +31,8 @@ Object.assign(AdvancedTable, {
                 }
                 bodyContainer.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; color:var(--danger-color); border:1px dashed var(--danger-color); border-radius:6px; background:rgba(239, 68, 68, 0.05);">
-                        <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Errore Critico: I dati di configurazione di questo Widget sono andati perduti o eliminati.</span></span>
-                        <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="document.getElementById('${tableId}').remove(); if(typeof Store !== 'undefined') Store.triggerAutoSave();"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} Rimuovi Widget Rotto</span></button>
+                        <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} ${I18n.t('adv_render.critical_error_lost')}</span></span>
+                        <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="document.getElementById('${tableId}').remove(); if(typeof Store !== 'undefined') Store.triggerAutoSave();"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${I18n.t('adv_render.remove_broken_widget')}</span></button>
                     </div>
                 `;
             }
@@ -69,10 +69,10 @@ Object.assign(AdvancedTable, {
         if (!bodyContainer) {
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('adv_render.drag_to_move')}" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('adv_render.options')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;"></span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('common.loading')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -90,8 +90,8 @@ Object.assign(AdvancedTable, {
         if (state.isLinkedView && state.sourceDeleted) {
             bodyContainer.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; color:var(--danger-color); border:1px dashed var(--danger-color); border-radius:6px; background:rgba(239, 68, 68, 0.05);">
-                    <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Il Database originale di questa Vista è stato eliminato.</span></span>
-                    <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="AdvancedTable.deleteTable('${tableId}', true)"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} Rimuovi Vista</span></button>
+                    <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} ${I18n.t('adv_render.original_db_deleted')}</span></span>
+                    <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="AdvancedTable.deleteTable('${tableId}', true)"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${I18n.t('adv_render.remove_view')}</span></button>
                 </div>
             `;
             return;
@@ -152,25 +152,25 @@ Object.assign(AdvancedTable, {
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
             if (typeof AdvancedBoard !== 'undefined') {
-                tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewList, title: 'Cambia visualizzazione', label: 'Vista', onClick: AdvancedBoard.openViewMenu });
+                tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewList, title: I18n.t('adv_board.select_view_title'), label: I18n.t('table.view'), onClick: AdvancedBoard.openViewMenu });
             }
             if (!state.isLinkedView && !isSysDB) {
-                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
+                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina Database', active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
             
             // FILTRI E VISTE SALVATE
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra Dati (Campi)', active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
             
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
-            tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: 'Viste / Filtri Salvati', active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
+            tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: I18n.t('adv_filter.saved_views_title'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
             
             // Pulsante di ricarica e sincronizzazione con il disco
-            tools.push({ icon: Icons.refresh, title: 'Ricarica dal disco e aggiorna dati', onClick: () => AdvancedTable.forceRecalculate(tableId) });
+            tools.push({ icon: Icons.refresh, title: I18n.t('adv_render.reload_from_disk'), onClick: () => AdvancedTable.forceRecalculate(tableId) });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
-                title: state.title || 'Database',
+                title: state.title || I18n.t('editor.database'),
                 optionsId: `adv-opt-btn-${tableId}`,
                 tools: tools,
                 onTitleChange: AdvancedTable.updateTitle,
@@ -209,7 +209,7 @@ Object.assign(AdvancedTable, {
             const thStyleOverrides = isFiltered ? `background: rgba(37, 99, 235, 0.15); color: var(--accent-color); border-bottom: 2px solid var(--accent-color);` : '';
             const filterIconHtml = isFiltered ? `<span style="opacity:0.5; color:var(--accent-color); margin-left:2px; font-size:0.8rem;">${Icons.filter}</span>` : '';
 
-            const safeColName = String(col.name || 'Senza Nome').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const safeColName = String(col.name || I18n.t('editor.untitled')).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             
             let tooltipHTML = `<div style='margin-bottom:4px; font-size:1.1em;'><b>${safeColName}</b></div>`;
             let hasTooltipInfo = false;
@@ -222,7 +222,7 @@ Object.assign(AdvancedTable, {
 
             if (isFiltered) {
                 const safeFilterTerm = state.filters[col.id].replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                tooltipHTML += `<div style='color:var(--accent-color); border-top:1px solid rgba(150,150,150,0.2); padding-top:4px;'><b>Filtro attivo:</b> ${safeFilterTerm}</div>`;
+                tooltipHTML += `<div style='color:var(--accent-color); border-top:1px solid rgba(150,150,150,0.2); padding-top:4px;'><b>${I18n.t('adv_render.active_filter_label')}</b> ${safeFilterTerm}</div>`;
                 hasTooltipInfo = true;
             }
 
@@ -256,7 +256,7 @@ Object.assign(AdvancedTable, {
         
         if (isEdit) {
             if (state.isLinkedView) {
-                lastColIcon = `<button class="adv-add-btn" style="padding:4px; margin:0 auto; display:flex; align-items:center; justify-content:center; color:var(--accent-color);" title="Vai al Database Originale per modificare la struttura" onclick="UI.jumpToWidget('${state.sourceTableId}')">${Icons.tableDatabase}</button>`;
+                lastColIcon = `<button class="adv-add-btn" style="padding:4px; margin:0 auto; display:flex; align-items:center; justify-content:center; color:var(--accent-color);" title="${I18n.t('adv_render.go_to_orig_db_structure')}" onclick="UI.jumpToWidget('${state.sourceTableId}')">${Icons.tableDatabase}</button>`;
             } else {
                 lastColIcon = `<button class="adv-add-btn" style="padding:4px; margin:0 auto; display:flex; align-items:center; justify-content:center;" onclick="AdvancedTableColumnMenus.openAddColumnMenu(event, '${tableId}')">${Icons.plus}</button>`;
             }
@@ -265,7 +265,7 @@ Object.assign(AdvancedTable, {
         html += `<th id="adv-th-add-${tableId}" style="width: ${lastColWidth}px; text-align:center; padding:0; vertical-align:middle;">${lastColIcon}</th></tr></thead><tbody>`;
 
         if (pagedRows.length === 0) {
-            html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:20px;">Nessun risultato.</td></tr>`;
+            html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:20px;">${I18n.t('adv_render.no_results')}</td></tr>`;
         } else {
             pagedRows.forEach(row => {
                 
@@ -336,7 +336,7 @@ Object.assign(AdvancedTable, {
                     html += `<td style="width: ${col.width}px; max-width: ${col.width}px;">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                 });
 
-                let actionCell = `<button class="adv-icon-btn" title="Apri Record" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
+                let actionCell = `<button class="adv-icon-btn" title="${I18n.t('adv_render.options')}" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
                 html += `<td class="adv-action-cell"><div class="adv-action-cell-content">${actionCell}</div></td></tr>`;
             });
         }
@@ -347,29 +347,29 @@ Object.assign(AdvancedTable, {
             html += `<div class="adv-footer-left">`;
             
             if (isEdit && !isSysDB) {
-                html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova riga</span></button>`;
+                html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} ${I18n.t('table.new_row')}</span></button>`;
                 
                 if (state.selectedRows && state.selectedRows.length > 0) {
                     if (state.selectedRows.length === 1) {
-                        html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} Apri Record</span></button>`;
+                        html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} ${I18n.t('adv_render.open_record')}</span></button>`;
                     }
-                    const btnLabel = state.selectedRows.length === 1 ? 'Elimina 1 riga' : `Elimina ${state.selectedRows.length} righe`;
+                    const btnLabel = state.selectedRows.length === 1 ? I18n.t('table.delete_rows_singular') : I18n.t('table.delete_rows_plural', { count: state.selectedRows.length });
                     html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                    html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
+                    html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
                 }
             } else if (isSysDB) {
-                html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">Il numero di record riflette le pagine. Le righe non possono essere aggiunte o rimosse manualmente.</div>`;
+                html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
             }
 
             html += `</div><div class="adv-footer-right">`;
 
             if (pageSize === 'all') {
-                if (isEdit) html += `<div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:pointer; margin:0; font-weight:normal;" onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')">Tutte le righe</div>`;
+                if (isEdit) html += `<div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:pointer; margin:0; font-weight:normal;" onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')">${I18n.t('table.all_rows')}</div>`;
             } else {
                 let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
                 let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
                 html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
-                         <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>Pagina ${currentPage} di ${totalPages}</div>
+                         <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>${I18n.t('table.page_info', { current: currentPage, total: totalPages })}</div>
                          <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
             }
             html += `</div></div>`;

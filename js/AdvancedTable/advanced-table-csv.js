@@ -92,7 +92,7 @@ Object.assign(AdvancedTable, {
             const link = document.createElement("a");
             link.style.display = "none";
             link.setAttribute("href", url);
-            link.setAttribute("download", `${(state.title || "Database").replace(/ /g, '_')}_export.csv`);
+            link.setAttribute("download", `${(state.title || I18n.t('editor.database')).replace(/ /g, '_')}_export.csv`);
             document.body.appendChild(link);
             
             link.click();
@@ -104,7 +104,7 @@ Object.assign(AdvancedTable, {
 
         } catch(err) {
             console.error(err);
-            alert("Errore tecnico durante l'esportazione della tabella.");
+            alert(I18n.t('adv_csv.export_error'));
         }
     },
 
@@ -122,39 +122,38 @@ Object.assign(AdvancedTable, {
             const bodyHTML = `
                 <div style="background: rgba(37, 99, 235, 0.05); padding: 15px; border-radius: 6px; border: 1px solid rgba(37, 99, 235, 0.2); margin-bottom: 20px;">
                     <p style="font-size:0.85rem; color:var(--text-secondary); margin:0 0 15px 0; line-height:1.5;">
-                        Imposta i parametri corretti in base a come è stato generato il tuo file CSV.
+                        ${I18n.t('adv_csv.banner_desc')}
                     </p>
                     
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:5px;">Separatore dei campi:</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:5px;">${I18n.t('adv_csv.field_separator_label')}</label>
                     <select id="advCsvSeparator" class="modern-input" style="width:100%; margin-bottom:10px;" onchange="document.getElementById('advCsvCustomSep').style.display = this.value === 'custom' ? 'block' : 'none'">
-                        <option value=";">Punto e Virgola (;)</option>
-                        <option value=",">Virgola (,)</option>
-                        <option value="TAB">Tabulazione (TAB)</option>
-                        <option value="custom">Altro (Specifica)...</option>
+                        <option value=";">${I18n.t('adv_csv.sep_semicolon')}</option>
+                        <option value=",">${I18n.t('adv_csv.sep_comma')}</option>
+                        <option value="TAB">${I18n.t('adv_csv.sep_tab')}</option>
+                        <option value="custom">${I18n.t('adv_csv.sep_custom')}</option>
                     </select>
                     
-                    <input type="text" id="advCsvCustomSep" class="modern-input" style="width:100%; margin-bottom:15px; display:none;" placeholder="Digita un separatore custom (es: | o ~)" maxlength="3">
+                    <input type="text" id="advCsvCustomSep" class="modern-input" style="width:100%; margin-bottom:15px; display:none;" placeholder="${I18n.t('adv_csv.sep_custom_placeholder')}" maxlength="3">
 
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:5px; margin-top:15px; border-top: 1px dashed var(--border-color); padding-top: 15px;">Intestazioni (Nomi delle Colonne):</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:5px; margin-top:15px; border-top: 1px dashed var(--border-color); padding-top: 15px;">${I18n.t('adv_csv.headers_label')}</label>
                     <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; color:var(--text-primary);">
                         <input type="checkbox" id="advCsvHasHeaders" checked style="transform:scale(1.2);">
-                        La prima riga del file contiene i nomi delle colonne
+                        ${I18n.t('adv_csv.first_row_headers_checkbox')}
                     </label>
                     <div style="font-size: 0.75rem; color: var(--text-secondary); margin-left: 25px; margin-top: 5px;">
-                        Se <b>spuntato</b>, modificheremo i nomi delle colonne di questo database per farli combaciare con il file.<br>
-                        Se <b>deselezionato</b>, inietteremo i dati nudi e crudi da sinistra verso destra.
+                        ${I18n.t('adv_csv.headers_hint')}
                     </div>
                 </div>
             `;
             
             const footerHTML = `
-                <button class="btn" style="color:var(--danger-color); margin-right:auto;" onclick="document.getElementById('advCsvCancel').click()">Annulla</button>
-                <button class="btn btn-primary" onclick="document.getElementById('advCsvConfirm').click()"><span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} Importa Dati</span></button>
+                <button class="btn" style="color:var(--danger-color); margin-right:auto;" onclick="document.getElementById('advCsvCancel').click()">${I18n.t('common.cancel')}</button>
+                <button class="btn btn-primary" onclick="document.getElementById('advCsvConfirm').click()"><span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} ${I18n.t('adv_csv.btn_import_data')}</span></button>
                 <button id="advCsvCancel" style="display:none;"></button>
                 <button id="advCsvConfirm" style="display:none;"></button>
             `;
 
-            UI.openDrawer('📥 Importazione CSV Database', bodyHTML, footerHTML);
+            UI.openDrawer(I18n.t('adv_csv.drawer_import_title'), bodyHTML, footerHTML);
 
             // 3. Attendiamo la decisione dell'utente
             const importConfig = await new Promise((resolve) => {
@@ -188,7 +187,7 @@ Object.assign(AdvancedTable, {
             const parsed = TableManager.CSV.parseFullCSV(text, importConfig.separator);
             
             if (parsed.length < 1) {
-                alert("Il CSV è vuoto o non è stato possibile dividerlo con il separatore scelto.");
+                alert(I18n.t('adv_csv.alert_csv_empty'));
                 return;
             }
 
@@ -281,7 +280,7 @@ Object.assign(AdvancedTable, {
                 
                 if (typeof UI !== 'undefined' && UI.showToast) {
                     setTimeout(() => {
-                        UI.showToast("Impaginazione a 20 righe attivata in automatico per proteggere le prestazioni.", "info");
+                        UI.showToast(I18n.t('adv_csv.pagination_toast'), "info");
                     }, 2500); 
                 }
             }
@@ -296,13 +295,13 @@ Object.assign(AdvancedTable, {
             }
             
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast(`Importati con successo ${dataRows.length} record.`, "success");
+                UI.showToast(I18n.t('adv_csv.import_success_toast', { count: dataRows.length }), "success");
             }
 
         } catch (err) {
             if (err.name !== 'AbortError') {
                 console.error(err);
-                alert("Errore durante l'importazione: " + err.message);
+                alert(I18n.t('adv_csv.import_error', { error: err.message }));
             }
         }
     }

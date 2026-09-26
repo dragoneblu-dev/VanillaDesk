@@ -36,10 +36,10 @@ Object.assign(AdvancedTable, {
 
         if (!state.filters) state.filters = {};
 
-        const safeTooltipText = "Usa i simboli &gt;, &lt;, != o dividi con ; per cercare più termini.\nInizia con = per match esatto.\nPer i range di date puoi usare la freccia ➔";
+        const safeTooltipText = I18n.t('adv_filter.tooltip_info');
         
         let html = `<div class="adv-dropdown-title" style="margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; text-transform:uppercase; letter-spacing:0.05em;">
-                    <span>Filtra Dati per Campo</span>
+                    <span>${I18n.t('adv_filter.title')}</span>
                     <span data-tooltip="${safeTooltipText}" style="cursor:help; opacity:0.6; display:inline-flex; align-items:center; color:var(--text-primary); transition: opacity 0.2s;" onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.6'">${Icons.info}</span>
                  </div>`;
 
@@ -65,7 +65,7 @@ Object.assign(AdvancedTable, {
             const val = state.filters[c.id] || '';
             const safeVal = val.replace(/"/g, '&quot;');
             
-            const clearBtn = val ? `<button class="adv-icon-btn danger" style="position:absolute; right:2px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.clearSingleFilter('${tableId}', '${c.id}')" title="Cancella filtro">${Icons.close}</button>` : '';
+            const clearBtn = val ? `<button class="adv-icon-btn danger" style="position:absolute; right:2px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.clearSingleFilter('${tableId}', '${c.id}')" title="${I18n.t('adv_filter.clear_filter_title')}">${Icons.close}</button>` : '';
 
             // L'uso di autocomplete="chrome-off", un name casuale e data-lpignore disinnesca l'autofill nativo e di terze parti
             return `<div style="display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap: 10px; margin-bottom:5px; position:relative;">
@@ -86,7 +86,7 @@ Object.assign(AdvancedTable, {
         visibleCols.forEach(c => { html += buildInputHTML(c); });
 
         if (hiddenCols.length > 0) {
-            html += `<div class="adv-dropdown-title" style="margin-top: 15px; margin-bottom: 10px; padding-top: 10px; border-top: 1px solid var(--border-color);">Campi non visibili</div>`;
+            html += `<div class="adv-dropdown-title" style="margin-top: 15px; margin-bottom: 10px; padding-top: 10px; border-top: 1px solid var(--border-color);">${I18n.t('adv_filter.hidden_fields')}</div>`;
             hiddenCols.forEach(c => { html += buildInputHTML(c); });
         }
 
@@ -135,13 +135,13 @@ Object.assign(AdvancedTable, {
         const canSave = hasActiveFilters && !isDuplicate;
 
         let html = `<div class="adv-dropdown-title" style="margin-bottom:8px; display:flex; justify-content:space-between; align-items:center; text-transform:uppercase; letter-spacing:0.05em;">
-                        <span>Viste e Filtri Salvati</span>
+                        <span>${I18n.t('adv_filter.saved_views_title')}</span>
                     </div>`;
 
         html += `<div style="display:flex; flex-direction:column; gap:6px; padding: 0 4px; max-height: 40vh; overflow-y: auto;">`;
         
         if (state.savedFilters.length === 0) {
-            html += `<div style="font-size:0.8rem; color:var(--text-secondary); text-align:center; font-style:italic; padding:10px 0;">Nessuna vista salvata.</div>`;
+            html += `<div style="font-size:0.8rem; color:var(--text-secondary); text-align:center; font-style:italic; padding:10px 0;">${I18n.t('adv_filter.no_saved_views')}</div>`;
         }
 
         state.savedFilters.forEach(sf => {
@@ -163,7 +163,7 @@ Object.assign(AdvancedTable, {
 
                             <button class="adv-icon-btn danger" style="padding: 4px; margin:0; flex-shrink:0; opacity:0.5; transition: opacity 0.2s;" 
                                     onmouseenter="this.style.opacity='1'" onmouseleave="this.style.opacity='0.5'"
-                                    onclick="event.stopPropagation(); AdvancedTable.deleteSavedFilter('${tableId}', '${sf.id}')" title="Elimina filtro">
+                                    onclick="event.stopPropagation(); AdvancedTable.deleteSavedFilter('${tableId}', '${sf.id}')" title="${I18n.t('adv_filter.delete_saved_filter')}">
                                 ${Icons.trash}
                             </button>
                         </div>`;
@@ -177,7 +177,7 @@ Object.assign(AdvancedTable, {
             if (canSave) {
                 html += `
                     <button class="adv-menu-btn" style="width:100%; display:flex; justify-content:center; align-items:center; gap:5px; margin-bottom: 5px;" onclick="event.stopPropagation(); AdvancedTable.saveCurrentFilter('${tableId}')">
-                        <span style="display:inline-flex; align-items:center; width:14px;">${Icons.save}</span> Salva Vista/Filtro Corrente
+                        <span style="display:inline-flex; align-items:center; width:14px;">${Icons.save}</span> ${I18n.t('adv_filter.save_current_view')}
                     </button>
                 `;
             }
@@ -186,7 +186,7 @@ Object.assign(AdvancedTable, {
                 html += `
                 <div style="padding-top: ${canSave ? '5px' : '0'};">
                     <button class="adv-menu-btn" style="width:100%; display:flex; justify-content:center; align-items:center; gap:5px; color:var(--danger-color); background:rgba(239, 68, 68, 0.1);" onclick="event.stopPropagation(); AdvancedTable.clearAllFilters('${tableId}', false)">
-                        Azzera Tutti i Filtri
+                        ${I18n.t('adv_filter.clear_all_filters')}
                     </button>
                 </div>`;
             }
@@ -203,7 +203,7 @@ Object.assign(AdvancedTable, {
         const hasActiveFilters = state.filters && Object.values(state.filters).some(val => val.trim() !== '');
         if (!hasActiveFilters) return;
 
-        const filterName = prompt("Scegli un nome per questa Vista/Filtro (es: Clienti Premium):");
+        const filterName = prompt(I18n.t('adv_filter.prompt_name'));
         if (!filterName || filterName.trim() === '') return;
 
         if (!state.savedFilters) state.savedFilters = [];
@@ -242,7 +242,7 @@ Object.assign(AdvancedTable, {
     },
 
     deleteSavedFilter: (tableId, filterId) => {
-        if (!confirm("Sei sicuro di voler eliminare definitivamente questo filtro dalla lista?")) return;
+        if (!confirm(I18n.t('adv_filter.confirm_delete_saved'))) return;
 
         let state = AdvancedTable.getState(tableId);
         if (!state.savedFilters) return;
@@ -302,9 +302,11 @@ Object.assign(AdvancedTable, {
             popup.style.left = rect.left + 'px';
             popup.style.width = rect.width + 'px';
 
+            const optYes = I18n.t('adv_filter.cb_checked');
+            const optNo = I18n.t('adv_filter.cb_unchecked');
             popup.innerHTML = `
-                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'Sì')">Sì (Spuntato)</div>
-                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'No')">No (Vuoto)</div>
+                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'Sì')">${optYes}</div>
+                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'No')">${optNo}</div>
             `;
             popup.style.display = 'block';
             return;

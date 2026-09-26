@@ -22,9 +22,9 @@ const AdvancedPivotMenus = {
         const isStriped = state.striped !== false;
         const isFooterHidden = state.hideFooterControls === true;
 
-        const widthLabel = 'Adatta a larghezza pagina&nbsp;' + (!state.freeWidth ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
-        const zebraLabel = 'Righe alternate' + (state.striped !== false ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
-        const footerLabel = 'Piè di pagina (Paginazione)' + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const widthLabel = I18n.t('adv_menus.fit_page_width') + '&nbsp;' + (!state.freeWidth ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const zebraLabel = I18n.t('adv_menus.striped_rows') + (state.striped !== false ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const footerLabel = I18n.t('adv_menus.footer_controls_pivot') + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
 
         // --- CALCOLO VISIBILITA' CAMPI ---
         let viewId = 'table';
@@ -46,12 +46,12 @@ const AdvancedPivotMenus = {
         let visibilityItems = [...visibleItems];
         if (hiddenItems.length > 0) {
             if (visibleItems.length > 0) visibilityItems.push({ type: 'divider' });
-            visibilityItems.push({ type: 'custom', html: '<div style="font-size:0.65rem; font-weight:bold; color:var(--text-secondary); padding:4px 8px; text-transform:uppercase; letter-spacing:0.05em;">Campi Nascosti</div>' });
+            visibilityItems.push({ type: 'custom', html: `<div style="font-size:0.65rem; font-weight:bold; color:var(--text-secondary); padding:4px 8px; text-transform:uppercase; letter-spacing:0.05em;">${I18n.t('adv_menus.hidden_fields')}</div>` });
             visibilityItems = visibilityItems.concat(hiddenItems);
         }
 
         const menuItems = [
-            { icon: Icons.eye, label: 'Visualizza campo', type: 'submenu', items: visibilityItems },
+            { icon: Icons.eye, label: I18n.t('adv_menus.view_field'), type: 'submenu', items: visibilityItems },
             { type: 'divider' },
             { icon: Icons.widthFit, label: widthLabel, onClick: () => AdvancedTable.toggleFreeWidth(tableId) },
             { icon: Icons.zebra, label: zebraLabel, onClick: () => AdvancedPivotMenus.toggleZebra(tableId) }
@@ -64,21 +64,21 @@ const AdvancedPivotMenus = {
         menuItems.push({ type: 'divider' });
 
         if (state.isPivot) {
-            menuItems.push({ icon: Icons.settings, label: 'Modifica Vista Analitica', onClick: () => AdvancedPivotMenus.openCreateWizard(tableId, false) });
+            menuItems.push({ icon: Icons.settings, label: I18n.t('adv_menus.modify_pivot'), onClick: () => AdvancedPivotMenus.openCreateWizard(tableId, false) });
             menuItems.push({ type: 'divider' });
         }
 
         if (state.sourceTableId) {
-            menuItems.push({ icon: Icons.tableDatabase, label: 'Vai al Database Originale', onClick: () => UI.jumpToWidget(state.sourceTableId) });
+            menuItems.push({ icon: Icons.tableDatabase, label: I18n.t('adv_menus.go_to_original_db'), onClick: () => UI.jumpToWidget(state.sourceTableId) });
             menuItems.push({ type: 'divider' });
         }
 
-        menuItems.push({ icon: Icons.export, label: 'Esporta come CSV', onClick: () => AdvancedTable.exportCSV(tableId) });
+        menuItems.push({ icon: Icons.export, label: I18n.t('adv_menus.export_csv'), onClick: () => AdvancedTable.exportCSV(tableId) });
         menuItems.push({ type: 'divider' });
         
         menuItems.push({ 
             icon: Icons.trash, 
-            label: state.isPivot ? 'Elimina Tabella Pivot' : 'Rimuovi Vista Collegata', 
+            label: state.isPivot ? I18n.t('adv_menus.remove_pivot') : I18n.t('adv_menus.remove_linked_view'), 
             danger: true, 
             onClick: () => AdvancedTable.deleteTable(tableId) 
         });
@@ -165,7 +165,7 @@ const AdvancedPivotMenus = {
             Object.keys(AppState.databases).forEach(id => {
                 const s = AppState.databases[id];
                 if (s && !s.isPivot && !s.isLinkedView && s.columns && !id.includes('adv_code_') && !id.includes('adv_btnbar_') && !id.includes('adv_cols_') && !id.includes('adv_journal_')) {
-                    dbList.push({ id: id, title: s.title || 'Database' });
+                    dbList.push({ id: id, title: s.title || I18n.t('editor.database') });
                 }
             });
         }
@@ -199,7 +199,7 @@ const AdvancedPivotMenus = {
                 }
 
                 const dbRef = dbList.find(d => d.id === state.sourceTableId);
-                sourceDbTitle = dbRef ? dbRef.title : "Sorgente Eliminata o Non Trovata";
+                sourceDbTitle = dbRef ? dbRef.title : I18n.t('adv_pivot_menu.source_not_found');
                 sourceState = AdvancedTable.getTableState(state.sourceTableId);
             }
         }
@@ -232,7 +232,13 @@ const AdvancedPivotMenus = {
             sunset: [1, 2, 3, 4, 5, 6].map(i => style.getPropertyValue(`--chart-sunset-${i}`).trim())
         };
 
-        const paletteNames = { default: "Predefinita (Tema App)", pastel: "Morbida (Pastello)", vibrant: "Vibrante (Satura)", ocean: "Oceano (Freddi)", sunset: "Tramonto (Caldi)" };
+        const paletteNames = { 
+            default: I18n.t('adv_pivot_menu.palette_default'), 
+            pastel: I18n.t('adv_pivot_menu.palette_pastel'), 
+            vibrant: I18n.t('adv_pivot_menu.palette_vibrant'), 
+            ocean: I18n.t('adv_pivot_menu.palette_ocean'), 
+            sunset: I18n.t('adv_pivot_menu.palette_sunset') 
+        };
 
         let paletteHTML = `<div style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;">
             <input type="hidden" id="chartColorPalette" value="${currentPalette}">`;
@@ -254,7 +260,7 @@ const AdvancedPivotMenus = {
         if (chartOnlyMode && isEditing) {
             let xLabels = AdvancedPivotMenus.pendingConfig.groupBy.map(id => {
                 const c = sourceState?.columns.find(col => col.id === id);
-                return c ? c.name : 'Sconosciuta';
+                return c ? c.name : I18n.t('adv_actions.unknown');
             }).join(' + ');
 
             let yLabels = AdvancedPivotMenus.pendingConfig.aggregations.map(agg => agg.label).join(', ');
@@ -267,23 +273,23 @@ const AdvancedPivotMenus = {
                      onmouseleave="this.style.borderColor='var(--border-color)'; this.style.backgroundColor='var(--bg-color)';">
                     
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; border-bottom:1px solid var(--border-color); padding-bottom:6px;">
-                        <span style="font-weight:bold; color:var(--text-secondary); text-transform:uppercase; font-size:0.7rem; letter-spacing:0.05em;">Dati e Struttura Analitica</span>
+                        <span style="font-weight:bold; color:var(--text-secondary); text-transform:uppercase; font-size:0.7rem; letter-spacing:0.05em;">${I18n.t('adv_pivot_menu.data_structure_title')}</span>
                         <span style="font-size:0.75rem; color:var(--accent-color); font-weight:bold; display:inline-flex; align-items:center; gap:4px;">
-                            ${Icons.edit} Modifica Dati & Gruppi ➔
+                            ${Icons.edit} ${I18n.t('adv_pivot_menu.edit_data_groups_btn')}
                         </span>
                     </div>
 
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:6px;">
                         <span style="opacity:0.6; display:inline-flex;">${Icons.tableDatabase}</span> 
-                        <span style="color:var(--text-secondary);">Sorgente:</span> <b>${sourceDbTitle}</b>
+                        <span style="color:var(--text-secondary);">${I18n.t('adv_pivot_menu.source_label')}</span> <b>${sourceDbTitle}</b>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px; margin-bottom:4px;">
                         <span style="color:var(--accent-color); display:inline-flex;">${Icons.folder}</span> 
-                        <span style="color:var(--text-secondary);">Asse X (Gruppi):</span> <b>${xLabels || 'Nessuno'}</b>
+                        <span style="color:var(--text-secondary);">${I18n.t('adv_pivot_menu.x_axis_label')}</span> <b>${xLabels || I18n.t('common.none')}</b>
                     </div>
                     <div style="display:flex; align-items:center; gap:8px;">
                         <span style="color:var(--tx-c4); display:inline-flex;">${Icons.formula}</span> 
-                        <span style="color:var(--text-secondary);">Asse Y (Metriche):</span> <b>${yLabels || 'Nessuna'}</b>
+                        <span style="color:var(--text-secondary);">${I18n.t('adv_pivot_menu.y_axis_label')}</span> <b>${yLabels || I18n.t('common.none')}</b>
                     </div>
                 </div>
             `;
@@ -292,21 +298,21 @@ const AdvancedPivotMenus = {
         const bodyHTML = `
             <div style="display: ${chartOnlyMode ? 'none' : 'block'};">
                 <div id="linkedStep1" style="${isEditing ? 'display:none;' : ''}">
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">1. Scegli il Database Originale:</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_pivot_menu.step1_title')}</label>
                     <select id="pivotSourceSelect" class="modern-input" style="margin-bottom:20px; margin-top:5px; width:100%;" onchange="AdvancedPivotMenus.loadSchemaForStep2()">
-                        <option value="">-- Seleziona Database --</option>
+                        <option value="">${I18n.t('adv_actions.select_db_placeholder')}</option>
                         ${dbList.map(db => `<option value="${db.id}">➔ ${db.title}</option>`).join('')}
                     </select>
                 </div>
 
                 <div id="linkedStep2" style="display:none;">
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin-bottom:10px; display:block;">2. Seleziona il Layout per la Vista Sincronizzata:</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin-bottom:10px; display:block;">${I18n.t('adv_pivot_menu.step2_title')}</label>
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom: 20px;" id="linkedViewButtonsArea"></div>
                     <div class="separator-h" style="margin:20px 0;"></div>
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--tx-c4); margin-bottom:10px; display:block;">Vista Analitica (Somme, Raggruppamenti e KPI):</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--tx-c4); margin-bottom:10px; display:block;">${I18n.t('adv_pivot_menu.analytics_view_title')}</label>
                     <button class="btn" style="width:100%; justify-content:center; padding:15px; border-radius:8px; border:1px dashed var(--tx-c4); background:rgba(255, 134, 0, 0.05);" onclick="AdvancedPivotMenus.showPivotConfig()">
                         <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--tx-c4);">
-                            <span style="font-size:1.5rem; display:inline-flex;">${Icons.tablePivot}</span> Crea Tabella Pivot / Grafico
+                            <span style="font-size:1.5rem; display:inline-flex;">${Icons.tablePivot}</span> ${I18n.t('adv_pivot_menu.btn_create_pivot_chart')}
                         </span>
                     </button>
                 </div>
@@ -314,27 +320,27 @@ const AdvancedPivotMenus = {
                 <div id="pivotStep2" style="${isEditing ? 'display:block;' : 'display:none;'}">
                     ${isEditing ? `
                     <div style="background: rgba(0,0,0,0.02); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color); margin-bottom: 15px; font-size:0.8rem;">
-                        <span style="color:var(--text-secondary);">Origine Dati Connessa:</span> <b><span style="display:inline-flex; align-items:center; vertical-align:middle; gap:5px;">${Icons.tableDatabase} ${sourceDbTitle}</span></b>
+                        <span style="color:var(--text-secondary);">${I18n.t('adv_pivot_menu.connected_source')}</span> <b><span style="display:inline-flex; align-items:center; vertical-align:middle; gap:5px;">${Icons.tableDatabase} ${sourceDbTitle}</span></b>
                     </div>
                     ` : ''}
 
                     <div style="background: rgba(37, 99, 235, 0.05); padding: 15px; border-radius:6px; margin-bottom:15px; border: 1px solid rgba(37, 99, 235, 0.2);">
-                        <label style="font-size:0.8rem; font-weight:bold; color:var(--accent-color); display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.folder}</span> Raggruppamenti (Asse X)</label>
+                        <label style="font-size:0.8rem; font-weight:bold; color:var(--accent-color); display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.folder}</span> ${I18n.t('adv_pivot_menu.group_by_axis')}</label>
                         <div style="display:flex; gap:5px; margin-top:5px; margin-bottom:10px;">
                             <select id="pivotGroupSelect" class="modern-input" style="flex:1; margin:0;"></select>
-                            <button class="btn" onclick="AdvancedPivotMenus.addGroup()">+ Aggiungi</button>
+                            <button class="btn" onclick="AdvancedPivotMenus.addGroup()">${I18n.t('adv_pivot_menu.btn_add')}</button>
                         </div>
                         <div id="pivotGroupList" style="display:flex; flex-direction:column; gap:5px;"></div>
                     </div>
 
                     <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius:6px; margin-bottom:20px; border: 1px solid var(--border-color);">
-                        <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.formula}</span> Metriche Calcolate (Asse Y)</label>
+                        <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.formula}</span> ${I18n.t('adv_pivot_menu.metrics_axis')}</label>
                         <div style="display:flex; gap:5px; margin-top:5px; margin-bottom:10px; align-items:center;">
-                            <span style="font-size:0.8rem; color:var(--text-secondary);">Elabora:</span>
+                            <span style="font-size:0.8rem; color:var(--text-secondary);">${I18n.t('adv_pivot_menu.process_label')}</span>
                             <select id="pivotAggCol" class="modern-input" style="flex:2; margin:0;" onchange="AdvancedPivotMenus.updateAggTypeOptions()"></select>
-                            <span style="font-size:0.8rem; color:var(--text-secondary);">con:</span>
+                            <span style="font-size:0.8rem; color:var(--text-secondary);">${I18n.t('adv_pivot_menu.with_label')}</span>
                             <select id="pivotAggType" class="modern-input" style="flex:1; margin:0;"></select>
-                            <button class="btn" onclick="AdvancedPivotMenus.addAgg()">+ Aggiungi</button>
+                            <button class="btn" onclick="AdvancedPivotMenus.addAgg()">${I18n.t('adv_pivot_menu.btn_add')}</button>
                         </div>
                         <div id="pivotAggList" style="display:flex; flex-direction:column; gap:5px;"></div>
                     </div>
@@ -345,62 +351,62 @@ const AdvancedPivotMenus = {
                 
                 ${summaryHTML}
                 
-                <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:10px;">Visualizzazione Risultato</label>
+                <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.result_view_title')}</label>
                 
                 <select id="pivotDisplayType" class="modern-input" style="width:100%; margin-bottom:10px; font-weight:bold; ${chartOnlyMode ? 'display:none;' : ''}" onchange="AdvancedPivotMenus.toggleChartOptions(this.value)">
-                    <option value="table" ${!isChart && !chartOnlyMode ? 'selected' : ''}>🔲 Mostra come Tabella Pivot</option>
-                    <option value="chart" ${isChart || chartOnlyMode ? 'selected' : ''}>📊 Mostra come Grafico Visivo</option>
+                    <option value="table" ${!isChart && !chartOnlyMode ? 'selected' : ''}>${I18n.t('adv_pivot_menu.view_as_pivot')}</option>
+                    <option value="chart" ${isChart || chartOnlyMode ? 'selected' : ''}>${I18n.t('adv_pivot_menu.view_as_chart')}</option>
                 </select>
 
                 <div id="pivotChartOptions" style="${isChart || chartOnlyMode ? 'display:block;' : 'display:none;'} margin-top:10px; border-top:1px dashed var(--border-color); padding-top:10px;">
                     
-                    <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">Seleziona lo stile del grafico:</label>
+                    <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.chart_style_label')}</label>
                     
                     <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;">
                         <input type="hidden" id="pivotChartStyle" value="${chartType}">
                         <div class="chart-type-card" data-type="bar" onclick="AdvancedPivotMenus.selectChartType('bar')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">Barre</span>
+                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_bar')}</span>
                         </div>
                         <div class="chart-type-card" data-type="horizontalBar" onclick="AdvancedPivotMenus.selectChartType('horizontalBar')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgHBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">Orizzontali</span>
+                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgHBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_horizontal_bar')}</span>
                         </div>
                         <div class="chart-type-card" data-type="line" onclick="AdvancedPivotMenus.selectChartType('line')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgLine}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">Linea</span>
+                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgLine}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_line')}</span>
                         </div>
                         <div class="chart-type-card" data-type="doughnut" onclick="AdvancedPivotMenus.selectChartType('doughnut')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgDoughnut}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">Ciambella</span>
+                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgDoughnut}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_doughnut')}</span>
                         </div>
                         <div class="chart-type-card" data-type="pie" onclick="AdvancedPivotMenus.selectChartType('pie')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgPie}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">Torta</span>
+                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgPie}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_pie')}</span>
                         </div>
                     </div>
 
-                    <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">Palette Cromatiche:</label>
+                    <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.color_palettes_label')}</label>
                     ${paletteHTML}
 
                     <div style="display:flex; flex-direction:column; gap:12px; border-top: 1px solid var(--border-color); padding-top:15px;">
                         <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
                             <input type="checkbox" id="chartStacked" style="transform:scale(1.1);" ${cCfg.stacked ? 'checked' : ''}>
-                            Raggruppa a blocchi (Stacking) <span style="color:var(--text-secondary); font-size:0.7rem;">(Richiede 2 Raggruppamenti)</span>
+                            ${I18n.t('adv_pivot_menu.chart_stacked')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_stacked_hint')}</span>
                         </label>
                         
                         <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
                             <input type="checkbox" id="chartShowLabels" style="transform:scale(1.1);" ${cCfg.showLabels !== false ? 'checked' : ''}>
-                            Mostra Valori e Linee guida sul grafico
+                            ${I18n.t('adv_pivot_menu.chart_show_labels')}
                         </label>
                         
                         <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
                             <input type="checkbox" id="chartCenterTotal" style="transform:scale(1.1);" ${cCfg.centerTotal !== false ? 'checked' : ''}>
-                            Mostra Somma Totale al centro <span style="color:var(--text-secondary); font-size:0.7rem;">(Solo Ciambella)</span>
+                            ${I18n.t('adv_pivot_menu.chart_center_total')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_center_total_hint')}</span>
                         </label>
 
                         <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
-                            <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">Posizione Legenda:</label>
+                            <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.legend_position')}</label>
                             <select id="chartLegendPos" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
-                                <option value="bottom" ${legendPos === 'bottom' ? 'selected' : ''}>In Basso</option>
-                                <option value="right" ${legendPos === 'right' ? 'selected' : ''}>A Destra</option>
-                                <option value="left" ${legendPos === 'left' ? 'selected' : ''}>A Sinistra</option>
-                                <option value="none" ${legendPos === 'none' ? 'selected' : ''}>Nascosta</option>
+                                <option value="bottom" ${legendPos === 'bottom' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_bottom')}</option>
+                                <option value="right" ${legendPos === 'right' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_right')}</option>
+                                <option value="left" ${legendPos === 'left' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_left')}</option>
+                                <option value="none" ${legendPos === 'none' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_none')}</option>
                             </select>
                         </div>
                     </div>
@@ -409,11 +415,11 @@ const AdvancedPivotMenus = {
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedPivotMenus.finalizePivot()">${isEditing && !chartOnlyMode ? 'Salva Configurazione' : 'Salva Grafico'}</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedPivotMenus.finalizePivot()">${isEditing && !chartOnlyMode ? I18n.t('adv_pivot_menu.save_config') : I18n.t('adv_pivot_menu.save_chart')}</button>
         `;
 
-        const titleHTML = `<span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.link}</span> ${chartOnlyMode ? 'Personalizza Grafico' : (isEditing ? 'Modifica Vista Analitica' : 'Crea Vista Collegata')}</span>`;
+        const titleHTML = `<span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.link}</span> ${chartOnlyMode ? I18n.t('adv_pivot_menu.drawer_customize_chart') : (isEditing ? I18n.t('adv_pivot_menu.drawer_edit_analytics_view') : I18n.t('adv_pivot_menu.drawer_create_linked_view'))}</span>`;
         UI.openDrawer(titleHTML, bodyHTML, footerHTML);
 
         if (isEditing) {
@@ -464,7 +470,7 @@ const AdvancedPivotMenus = {
         let buttonsHTML = `
             <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('table')">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--accent-color);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.tableDatabase}</span> Tabella
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.tableDatabase}</span> ${I18n.t('table.view_table')}
                 </span>
             </button>
         `;
@@ -473,14 +479,14 @@ const AdvancedPivotMenus = {
             buttonsHTML += `
             <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('tree')">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--accent-color);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.treeNode}</span> Gerarchia WBS
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.treeNode}</span> ${I18n.t('table.view_tree')}
                 </span>
             </button>`;
         } else {
             buttonsHTML += `
-            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="Nessuna colonna 'Relazione' che punta a questo stesso database">
+            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="${I18n.t('adv_pivot_menu.no_self_rel_tooltip')}">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--text-secondary);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.treeNode}</span> Gerarchia WBS
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.treeNode}</span> ${I18n.t('table.view_tree')}
                 </span>
             </button>`;
         }
@@ -489,14 +495,14 @@ const AdvancedPivotMenus = {
             buttonsHTML += `
             <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('board')">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--accent-color);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewBoard}</span> Bacheca
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewBoard}</span> ${I18n.t('table.view_board')}
                 </span>
             </button>`;
         } else {
             buttonsHTML += `
-            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="Nessuna colonna 'Select Singola' presente">
+            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="${I18n.t('adv_pivot_menu.no_select_col_tooltip')}">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--text-secondary);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewBoard}</span> Bacheca
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewBoard}</span> ${I18n.t('table.view_board')}
                 </span>
             </button>`;
         }
@@ -505,14 +511,14 @@ const AdvancedPivotMenus = {
             buttonsHTML += `
             <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('calendar')">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--accent-color);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewCalendar}</span> Calendario
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewCalendar}</span> ${I18n.t('table.view_calendar')}
                 </span>
             </button>`;
         } else {
             buttonsHTML += `
-            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="Nessuna colonna 'Data' presente">
+            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="${I18n.t('adv_pivot_menu.no_date_col_tooltip')}">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--text-secondary);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewCalendar}</span> Calendario
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewCalendar}</span> ${I18n.t('table.view_calendar')}
                 </span>
             </button>`;
         }
@@ -521,14 +527,14 @@ const AdvancedPivotMenus = {
             buttonsHTML += `
             <button class="btn" style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--accent-color);" onclick="AdvancedPivotMenus.createLinkedView('timeline')">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--accent-color);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewTimeline}</span> Timeline
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewTimeline}</span> ${I18n.t('table.view_timeline')}
                 </span>
             </button>`;
         } else {
             buttonsHTML += `
-            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="Nessuna colonna 'Data' con opzione 'Data di fine' attivata">
+            <button class="btn" disabled style="justify-content:center; padding:15px; border-radius:8px; border:1px solid var(--border-color); opacity:0.5;" title="${I18n.t('adv_pivot_menu.no_timeline_col_tooltip')}">
                 <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--text-secondary);">
-                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewTimeline}</span> Timeline
+                    <span style="font-size:1.5rem; display:inline-flex;">${Icons.viewTimeline}</span> ${I18n.t('table.view_timeline')}
                 </span>
             </button>`;
         }
@@ -556,7 +562,7 @@ const AdvancedPivotMenus = {
         const tableId = 'adv_link_' + Store.generateId();
         
         let linkedState = {
-            title: `Vista di: ${sourceState.title}`,
+            title: I18n.t('adv_pivot_menu.linked_view_title', { sourceTitle: sourceState.title }),
             isLinkedView: true,
             sourceTableId: sourceId,
             viewType: type,
@@ -630,8 +636,8 @@ const AdvancedPivotMenus = {
     populateSelectors: () => {
         const sourceState = AdvancedTable.getTableState(AdvancedPivotMenus.pendingConfig.sourceId);
         if (!sourceState || !sourceState.columns) {
-            document.getElementById('pivotGroupSelect').innerHTML = '<option value="">-- Non Disponibile --</option>';
-            document.getElementById('pivotAggCol').innerHTML = '<option value="">-- Non Disponibile --</option>';
+            document.getElementById('pivotGroupSelect').innerHTML = `<option value="">-- ${I18n.t('common.empty')} --</option>`;
+            document.getElementById('pivotAggCol').innerHTML = `<option value="">-- ${I18n.t('common.empty')} --</option>`;
             return;
         }
 
@@ -650,19 +656,19 @@ const AdvancedPivotMenus = {
         const colType = colSelect.options[colSelect.selectedIndex].getAttribute('data-type');
         const typeSelect = document.getElementById('pivotAggType');
 
-        let html = `<option value="count">Conteggio (N. Record)</option>`;
+        let html = `<option value="count">${I18n.t('adv_pivot_menu.agg_count')}</option>`;
 
         if (colType === 'number' || colType === 'formula' || colType === 'rollup') {
             html += `
-                <option value="sum">Somma Aritmetica</option>
-                <option value="avg">Media Aritmetica</option>
+                <option value="sum">${I18n.t('adv_pivot_menu.agg_sum')}</option>
+                <option value="avg">${I18n.t('adv_pivot_menu.agg_avg')}</option>
             `;
         }
 
         html += `
-            <option value="max">Trova Valore Massimo</option>
-            <option value="min">Trova Valore Minimo</option>
-            <option value="list">Uniscili in una Lista Testuale</option>
+            <option value="max">${I18n.t('adv_pivot_menu.agg_max')}</option>
+            <option value="min">${I18n.t('adv_pivot_menu.agg_min')}</option>
+            <option value="list">${I18n.t('adv_pivot_menu.agg_list')}</option>
         `;
 
         typeSelect.innerHTML = html;
@@ -672,7 +678,7 @@ const AdvancedPivotMenus = {
         const colId = document.getElementById('pivotGroupSelect').value;
         if (!colId) return;
         if (AdvancedPivotMenus.pendingConfig.groupBy.includes(colId)) {
-            alert("Questa colonna è già usata per raggruppare."); return;
+            alert(I18n.t('adv_pivot_menu.alert_col_already_grouped')); return;
         }
         AdvancedPivotMenus.pendingConfig.groupBy.push(colId);
         AdvancedPivotMenus.renderLists();
@@ -687,12 +693,12 @@ const AdvancedPivotMenus = {
         const colDef = sourceState.columns.find(c => c.id === colId);
 
         let label = '';
-        if (type === 'count') label = `N. Totale di ${colDef.name}`;
-        else if (type === 'sum') label = `Somma di ${colDef.name}`;
-        else if (type === 'avg') label = `Media di ${colDef.name}`;
-        else if (type === 'max') label = `Max ${colDef.name}`;
-        else if (type === 'min') label = `Min ${colDef.name}`;
-        else if (type === 'list') label = `Lista di ${colDef.name}`;
+        if (type === 'count') label = I18n.t('adv_pivot_menu.label_total_count', { name: colDef.name });
+        else if (type === 'sum') label = I18n.t('adv_pivot_menu.label_sum', { name: colDef.name });
+        else if (type === 'avg') label = I18n.t('adv_pivot_menu.label_avg', { name: colDef.name });
+        else if (type === 'max') label = I18n.t('adv_pivot_menu.label_max', { name: colDef.name });
+        else if (type === 'min') label = I18n.t('adv_pivot_menu.label_min', { name: colDef.name });
+        else if (type === 'list') label = I18n.t('adv_pivot_menu.label_list', { name: colDef.name });
 
         AdvancedPivotMenus.pendingConfig.aggregations.push({
             type: type,
@@ -753,11 +759,11 @@ const AdvancedPivotMenus = {
         const sourceState = AdvancedTable.getTableState(config.sourceId);
 
         if (config.groupBy.length === 0) {
-            if(gList) gList.innerHTML = `<div style="text-align:center; color:var(--danger-color); font-size:0.8rem; padding:10px;">Aggiungi almeno un Raggruppamento per usare i grafici o le pivot!</div>`;
+            if(gList) gList.innerHTML = `<div style="text-align:center; color:var(--danger-color); font-size:0.8rem; padding:10px;">${I18n.t('adv_pivot_menu.no_groups_warning')}</div>`;
         } else {
             let gHtml = '';
             config.groupBy.forEach((colId, idx) => {
-                const name = sourceState?.columns.find(c => c.id === colId)?.name || 'Colonna Non Trovata';
+                const name = sourceState?.columns.find(c => c.id === colId)?.name || I18n.t('adv_actions.unknown');
                 gHtml += `
                     <div class="drag-item" draggable="true" ondragstart="AdvancedPivotMenus.onDragStart(event, 'groupBy', ${idx})" ondragover="AdvancedPivotMenus.onDragOver(event, 'groupBy')" ondragleave="AdvancedPivotMenus.onDragLeave(event)" ondrop="AdvancedPivotMenus.onDrop(event, 'groupBy', ${idx})" style="display:flex; justify-content:space-between; align-items:center; background:var(--bg-color); padding:8px 12px; border:1px solid var(--border-color); border-radius:4px; font-size:0.8rem;">
                         <span style="display:flex; align-items:center;">
@@ -773,7 +779,7 @@ const AdvancedPivotMenus = {
         }
 
         if (config.aggregations.length === 0) {
-            if(aList) aList.innerHTML = `<span style="color:var(--text-secondary); font-size:0.8rem; text-align:center;">Seleziona la metrica da calcolare.</span>`;
+            if(aList) aList.innerHTML = `<span style="color:var(--text-secondary); font-size:0.8rem; text-align:center;">${I18n.t('adv_pivot_menu.no_metrics_warning')}</span>`;
         } else {
             let aHtml = '';
             config.aggregations.forEach((agg, idx) => {
@@ -794,8 +800,8 @@ const AdvancedPivotMenus = {
 
     finalizePivot: () => {
         const config = AdvancedPivotMenus.pendingConfig;
-        if (config.groupBy.length === 0) { alert('Scegli almeno una colonna per raggruppare i dati.'); return; }
-        if (config.aggregations.length === 0) { alert('Scegli almeno una metrica per visualizzare i dati.'); return; }
+        if (config.groupBy.length === 0) { alert(I18n.t('adv_pivot_menu.alert_require_group')); return; }
+        if (config.aggregations.length === 0) { alert(I18n.t('adv_pivot_menu.alert_require_metric')); return; }
 
         const displaySelect = document.getElementById('pivotDisplayType');
         const chartTypeInput = document.getElementById('pivotChartStyle');

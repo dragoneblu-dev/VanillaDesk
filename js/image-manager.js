@@ -235,16 +235,16 @@ const ImageManager = {
         const svgAlignNone = `<svg viewBox="0 0 24 24" width="16" height="16" stroke="currentColor" stroke-width="2" fill="none"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
 
         popover.innerHTML = `
-            <button onclick="ImageManager.alignImage('left')" title="Testo a destra (Float Left)">${svgAlignLeft}</button>
-            <button onclick="ImageManager.alignImage('center')" title="Al Centro (Nessun testo ai lati)">${svgAlignCenter}</button>
-            <button onclick="ImageManager.alignImage('right')" title="Testo a sinistra (Float Right)">${svgAlignRight}</button>
-            <button onclick="ImageManager.alignImage('none')" title="In linea col testo">${svgAlignNone}</button>
+            <button onclick="ImageManager.alignImage('left')" title="${I18n.t('image_manager.align_left')}">${svgAlignLeft}</button>
+            <button onclick="ImageManager.alignImage('center')" title="${I18n.t('image_manager.align_center')}">${svgAlignCenter}</button>
+            <button onclick="ImageManager.alignImage('right')" title="${I18n.t('image_manager.align_right')}">${svgAlignRight}</button>
+            <button onclick="ImageManager.alignImage('none')" title="${I18n.t('image_manager.align_none')}">${svgAlignNone}</button>
             
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
             
-            <button onclick="ImageManager.openImage(ImageManager.activeImage)" title="Apri in un'altra finestra">${svgOpen} Apri</button>
+            <button onclick="ImageManager.openImage(ImageManager.activeImage)" title="${I18n.t('image_manager.open_title')}">${svgOpen} ${I18n.t('image_manager.open')}</button>
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
-            <button onclick="ImageManager.compressImage()" title="Riduci peso e qualità dell'immagine in memoria">${svgCompress} Comprimi</button>
+            <button onclick="ImageManager.compressImage()" title="${I18n.t('image_manager.compress_title')}">${svgCompress} ${I18n.t('image_manager.compress')}</button>
         `;
 
         document.body.appendChild(popover);
@@ -301,11 +301,11 @@ const ImageManager = {
         const imgId = imgEl.getAttribute('data-image-ref');
 
         if (!imgId || !AppState.assetsHandle) {
-            alert("Devi trovarti in un Workspace (Cartella) valido per comprimere permanentemente l'immagine.");
+            alert(I18n.t('image_manager.compress_no_workspace'));
             return;
         }
 
-        if (!confirm("Questa operazione ridurrà la qualità e le dimensioni dell'immagine sovrascrivendo il file originale su disco. Vuoi procedere?")) return;
+        if (!confirm(I18n.t('image_manager.compress_confirm'))) return;
 
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         ImageManager.hideFloatingMenu();
@@ -347,13 +347,13 @@ const ImageManager = {
                     imgEl.src = newBlobUrl;
 
                     if (typeof Store !== 'undefined') Store.triggerAutoSave();
-                    if (typeof UI !== 'undefined') UI.showToast("Compressione su disco completata!", "success");
+                    if (typeof UI !== 'undefined') UI.showToast(I18n.t('image_manager.compress_success'), "success");
                     
                 }, 'image/webp', 0.7);
             };
             img.src = blobUrl;
         } catch (e) {
-            alert("Errore durante la compressione dell'immagine: " + e.message);
+            alert(I18n.t('image_manager.compress_error') + e.message);
         }
     }
 };

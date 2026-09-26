@@ -1,8 +1,8 @@
 /**
  * ui-security.js
  * Modulo dedicato alla UI e all'interazione dell'utente per la crittografia.
- * FIX HASHTRAP: Il salvataggio/rimozione password innesca la pulizia della cache degli Hash 
- * in store.js, forzando la riscrittura massiva dell'intero workspace su disco in modo sicuro.
+ * Gestione crittografia AES-GCM con prompt sicuri e rimozione password.
+ * Internazionalizzato con supporto multi-lingua tramite modulo I18n.
  */
 
 Object.assign(UI, {
@@ -12,70 +12,68 @@ Object.assign(UI, {
             
             const bodyHTML = `
                 <div class="ui-security-banner">
-                    <b>L'applicazione usa la crittografia di grado militare (AES-GCM 256bit)</b>.<br>
-                    Se imposti una password, l'intero Workspace diventerà illeggibile e protetto in modo assoluto su disco.<br><br>
-                    <span style="color:var(--danger-color);"><b>ATTENZIONE:</b> Se dimentichi la password, i dati andranno persi per sempre. Non c'è alcun modo per recuperarla!</span>
+                    ${I18n.t('security.banner_info')}
                 </div>
 
                 <div style="${hasPassword ? 'display:none;' : 'display:block;'}">
-                    <label class="ui-label-primary">Imposta una nuova password:</label>
-                    <input type="password" id="newDocPassword" class="modern-input ui-input-full" style="margin-bottom: 10px;" placeholder="Scrivi la tua password segreta...">
+                    <label class="ui-label-primary">${I18n.t('security.new_password_label')}</label>
+                    <input type="password" id="newDocPassword" class="modern-input ui-input-full" style="margin-bottom: 10px;" placeholder="${I18n.t('security.new_password_placeholder')}">
                     
-                    <label class="ui-label-primary">Conferma la password:</label>
-                    <input type="password" id="newDocPasswordConfirm" class="modern-input ui-input-full" style="margin-bottom: 20px;" placeholder="Ripeti la password per sicurezza...">
+                    <label class="ui-label-primary">${I18n.t('security.confirm_password_label')}</label>
+                    <input type="password" id="newDocPasswordConfirm" class="modern-input ui-input-full" style="margin-bottom: 20px;" placeholder="${I18n.t('security.confirm_password_placeholder')}">
                     
                     <button class="btn btn-primary ui-flex-center ui-input-full" onclick="UI.PasswordManager.saveNewPassword()">
-                        <span class="ui-flex-center ui-gap-small">${Icons.lock} Cifra il Workspace</span>
+                        <span class="ui-flex-center ui-gap-small">${Icons.lock} ${I18n.t('security.encrypt_btn')}</span>
                     </button>
                 </div>
 
                 <div style="${hasPassword ? 'display:block;' : 'display:none;'}">
                     <div class="ui-danger-box">
                         <div style="color:var(--danger-color); margin-bottom:10px;"><span style="display:inline-flex; transform:scale(1.5);">${Icons.lock}</span></div>
-                        <h3 style="margin-top:0; color:var(--text-primary); font-size:1rem;">Il Workspace è protetto</h3>
-                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:15px;">Per rimuovere la password e tornare ai file JSON in chiaro, clicca qui sotto.</p>
+                        <h3 style="margin-top:0; color:var(--text-primary); font-size:1rem;">${I18n.t('security.protected_title')}</h3>
+                        <p style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:15px;">${I18n.t('security.protected_desc')}</p>
                         
                         <button class="btn ui-flex-center ui-input-full" style="color:var(--danger-color); border-color:var(--danger-color);" onclick="UI.PasswordManager.removePassword()">
-                            <span class="ui-flex-center ui-gap-small">${Icons.close} Rimuovi Protezione</span>
+                            <span class="ui-flex-center ui-gap-small">${Icons.close} ${I18n.t('security.remove_protection_btn')}</span>
                         </button>
                     </div>
                 </div>
             `;
 
-            UI.openDrawer(`<span class="ui-flex-center ui-gap-small">${Icons.lock} Sicurezza Workspace</span>`, bodyHTML, null);
+            UI.openDrawer(`<span class="ui-flex-center ui-gap-small">${Icons.lock} ${I18n.t('security.drawer_title')}</span>`, bodyHTML, null);
         },
 
         saveNewPassword: () => {
             const p1 = document.getElementById('newDocPassword').value;
             const p2 = document.getElementById('newDocPasswordConfirm').value;
 
-            if (!p1) { alert("La password non può essere vuota."); return; }
-            if (p1 !== p2) { alert("Le due password non coincidono."); return; }
+            if (!p1) { alert(I18n.t('security.error_empty')); return; }
+            if (p1 !== p2) { alert(I18n.t('security.error_mismatch')); return; }
 
             AppState.documentPassword = p1;
             
-            // Forza la riscrittura brutale sul File System ignorando il Diffing
+            // Forza la riscrittura sul File System ignorando il Diffing precedente
             if (typeof Store !== 'undefined') {
                 Store._diskHashes = { notes: {}, databases: {}, index: "" };
                 Store.triggerAutoSave(true);
             }
             
             UI.closeDrawer();
-            UI.showToast("Il workspace è ora crittografato e protetto.", "success");
+            UI.showToast(I18n.t('security.toast_encrypted'), "success");
         },
 
         removePassword: () => {
-            if (confirm("Sei sicuro di voler rimuovere la password? Tutti i file verranno salvati in chiaro sul disco.")) {
+            if (confirm(I18n.t('security.confirm_remove'))) {
                 AppState.documentPassword = null;
                 
-                // Forza la riscrittura brutale sul File System ignorando il Diffing
+                // Forza la riscrittura sul File System ignorando il Diffing precedente
                 if (typeof Store !== 'undefined') {
                     Store._diskHashes = { notes: {}, databases: {}, index: "" };
                     Store.triggerAutoSave(true);
                 }
                 
                 UI.closeDrawer();
-                UI.showToast("Protezione rimossa. I file sono di nuovo in chiaro.", "info");
+                UI.showToast(I18n.t('security.toast_removed'), "info");
             }
         },
 
@@ -85,21 +83,21 @@ Object.assign(UI, {
                 overlay.className = 'link-modal-overlay';
                 overlay.style.zIndex = '9999';
 
-                const msg = customMessage || "Questa cartella contiene file crittografati.<br>Inserisci la password per sbloccarli e leggerli.";
+                const msg = customMessage || I18n.t('security.prompt_unlock_desc');
 
                 overlay.innerHTML = `
                     <div class="link-modal modal-animate" style="width: 400px; padding: 20px;">
                         <div style="text-align:center; color:var(--accent-color); margin-bottom:15px;">
                             <span style="display:inline-flex; transform:scale(2);">${Icons.lock}</span>
                         </div>
-                        <h3 style="margin-top:0; text-align:center; color:var(--text-primary);">Workspace Protetto</h3>
+                        <h3 style="margin-top:0; text-align:center; color:var(--text-primary);">${I18n.t('security.prompt_unlock_title')}</h3>
                         <p style="font-size:0.85rem; color:var(--text-secondary); text-align:center; margin-bottom:20px;">
                             ${msg}
                         </p>
-                        <input type="password" id="decryptPasswordInput" class="modern-input ui-input-full" style="margin-bottom:20px; font-size:1.1rem; text-align:center;" placeholder="La tua password segreta...">
+                        <input type="password" id="decryptPasswordInput" class="modern-input ui-input-full" style="margin-bottom:20px; font-size:1.1rem; text-align:center;" placeholder="${I18n.t('security.prompt_unlock_placeholder')}">
                         <div class="ui-flex-between ui-gap-medium">
-                            <button class="btn ui-flex-center ui-input-full" onclick="document.getElementById('btnDecryptCancel').click()">Annulla</button>
-                            <button class="btn btn-primary ui-flex-center ui-input-full" onclick="document.getElementById('btnDecryptConfirm').click()">Sblocca</button>
+                            <button class="btn ui-flex-center ui-input-full" onclick="document.getElementById('btnDecryptCancel').click()">${I18n.t('common.cancel')}</button>
+                            <button class="btn btn-primary ui-flex-center ui-input-full" onclick="document.getElementById('btnDecryptConfirm').click()">${I18n.t('security.unlock_btn')}</button>
                         </div>
                         <button id="btnDecryptCancel" style="display:none;"></button>
                         <button id="btnDecryptConfirm" style="display:none;"></button>

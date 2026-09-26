@@ -304,13 +304,13 @@ Object.assign(TableManager, {
 
                 menuItems.push({ 
                     type: 'custom', 
-                    html: '<div class="adv-dropdown-title" style="margin-bottom:4px;">Cella Attiva</div>' 
+                    html: `<div class="adv-dropdown-title" style="margin-bottom:4px;">${I18n.t('table_ui.cell_active')}</div>` 
                 });
 
                 if (isMergedCell) {
                     menuItems.push({
                         icon: Icons.split,
-                        label: 'Dividi Cella Unita',
+                        label: I18n.t('table_ui.split_cell'),
                         onClick: () => {
                             TableManager.Selection.selectedCells = [cell];
                             TableManager.Selection.splitCell();
@@ -322,16 +322,16 @@ Object.assign(TableManager, {
                     type: 'custom',
                     html: `
                         <div style="display:flex; justify-content:space-between; padding:0 4px; gap:5px; margin-bottom:5px;">
-                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-left')" title="Allinea Testo a Sinistra" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgLeft}</button>
-                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-center')" title="Allinea Testo al Centro" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgCenter}</button>
-                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-right')" title="Allinea Testo a Destra" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgRight}</button>
+                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-left')" title="${I18n.t('table_ui.align_left')}" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgLeft}</button>
+                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-center')" title="${I18n.t('table_ui.align_center')}" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgCenter}</button>
+                            <button class="adv-icon-btn" onclick="TableManager.UI.performAction('alignCell', 'text-right')" title="${I18n.t('table_ui.align_right')}" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgRight}</button>
                         </div>
                     `
                 });
 
                 menuItems.push({
                     icon: Icons.palette,
-                    label: 'Sfondo Cella',
+                    label: I18n.t('table_ui.cell_bg'),
                     type: 'submenu',
                     items: [
                         { type: 'custom', html: TableManager.getColorGridHTML('colorCell') }
@@ -341,28 +341,26 @@ Object.assign(TableManager, {
                 menuItems.push({ type: 'divider' });
             }
 
-            // =========================================================================
             // 2. SEZIONE TABELLA INTERA
-            // =========================================================================
             menuItems.push({ 
                 type: 'custom', 
-                html: '<div class="adv-dropdown-title" style="margin-bottom:4px;">Tabella Intera</div>' 
+                html: `<div class="adv-dropdown-title" style="margin-bottom:4px;">${I18n.t('table_ui.table_entire')}</div>` 
             });
 
             menuItems.push({
                 icon: Icons.layoutAuto, 
-                label: 'Layout Tabella', 
+                label: I18n.t('table_ui.layout_menu'), 
                 type: 'submenu',
                 items: [
-                    { icon: Icons.layoutAuto, label: 'Adattivo (Testo)' + (mode === 'auto' ? chk : ''), onClick: () => TableManager.setLayoutMode('auto') },
-                    { icon: Icons.percent, label: 'Percentuale (Schermo)' + (mode === 'percent' ? chk : ''), onClick: () => TableManager.setLayoutMode('percent') },
-                    { icon: Icons.pixel, label: 'Libera (Scroll Orizz.)' + (mode === 'pixel' ? chk : ''), onClick: () => TableManager.setLayoutMode('pixel') }
+                    { icon: Icons.layoutAuto, label: I18n.t('table_ui.layout_auto') + (mode === 'auto' ? chk : ''), onClick: () => TableManager.setLayoutMode('auto') },
+                    { icon: Icons.percent, label: I18n.t('table_ui.layout_percent') + (mode === 'percent' ? chk : ''), onClick: () => TableManager.setLayoutMode('percent') },
+                    { icon: Icons.pixel, label: I18n.t('table_ui.layout_pixel') + (mode === 'pixel' ? chk : ''), onClick: () => TableManager.setLayoutMode('pixel') }
                 ]
             });
 
             menuItems.push({ 
                 icon: Icons.zebraTbl, 
-                label: 'Righe alternate' + (isStriped ? chk : ''), 
+                label: I18n.t('table_ui.striped_rows') + (isStriped ? chk : ''), 
                 onClick: () => TableManager.toggleZebraCurrent() 
             });
 
@@ -370,25 +368,25 @@ Object.assign(TableManager, {
 
             menuItems.push({
                 icon: Icons.file, 
-                label: 'Importa / Esporta Dati', 
+                label: I18n.t('table_ui.data_exchange'), 
                 type: 'submenu',
                 items: [
-                    { icon: Icons.clipboard, label: 'Copia negli Appunti (per Excel)', onClick: () => TableManager.CSV.copyToClipboardAsExcel() },
+                    { icon: Icons.clipboard, label: I18n.t('table_ui.copy_excel'), onClick: () => TableManager.CSV.copyToClipboardAsExcel() },
                     { type: 'divider' },
-                    { icon: Icons.editTbl, label: 'Modifica Dati con Editor di Testo', onClick: () => TableManager.CSV.editDataAsCSV() },
-                    { icon: Icons.exportCSV, label: 'Esporta Tabella in file CSV', onClick: () => TableManager.CSV.exportToCSV() }
+                    { icon: Icons.editTbl, label: I18n.t('table_ui.edit_csv'), onClick: () => TableManager.CSV.editDataAsCSV() },
+                    { icon: Icons.exportCSV, label: I18n.t('table_ui.export_csv'), onClick: () => TableManager.CSV.exportToCSV() }
                 ]
             });
 
             menuItems.push({ type: 'divider' });
             menuItems.push({ 
                 icon: Icons.tableDatabase, 
-                label: 'Converti in Database', 
+                label: I18n.t('table_ui.convert_db'), 
                 onClick: () => TableManager.CSV.convertToDatabase() 
             });
             menuItems.push({ 
                 icon: Icons.trash, 
-                label: 'Elimina Tabella', 
+                label: I18n.t('table_ui.delete_table'), 
                 danger: true, 
                 onClick: () => TableManager.UI.performAction('deleteTable') 
             });
@@ -405,16 +403,16 @@ Object.assign(TableManager, {
             const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
             const menuItems = [
-                { icon: Icons.up, label: 'Inserisci Sopra', onClick: () => TableManager.UI.performAction('insertRow', -1) },
-                { icon: Icons.down, label: 'Inserisci Sotto', onClick: () => TableManager.UI.performAction('insertRow', 1) },
+                { icon: Icons.up, label: I18n.t('table_ui.row_insert_up'), onClick: () => TableManager.UI.performAction('insertRow', -1) },
+                { icon: Icons.down, label: I18n.t('table_ui.row_insert_down'), onClick: () => TableManager.UI.performAction('insertRow', 1) },
                 { type: 'divider' },
-                { icon: Icons.h, label: 'Intestazione (Titoli)' + (isHeaderRow ? chk : ''), onClick: () => TableManager.UI.performAction('setRowType', isHeaderRow ? 'td' : 'th') },
+                { icon: Icons.h, label: I18n.t('table_ui.row_header') + (isHeaderRow ? chk : ''), onClick: () => TableManager.UI.performAction('setRowType', isHeaderRow ? 'td' : 'th') },
                 { type: 'divider' },
-                { icon: Icons.palette, label: 'Sfondo Riga', type: 'submenu', items: [
+                { icon: Icons.palette, label: I18n.t('table_ui.row_bg'), type: 'submenu', items: [
                     { type: 'custom', html: TableManager.getColorGridHTML('colorRow') }
                 ]},
                 { type: 'divider' },
-                { icon: Icons.trash, label: 'Elimina Riga', danger: true, onClick: () => TableManager.UI.performAction('deleteRow') }
+                { icon: Icons.trash, label: I18n.t('table_ui.row_delete'), danger: true, onClick: () => TableManager.UI.performAction('deleteRow') }
             ];
             UI.Menu.buildContextMenu(e.currentTarget.id, menuItems);
         },
@@ -436,25 +434,25 @@ Object.assign(TableManager, {
             const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
             const menuItems = [
-                { icon: Icons.left, label: 'Inserisci a Sinistra', onClick: () => TableManager.UI.performAction('insertCol', -1) },
-                { icon: Icons.right, label: 'Inserisci a Destra', onClick: () => TableManager.UI.performAction('insertCol', 1) },
+                { icon: Icons.left, label: I18n.t('table_ui.col_insert_left'), onClick: () => TableManager.UI.performAction('insertCol', -1) },
+                { icon: Icons.right, label: I18n.t('table_ui.col_insert_right'), onClick: () => TableManager.UI.performAction('insertCol', 1) },
                 { type: 'divider' },
-                { type: 'custom', html: '<div class="adv-dropdown-title" style="margin-bottom:4px;">Allineamento Testo</div>' },
+                { type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom:4px;">${I18n.t('table_ui.col_align_title')}</div>` },
                 { type: 'custom', html: `
                     <div style="display:flex; justify-content:space-between; padding:0 4px; gap:5px; margin-bottom:5px;">
-                        <button class="adv-icon-btn" onclick="TableManager.UI.performAction('setColAlign', 'text-left')" title="Sinistra" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgLeft}</button>
-                        <button class="adv-icon-btn" onclick="TableManager.UI.performAction('setColAlign', 'text-center')" title="Centro" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgCenter}</button>
-                        <button class="adv-icon-btn" onclick="TableManager.UI.performAction('setColAlign', 'text-right')" title="Destra" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgRight}</button>
+                        <button class="adv-icon-btn" onclick="TableManager.UI.performAction('setColAlign', 'text-left')" title="${I18n.t('table_ui.align_left')}" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgLeft}</button>
+                        <button class="adv-icon-btn" onclick="TableManager.UI.performAction('setColAlign', 'text-center')" title="${I18n.t('table_ui.align_center')}" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgCenter}</button>
+                        <button class="adv-icon-btn" onclick="TableManager.UI.performAction('setColAlign', 'text-right')" title="${I18n.t('table_ui.align_right')}" style="flex:1; justify-content:center; border:1px solid var(--border-color); border-radius:4px; padding:4px; color:var(--text-primary);">${svgRight}</button>
                     </div>
                 ` },
                 { type: 'divider' },
-                { icon: Icons.h, label: 'Intestazione (Titoli)' + (isHeaderCol ? chk : ''), onClick: () => TableManager.UI.performAction('setColType', isHeaderCol ? 'td' : 'th') },
+                { icon: Icons.h, label: I18n.t('table_ui.col_header') + (isHeaderCol ? chk : ''), onClick: () => TableManager.UI.performAction('setColType', isHeaderCol ? 'td' : 'th') },
                 { type: 'divider' },
-                { icon: Icons.palette, label: 'Sfondo Colonna', type: 'submenu', items: [
+                { icon: Icons.palette, label: I18n.t('table_ui.col_bg'), type: 'submenu', items: [
                     { type: 'custom', html: TableManager.getColorGridHTML('colorCol') }
                 ]},
                 { type: 'divider' },
-                { icon: Icons.trash, label: 'Elimina Colonna', danger: true, onClick: () => TableManager.UI.performAction('deleteCol') }
+                { icon: Icons.trash, label: I18n.t('table_ui.col_delete'), danger: true, onClick: () => TableManager.UI.performAction('deleteCol') }
             ];
 
             UI.Menu.buildContextMenu(e.currentTarget.id, menuItems);
@@ -585,7 +583,7 @@ Object.assign(TableManager, {
                     }
                 }
                 else if (actionType === 'deleteTable') {
-                    if (confirm("Eliminare l'intera tabella?")) {
+                    if (confirm(I18n.t('table_ui.confirm_delete_table'))) {
                         const wrap = table.closest('.simple-table-wrapper');
                         if (wrap) wrap.remove();
                         else table.remove();

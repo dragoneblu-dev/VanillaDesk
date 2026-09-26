@@ -30,27 +30,27 @@ const CitationManager = {
         const isCollapsed = cit.classList.contains('collapsed');
         const targetNote = Store.getNote(noteId);
         
-        let displayTitle = targetNote ? targetNote.title : "Riferimento Mancante";
-        if (refId && refType === 'chapter') displayTitle = `${displayTitle} > Capitolo`;
+        let displayTitle = targetNote ? targetNote.title : I18n.t('citation.missing_ref');
+        if (refId && refType === 'chapter') displayTitle = `${displayTitle} > ${I18n.t('citation.subchapter_label')}`;
 
         // Assicura che anche il guscio base non sia mai editabile se incapsulato
         const isCited = cit.id.includes('_cited_');
 
         WidgetManager.updateShellUI(cit.id, {
             icon: Icons.citation,
-            title: `Riferimento: ${displayTitle}`,
+            title: I18n.t('citation.title_prefix', { title: displayTitle }),
             compact: true,
             optionsId: `cit-opt-btn-${cit.id}`,
             onOptionsClick: (e) => {
                 if (isCited) return; 
                 UI.Menu.closeAll(true);
                 UI.Menu.buildContextMenu(`cit-opt-btn-${cit.id}`, [
-                    { icon: Icons.arrowRightUp, label: 'Apri nota di origine', onClick: () => UI.selectNote(noteId) },
-                    { icon: Icons.edit, label: 'Modifica origine...', onClick: () => CitationManager.editCitation(cit.id) },
+                    { icon: Icons.arrowRightUp, label: I18n.t('citation.open_source_note'), onClick: () => UI.selectNote(noteId) },
+                    { icon: Icons.edit, label: I18n.t('citation.edit_source'), onClick: () => CitationManager.editCitation(cit.id) },
                     { type: 'divider' },
-                    { icon: Icons.down, label: 'Inserisci riga sotto', onClick: () => WidgetManager.insertLineBreakAfter(cit.id) },
+                    { icon: Icons.down, label: I18n.t('citation.insert_line_below'), onClick: () => WidgetManager.insertLineBreakAfter(cit.id) },
                     { type: 'divider' },
-                    { icon: Icons.trash, label: 'Elimina Citazione', danger: true, onClick: () => Editor.safeDeleteWidget(cit) }
+                    { icon: Icons.trash, label: I18n.t('citation.delete_citation'), danger: true, onClick: () => Editor.safeDeleteWidget(cit) }
                 ]);
             },
             onDragStart: (e) => {
@@ -64,8 +64,8 @@ const CitationManager = {
                  AppState.draggedBlockType = null;
             },
             tools: [
-                { icon: Icons.arrowRightUp, label: '', title: 'Apri', onClick: () => UI.selectNote(noteId) },
-                { icon: isCollapsed ? Icons.chevronDown : Icons.searchUp, title: 'Espandi / Riduci Blocco', onClick: (e) => CitationManager.toggleCollapse(e, cit.id) }
+                { icon: Icons.arrowRightUp, label: '', title: I18n.t('citation.open_action'), onClick: () => UI.selectNote(noteId) },
+                { icon: isCollapsed ? Icons.chevronDown : Icons.searchUp, title: I18n.t('citation.expand_collapse'), onClick: (e) => CitationManager.toggleCollapse(e, cit.id) }
             ]
         });
     },
@@ -90,7 +90,7 @@ const CitationManager = {
         if (!isHome && typeof Editor !== 'undefined') Editor.saveSelection();
         CitationManager.editingCitationId = null;
         
-        UI.DocumentBrowser.open('citation', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.citation} Cita Elemento o Intera Nota</span>`, (item) => {
+        UI.DocumentBrowser.open('citation', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.citation} ${I18n.t('citation.modal_title_insert')}</span>`, (item) => {
             CitationManager.confirmCitation(item.noteId, item.refId, item.refType, item.title);
         });
     },
@@ -107,7 +107,7 @@ const CitationManager = {
 
         CitationManager.editingCitationId = wrapperId;
 
-        UI.DocumentBrowser.open('citation', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.edit} Modifica Origine Citazione</span>`, (item) => {
+        UI.DocumentBrowser.open('citation', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.edit} ${I18n.t('citation.modal_title_edit')}</span>`, (item) => {
             CitationManager.confirmCitation(item.noteId, item.refId, item.refType, item.title);
         }, { noteId: noteId, refId: refId });
     },
@@ -117,7 +117,7 @@ const CitationManager = {
         
         if (!targetNote) {
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("La nota selezionata non esiste più.", "error");
+                UI.showToast(I18n.t('citation.error_note_deleted'), "error");
             }
             UI.closeDrawer();
             return;
@@ -158,7 +158,7 @@ const CitationManager = {
         if (node && node.nodeType === 3) node = node.parentNode;
 
         if (node && node.closest('.widget-type-columns')) {
-            alert("Non è permesso inserire Widget Complessi all'interno delle Colonne per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.");
+            alert(I18n.t('format_blocks.alert_columns_barrier'));
             return;
         }
 
@@ -172,7 +172,7 @@ const CitationManager = {
         const body = block.querySelector('.widget-body');
         // Aggiunta conservazione della classe widget-body per il collasso CSS
         body.className = 'widget-body citation-body adv-scroll-container editor-content';
-        body.innerHTML = '<span style="color:var(--text-secondary); font-style:italic;">Caricamento contenuto live...</span>';
+        body.innerHTML = `<span style="color:var(--text-secondary); font-style:italic;">${I18n.t('citation.live_loading')}</span>`;
 
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
 
@@ -208,7 +208,7 @@ const CitationManager = {
     },
 
     removeHomeCitation: (index) => {
-        if (!confirm("Rimuovere questa citazione dalla Home?")) return;
+        if (!confirm(I18n.t('citation.confirm_remove_home'))) return;
         AppState.homeCitations.splice(index, 1);
         Store.triggerAutoSave(true);
         CitationManager.renderHomeCitations();
@@ -259,14 +259,14 @@ const CitationManager = {
         if (!container) return;
 
         if (!AppState.homeCitations || AppState.homeCitations.length === 0) {
-            container.innerHTML = `<div style="text-align:center; color:var(--text-secondary); margin-top:20px; font-style:italic;">Aggiungi citazioni qui per creare la tua Dashboard personale.</div>`;
+            container.innerHTML = `<div style="text-align:center; color:var(--text-secondary); margin-top:20px; font-style:italic;">${I18n.t('citation.empty_home_hint')}</div>`;
             return;
         }
 
         let html = '';
         AppState.homeCitations.forEach((cit, idx) => {
             const targetNote = Store.getNote(cit.noteId);
-            const displayTitle = targetNote ? targetNote.title : 'Riferimento';
+            const displayTitle = targetNote ? targetNote.title : I18n.t('citation.reference');
             const fullTitle = cit.refId && cit.refType === 'chapter' ? `${displayTitle} > ${cit.displayTitle}` : displayTitle;
             const citId = `home_cit_${idx}`;
 
@@ -281,14 +281,14 @@ const CitationManager = {
                     <div class="widget-header adv-table-header compact-header" style="cursor: grab;">
                         <span class="widget-drag-handle adv-drag-handle" style="display:flex; margin-right:5px;" title="Trascina per riordinare">${Icons.dragHandle}</span>
                         <span class="widget-icon" style="display:inline-flex;">${Icons.link}</span>
-                        <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Riferimento: ${fullTitle}</span>
+                        <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('citation.title_prefix', { title: fullTitle })}</span>
                         <div class="widget-tools adv-tools" style="flex-shrink: 0;">
-                            <button class="adv-tool-btn" title="Apri" onclick="UI.selectNote('${cit.noteId}')"><span style="display:inline-flex; align-items:center;">${Icons.arrowRightUp}</span></button>
-                            <button class="adv-tool-btn active" title="Rimuovi dalla Dashboard" onclick="CitationManager.removeHomeCitation(${idx})"><span style="display:inline-flex; align-items:center;">${Icons.close}</span></button>
+                            <button class="adv-tool-btn" title="${I18n.t('citation.open_action')}" onclick="UI.selectNote('${cit.noteId}')"><span style="display:inline-flex; align-items:center;">${Icons.arrowRightUp}</span></button>
+                            <button class="adv-tool-btn active" title="${I18n.t('citation.btn_remove_home')}" onclick="CitationManager.removeHomeCitation(${idx})"><span style="display:inline-flex; align-items:center;">${Icons.close}</span></button>
                         </div>
                     </div>
                     <div class="widget-body citation-body adv-scroll-container editor-content" style="overflow-x: auto; min-height: 50px;">
-                        <span style="color:var(--text-secondary); font-style:italic;">Caricamento contenuto live...</span>
+                        <span style="color:var(--text-secondary); font-style:italic;">${I18n.t('citation.live_loading')}</span>
                     </div>
                 </blockquote>
             `;
@@ -310,13 +310,13 @@ const CitationManager = {
             if (!noteId || !body) return;
 
             if (visitedNotes.has(noteId)) {
-                body.innerHTML = `<div style="padding:15px; border:1px dashed var(--danger-color); background:rgba(239, 68, 68, 0.05); color:var(--danger-color); font-weight:bold;">[Riferimento Circolare Rilevato: L'app ha bloccato il rendering per impedire un loop infinito.]</div>`;
+                body.innerHTML = `<div style="padding:15px; border:1px dashed var(--danger-color); background:rgba(239, 68, 68, 0.05); color:var(--danger-color); font-weight:bold;">${I18n.t('citation.circular_ref_error')}</div>`;
                 return;
             }
 
             const targetNote = Store.getNote(noteId);
             if (!targetNote) {
-                body.innerHTML = `<p style="color:var(--danger-color); font-style:italic;">[La nota di origine è stata eliminata]</p>`;
+                body.innerHTML = `<p style="color:var(--danger-color); font-style:italic;">${I18n.t('citation.source_deleted_error')}</p>`;
                 return;
             }
 

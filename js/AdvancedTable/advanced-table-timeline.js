@@ -104,11 +104,11 @@ const AdvancedTimeline = {
         const presetQuarter = Math.max(6, Math.round(viewWidth / 92)); // Calcolo reale per 3 mesi completi
 
         const menuItems =[
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Zoom Preimpostato:</div>' },
-            { icon: Icons.time, label: 'Vista a 1 Giorno (24h)', onClick: () => AdvancedTimeline.setZoomExact(tableId, presetDay) },
-            { icon: Icons.viewCalendar, label: 'Vista a 1 Settimana', onClick: () => AdvancedTimeline.setZoomExact(tableId, presetWeek) },
-            { icon: Icons.viewTimeline, label: 'Vista a 1 Mese', onClick: () => AdvancedTimeline.setZoomExact(tableId, presetMonth) },
-            { icon: Icons.viewBoard, label: 'Vista a 1 Trimestre', onClick: () => AdvancedTimeline.setZoomExact(tableId, presetQuarter) }
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('adv_timeline.zoom_preset_title')}</div>` },
+            { icon: Icons.time, label: I18n.t('adv_timeline.zoom_day'), onClick: () => AdvancedTimeline.setZoomExact(tableId, presetDay) },
+            { icon: Icons.viewCalendar, label: I18n.t('adv_timeline.zoom_week'), onClick: () => AdvancedTimeline.setZoomExact(tableId, presetWeek) },
+            { icon: Icons.viewTimeline, label: I18n.t('adv_timeline.zoom_month'), onClick: () => AdvancedTimeline.setZoomExact(tableId, presetMonth) },
+            { icon: Icons.viewBoard, label: I18n.t('adv_timeline.zoom_quarter'), onClick: () => AdvancedTimeline.setZoomExact(tableId, presetQuarter) }
         ];
 
         UI.Menu.buildContextMenu(e.currentTarget.id, menuItems);
@@ -169,14 +169,14 @@ const AdvancedTimeline = {
         const chk = '<span style="color:var(--accent-color); font-weight:bold; float:right; margin-left:10px;">✓</span>';
 
         const menuItems =[
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Raggruppa Timeline per:</div>' },
-            { icon: Icons.viewList, label: 'Nessun Raggruppamento' + (!state.timelineGroupBy ? chk : ''), onClick: () => AdvancedTimeline.setGroupBy(tableId, null) },
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('adv_timeline.group_title')}</div>` },
+            { icon: Icons.viewList, label: I18n.t('adv_timeline.no_grouping') + (!state.timelineGroupBy ? chk : ''), onClick: () => AdvancedTimeline.setGroupBy(tableId, null) },
             { type: 'divider' }
         ];
 
         const groupableCols = state.columns.filter(c => c.id === state.columns[0].id || c.type === 'select' || c.type === 'relation');
         if (groupableCols.length === 0) {
-            menuItems.push({ type: 'custom', html: '<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px;">Nessuna colonna adatta trovata.</div>' });
+            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px;">${I18n.t('adv_timeline.no_groupable_cols')}</div>` });
         } else {
             groupableCols.forEach(c => {
                 const isActive = state.timelineGroupBy === c.id;
@@ -287,17 +287,17 @@ const AdvancedTimeline = {
         // Gestione Freccia Sinistra
         if (prevTask) {
             const titleCol = data.titleCol;
-            let tName = prevTask.virtualCells[titleCol.id] || 'Senza Titolo';
+            let tName = prevTask.virtualCells[titleCol.id] || I18n.t('editor.untitled');
             if (titleCol.type === 'record_note') {
                 const noteObj = typeof Store !== 'undefined' ? Store.getNote(tName) : null;
-                if (noteObj) tName = noteObj.title || 'Senza Titolo';
+                if (noteObj) tName = noteObj.title || I18n.t('editor.untitled');
             }
             const dateFmt = AdvancedTimeline.formatTooltipDate(prevTask._timeStart, data.dateColType);
 
             prevBtn.style.display = 'flex';
             prevBtn.style.top = `${btnY}px`;
             prevBtn.style.left = `${viewLeft + 8}px`;
-            prevBtn.title = `Precedente: ${tName} (${dateFmt})`;
+            prevBtn.title = I18n.t('adv_timeline.prev_task_tooltip', { title: tName, date: dateFmt });
             prevBtn.onclick = (ev) => {
                 ev.stopPropagation();
                 AdvancedTimeline.jumpToTask(tableId, prevTask.id);
@@ -309,17 +309,17 @@ const AdvancedTimeline = {
         // Gestione Freccia Destra
         if (nextTask) {
             const titleCol = data.titleCol;
-            let tName = nextTask.virtualCells[titleCol.id] || 'Senza Titolo';
+            let tName = nextTask.virtualCells[titleCol.id] || I18n.t('editor.untitled');
             if (titleCol.type === 'record_note') {
                 const noteObj = typeof Store !== 'undefined' ? Store.getNote(tName) : null;
-                if (noteObj) tName = noteObj.title || 'Senza Titolo';
+                if (noteObj) tName = noteObj.title || I18n.t('editor.untitled');
             }
             const dateFmt = AdvancedTimeline.formatTooltipDate(nextTask._timeStart, data.dateColType);
 
             nextBtn.style.display = 'flex';
             nextBtn.style.top = `${btnY}px`;
             nextBtn.style.left = `${viewRight - 34}px`;
-            nextBtn.title = `Successivo: ${tName} (${dateFmt})`;
+            nextBtn.title = I18n.t('adv_timeline.next_task_tooltip', { title: tName, date: dateFmt });
             nextBtn.onclick = (ev) => {
                 ev.stopPropagation();
                 AdvancedTimeline.jumpToTask(tableId, nextTask.id);

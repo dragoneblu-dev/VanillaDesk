@@ -59,34 +59,34 @@ const LinkManager = {
                 <div class="selection-card" onclick="LinkManager.selectType(event, 'internal')" style="position:relative;">
                     <span class="selection-icon" style="color:var(--accent-color);">${Icons.file}</span>
                     <div>
-                        <div style="font-weight:bold">Link Interno <span style="font-size:0.75rem; color:var(--accent-color); background:rgba(37,99,235,0.1); padding:2px 6px; border-radius:10px; margin-left:5px; font-family:monospace; font-weight:normal;">Digita [[</span></div>
-                        <div style="font-size:0.8rem; color:var(--text-secondary)">Collegamento a un'altra nota o capitolo</div>
+                        <div style="font-weight:bold">${I18n.t('link_manager.internal_link_title')} <span style="font-size:0.75rem; color:var(--accent-color); background:rgba(37,99,235,0.1); padding:2px 6px; border-radius:10px; margin-left:5px; font-family:monospace; font-weight:normal;">${I18n.t('link_manager.internal_link_badge')}</span></div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary)">${I18n.t('link_manager.internal_link_desc')}</div>
                     </div>
                 </div>
                 <div class="selection-card" onclick="LinkManager.selectType(event, 'external')">
                     <span class="selection-icon" style="color:var(--accent-color);">${Icons.globe}</span>
                     <div>
-                        <div style="font-weight:bold">Link Esterno</div>
-                        <div style="font-size:0.8rem; color:var(--text-secondary)">Sito Web (http://...)</div>
+                        <div style="font-weight:bold">${I18n.t('link_manager.external_link_title')}</div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary)">${I18n.t('link_manager.external_link_desc')}</div>
                     </div>
                 </div>
                 <div class="selection-card" onclick="LinkManager.selectType(event, 'file')">
                     <span class="selection-icon" style="color:var(--accent-color);">${Icons.folderOpen}</span>
                     <div>
-                        <div style="font-weight:bold">Link a File Testuale</div>
-                        <div style="font-size:0.8rem; color:var(--text-secondary)">Assoluto (PC) o Relativo (Workspace)</div>
+                        <div style="font-weight:bold">${I18n.t('link_manager.file_link_title')}</div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary)">${I18n.t('link_manager.file_link_desc')}</div>
                     </div>
                 </div>
                 <div class="selection-card" onclick="LinkManager.selectType(event, 'youtube')">
                     <span class="selection-icon" style="color:var(--danger-color);">${Icons.youtube}</span>
                     <div>
-                        <div style="font-weight:bold">Video YouTube</div>
-                        <div style="font-size:0.8rem; color:var(--text-secondary)">Incorpora un video eseguibile nella pagina</div>
+                        <div style="font-weight:bold">${I18n.t('link_manager.youtube_title')}</div>
+                        <div style="font-size:0.8rem; color:var(--text-secondary)">${I18n.t('link_manager.youtube_desc')}</div>
                     </div>
                 </div>
             </div>
         `;
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.link} Inserisci Link o Media</span>`, html, null);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.link} ${I18n.t('link_manager.drawer_insert_title')}</span>`, html, null);
     },
 
     selectType: (e, type) => {
@@ -113,14 +113,14 @@ const LinkManager = {
         if (link.classList.contains('file-link')) {
             extraHtml = `
                 <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
-                <button onclick="LinkManager.copyFileLinkPath()" title="Copia Path (Percorso)">${Icons.clipboard}</button>
+                <button onclick="LinkManager.copyFileLinkPath()" title="${I18n.t('link_manager.tooltip_copy_path')}">${Icons.clipboard}</button>
             `;
         }
 
         popover.innerHTML = `
-            <button onclick="LinkManager.openCurrentLink()" title="Apri Link">${svgOpen}</button>
+            <button onclick="LinkManager.openCurrentLink()" title="${I18n.t('link_manager.tooltip_open_link')}">${svgOpen}</button>
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
-            <button onclick="LinkManager.editCurrentLink()" title="Modifica Link">${svgEdit}</button>
+            <button onclick="LinkManager.editCurrentLink()" title="${I18n.t('link_manager.tooltip_edit_link')}">${svgEdit}</button>
             ${extraHtml}
         `;
 
@@ -167,7 +167,7 @@ const LinkManager = {
 
         navigator.clipboard.writeText(pathToCopy).then(() => {
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast(!isAbsolutePath ? "Percorso (relativo al Workspace) copiato!" : "Percorso copiato negli appunti!", "success");
+                UI.showToast(!isAbsolutePath ? I18n.t('link_manager.toast_path_copied_relative') : I18n.t('link_manager.toast_path_copied_absolute'), "success");
             }
             LinkManager.hideFloatingMenu();
         });
@@ -241,22 +241,22 @@ const LinkManager = {
     },
 
     openExternalModal: (prefilledUrl = null) => {
-        const title = LinkManager.isEditingMode ? `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.globe} Modifica Link Web</span>` : `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.globe} Nuovo Link Web</span>`;
-        const btnLabel = LinkManager.isEditingMode ? 'Salva Modifiche' : 'Inserisci Link';
+        const title = LinkManager.isEditingMode ? `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.globe} ${I18n.t('link_manager.drawer_edit_web_link')}</span>` : `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.globe} ${I18n.t('link_manager.drawer_new_web_link')}</span>`;
+        const btnLabel = LinkManager.isEditingMode ? I18n.t('link_manager.btn_save_changes') : I18n.t('link_manager.btn_insert_link');
 
         const html = `
             <div style="display:flex; flex-direction:column; gap:15px;">
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">URL (Indirizzo Web):</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.url_label')}</label>
                     <input type="text" id="externalLinkUrl" class="modern-input" placeholder="https://www.google.com" value="https://">
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Testo da visualizzare (Titolo):</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.display_text_label')}</label>
                     <input type="text" id="externalLinkText" class="modern-input" placeholder="Es: Cerca su Google">
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Note Aggiuntive (Opzionale):</label>
-                    <textarea id="externalLinkNote" class="modern-input" rows="6" style="resize:vertical; width:100%; font-size:0.85rem;" placeholder="Aggiungi dettagli o spiegazioni. Appariranno come tooltip passandoci il mouse sopra..."></textarea>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.notes_optional_label')}</label>
+                    <textarea id="externalLinkNote" class="modern-input" rows="6" style="resize:vertical; width:100%; font-size:0.85rem;" placeholder="${I18n.t('link_manager.notes_tooltip_placeholder')}"></textarea>
                 </div>
             </div>
         `;
@@ -309,7 +309,7 @@ const LinkManager = {
         const text = document.getElementById('externalLinkText').value;
         let note = document.getElementById('externalLinkNote').value || '';
         
-        if (!url || url === "https://") { alert("Inserisci un URL valido."); return; }
+        if (!url || url === "https://") { alert(I18n.t('link_manager.alert_valid_url')); return; }
 
         url = url.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
 
@@ -356,7 +356,7 @@ const LinkManager = {
     },
 
     openInternalModal: (targetNoteId = null, targetRefId = null) => {
-        const title = LinkManager.isEditingMode ? `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.file} Cambia Nota Collegata</span>` : `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.file} Seleziona Nota Interna</span>`;
+        const title = LinkManager.isEditingMode ? `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.file} ${I18n.t('link_manager.drawer_change_internal_note')}</span>` : `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.file} ${I18n.t('link_manager.drawer_select_internal_note')}</span>`;
 
         UI.DocumentBrowser.open('link', title, (item) => {
             const anchor = (item.refType === 'chapter') ? item.title : null;
@@ -413,36 +413,35 @@ const LinkManager = {
                 const file = e.target.files[0];
                 document.getElementById('fileLinkName').value = file.name;
                 document.getElementById('fileLinkPath').value = "C:\\...\\" + file.name;
-                UI.showToast("Per motivi di sicurezza, il browser non può leggere la cartella esatta del tuo PC. Sostituisci i puntini con il path manualmente.", "warning");
+                UI.showToast(I18n.t('link_manager.toast_browse_security_warning'), "warning");
             }
         };
         input.click();
     },
 
     openFileModal: (prefilledPath = null) => {
-        const title = LinkManager.isEditingMode ? `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.folderOpen} Modifica Link a File Testuale</span>` : `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.folderOpen} Nuovo Link a File Testuale</span>`;
-        const btnLabel = LinkManager.isEditingMode ? 'Salva Modifiche' : 'Inserisci Link';
+        const title = LinkManager.isEditingMode ? `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.folderOpen} ${I18n.t('link_manager.drawer_edit_file_link')}</span>` : `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.folderOpen} ${I18n.t('link_manager.drawer_new_file_link')}</span>`;
+        const btnLabel = LinkManager.isEditingMode ? I18n.t('link_manager.btn_save_changes') : I18n.t('link_manager.btn_insert_link');
 
         const html = `
             <div style="background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2); padding: 10px; border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">
-                <b>Percorso Assoluto:</b> <code>C:\\Cartella\\File.txt</code> (L'app non potrà aprirlo in automatico)<br>
-                <b>Percorso Relativo:</b> <code>Documenti/File.txt</code> (L'app cercherà il file all'interno della cartella Workspace e lo auto-caricherà nel visore).
+                ${I18n.t('link_manager.file_path_info_banner')}
             </div>
             <div style="display:flex; flex-direction:column; gap:15px;">
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Percorso File (Path Assoluto o Relativo):</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.file_path_label')}</label>
                     <input type="text" id="fileLinkPath" class="modern-input" placeholder="Es: C:\\Logs\\error.log oppure cartella/file.txt" style="margin-top:5px;">
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Testo da visualizzare (Titolo):</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.display_text_label')}</label>
                     <div style="display:flex; gap:10px; margin-top:5px;">
                         <input type="text" id="fileLinkName" class="modern-input" placeholder="Es: Log Errori" style="flex:1;">
-                        <button class="btn" onclick="LinkManager.browseLocalFile()" style="padding:0 15px;"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.search} Sfoglia...</span></button>
+                        <button class="btn" onclick="LinkManager.browseLocalFile()" style="padding:0 15px;"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.search} ${I18n.t('link_manager.btn_browse')}</span></button>
                     </div>
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Note Aggiuntive (Opzionale):</label>
-                    <textarea id="fileLinkNote" class="modern-input" rows="4" style="resize:vertical; width:100%; font-size:0.85rem; margin-top:5px;" placeholder="Aggiungi dettagli o descrizioni sul file..."></textarea>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.notes_optional_label')}</label>
+                    <textarea id="fileLinkNote" class="modern-input" rows="4" style="resize:vertical; width:100%; font-size:0.85rem; margin-top:5px;" placeholder="${I18n.t('link_manager.file_notes_placeholder')}"></textarea>
                 </div>
             </div>
         `;
@@ -453,7 +452,7 @@ const LinkManager = {
         setTimeout(() => {
             if (prefilledPath && !LinkManager.isEditingMode) {
                 document.getElementById('fileLinkPath').value = prefilledPath;
-                let filename = prefilledPath.split(/[\\/]/).pop() || "File Locale";
+                let filename = prefilledPath.split(/[\\/]/).pop() || I18n.t('link_manager.default_file_name');
                 document.getElementById('fileLinkName').value = filename;
             } else if (!LinkManager.isEditingMode) {
                 let selectedText = "";
@@ -469,11 +468,11 @@ const LinkManager = {
     },
 
     confirmFileLink: () => {
-        const name = document.getElementById('fileLinkName').value || "File Locale";
+        const name = document.getElementById('fileLinkName').value || I18n.t('link_manager.default_file_name');
         const path = document.getElementById('fileLinkPath').value;
         let note = document.getElementById('fileLinkNote').value || '';
 
-        if (!path) { alert("Inserisci un percorso valido."); return; }
+        if (!path) { alert(I18n.t('link_manager.alert_valid_path')); return; }
 
         note = note.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
@@ -512,19 +511,19 @@ const LinkManager = {
     // VIDEO YOUTUBE (WIDGET SHELL ISOLATA)
     // -------------------------------------------------------------
     openYoutubeModal: (prefilledUrl = null) => {
-        const title = `<span style="display:inline-flex; align-items:center; gap:5px; color:var(--danger-color);">${Icons.youtube} Incorpora Video YouTube</span>`;
+        const title = `<span style="display:inline-flex; align-items:center; gap:5px; color:var(--danger-color);">${Icons.youtube} ${I18n.t('link_manager.drawer_embed_youtube')}</span>`;
         const html = `
             <div style="display:flex; flex-direction:column; gap:15px;">
                 <div style="font-size:0.85rem; color:var(--text-secondary); background:rgba(37,99,235,0.05); border:1px solid rgba(37,99,235,0.2); padding:10px; border-radius:6px; line-height:1.5;">
-                    Il video verrà inserito direttamente nella pagina in un modulo protetto. Potrai riprodurlo senza uscire dall'app.
+                    ${I18n.t('link_manager.youtube_banner_info')}
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">URL del Video:</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.youtube_url_label')}</label>
                     <input type="text" id="youtubeUrlInput" class="modern-input" placeholder="Es: https://www.youtube.com/watch?v=12345abcdef">
                 </div>
             </div>
         `;
-        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmYoutube()" style="width:100%; justify-content:center;">Inserisci Video</button>`;
+        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmYoutube()" style="width:100%; justify-content:center;">${I18n.t('link_manager.btn_insert_video')}</button>`;
         
         UI.openDrawer(title, html, footer);
 
@@ -539,14 +538,14 @@ const LinkManager = {
 
     confirmYoutube: () => {
         let url = document.getElementById('youtubeUrlInput').value.trim();
-        if (!url) { alert("Inserisci l'URL del video YouTube."); return; }
+        if (!url) { alert(I18n.t('link_manager.alert_enter_youtube_url')); return; }
 
         // Estrazione dell'ID Video
         const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
         const match = url.match(ytRegex);
 
         if (!match || match[1].length !== 11) {
-            alert("Impossibile riconoscere un ID video valido in questo link YouTube.");
+            alert(I18n.t('link_manager.alert_invalid_youtube_id'));
             return;
         }
 
@@ -593,15 +592,15 @@ const LinkManager = {
         // Disegna l'header del widget
         WidgetManager.updateShellUI(widgetId, {
             icon: Icons.youtube,
-            title: 'Video YouTube',
+            title: I18n.t('link_manager.video_widget_title'),
             optionsId: `adv-opt-btn-${widgetId}`,
             onOptionsClick: (e) => {
                 e.stopPropagation();
                 UI.Menu.closeAll(true);
                 UI.Menu.buildContextMenu(`adv-opt-btn-${widgetId}`, [
-                    { icon: Icons.globe, label: 'Apri nel Browser', onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
+                    { icon: Icons.globe, label: I18n.t('link_manager.open_in_browser'), onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
                     { type: 'divider' },
-                    { icon: Icons.trash, label: 'Rimuovi Video', danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
+                    { icon: Icons.trash, label: I18n.t('link_manager.remove_video'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
                 ]);
             },
             onDragStart: (e) => {
@@ -673,7 +672,7 @@ const LinkManager = {
 
         btnCopy.disabled = true;
         btnCopy.style.opacity = "0.6";
-        btnCopy.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} 3. Copia nella clipboard</span>`;
+        btnCopy.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${I18n.t('link_manager.viewer_step3_copy')}</span>`;
 
         btnReplace.disabled = true;
         btnReplace.style.opacity = "0.6";
@@ -686,7 +685,7 @@ const LinkManager = {
         if (!isAbsolutePath && AppState.workspaceHandle) {
             try {
                 emptyState.style.display = "block";
-                emptyState.innerHTML = `<span style="color:var(--text-secondary);">${Icons.hourglass} Caricamento automatico dal Workspace...</span>`;
+                emptyState.innerHTML = `<span style="color:var(--text-secondary);">${Icons.hourglass} ${I18n.t('link_manager.viewer_loading_workspace')}</span>`;
                 
                 // Normalizza path rimuovendo .\ iniziali o usando / al posto di \
                 let normalizedPath = path.replace(/\\/g, '/').replace(/^\.\//, '');
@@ -732,22 +731,22 @@ const LinkManager = {
                 emptyState.style.display = "block";
                 emptyState.innerHTML = `
                     <div style="margin-bottom:10px; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); opacity:0.5;">${Icons.lock}</div>
-                    <div style="color:var(--danger-color); font-weight:bold; margin-bottom:5px;">File non trovato o formato non supportato.</div>
+                    <div style="color:var(--danger-color); font-weight:bold; margin-bottom:5px;">${I18n.t('link_manager.viewer_error_title')}</div>
                     <div style="font-size:0.85rem; color:var(--danger-color); max-width:80%;">
-                        Motivo: ${err.message}<br><br>
-                        Verifica che il file esista fisicamente nel path:<br>
+                        ${I18n.t('link_manager.viewer_error_reason')} ${err.message}<br><br>
+                        ${I18n.t('link_manager.viewer_error_verify')}<br>
                         <code>${path}</code><br>
                         (Controlla le doppie estensioni come .txt.txt o gli errori di battitura)
                     </div>
-                    <br><br>Puoi comunque cliccare su <b>"Apri File..."</b> in alto per caricarlo manualmente.
+                    <br><br>${I18n.t('link_manager.viewer_error_manual_hint')}
                 `;
             }
         } else {
             emptyState.style.display = "block";
             emptyState.innerHTML = `
                 <div style="margin-bottom:10px; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); opacity:0.5;">${Icons.lock}</div>
-                <div>Per motivi di sicurezza, i browser non possono aprire automaticamente<br>i percorsi assoluti del tuo PC.</div>
-                <div style="margin-top:10px; font-size:0.85rem;">Clicca su <b>"Apri File..."</b> in alto per visualizzare il contenuto.</div>
+                <div>${I18n.t('link_manager.viewer_security_warning')}</div>
+                <div style="margin-top:10px; font-size:0.85rem;">${I18n.t('link_manager.viewer_click_to_open_hint')}</div>
             `;
         }
     },
@@ -785,7 +784,7 @@ const LinkManager = {
         }
 
         const origText = btn.innerHTML;
-        btn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} Fatto!</span>`;
+        btn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} ${I18n.t('link_manager.btn_done')}</span>`;
         btn.classList.add('btn-primary');
         setTimeout(() => {
             btn.innerHTML = origText;
@@ -799,7 +798,7 @@ const LinkManager = {
         navigator.clipboard.writeText(content).then(() => {
             const btn = document.getElementById('btnCopyContent');
             const originalText = btn.innerHTML;
-            btn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} Copiato!</span>`;
+            btn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} ${I18n.t('common.copied')}</span>`;
             btn.classList.add('btn-primary');
             setTimeout(() => {
                 btn.innerHTML = originalText;

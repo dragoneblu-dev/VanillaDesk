@@ -29,7 +29,7 @@ Object.assign(AdvancedTable, {
             clampStyle = `display: -webkit-box; -webkit-line-clamp: ${clamp}; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; word-break: break-word;`;
         }
 
-        const readOnlyTip = isBacklink ? `title="Valore calcolato in automatico. Modificabile solo dal database origine." style="cursor:help;"` : '';
+        const readOnlyTip = isBacklink ? `title="${I18n.t('adv_cell.computed_field_tooltip')}" style="cursor:help;"` : '';
 
         if (isBacklink && (col.backlinkDisplay === 'count' || col.backlinkDisplay === 'property')) {
             if (col.backlinkDisplay === 'count') {
@@ -54,11 +54,11 @@ Object.assign(AdvancedTable, {
             if (linkObj && linkObj.noteId) {
                 targetNote = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
                 if (targetNote && !targetNote.deletedAt) {
-                    noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || 'Senza Titolo');
+                    noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || I18n.t('editor.untitled'));
                 } else if (targetNote && targetNote.deletedAt) {
-                    noteTitle = 'Nota nel Cestino';
+                    noteTitle = I18n.t('adv_cell.trashed_note');
                 } else {
-                    noteTitle = linkObj.title || 'Nota Mancante';
+                    noteTitle = linkObj.title || I18n.t('adv_cell.missing_note');
                 }
             }
 
@@ -66,13 +66,13 @@ Object.assign(AdvancedTable, {
                 const safeTitle = UI.escapeHTML(noteTitle);
                 const clickNav = `onclick="event.stopPropagation(); UI.selectNote('${linkObj.noteId}', ${linkObj.anchor ? `'${linkObj.anchor.replace(/'/g, "\\'")}'` : 'null'}, ${linkObj.refId ? `'${linkObj.refId}'` : 'null'})"`;
                 const editBtn = isEdit ? `
-                    <button class="adv-icon-btn" title="Cambia Collegamento" style="padding:1px 3px; margin-left:4px; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${row.id}', '${col.id}')">${Icons.edit}</button>
-                    <button class="adv-icon-btn danger" title="Rimuovi Collegamento" style="padding:1px 3px; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTable.clearNoteLink(event, '${tableId}', '${row.id}', '${col.id}')">${Icons.close}</button>
+                    <button class="adv-icon-btn" title="${I18n.t('adv_cell.change_link')}" style="padding:1px 3px; margin-left:4px; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${row.id}', '${col.id}')">${Icons.edit}</button>
+                    <button class="adv-icon-btn danger" title="${I18n.t('adv_cell.remove_link')}" style="padding:1px 3px; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTable.clearNoteLink(event, '${tableId}', '${row.id}', '${col.id}')">${Icons.close}</button>
                 ` : '';
 
                 return `
                     <div class="adv-select-container" style="justify-content: flex-start; align-items: center; flex-wrap: nowrap; width: 100%;">
-                        <a class="internal-link" style="cursor:pointer; max-width: calc(100% - 40px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" ${clickNav} title="Vai a: ${safeTitle}">
+                        <a class="internal-link" style="cursor:pointer; max-width: calc(100% - 40px); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" ${clickNav} title="${I18n.t('adv_cell.go_to_note', { title: safeTitle })}">
                             ${safeTitle}
                         </a>
                         ${editBtn}
@@ -83,12 +83,12 @@ Object.assign(AdvancedTable, {
                     return `
                         <div class="adv-select-container" style="justify-content: flex-start; cursor:pointer;" onclick="AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${row.id}', '${col.id}')">
                             <span class="adv-select-empty" style="color:var(--accent-color); opacity:0.8; display:inline-flex; align-items:center; gap:4px;">
-                                ${Icons.plus} Collega Nota...
+                                ${Icons.plus} ${I18n.t('adv_cell.link_note_placeholder')}
                             </span>
                         </div>
                     `;
                 } else {
-                    return `<span class="adv-select-empty">Vuoto</span>`;
+                    return `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
                 }
             }
         }
@@ -103,7 +103,7 @@ Object.assign(AdvancedTable, {
             
             return `
                 <div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; padding:2px;">
-                    <button class="btn action-btn-run" style="width:100%; min-height:28px; background-color:${btnColor}; border-color:${btnColor}; color:white; padding:4px 8px; font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; ${btnStyle}" ${actionCall} title="Esegui Azione" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
+                    <button class="btn action-btn-run" style="width:100%; min-height:28px; background-color:${btnColor}; border-color:${btnColor}; color:white; padding:4px 8px; font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; ${btnStyle}" ${actionCall} title="${I18n.t('adv_cell.execute_action')}" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
                         <span style="display:inline-flex; flex-shrink:0; pointer-events:none;">${btnIcon}</span> <span style="overflow:hidden; text-overflow:ellipsis; pointer-events:none;">${btnLabel}</span>
                     </button>
                 </div>
@@ -116,7 +116,7 @@ Object.assign(AdvancedTable, {
             if (noteObj && noteObj.deletedAt) noteObj = null;
             
             const isAttached = !!noteObj;
-            const noteTitle = isAttached ? (noteObj.title || 'Senza Titolo') : 'Apri Pagina';
+            const noteTitle = isAttached ? (noteObj.title || I18n.t('editor.untitled')) : I18n.t('adv_record.open_page');
             const btnStyle = isAttached 
                 ? 'color: var(--record-color, #10b981); font-weight: bold; background: var(--record-bg, rgba(16, 185, 129, 0.1)); border-color: var(--record-color, #10b981);' 
                 : 'color: var(--text-secondary); opacity: 0.7;';
@@ -168,8 +168,8 @@ Object.assign(AdvancedTable, {
                     if (endVal && col.type === 'datetime') eDisp = endVal.replace('T', ' ');
 
                     return `<div class="adv-date-ro-container">
-                                <div class="adv-date-ro-row"><span class="adv-date-ro-label">da:</span><span>${sDisp}</span></div>
-                                <div class="adv-date-ro-row"><span class="adv-date-ro-label">a:</span><span>${eDisp}</span></div>
+                                <div class="adv-date-ro-row"><span class="adv-date-ro-label">${I18n.t('adv_cell.date_from')}</span><span>${sDisp}</span></div>
+                                <div class="adv-date-ro-row"><span class="adv-date-ro-label">${I18n.t('adv_cell.date_to')}</span><span>${eDisp}</span></div>
                             </div>`;
                 }
             } else {
@@ -227,7 +227,7 @@ Object.assign(AdvancedTable, {
                     content += `<span class="adv-select-pill ${colorClass}" data-opt-name="${String(v).replace(/"/g, '&quot;')}">${v}</span>`;
                 });
             } else {
-                content = `<span class="adv-select-empty">Vuoto</span>`;
+                content = `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
             }
             const cellId = `adv-sel-${tableId}-${row.id}-${col.id}`;
             return `<div id="${cellId}" class="adv-select-container ${isEdit ? 'adv-select-right' : ''}" ${clickEventSelect}>${content}</div>`;
@@ -244,16 +244,16 @@ Object.assign(AdvancedTable, {
                 
                 details.forEach(rel => {
                     if (rel.name === 'Orfano') {
-                        content += `<span class="adv-select-pill hl-c10">Orfano</span>`;
+                        content += `<span class="adv-select-pill hl-c10">${I18n.t('adv_record.orphan_badge')}</span>`;
                     } else {
                         content += `<span class="adv-select-pill default-color" style="margin-right:4px; margin-left: 10px; ${pointerEvent}" onclick="event.stopPropagation(); AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxObjStr})">
                                        ${UI.escapeHTML(rel.name)} 
-                                       <span style="cursor:pointer; margin-left:4px; display:inline-flex; align-items:center;" title="Vedi Dettaglio">${Icons.recordView}</span>
+                                       <span style="cursor:pointer; margin-left:4px; display:inline-flex; align-items:center;" title="${I18n.t('adv_cell.view_detail')}">${Icons.recordView}</span>
                                     </span>`;
                     }
                 });
             } else {
-                content = `<span class="adv-select-empty">Vuoto</span>`;
+                content = `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
             }
 
             const cellId = `adv-rel-${tableId}-${row.id}-${col.id}`;
@@ -270,7 +270,7 @@ Object.assign(AdvancedTable, {
                 if (isLocalPath) targetUrl = 'file:///' + targetUrl.replace(/\\/g, '/');
                 else if (!hasProtocol && targetUrl) targetUrl = 'https://' + targetUrl;
 
-                const openBtnHTML = targetUrl ? `<button class="adv-icon-btn" title="Apri Link Esterno" onclick="event.stopPropagation(); window.open('${targetUrl}', '_blank')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-left:4px;">${Icons.globe}</button>` : '';
+                const openBtnHTML = targetUrl ? `<button class="adv-icon-btn" title="${I18n.t('adv_cell.open_external_link')}" onclick="event.stopPropagation(); window.open('${targetUrl}', '_blank')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-left:4px;">${Icons.globe}</button>` : '';
                 
                 return `<div style="display:flex; align-items:center; width:100%;">
                             <div class="adv-cell-text adv-url-edit" style="${clampStyle}" contenteditable="true" data-row="${row.id}" data-col="${col.id}" placeholder="https://... o C:\\...">${safeVal}</div>
@@ -286,14 +286,14 @@ Object.assign(AdvancedTable, {
                                     <div class="adv-url-ro-text" style="${clampStyle}; ${pointerEvent}">
                                         <a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline;">${val}</a>
                                     </div>
-                                    <button class="adv-icon-btn" style="${pointerEvent} padding:2px;" onclick="navigator.clipboard.writeText('${val.replace(/\\/g, '\\\\')}'); alert('Percorso copiato negli appunti!')" title="Copia percorso locale">${Icons.clipboard}</button>
+                                    <button class="adv-icon-btn" style="${pointerEvent} padding:2px;" onclick="navigator.clipboard.writeText('${val.replace(/\\/g, '\\\\')}'); alert('${I18n.t('adv_record.copy_path_alert')}')" title="${I18n.t('adv_cell.copy_local_path')}">${Icons.clipboard}</button>
                                 </div>`;
                     } else {
                         if (!/^[a-zA-Z0-9+-.]+:/i.test(href)) href = 'https://' + href;
                         return `<div class="adv-url-ro-text" style="${clampStyle}; ${pointerEvent}"><a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline;">${val}</a></div>`;
                     }
                 }
-                return `<span class="adv-select-empty">Vuoto</span>`;
+                return `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
             }
         } else {
             let rawVal = val || '';
@@ -322,8 +322,8 @@ Object.assign(AdvancedTable, {
                 // Sui campi calcolati/derivati (rollup, formula) mostriamo SEMPRE E SOLO "Apri Testo Completo" (icona recordView), mai "Modifica"
                 const actionButtonHTML = isTooLong ? (
                     (isComputed || !isEdit)
-                        ? `<button class="adv-icon-btn" title="Apri Testo Completo" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px; pointer-events:auto; cursor:pointer;">${Icons.recordView}</button>`
-                        : `<button class="adv-icon-btn" title="Modifica Testo Completo" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px;">${Icons.editTbl}</button>`
+                        ? `<button class="adv-icon-btn" title="${I18n.t('adv_cell.open_full_text')}" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px; pointer-events:auto; cursor:pointer;">${Icons.recordView}</button>`
+                        : `<button class="adv-icon-btn" title="${I18n.t('adv_cell.edit_full_text')}" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px;">${Icons.editTbl}</button>`
                 ) : '';
 
                 return `

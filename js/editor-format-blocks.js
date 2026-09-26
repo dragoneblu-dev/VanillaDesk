@@ -17,15 +17,15 @@ Object.assign(Editor, {
         const svgDivider = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><line x1="3" y1="12" x2="21" y2="12"></line></svg>`;
 
         const items = [
-            { icon: Icons.link, label: 'Collegamento (Link)', onClick: () => executeInsert(() => LinkManager.openSelectionModal()) },
-            { icon: Icons.image, label: 'Immagine', onClick: () => executeInsert(() => { document.getElementById('imgUpload').click(); }) },
-            { icon: Icons.play, label: 'Traccia Audio (.mp3, .wav)', onClick: () => executeInsert(() => { document.getElementById('audioUpload').click(); }) },
+            { icon: Icons.link, label: I18n.t('format_blocks.menu_insert_link'), onClick: () => executeInsert(() => LinkManager.openSelectionModal()) },
+            { icon: Icons.image, label: I18n.t('format_blocks.menu_insert_image'), onClick: () => executeInsert(() => { document.getElementById('imgUpload').click(); }) },
+            { icon: Icons.play, label: I18n.t('format_blocks.menu_insert_audio'), onClick: () => executeInsert(() => { document.getElementById('audioUpload').click(); }) },
             { type: 'divider' },
-            { icon: svgDivider, label: 'Linea di Divisione', shortcut: '---', onClick: () => executeInsert(() => Editor.insertDivider()) },
+            { icon: svgDivider, label: I18n.t('format_blocks.menu_insert_divider'), shortcut: '---', onClick: () => executeInsert(() => Editor.insertDivider()) },
             { type: 'divider' },
-            { icon: Icons.bookmark, label: 'Segnalibro', shortcut: 'Ctrl+Shift+B', onClick: () => executeInsert(() => Editor.insertBookmark()) },
-            { icon: Icons.noteInline, label: 'Appunto Inline (Nascosto)', onClick: () => executeInsert(() => Editor.insertInlineNote()) },
-            { icon: Icons.clipboard, label: 'Snippet Copiabile', onClick: () => executeInsert(() => Editor.insertCopySnippet()) }
+            { icon: Icons.bookmark, label: I18n.t('format_blocks.menu_insert_bookmark'), shortcut: 'Ctrl+Shift+B', onClick: () => executeInsert(() => Editor.insertBookmark()) },
+            { icon: Icons.noteInline, label: I18n.t('format_blocks.menu_insert_inline_note'), onClick: () => executeInsert(() => Editor.insertInlineNote()) },
+            { icon: Icons.clipboard, label: I18n.t('format_blocks.menu_insert_snippet'), onClick: () => executeInsert(() => Editor.insertCopySnippet()) }
         ];
 
         UI.Menu.buildContextMenu(anchorId, items);
@@ -40,15 +40,15 @@ Object.assign(Editor, {
         };
 
         const items = [
-            { icon: Icons.code, label: 'Blocco di Codice', onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
-            { icon: Icons.citation, label: 'Citazione Live', onClick: () => executeInsert(() => CitationManager.openModal()) },
-            { icon: Icons.columns, label: 'Testo in Colonne', onClick: () => executeInsert(() => ColumnManager.insert()) },
+            { icon: Icons.code, label: I18n.t('format_blocks.menu_widget_code'), onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
+            { icon: Icons.citation, label: I18n.t('format_blocks.menu_widget_citation'), onClick: () => executeInsert(() => CitationManager.openModal()) },
+            { icon: Icons.columns, label: I18n.t('format_blocks.menu_widget_columns'), onClick: () => executeInsert(() => ColumnManager.insert()) },
             { type: 'divider' },
-            { icon: Icons.tableSimple, label: 'Tabella', onClick: () => executeInsert(() => TableManager.openCreationModal()) },
-            { icon: Icons.tableDatabase, label: 'Database', onClick: () => executeInsert(() => AdvancedTable.create()) },
-            { icon: Icons.tablePivot, label: 'Vista / Pivot / Grafico', onClick: () => executeInsert(() => AdvancedPivotMenus.openCreateWizard()) },
+            { icon: Icons.tableSimple, label: I18n.t('format_blocks.menu_widget_table'), onClick: () => executeInsert(() => TableManager.openCreationModal()) },
+            { icon: Icons.tableDatabase, label: I18n.t('format_blocks.menu_widget_database'), onClick: () => executeInsert(() => AdvancedTable.create()) },
+            { icon: Icons.tablePivot, label: I18n.t('format_blocks.menu_widget_pivot'), onClick: () => executeInsert(() => AdvancedPivotMenus.openCreateWizard()) },
             { type: 'divider' },
-            { icon: Icons.play, label: 'Pulsante Macro', onClick: () => executeInsert(() => ButtonManager.insert()) }
+            { icon: Icons.play, label: I18n.t('format_blocks.menu_widget_button'), onClick: () => executeInsert(() => ButtonManager.insert()) }
         ];
 
         UI.Menu.buildContextMenu(anchorId, items);
@@ -61,7 +61,7 @@ Object.assign(Editor, {
         if(node && node.nodeType === 3) node = node.parentNode;
 
         if (node && node.closest('.widget-type-columns')) {
-            alert("Sposta il cursore fuori dalle colonne prima di inserire questo elemento.");
+            alert(I18n.t('format_blocks.alert_columns_barrier'));
             return;
         }
 
@@ -70,7 +70,7 @@ Object.assign(Editor, {
         const id = 'adv_code_' + Store.generateId();
         
         if (!AppState.databases) AppState.databases = {};
-        AppState.databases[id] = { title: 'Codice', language: 'none', content: '' };
+        AppState.databases[id] = { title: I18n.t('format_blocks.menu_widget_code'), language: 'none', content: '' };
 
         let wrapper;
         if (typeof WidgetManager !== 'undefined') {
@@ -140,7 +140,7 @@ Object.assign(Editor, {
         const btnSpan = document.createElement('span');
         btnSpan.className = 'snippet-copy-btn';
         btnSpan.setAttribute('contenteditable', 'false');
-        btnSpan.setAttribute('title', 'Copia');
+        btnSpan.setAttribute('title', I18n.t('common.copy'));
         btnSpan.innerHTML = typeof Icons !== 'undefined' ? Icons.clipboard : '📋';
 
         wrapper.appendChild(document.createTextNode('\u200B'));

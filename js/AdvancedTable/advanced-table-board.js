@@ -34,22 +34,22 @@ const AdvancedBoard = {
         const chk = '<span style="color:var(--accent-color); font-weight:bold; float:right; margin-left:10px;">✓</span>';
 
         const menuItems = [
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:2px;">Seleziona Vista</div>' },
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:2px;">${I18n.t('adv_board.select_view_title')}</div>` },
             { 
                 icon: Icons.viewList, 
-                label: 'Vista formato Tabella' + ((state.viewType === 'table' || !state.viewType) ? chk : ''), 
+                label: I18n.t('adv_board.view_table') + ((state.viewType === 'table' || !state.viewType) ? chk : ''), 
                 onClick: () => AdvancedBoard.setView(tableId, 'table') 
             }
         ];
 
         // Sezione Vista ad Albero (WBS) con avviso di coerenza se assente
         menuItems.push({ type: 'divider' });
-        menuItems.push({ type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">Gerarchia ad Albero (WBS)</div>' });
+        menuItems.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">${I18n.t('adv_board.tree_wbs_title')}</div>` });
 
         if (selfRelCols.length === 0) {
             menuItems.push({ 
                 type: 'custom', 
-                html: '<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">Crea una colonna "Relazione" che punti a questo stesso DB</div>' 
+                html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_self_relation')}</div>` 
             });
         } else {
             selfRelCols.forEach(c => {
@@ -60,7 +60,7 @@ const AdvancedBoard = {
                 let treeSubMenu = [
                     { 
                         icon: Icons.treeNode, 
-                        label: `Il campo "${c.name}" indica i Figli` + (isChildrenDir ? chk : ''), 
+                        label: I18n.t('adv_board.tree_indicates_children', { colName: c.name }) + (isChildrenDir ? chk : ''), 
                         onClick: () => {
                             if (typeof AdvancedTree !== 'undefined') {
                                 AdvancedTree.setView(tableId, c.id, 'children');
@@ -69,7 +69,7 @@ const AdvancedBoard = {
                     },
                     { 
                         icon: Icons.treeNode, 
-                        label: `Il campo "${c.name}" indica il Genitore` + (isParentDir ? chk : ''), 
+                        label: I18n.t('adv_board.tree_indicates_parent', { colName: c.name }) + (isParentDir ? chk : ''), 
                         onClick: () => {
                             if (typeof AdvancedTree !== 'undefined') {
                                 AdvancedTree.setView(tableId, c.id, 'parent');
@@ -79,7 +79,7 @@ const AdvancedBoard = {
                     { type: 'divider' },
                     {
                         icon: Icons.data || Icons.tablePivot,
-                        label: 'Apri in Workflow Graph Studio ↗',
+                        label: I18n.t('adv_board.open_workflow_studio'),
                         onClick: () => {
                             AdvancedBoard.openInWorkflowStudio(tableId, c.id, state.treeRelationDirection || 'children');
                         }
@@ -96,10 +96,10 @@ const AdvancedBoard = {
         }
 
         menuItems.push({ type: 'divider' });
-        menuItems.push({ type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">Bacheca (Raggruppa per...)</div>' });
+        menuItems.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">${I18n.t('adv_board.board_group_title')}</div>` });
 
         if (selectCols.length === 0) {
-            menuItems.push({ type: 'custom', html: '<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">Crea una colonna "Select Singola"</div>' });
+            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_select_column')}</div>` });
         } else {
             selectCols.forEach(c => {
                 const isActive = state.viewType === 'board' && state.boardGroupBy === c.id;
@@ -112,21 +112,21 @@ const AdvancedBoard = {
         }
 
         menuItems.push({ type: 'divider' });
-        menuItems.push({ type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">Viste Temporali (per Colonna)</div>' });
+        menuItems.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">${I18n.t('adv_board.time_views_title')}</div>` });
 
         if (dateCols.length === 0) {
-            menuItems.push({ type: 'custom', html: '<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">Crea almeno una colonna "Data"</div>' });
+            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_date_column')}</div>` });
         } else {
             dateCols.forEach(c => {
                 const isCalActive = state.viewType === 'calendar' && state.calendarDateCol === c.id;
                 const isTlActive = state.viewType === 'timeline' && state.timelineDateCol === c.id;
 
                 let timeSubMenu = [
-                    { icon: Icons.viewCalendar, label: 'Calendario' + (isCalActive ? chk : ''), onClick: () => AdvancedBoard.setView(tableId, 'calendar', null, null, c.id) }
+                    { icon: Icons.viewCalendar, label: I18n.t('adv_board.calendar_view') + (isCalActive ? chk : ''), onClick: () => AdvancedBoard.setView(tableId, 'calendar', null, null, c.id) }
                 ];
 
                 if (c.hasEndDate) {
-                    timeSubMenu.push({ icon: Icons.viewTimeline, label: 'Timeline' + (isTlActive ? chk : ''), onClick: () => AdvancedBoard.setView(tableId, 'timeline', null, c.id, null) });
+                    timeSubMenu.push({ icon: Icons.viewTimeline, label: I18n.t('adv_board.timeline_view') + (isTlActive ? chk : ''), onClick: () => AdvancedBoard.setView(tableId, 'timeline', null, c.id, null) });
                 }
 
                 menuItems.push({
@@ -198,9 +198,9 @@ const AdvancedBoard = {
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header">
                     <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('menu.configure')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;"></span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('common.loading')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -230,16 +230,16 @@ const AdvancedBoard = {
 
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
-            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewBoard, title: 'Cambia visualizzazione', label: 'Vista', onClick: AdvancedBoard.openViewMenu });
+            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewBoard, title: I18n.t('adv_board.select_view_title'), label: I18n.t('table.view'), onClick: AdvancedBoard.openViewMenu });
             if (!state.isLinkedView && !isSysDB) {
-                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
+                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina Database', active: hasSort, onClick: AdvancedTable.openSortMenu });
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra Database', active: hasFilter, onClick: AdvancedTable.openFilterMenu });
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, onClick: AdvancedTable.openFilterMenu });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
-                title: state.title || 'Database',
+                title: state.title || I18n.t('editor.database'),
                 optionsId: `adv-opt-btn-${tableId}`,
                 tools: tools,
                 onTitleChange: AdvancedTable.updateTitle,
@@ -261,7 +261,7 @@ const AdvancedBoard = {
         const options = state.selectOptions[groupColId] ||[];
         const columnsData =[];
         options.forEach(opt => columnsData.push({ name: opt, value: opt }));
-        columnsData.push({ name: 'Senza Stato', value: '' });
+        columnsData.push({ name: I18n.t('adv_board.without_status'), value: '' });
 
         const boardData = {};
         columnsData.forEach(c => boardData[c.value] =[]);
@@ -296,7 +296,7 @@ const AdvancedBoard = {
             html += `
                 <div class="adv-board-col-wrapper">
                     <div class="adv-board-col-header">
-                        ${colData.value ? `<span class="adv-select-pill ${colorClass}" style="margin:0;">${safeGrpName}</span>` : `<span style="font-weight:bold; color:var(--text-secondary); font-size:0.85rem;">Senza Stato</span>`}
+                        ${colData.value ? `<span class="adv-select-pill ${colorClass}" style="margin:0;">${safeGrpName}</span>` : `<span style="font-weight:bold; color:var(--text-secondary); font-size:0.85rem;">${I18n.t('adv_board.without_status')}</span>`}
                         <span style="color:var(--text-secondary); font-size:0.75rem; opacity:0.7;">${totalInCol}</span>
                     </div>
                     
@@ -308,10 +308,10 @@ const AdvancedBoard = {
             `;
 
             visibleCards.forEach(row => {
-                let tVal = row.virtualCells[titleCol.id] || 'Senza Titolo';
+                let tVal = row.virtualCells[titleCol.id] || I18n.t('editor.untitled');
                 if (titleCol.type === 'record_note') {
                     const noteObj = typeof Store !== 'undefined' ? Store.getNote(tVal) : null;
-                    if (noteObj) tVal = noteObj.title || 'Senza Titolo';
+                    if (noteObj) tVal = noteObj.title || I18n.t('editor.untitled');
                 }
                 tVal = String(tVal).replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
@@ -323,7 +323,7 @@ const AdvancedBoard = {
                         
                         <div class="adv-board-card-header">
                             <div class="adv-board-card-title">${tVal}</div>
-                            <button class="adv-icon-btn" title="Apri Record" style="margin:0; padding:2px; color:currentColor;" onclick="event.stopPropagation(); AdvancedTable.openRecordView('${tableId}', '${row.id}')">${Icons.recordView}</button>
+                            <button class="adv-icon-btn" title="${I18n.t('adv_record.title_record')}" style="margin:0; padding:2px; color:currentColor;" onclick="event.stopPropagation(); AdvancedTable.openRecordView('${tableId}', '${row.id}')">${Icons.recordView}</button>
                         </div>
 
                         <div class="adv-board-card-props">
@@ -377,13 +377,13 @@ const AdvancedBoard = {
                     <button class="adv-add-btn" 
                             style="text-align:center; justify-content:center; margin-top:4px; margin-bottom:4px; font-weight:bold; border: 1px dashed var(--border-color); background: var(--bg-color); font-size:0.75rem;" 
                             onclick="AdvancedBoard.loadMoreCards(event, '${tableId}', '${colData.value.replace(/'/g, "\\'")}', 30)">
-                        Mostra altri ${nextBatch} di ${totalInCol} (${remaining} rimanenti)
+                        ${I18n.t('adv_board.load_more_cards', { batch: nextBatch, total: totalInCol, remaining: remaining })}
                     </button>
                 `;
             }
 
             if (isEdit && !hasFilter && !isSysDB) {
-                html += `<button class="adv-add-btn" style="text-align:left; justify-content:flex-start; margin-top:5px; opacity:0.6; flex-shrink:0;" onclick="AdvancedBoard.addCard(event, '${tableId}', '${colData.value.replace(/'/g, "\\'")}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova scheda</span></button>`;
+                html += `<button class="adv-add-btn" style="text-align:left; justify-content:flex-start; margin-top:5px; opacity:0.6; flex-shrink:0;" onclick="AdvancedBoard.addCard(event, '${tableId}', '${colData.value.replace(/'/g, "\\'")}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} ${I18n.t('adv_board.new_card')}</span></button>`;
             }
 
             html += `</div></div>`;

@@ -185,8 +185,17 @@ Object.assign(UI, {
 
     extractSearchableText: (htmlContent) => {
         if (!htmlContent) return "";
+
+        // SANIFICAZIONE PREVENTIVA: Rimozione selettiva di frame, script e stili prima del parsing DOM.
+        // Impedisce a Chromium di eseguire il check della Permissions Policy (eliminando il warning 'attribution-reporting')
+        // e velocizza significativamente l'indicizzazione delle note.
+        const cleanMarkup = htmlContent
+            .replace(/<iframe\b[^>]*>([\s\S]*?<\/iframe>)?/gi, '')
+            .replace(/<script\b[^>]*>([\s\S]*?<\/script>)?/gi, '')
+            .replace(/<style\b[^>]*>([\s\S]*?<\/style>)?/gi, '');
+
         const temp = document.createElement('div');
-        temp.innerHTML = htmlContent;
+        temp.innerHTML = cleanMarkup;
 
         let pureText = temp.textContent || temp.innerText || "";
         

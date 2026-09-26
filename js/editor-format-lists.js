@@ -46,13 +46,13 @@ Object.assign(Editor, {
         let num = val;
         if (num === null) {
             const currentVal = parseInt(currentOl.getAttribute('start'), 10) || 1;
-            const input = prompt("Imposta il numero iniziale per questo elenco numerato:", currentVal);
+            const input = prompt(I18n.t('format_lists.prompt_start_num'), currentVal);
             if (input === null) return;
             num = parseInt(input.trim(), 10);
         }
 
         if (isNaN(num) || num < 0) {
-            alert("Inserisci un numero intero positivo valido (minimo 0).");
+            alert(I18n.t('format_lists.alert_invalid_num'));
             return;
         }
 
@@ -66,7 +66,7 @@ Object.assign(Editor, {
 
         Store.triggerAutoSave();
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast(`Numerazione impostata da ${num}.`, "info");
+            UI.showToast(I18n.t('format_lists.toast_num_set', { num: num }), "info");
         }
     },
 
@@ -78,7 +78,7 @@ Object.assign(Editor, {
         currentOl.removeAttribute('start');
         Store.triggerAutoSave();
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast("Numerazione reimpostata da 1.", "info");
+            UI.showToast(I18n.t('format_lists.toast_num_reset'), "info");
         }
     },
 
@@ -88,7 +88,7 @@ Object.assign(Editor, {
 
         const prevOl = Editor._getPreviousOrderedList(currentOl);
         if (!prevOl) {
-            alert("Nessun elenco numerato precedente trovato in questa nota.");
+            alert(I18n.t('format_lists.alert_no_prev_list'));
             return;
         }
 
@@ -98,7 +98,7 @@ Object.assign(Editor, {
         currentOl.setAttribute('start', nextStart);
         Store.triggerAutoSave();
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast(`Numerazione ripresa dal numero ${nextStart}.`, "success");
+            UI.showToast(I18n.t('format_lists.toast_num_resumed', { nextStart: nextStart }), "success");
         }
     },
 
@@ -108,7 +108,7 @@ Object.assign(Editor, {
 
         const prevOl = Editor._getPreviousOrderedList(currentOl);
         if (!prevOl) {
-            alert("Nessun elenco numerato precedente trovato a cui unire questo blocco.");
+            alert(I18n.t('format_lists.alert_no_prev_merge'));
             return;
         }
 
@@ -146,7 +146,7 @@ Object.assign(Editor, {
 
         Store.triggerAutoSave();
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast("Elenchi numerati uniti con successo.", "success");
+            UI.showToast(I18n.t('format_lists.toast_merged_success'), "success");
         }
     },
 
@@ -165,42 +165,42 @@ Object.assign(Editor, {
         };
 
         const items = [
-            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">•</span>', label: 'Elenco Puntato', shortcut: '- ', onClick: () => executeInsert('ul') },
-            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">1.</span>', label: 'Elenco Numerato', shortcut: '1. ', onClick: () => executeInsert('ol', '1') },
-            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">A.</span>', label: 'Elenco Lettere', onClick: () => executeInsert('ol', 'A') },
+            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">•</span>', label: I18n.t('format_lists.bullet_list'), shortcut: '- ', onClick: () => executeInsert('ul') },
+            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">1.</span>', label: I18n.t('format_lists.numbered_list'), shortcut: '1. ', onClick: () => executeInsert('ol', '1') },
+            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">A.</span>', label: I18n.t('format_lists.alpha_list'), onClick: () => executeInsert('ol', 'A') },
             { type: 'divider' },
-            { icon: Icons.checkSquare, label: 'To-Do List', shortcut: '[] ', onClick: () => { Editor.restoreSelection(); Editor.insertChecklist(); } },
-            { icon: Icons.journal, label: 'Diario / Log Date', onClick: () => JournalManager.insert(true) }
+            { icon: Icons.checkSquare, label: I18n.t('format_lists.todo_list'), shortcut: '[] ', onClick: () => { Editor.restoreSelection(); Editor.insertChecklist(); } },
+            { icon: Icons.journal, label: I18n.t('format_lists.journal_log'), onClick: () => JournalManager.insert(true) }
         ];
 
         // Selezionatore contestuale dedicato agli elenchi numerati
         if (currentOl) {
             items.push({ type: 'divider' });
-            items.push({ type: 'custom', html: '<div class="adv-dropdown-title" style="margin-bottom: 2px;">Gestione Numerazione</div>' });
+            items.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom: 2px;">${I18n.t('format_lists.num_management')}</div>` });
 
             if (prevOl) {
                 items.push({
                     icon: Icons.play,
-                    label: `Continua da elenco precedente (da ${nextStartVal})`,
+                    label: I18n.t('format_lists.continue_from_prev', { nextStartVal: nextStartVal }),
                     onClick: () => Editor.continueFromPreviousList()
                 });
                 items.push({
                     icon: Icons.merge,
-                    label: 'Unisci all\'elenco precedente',
+                    label: I18n.t('format_lists.merge_with_prev'),
                     onClick: () => Editor.mergeWithPreviousList()
                 });
             }
 
             items.push({
                 icon: Icons.number,
-                label: `Imposta numero iniziale... (Attuale: ${currentStart})`,
+                label: I18n.t('format_lists.set_start_num', { currentStart: currentStart }),
                 onClick: () => Editor.setListStart()
             });
 
             if (currentStart !== 1) {
                 items.push({
                     icon: Icons.restore,
-                    label: 'Ricomincia da 1',
+                    label: I18n.t('format_lists.restart_at_one'),
                     onClick: () => Editor.resetListStart()
                 });
             }

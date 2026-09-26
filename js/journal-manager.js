@@ -58,9 +58,19 @@ const JournalManager = {
         const editor = container.id === 'noteContent' ? container : (container.querySelector ? container.querySelector('#noteContent') || container : document);
         if (!editor || !editor.querySelectorAll) return;
 
+        const defaultJournalTitle = I18n.t('journal.default_title');
+
         const legacyJournals = editor.querySelectorAll('ul.adv-journal-list[data-journal="true"]');
         legacyJournals.forEach(legacy => {
-            const state = { entries: [], collapsedDates:[], displayLimit: 'all', showSearch: false, searchTerm: '', hideCompleted: false };
+            const state = { 
+                title: defaultJournalTitle,
+            entries: [], 
+            collapsedDates:[], 
+            displayLimit: 'all', 
+            showSearch: false, 
+            searchTerm: '', 
+            hideCompleted: false 
+            };
             
             legacy.querySelectorAll('.journal-time-node').forEach(timeNode => {
                 const ts = parseInt(timeNode.getAttribute('data-timestamp') || Date.now());
@@ -162,35 +172,35 @@ const JournalManager = {
         const menuItems =[
             { 
                 icon: Icons.listFilter, 
-                label: 'Nascondi completati (Vedi solo To-Do)' + (isHideCompleted ? chk : ''), 
+                label: I18n.t('journal.hide_completed') + (isHideCompleted ? chk : ''), 
                 onClick: () => JournalManager.toggleHideCompleted(journalId) 
             },
             { type: 'divider' },
             { 
                 icon: Icons.filter, 
-                label: 'Mostra barra di ricerca' + (isSearchVisible ? chk : ''), 
+                label: I18n.t('journal.show_search') + (isSearchVisible ? chk : ''), 
                 onClick: () => JournalManager.toggleSearch(journalId) 
             },
             {
                 icon: Icons.date,
-                label: 'Giorni visualizzati',
+                label: I18n.t('journal.displayed_days'),
                 type: 'submenu',
                 items:[
-                    { label: 'Tutti i giorni' + (limit === 'all' ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 'all') },
-                    { label: 'Ultimi 7 giorni' + (limit === 7 ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 7) },
-                    { label: 'Ultimi 14 giorni' + (limit === 14 ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 14) }
+                    { label: I18n.t('journal.all_days') + (limit === 'all' ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 'all') },
+                    { label: I18n.t('journal.last_7_days') + (limit === 7 ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 7) },
+                    { label: I18n.t('journal.last_14_days') + (limit === 14 ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 14) }
                 ]
             },
             { type: 'divider' },
             { 
                 icon: Icons.exportCSV, 
-                label: 'Esporta Diario come CSV', 
+                label: I18n.t('journal.export_csv'), 
                 onClick: () => JournalManager.exportJournalCSV(journalId) 
             },
             { type: 'divider' },
             { 
                 icon: Icons.trash, 
-                label: 'Elimina Intero Diario', 
+                label: I18n.t('journal.delete_journal'), 
                 danger: true, 
                 onClick: () => JournalManager.deleteJournal(journalId)
             }
@@ -207,10 +217,10 @@ const JournalManager = {
         e.currentTarget.id = btnId;
         
         const items = [
-            { icon: `<span style="color:var(--danger-color); display:flex; align-items:center;">${Icons.priorityHigh}</span>`, label: 'Priorità Alta', onClick: () => JournalManager.setPriority(journalId, entryId, 'high') },
-            { icon: `<span style="color:var(--tx-c7); display:flex; align-items:center;">${Icons.priorityLow}</span>`, label: 'Priorità Bassa', onClick: () => JournalManager.setPriority(journalId, entryId, 'low') },
+            { icon: `<span style="color:var(--danger-color); display:flex; align-items:center;">${Icons.priorityHigh}</span>`, label: I18n.t('journal.priority_high'), onClick: () => JournalManager.setPriority(journalId, entryId, 'high') },
+            { icon: `<span style="color:var(--tx-c7); display:flex; align-items:center;">${Icons.priorityLow}</span>`, label: I18n.t('journal.priority_low'), onClick: () => JournalManager.setPriority(journalId, entryId, 'low') },
             { type: 'divider' },
-            { icon: `<span style="display:flex; align-items:center;">${Icons.close}</span>`, label: 'Nessuna Priorità (Normale)', onClick: () => JournalManager.setPriority(journalId, entryId, null) }
+            { icon: `<span style="display:flex; align-items:center;">${Icons.close}</span>`, label: I18n.t('journal.priority_none'), onClick: () => JournalManager.setPriority(journalId, entryId, null) }
         ];
         
         UI.Menu.buildContextMenu(btnId, items);
@@ -285,7 +295,7 @@ const JournalManager = {
     },
 
     deleteJournal: (journalId) => {
-        if (!confirm("Sei sicuro di voler eliminare l'intero diario e tutte le sue voci?")) return;
+        if (!confirm(I18n.t('journal.confirm_delete'))) return;
         
         const wrapper = document.getElementById(journalId);
         if (wrapper) wrapper.remove();
@@ -303,11 +313,17 @@ const JournalManager = {
         try {
             const state = JournalManager.getState(journalId);
             if (!state || !state.entries || state.entries.length === 0) {
-                alert("Il diario è vuoto.");
+                alert(I18n.t('journal.csv_empty'));
                 return;
             }
 
-            let csvContent = "Data Inizio;Ora Inizio;Completato Il;Priorita;Contenuto\n";
+            const headerDate = I18n.t('journal.csv_header_date');
+            const headerTime = I18n.t('journal.csv_header_time');
+            const headerComp = I18n.t('journal.csv_header_completed');
+            const headerPrio = I18n.t('journal.csv_header_priority');
+            const headerCont = I18n.t('journal.csv_header_content');
+
+            let csvContent = `${headerDate};${headerTime};${headerComp};${headerPrio};${headerCont}\n`;
             const sorted = [...state.entries].sort((a,b) => a.timestamp - b.timestamp);
 
             sorted.forEach((entry) => {
@@ -325,7 +341,9 @@ const JournalManager = {
                     completionStr = `${JournalManager.formatDate(d)} ${JournalManager.formatTime(d)}`;
                 }
 
-                const prioStr = entry.priority === 'high' ? 'Alta' : (entry.priority === 'low' ? 'Bassa' : 'Normale');
+                let prioStr = I18n.t('journal.csv_prio_normal');
+                if (entry.priority === 'high') prioStr = I18n.t('journal.csv_prio_high');
+                else if (entry.priority === 'low') prioStr = I18n.t('journal.csv_prio_low');
 
                 csvContent += `${entry.dateStr};${entry.timeStr};${completionStr};${prioStr};${cleanText}\n`;
             });
@@ -381,9 +399,10 @@ const JournalManager = {
         const journalId = 'adv_journal_' + Store.generateId();
         const now = new Date();
         const entryId = 'je_' + Store.generateId();
+        const defaultJournalTitle = I18n.t('journal.default_title');
         
         const state = {
-            title: 'Diario / Log',
+            title: defaultJournalTitle,
             entries:[{
                 id: entryId,
                 timestamp: now.getTime(),
@@ -584,7 +603,7 @@ const JournalManager = {
     updateTitle: (journalId, newTitle) => {
         let state = JournalManager.getState(journalId);
         if (!state) return;
-        state.title = newTitle.trim() || 'Diario / Log';
+        state.title = newTitle.trim() || I18n.t('journal.default_title');
         JournalManager.setState(journalId, state);
     },
 
@@ -606,7 +625,7 @@ const JournalManager = {
                     <span class="widget-drag-handle adv-drag-handle" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
                     <span class="widget-options-btn adv-drag-handle" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;">${Icons.journal}</span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}">${state.title || 'Diario / Log'}</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}">${state.title || I18n.t('journal.default_title')}</span>
                     <div class="widget-tools adv-tools"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -648,7 +667,7 @@ const JournalManager = {
         if (typeof WidgetManager !== 'undefined') {
             WidgetManager.updateShellUI(journalId, {
                 icon: Icons.journal,
-                title: state.title || 'Diario / Log',
+                title: state.title || I18n.t('journal.default_title'),
                 optionsId: `j-opt-btn-${journalId}`,
                 onTitleChange: JournalManager.updateTitle,
                 onOptionsClick: JournalManager.openMenu,
@@ -664,7 +683,7 @@ const JournalManager = {
             html += `
                 <div class="journal-search-wrapper" onmousedown="event.stopPropagation()">
                     <span class="journal-search-icon">${Icons.search}</span>
-                    <input type="text" id="j-search-${journalId}" class="journal-search-input" placeholder="Cerca nel diario..." value="${safeTerm}" 
+                    <input type="text" id="j-search-${journalId}" class="journal-search-input" placeholder="${I18n.t('journal.search_placeholder')}" value="${safeTerm}" 
                            oninput="event.stopPropagation(); JournalManager.setSearchTerm('${journalId}', this.value)"
                            onkeydown="event.stopPropagation()"
                            onkeyup="event.stopPropagation()"
@@ -677,11 +696,11 @@ const JournalManager = {
 
         if (dateKeys.length === 0) {
             if (state.showSearch && state.searchTerm) {
-                html += `<li style="padding: 10px; color: var(--text-secondary); font-style: italic; font-size:0.9rem;">Nessun risultato.</li>`;
+                html += `<li style="padding: 10px; color: var(--text-secondary); font-style: italic; font-size:0.9rem;">${I18n.t('journal.empty_search')}</li>`;
             } else if (state.hideCompleted) {
-                html += `<li style="padding: 10px; color: var(--text-secondary); font-style: italic; font-size:0.9rem;">Tutte le attività sono completate!</li>`;
+                html += `<li style="padding: 10px; color: var(--text-secondary); font-style: italic; font-size:0.9rem;">${I18n.t('journal.all_completed')}</li>`;
             } else {
-                html += `<li style="padding: 10px; color: var(--text-secondary); font-style: italic; font-size:0.9rem;">(Nessun record)</li>`;
+                html += `<li style="padding: 10px; color: var(--text-secondary); font-style: italic; font-size:0.9rem;">${I18n.t('journal.no_records')}</li>`;
             }
         } else {
             dateKeys.forEach(dateStr => {
@@ -715,24 +734,24 @@ const JournalManager = {
                     if (isCompleted) {
                         const endD = new Date(entry.endTime);
                         const endStr = `${JournalManager.formatDate(endD)} ${JournalManager.formatTime(endD)}`;
-                        tooltipAttr = `data-tooltip="<b>Inizio:</b> ${entry.dateStr} ${entry.timeStr}<br><b>Fine:</b> ${endStr}" style="cursor:help;"`;
+                        tooltipAttr = `data-tooltip="<b>${I18n.t('journal.tooltip_start')}</b> ${entry.dateStr} ${entry.timeStr}<br><b>${I18n.t('journal.tooltip_end')}</b> ${endStr}" style="cursor:help;"`;
                     }
 
-                    // GENERAZIONE HTML BOTTONE PRIORITA'
+                    // BOTTONE PRIORITÀ
                     let prioIcon = Icons.flagEmpty;
                     let prioClass = '';
                     if (entry.priority === 'high') { prioIcon = Icons.priorityHigh; prioClass = 'has-priority prio-high'; }
                     else if (entry.priority === 'low') { prioIcon = Icons.priorityLow; prioClass = 'has-priority prio-low'; }
 
                     const priorityHtml = isEdit 
-                        ? `<div class="journal-priority-btn ${prioClass}" onclick="JournalManager.openPriorityMenu(event, '${journalId}', '${entry.id}')" title="Imposta Priorità">${prioIcon}</div>` 
+                        ? `<div class="journal-priority-btn ${prioClass}" onclick="JournalManager.openPriorityMenu(event, '${journalId}', '${entry.id}')" title="${I18n.t('journal.set_priority_title')}">${prioIcon}</div>` 
                         : (entry.priority ? `<div class="journal-priority-btn ${prioClass}" style="cursor:default;">${prioIcon}</div>` : '');
 
                     html += `
                         <li class="journal-time-node ${vanishingClass}">
                             ${priorityHtml}
                             <span class="journal-time-label ${hiddenTimeClass} ${completedClass}" ${tooltipAttr} ${isEdit ? `onclick="JournalManager.toggleCompletion('${journalId}', '${entry.id}', this.closest('.journal-time-node'))"` : ''}>${entry.timeStr}</span>
-                            <div id="${entry.id}" class="journal-content" ${isEdit ? 'contenteditable="true"' : 'contenteditable="false"'} style="${strikeStyle}" placeholder="Scrivi log...">${entry.content}</div>
+                            <div id="${entry.id}" class="journal-content" ${isEdit ? 'contenteditable="true"' : 'contenteditable="false"'} style="${strikeStyle}" placeholder="${I18n.t('journal.input_placeholder')}">${entry.content}</div>
                         </li>
                     `;
                 });

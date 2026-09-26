@@ -37,30 +37,30 @@ const AdvancedTableMenus = {
         let visibilityItems = [...visibleItems];
         if (hiddenItems.length > 0) {
             if (visibleItems.length > 0) visibilityItems.push({ type: 'divider' });
-            visibilityItems.push({ type: 'custom', html: '<div style="font-size:0.65rem; font-weight:bold; color:var(--text-secondary); padding:4px 8px; text-transform:uppercase; letter-spacing:0.05em;">Campi Nascosti</div>' });
+            visibilityItems.push({ type: 'custom', html: `<div style="font-size:0.65rem; font-weight:bold; color:var(--text-secondary); padding:4px 8px; text-transform:uppercase; letter-spacing:0.05em;">${I18n.t('adv_menus.hidden_fields')}</div>` });
             visibilityItems = visibilityItems.concat(hiddenItems);
         }
 
-        const widthLabel = 'Adatta a larghezza pagina&nbsp;' + (!state.freeWidth ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
-        const zebraLabel = 'Righe alternate' + (state.striped !== false ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
-        const footerLabel = 'Piè di pagina (Nuova riga / Pagine)' + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const widthLabel = I18n.t('adv_menus.fit_page_width') + '&nbsp;' + (!state.freeWidth ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const zebraLabel = I18n.t('adv_menus.striped_rows') + (state.striped !== false ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
+        const footerLabel = I18n.t('adv_menus.footer_controls') + (!isFooterHidden ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '');
 
         const clamp = state.textClamp !== undefined ? state.textClamp : 1; 
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right; margin-left:10px;">✓</span>';
         
         const lineClampItems =[
-            { label: 'Tutto il testo' + (clamp === 'auto' ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 'auto') },
-            { label: 'Max 1 riga' + (clamp === 1 ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 1) },
-            { label: 'Max 2 righe' + (clamp === 2 ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 2) },
-            { label: 'Max 3 righe' + (clamp === 3 ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 3) }
+            { label: I18n.t('adv_menus.clamp_auto') + (clamp === 'auto' ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 'auto') },
+            { label: I18n.t('adv_menus.clamp_1') + (clamp === 1 ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 1) },
+            { label: I18n.t('adv_menus.clamp_2') + (clamp === 2 ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 2) },
+            { label: I18n.t('adv_menus.clamp_3') + (clamp === 3 ? chk : ''), onClick: () => AdvancedTableMenus.setTextClamp(tableId, 3) }
         ];
 
         const menuItems =[
-            { icon: Icons.eye, label: 'Visualizza campo', type: 'submenu', items: visibilityItems },
+            { icon: Icons.eye, label: I18n.t('adv_menus.view_field'), type: 'submenu', items: visibilityItems },
             { icon: Icons.widthFit, label: widthLabel, onClick: () => AdvancedTable.toggleFreeWidth(tableId) },
             { icon: Icons.zebra, label: zebraLabel, onClick: () => AdvancedTableMenus.toggleZebra(tableId) },
             { icon: Icons.layoutAuto, label: footerLabel, onClick: () => AdvancedTableMenus.toggleFooterControls(tableId) },
-            { icon: Icons.text, label: 'Altezza Righe Testo', type: 'submenu', items: lineClampItems }
+            { icon: Icons.text, label: I18n.t('adv_menus.row_height'), type: 'submenu', items: lineClampItems }
         ];
 
         if (!state.isLinkedView && !state.isPivot && typeof AdvancedTableConditionalColors !== 'undefined') {
@@ -69,7 +69,7 @@ const AdvancedTableMenus = {
             menuItems.push({ type: 'divider' });
             menuItems.push({ 
                 icon: Icons.palette, 
-                label: `Colorazione Condizionale`, 
+                label: I18n.t('adv_menus.conditional_colors'), 
                 badge: activeRulesCount > 0 ? activeRulesCount : null,
                 onClick: () => AdvancedTableConditionalColors.openConditionalColorPanel(e, tableId) 
             });
@@ -83,23 +83,23 @@ const AdvancedTableMenus = {
                 const db = AppState.databases[k];
                 const originalSource = state.isLinkedView || state.isPivot ? state.sourceTableId : tableId;
                 if (db && (db.isLinkedView || db.isPivot) && db.sourceTableId === originalSource && k !== tableId) {
-                    linkedViews.push({ icon: db.isPivot ? (db.chartConfig?.visible ? '📊' : '📈') : Icons.link, label: db.title || 'Vista senza titolo', onClick: () => UI.jumpToWidget(k) });
+                    linkedViews.push({ icon: db.isPivot ? (db.chartConfig?.visible ? '📊' : '📈') : Icons.link, label: db.title || I18n.t('editor.untitled'), onClick: () => UI.jumpToWidget(k) });
                 }
             });
         }
 
-        if (linkedViews.length > 0) menuItems.push({ icon: Icons.link, label: 'Altre Viste Collegate...', type: 'submenu', items: linkedViews });
-        if (state.isLinkedView || state.isPivot) menuItems.push({ icon: Icons.tableDatabase, label: 'Vai al Database Originale', onClick: () => UI.jumpToWidget(state.sourceTableId) });
+        if (linkedViews.length > 0) menuItems.push({ icon: Icons.link, label: I18n.t('adv_menus.other_linked_views'), type: 'submenu', items: linkedViews });
+        if (state.isLinkedView || state.isPivot) menuItems.push({ icon: Icons.tableDatabase, label: I18n.t('adv_menus.go_to_original_db'), onClick: () => UI.jumpToWidget(state.sourceTableId) });
         if (linkedViews.length > 0 || state.isLinkedView || state.isPivot) menuItems.push({ type: 'divider' });
 
-        if (!state.isLinkedView && !state.isPivot) menuItems.push({ icon: Icons.import, label: 'Importa da CSV (Sostituisci)', onClick: () => AdvancedTable.importCSV(tableId) });
+        if (!state.isLinkedView && !state.isPivot) menuItems.push({ icon: Icons.import, label: I18n.t('adv_menus.import_csv'), onClick: () => AdvancedTable.importCSV(tableId) });
         
-        menuItems.push({ icon: Icons.export, label: 'Esporta come CSV', onClick: () => AdvancedTable.exportCSV(tableId) });
+        menuItems.push({ icon: Icons.export, label: I18n.t('adv_menus.export_csv'), onClick: () => AdvancedTable.exportCSV(tableId) });
         menuItems.push({ type: 'divider' });
         
-        let deleteLabel = 'Elimina Database';
-        if (state.isLinkedView) deleteLabel = 'Rimuovi Vista Collegata';
-        if (state.isPivot) deleteLabel = 'Rimuovi Tabella Pivot';
+        let deleteLabel = I18n.t('adv_menus.delete_db');
+        if (state.isLinkedView) deleteLabel = I18n.t('adv_menus.remove_linked_view');
+        if (state.isPivot) deleteLabel = I18n.t('adv_menus.remove_pivot');
 
         menuItems.push({ icon: Icons.trash, label: deleteLabel, danger: true, onClick: () => AdvancedTable.deleteTable(tableId) });
 

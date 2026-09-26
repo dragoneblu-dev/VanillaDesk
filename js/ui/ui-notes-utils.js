@@ -66,28 +66,28 @@ Object.assign(UI, {
         if (isTrashed) {
             items.push({
                 icon: Icons.restore,
-                label: 'Ripristina Nota dal Cestino',
+                label: I18n.t('notes_utils.menu_restore_trash'),
                 onClick: () => UI.restoreNoteFromBanner(AppState.currentNoteId)
             });
             items.push({ type: 'divider' });
             items.push({
                 icon: Icons.trash,
-                label: 'Elimina Definitivamente',
+                label: I18n.t('notes_utils.menu_hard_delete'),
                 danger: true,
                 onClick: () => {
-                    if (confirm("Eliminare DEFINITIVAMENTE questa nota e tutti i suoi dati? L'operazione non può essere annullata.")) {
+                    if (confirm(I18n.t('notes_utils.confirm_hard_delete'))) {
                         UI.Trash.hardDelete(AppState.currentNoteId, true);
                         UI.goHome();
                     }
                 }
             });
         } else {
-            items.push({ icon: Icons.save, label: 'Salva come Template Locale', onClick: () => TemplateManager.saveCurrentNoteAsTemplate() });
-            items.push({ icon: Icons.tableSimple, label: 'Gestisci Template...', onClick: () => TemplateManager.openManager() });
+            items.push({ icon: Icons.save, label: I18n.t('notes_utils.menu_save_template'), onClick: () => TemplateManager.saveCurrentNoteAsTemplate() });
+            items.push({ icon: Icons.tableSimple, label: I18n.t('notes_utils.menu_manage_templates'), onClick: () => TemplateManager.openManager() });
             items.push({ type: 'divider' });
-            items.push({ icon: Icons.download, label: 'Esporta come Modulo (Modpack)', onClick: () => PackageManager.exportNoteAsModpack(AppState.currentNoteId) });
+            items.push({ icon: Icons.download, label: I18n.t('notes_utils.menu_export_modpack'), onClick: () => PackageManager.exportNoteAsModpack(AppState.currentNoteId) });
             items.push({ type: 'divider' });
-            items.push({ icon: Icons.trash, label: 'Sposta nel Cestino', danger: true, onClick: () => UI.deleteCurrentNote() });
+            items.push({ icon: Icons.trash, label: I18n.t('notes_utils.menu_move_trash'), danger: true, onClick: () => UI.deleteCurrentNote() });
         }
 
         UI.Menu.buildContextMenu(anchorId, items);
@@ -131,12 +131,12 @@ Object.assign(UI, {
         let breadcrumbHTML = '';
 
         if (note && note.deletedAt) {
-            breadcrumbHTML += `<span style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color); padding: 1px 6px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;">${Icons.trash} Cestino</span><span style="opacity:0.5;"> / </span>`;
+            breadcrumbHTML += `<span style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color); padding: 1px 6px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;">${Icons.trash} ${I18n.t('notes_utils.breadcrumb_trash')}</span><span style="opacity:0.5;"> / </span>`;
         }
 
         breadcrumbHTML += path.map((n, i) => {
             const isLast = i === path.length - 1;
-            const safeTitle = n.title || 'Senza Titolo';
+            const safeTitle = n.title || I18n.t('editor.untitled');
             const colorStyle = n.deletedAt ? 'color: var(--danger-color);' : '';
             return `<span style="cursor:pointer; color:var(--text-secondary); ${colorStyle} ${isLast ? 'font-weight:bold; color:var(--text-primary);' : ''}" onclick="UI.selectNote('${n.id}')">${safeTitle}</span>`;
         }).join('<span style="opacity:0.5;"> / </span>');

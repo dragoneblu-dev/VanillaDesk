@@ -21,31 +21,31 @@ Object.assign(AdvancedTable, {
         dropdown.onclick = (ev) => ev.stopPropagation();
         dropdown.style.minWidth = '250px';
 
-        let html = `<div class="adv-dropdown-title" style="margin-bottom:8px;">Regole di Ordinamento attive</div>`;
+        let html = `<div class="adv-dropdown-title" style="margin-bottom:8px;">${I18n.t('adv_sort.active_rules')}</div>`;
 
         if (state.sorts && state.sorts.length > 0) {
             state.sorts.forEach((sortRule, index) => {
-                const colName = (state.columns || []).find(c => c.id === sortRule.colId)?.name || 'Colonna eliminata';
-                const dirLabel = sortRule.dir === 1 ? 'Crescente (A-Z)' : 'Decrescente (Z-A)';
+                const colName = (state.columns || []).find(c => c.id === sortRule.colId)?.name || I18n.t('adv_sort.deleted_col');
+                const dirLabel = sortRule.dir === 1 ? I18n.t('adv_sort.asc') : I18n.t('adv_sort.desc');
                 html += `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px; background:var(--item-hover); border-radius:4px; margin-bottom:4px; font-size:0.8rem; cursor:pointer;"
-                         title="Doppio click per invertire l'ordinamento"
+                         title="${I18n.t('adv_sort.dblclick_invert')}"
                          ondblclick="event.stopPropagation(); AdvancedTable.toggleSortDirection('${tableId}', ${index})">
                         <div style="pointer-events:none;">
                             <span style="color:var(--text-secondary); margin-right:4px;">${index + 1}.</span> 
                             <b>${colName}</b> <span style="opacity:0.7; font-size:0.7rem;">${dirLabel}</span>
                         </div>
-                        <button class="adv-icon-btn danger" onclick="event.stopPropagation(); AdvancedTable.removeSort('${tableId}', ${index})" title="Rimuovi regola">✕</button>
+                        <button class="adv-icon-btn danger" onclick="event.stopPropagation(); AdvancedTable.removeSort('${tableId}', ${index})" title="${I18n.t('adv_sort.remove_rule')}">✕</button>
                     </div>`;
             });
             html += `<hr style="border:0; border-top:1px solid var(--border-color); margin: 8px 0;">`;
         } else {
-            html += `<div style="font-size:0.8rem; color:#888; padding:4px; margin-bottom:8px;">Nessuna regola applicata.</div>`;
+            html += `<div style="font-size:0.8rem; color:#888; padding:4px; margin-bottom:8px;">${I18n.t('adv_sort.no_rules')}</div>`;
         }
 
-        html += `<div class="adv-dropdown-title">Aggiungi Nuova Regola</div>`;
+        html += `<div class="adv-dropdown-title">${I18n.t('adv_sort.add_rule')}</div>`;
         html += `<select class="adv-dropdown-select" id="advSortCol" onchange="event.stopPropagation()">
-                    <option value="">-- Seleziona Colonna --</option>`;
+                    <option value="">${I18n.t('adv_sort.select_col')}</option>`;
         (state.columns || []).forEach(c => {
             if (!(state.sorts || []).find(s => s.colId === c.id)) {
                 html += `<option value="${c.id}">${c.name}</option>`;
@@ -54,12 +54,12 @@ Object.assign(AdvancedTable, {
         html += `</select>`;
 
         html += `<div style="display:flex; gap:5px; margin-bottom:5px;">
-                    <button class="adv-add-btn" style="flex:1; border:1px solid var(--border-color);" onclick="event.stopPropagation(); AdvancedTable.addSort('${tableId}', 1)">+ A-Z</button>
-                    <button class="adv-add-btn" style="flex:1; border:1px solid var(--border-color);" onclick="event.stopPropagation(); AdvancedTable.addSort('${tableId}', -1)">+ Z-A</button>
+                    <button class="adv-add-btn" style="flex:1; border:1px solid var(--border-color);" onclick="event.stopPropagation(); AdvancedTable.addSort('${tableId}', 1)">${I18n.t('adv_sort.btn_asc')}</button>
+                    <button class="adv-add-btn" style="flex:1; border:1px solid var(--border-color);" onclick="event.stopPropagation(); AdvancedTable.addSort('${tableId}', -1)">${I18n.t('adv_sort.btn_desc')}</button>
                  </div>`;
 
         if (state.sorts && state.sorts.length > 0) {
-            html += `<button class="adv-add-btn" style="width:100%; color:var(--danger-color); margin-top:5px;" onclick="event.stopPropagation(); AdvancedTable.clearSort('${tableId}')">Rimuovi Tutte le Regole</button>`;
+            html += `<button class="adv-add-btn" style="width:100%; color:var(--danger-color); margin-top:5px;" onclick="event.stopPropagation(); AdvancedTable.clearSort('${tableId}')">${I18n.t('adv_sort.clear_all')}</button>`;
         }
 
         dropdown.innerHTML = html;

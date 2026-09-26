@@ -1,9 +1,11 @@
 /**
  * ui-menu.js
  * Motore isolato per la generazione e gestione dei Menu a Tendina e Contestuali.
+ * FIX SUBMENU MULTILIVELLO: Risolto bug di posizionamento a coordinate (0,0) in alto a sinistra.
+ * Introdotta gestione ad albero di discendenza (Grafo Portali) per preservare i menu genitori aperti.
  * FIX: Aggiunto supporto per la proprietà 'shortcut' per visualizzare le scorciatoie da tastiera allineate a destra.
- * FIX RICERCA: Esclusione del portale di autocompletamento della Sidebar dalla distruzione globale per prevenire la chiusura forzata durante l'aggiornamento della nota attiva.
- * FEAT UX: Aggiunto supporto nativo per i 'badge' (Pillole numeriche informative) con colore personalizzabile (badgeColor).
+ * FIX RICERCA: Esclusione del portale di autocompletamento della Sidebar dalla distruzione globale.
+ * FEAT UX: Supporto nativo per i 'badge' (Pillole numeriche informative) con colore personalizzabile (badgeColor).
  */
 
 Object.assign(UI, {
@@ -80,7 +82,27 @@ Object.assign(UI, {
             const menu = document.createElement('div');
             menu.className = 'adv-dropdown adv-context-menu';
 
-            const buildLevel = (menuItems, container) => {
+            // Verifica se potentialAncestor è un antenato diretto o indiretto di targetSub
+            const isAncestorOf = (potentialAncestor, targetSub) => {
+                let curr = targetSub ? targetSub._parentMenu : null;
+                while (curr) {
+                    if (curr === potentialAncestor) return true;
+                    curr = curr._parentMenu;
+                }
+                return false;
+            };
+
+            // Verifica ricorsiva se targetSub o uno dei suoi sottomenu aperti ha il mouse sopra
+            const isSubmenuTreeActive = (targetSub) => {
+                if (!targetSub || targetSub.style.display === 'none') return false;
+                if (targetSub.matches(':hover')) return true;
+                if (targetSub._parentMenuItem && targetSub._parentMenuItem.matches(':hover')) return true;
+
+                const childSubs = Array.from(document.querySelectorAll('.adv-submenu-portal')).filter(p => p._parentMenu === targetSub);
+                return childSubs.some(child => isSubmenuTreeActive(child));
+            };
+
+            const buildLevel = (menuItems, container, depth = 1) => {
                 menuItems.forEach(item => {
                     if (item.type === 'divider') {
                         const div = document.createElement('div');
@@ -104,12 +126,12 @@ Object.assign(UI, {
                             </div>
                         `;
 
-                        // Aggiunge il Badge numerico con supporto a badgeColor opzionale
+                        // Aggiunge il Badge numerico
                         if (item.badge !== undefined && item.badge !== null) {
                             const bColor = item.badgeColor || 'var(--accent-color)';
                             innerHTML += `<span style="background:${bColor}; color:white; font-size:0.7rem; font-weight:bold; padding:2px 6px; border-radius:10px; margin-left:auto;">${item.badge}</span>`;
                         }
-                        // Aggiunge la scorciatoia testuale
+                        // Aggiunge la scorciatoia da tastiera
                         else if (item.shortcut) {
                             innerHTML += `<span style="font-size: 0.7rem; opacity: 0.5; margin-left: 15px; font-family: monospace;">${item.shortcut}</span>`;
                         }
@@ -121,22 +143,31 @@ Object.assign(UI, {
 
                             const sub = document.createElement('div');
                             sub.className = 'adv-dropdown adv-context-menu adv-submenu adv-submenu-portal';
-                            sub.style.display = 'none'; 
+                            sub.style.display = 'none';
                             
-                            buildLevel(item.items, sub);
+                            // Metadati di tracciamento gerarchico per evitare chiusure spurie dei padri
+                            sub._parentMenuItem = el;
+                            sub._parentMenu = container;
+                            el._childSubmenu = sub;
+                            
+                            buildLevel(item.items, sub, depth + 1);
                             document.body.appendChild(sub);
 
-                            let hoverTimer;
+                            let hoverTimer = null;
 
                             const openSubmenu = () => {
                                 clearTimeout(hoverTimer);
-                                
+
+                                // Chiude esclusivamente i portali che NON sono 'sub' e NON sono suoi antenati
                                 document.querySelectorAll('.adv-submenu-portal').forEach(p => {
-                                    if (p !== sub) p.style.display = 'none';
+                                    if (p !== sub && !isAncestorOf(p, sub)) {
+                                        p.style.display = 'none';
+                                    }
                                 });
 
                                 sub.style.position = 'fixed';
-                                sub.style.zIndex = '10000';
+                                sub.style.zIndex = (10000 + (depth * 50)).toString();
+                                sub.style.visibility = 'hidden';
                                 sub.style.display = 'flex';
                                 sub.style.flexDirection = 'column';
                                 sub.style.maxHeight = '80vh';
@@ -147,38 +178,65 @@ Object.assign(UI, {
                                 const subRect = sub.getBoundingClientRect();
 
                                 let left = rect.right;
-                                let top = rect.top - 6;
+                                let top = rect.top - 4;
 
-                                if (left + subRect.width > window.innerWidth) {
+                                // Se sfora a destra, proietta a sinistra dell'elemento padre
+                                if (left + subRect.width > window.innerWidth - 10) {
                                     left = rect.left - subRect.width;
                                 }
+                                if (left < 10) left = 10;
 
-                                if (top + subRect.height > window.innerHeight) {
+                                // Controllo margini verticali
+                                if (top + subRect.height > window.innerHeight - 10) {
                                     top = window.innerHeight - subRect.height - 10;
                                 }
-                                if (top < 0) top = 10;
+                                if (top < 10) top = 10;
 
-                                sub.style.left = left + 'px';
-                                sub.style.top = top + 'px';
+                                sub.style.left = Math.round(left) + 'px';
+                                sub.style.top = Math.round(top) + 'px';
+                                sub.style.visibility = 'visible';
                             };
 
                             const closeSubmenu = () => {
                                 hoverTimer = setTimeout(() => {
-                                    if (!sub.matches(':hover') && !el.matches(':hover')) {
+                                    if (!isSubmenuTreeActive(sub)) {
                                         sub.style.display = 'none';
+                                        
+                                        // Chiude a cascata anche i discendenti aperti di questo specifico sottomenu
+                                        document.querySelectorAll('.adv-submenu-portal').forEach(p => {
+                                            if (isAncestorOf(sub, p)) {
+                                                p.style.display = 'none';
+                                            }
+                                        });
                                     }
-                                }, 100); 
+                                }, 150);
                             };
 
                             el.addEventListener('mouseenter', openSubmenu);
                             el.addEventListener('mouseleave', closeSubmenu);
-                            sub.addEventListener('mouseenter', () => clearTimeout(hoverTimer));
+
+                            sub.addEventListener('mouseenter', () => {
+                                clearTimeout(hoverTimer);
+                                if (sub._parentMenu && sub._parentMenu._closeTimer) {
+                                    clearTimeout(sub._parentMenu._closeTimer);
+                                }
+                            });
                             sub.addEventListener('mouseleave', closeSubmenu);
 
                             container.appendChild(el);
                             
                         } else {
                             el.innerHTML = innerHTML;
+
+                            // Chiude eventuali sottomenu fratelli aperti se il mouse si sposta su una voce standard
+                            el.addEventListener('mouseenter', () => {
+                                container.querySelectorAll('.has-submenu').forEach(siblingEl => {
+                                    if (siblingEl !== el && siblingEl._childSubmenu) {
+                                        siblingEl._childSubmenu.style.display = 'none';
+                                    }
+                                });
+                            });
+
                             if (!item.disabled && item.onClick) {
                                 el.addEventListener('mousedown', (ev) => {
                                     ev.preventDefault();
@@ -204,7 +262,7 @@ Object.assign(UI, {
                 });
             };
 
-            buildLevel(items, menu);
+            buildLevel(items, menu, 1);
             document.body.appendChild(menu);
             UI.Menu.positionAt(menu, anchorId);
         }

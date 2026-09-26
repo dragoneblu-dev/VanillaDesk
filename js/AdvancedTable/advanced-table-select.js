@@ -1,13 +1,13 @@
 /**
  * js/AdvancedTable/advanced-table-select.js
- * Isolamento gestione Tipi Select (Singola, Multipla, Colori, Opzioni) con UI Stile Notion
+ * Isolamento gestione Tipi Select (Singola, Multipla, Colori, Opzioni) con UI Stile Notion.
+ * FIX ARCHITETTURALE: Rimosso il controllo fragile su drawerTitle.innerText.includes('Dettaglio Record').
+ * La riapertura reattiva della vista record usa ora esclusivamente lo stato AdvancedTable.activeRecordId === rowId.
  * FIX POSIZIONAMENTO MENU: Logica di ricalcolo ancoraggio per i menu ricostruiti all'interno del Drawer.
  * FEAT ORDINAMENTO A-Z PERSISTENTE: Inserimento e rinomina opzioni mantengono sempre ordinato
  * l'array state.selectOptions[colId] da A alla Z in memoria e a video.
- * FIX SEARCH INPUT RESET: Azzeramento sicuro di tutti gli elementi #advCreateSelectInput nel DOM,
- * prevenendo mancate pulizie dovute a collisioni di ID nel documento.
- * FIX HEADLESS CLEANUP: In setTagColor la riapertura del menu avviene solo se è presente un'ancora reale.
- * FIX DEFENSIVO ROW CRASH: openSelectMenu gestisce in modo resiliente l'eventuale assenza del record specificato.
+ * FIX SEARCH INPUT RESET: Azzeramento sicuro di tutti gli elementi #advCreateSelectInput nel DOM.
+ * LOCALIZZAZIONE MULTILINGUA: Integrazione completa del dizionario I18n.
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
@@ -82,14 +82,14 @@ Object.assign(AdvancedTable, {
     renderSelectMenuContent: (dropdown, tableId, rowId, colId, state, options, currentVals, col, parentAnchorId) => {
 
         let html = `<div style="flex-shrink:0;">`; 
-        html += `<div class="adv-dropdown-title">Cerca o Crea Opzione</div>`;
-        html += `<input type="text" class="adv-dropdown-input" id="advCreateSelectInput" placeholder="Cerca o digita e premi Invio..." 
+        html += `<div class="adv-dropdown-title">${I18n.t('adv_select.search_create_title')}</div>`;
+        html += `<input type="text" class="adv-dropdown-input" id="advCreateSelectInput" placeholder="${I18n.t('adv_select.search_placeholder')}" 
                        oninput="AdvancedTable.filterSelectOptions(this.value)" 
                        onkeydown="if(event.key === 'Enter') { event.preventDefault(); AdvancedTable.createSelectOptionFromInput('${tableId}', '${rowId}', '${colId}', this.value); } event.stopPropagation();">`;
-        html += `<div class="adv-dropdown-title" style="margin-top:5px;">Opzioni</div>`;
+        html += `<div class="adv-dropdown-title" style="margin-top:5px;">${I18n.t('adv_select.options_title')}</div>`;
         
         if (options.length === 0) {
-            html += `<div id="advSelectNoOptions" style="font-size:0.8rem; color:var(--text-secondary); padding:4px;">Nessuna opzione trovata.</div>`;
+            html += `<div id="advSelectNoOptions" style="font-size:0.8rem; color:var(--text-secondary); padding:4px;">${I18n.t('adv_select.no_options')}</div>`;
         }
         html += `</div>`; 
 
@@ -105,11 +105,11 @@ Object.assign(AdvancedTable, {
 
             html += `
             <div class="adv-menu-item adv-select-item ${isSelected ? 'active' : ''}" style="padding-right:4px;">
-                <div style="display:flex; align-items:center; flex:1; min-width:0; overflow:hidden;" title="${isSelected ? 'Clicca per rimuovere' : 'Clicca per selezionare'}" onclick="event.stopPropagation(); AdvancedTable.toggleSelectValue('${tableId}', '${rowId}', '${colId}', '${escapedOpt}')">
+                <div style="display:flex; align-items:center; flex:1; min-width:0; overflow:hidden;" title="${isSelected ? I18n.t('adv_select.click_to_remove') : I18n.t('adv_select.click_to_select')}" onclick="event.stopPropagation(); AdvancedTable.toggleSelectValue('${tableId}', '${rowId}', '${colId}', '${escapedOpt}')">
                     <span class="adv-select-pill ${colorClass}" style="margin:0; max-width:${isSelected ? '85%' : '95%'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-opt-name="${safeOptName}">${opt.replace(/</g, '&lt;')}</span>
                     ${isSelected ? `<span style="margin-left:auto; margin-right:8px; opacity:0.5; display:inline-flex; align-items:center; pointer-events:none;">${svgCloseSel}</span>` : ''}
                 </div>
-                <button id="${btnId}" class="adv-icon-btn" style="padding:4px; margin:0; color:currentColor; flex-shrink:0;" title="Opzioni Etichetta" onclick="AdvancedTable.openSelectEditMenu(event, this, '${tableId}', '${rowId}', '${colId}', '${escapedOpt}', '${parentAnchorId}')">
+                <button id="${btnId}" class="adv-icon-btn" style="padding:4px; margin:0; color:currentColor; flex-shrink:0;" title="${I18n.t('adv_select.label_options')}" onclick="AdvancedTable.openSelectEditMenu(event, this, '${tableId}', '${rowId}', '${colId}', '${escapedOpt}', '${parentAnchorId}')">
                     ${svgDotsHorizontal}
                 </button>
             </div>`;
@@ -118,7 +118,7 @@ Object.assign(AdvancedTable, {
 
         if (col.type === 'select' || (col.type === 'multi-select' && currentVals.length > 0)) {
             html += `<div style="flex-shrink:0; padding-top: 4px; border-top: 1px solid var(--border-color); margin-top: 4px;">`;
-            html += `<div class="adv-menu-item" onclick="event.stopPropagation(); AdvancedTable.clearSelect('${tableId}', '${rowId}', '${colId}')"><em>Svuota Cella</em></div>`;
+            html += `<div class="adv-menu-item" onclick="event.stopPropagation(); AdvancedTable.clearSelect('${tableId}', '${rowId}', '${colId}')"><em>${I18n.t('adv_select.empty_cell')}</em></div>`;
             html += `</div>`;
         }
         dropdown.innerHTML = html;
@@ -179,9 +179,9 @@ Object.assign(AdvancedTable, {
         const escapedOpt = optName.replace(/'/g, "\\'");
 
         let html = `
-            <div class="adv-dropdown-title" style="margin-bottom:5px;">Modifica Nome</div>
-            <input type="text" class="adv-dropdown-input" value="${safeOptName}" placeholder="Nome..." onkeydown="event.stopPropagation(); if(event.key==='Enter') { event.preventDefault(); AdvancedTable.renameSelectOption(event, '${tableId}', '${colId}', '${escapedOpt}', this.value); }">
-            <div class="adv-dropdown-title" style="margin-top:10px; margin-bottom:5px;">Colore</div>
+            <div class="adv-dropdown-title" style="margin-bottom:5px;">${I18n.t('adv_select.edit_name_title')}</div>
+            <input type="text" class="adv-dropdown-input" value="${safeOptName}" placeholder="${I18n.t('adv_select.name_placeholder')}" onkeydown="event.stopPropagation(); if(event.key==='Enter') { event.preventDefault(); AdvancedTable.renameSelectOption(event, '${tableId}', '${colId}', '${escapedOpt}', this.value); }">
+            <div class="adv-dropdown-title" style="margin-top:10px; margin-bottom:5px;">${I18n.t('adv_select.color_title')}</div>
             <div class="color-grid" style="grid-template-columns: repeat(5, 1fr); gap:6px; margin-bottom:10px;">
         `;
 
@@ -190,7 +190,7 @@ Object.assign(AdvancedTable, {
             const isColorSelected = state.selectColors[colId][optName] === color;
             html += `<div class="adv-select-pill ${displayClass}" 
                             style="width:20px; height:20px; padding:0; border-radius:4px; cursor:pointer; margin:0; ${isColorSelected ? 'outline:2px solid var(--accent-color); outline-offset:1px;' : ''}" 
-                            title="${color || 'Nessuno'}" 
+                            title="${color || I18n.t('common.none')}" 
                             onclick="event.stopPropagation(); AdvancedTable.setTagColor(event, '${tableId}', '${rowId}', '${colId}', '${escapedOpt}', '${color}', '${parentAnchorId}')"></div>`;
         });
 
@@ -198,7 +198,7 @@ Object.assign(AdvancedTable, {
             </div>
             <div class="adv-menu-divider"></div>
             <button class="adv-menu-btn" style="color:var(--danger-color); background:rgba(239, 68, 68, 0.1); display:flex; align-items:center; justify-content:center; gap:5px;" onclick="event.stopPropagation(); AdvancedTable.deleteSelectOption(event, '${tableId}', '${colId}', '${escapedOpt}')">
-                ${svgTrashSel} Elimina Opzione
+                ${svgTrashSel} ${I18n.t('adv_select.delete_option')}
             </button>
         `;
 
@@ -217,7 +217,7 @@ Object.assign(AdvancedTable, {
         let state = AdvancedTable.getState(tableId);
 
         if (state.selectOptions[colId].includes(newName)) {
-            alert(`L'opzione "${newName}" esiste già!`);
+            alert(I18n.t('adv_select.alert_option_exists', { name: newName }));
             return;
         }
 
@@ -296,7 +296,7 @@ Object.assign(AdvancedTable, {
 
     deleteSelectOption: (e, tableId, colId, optToDelete) => {
         e.stopPropagation();
-        if (!confirm(`Eliminare l'opzione "${optToDelete}" da tutto il database?`)) return;
+        if (!confirm(I18n.t('adv_select.confirm_delete_option', { name: optToDelete }))) return;
         let state = AdvancedTable.getState(tableId);
 
         state.selectOptions[colId] = state.selectOptions[colId].filter(o => o !== optToDelete);
@@ -346,8 +346,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable.updateData(tableId, rowId, colId, finalValue);
 
         const drawer = document.getElementById('advGlobalDrawer');
-        const drawerTitle = document.getElementById('advDrawerTitle');
-        if (drawer && drawer.classList.contains('open') && drawerTitle && drawerTitle.innerText.includes('Dettaglio Record')) {
+        if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
             AdvancedTable.openRecordView(tableId, rowId);
         }
 
@@ -381,8 +380,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable.updateData(tableId, rowId, colId, finalValue);
         
         const drawer = document.getElementById('advGlobalDrawer');
-        const drawerTitle = document.getElementById('advDrawerTitle');
-        if (drawer && drawer.classList.contains('open') && drawerTitle && drawerTitle.innerText.includes('Dettaglio Record')) {
+        if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
             AdvancedTable.openRecordView(tableId, rowId);
         }
         

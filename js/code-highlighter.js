@@ -24,7 +24,7 @@ const CodeManager = {
                 const trueId = wrapper.id.split('_cited_')[0];
                 if (!AppState.databases) AppState.databases = {};
                 if (!AppState.databases[trueId]) {
-                    AppState.databases[trueId] = { title: 'Codice', language: pre.getAttribute('data-language') || 'none', content: '' };
+                    AppState.databases[trueId] = { title: I18n.t('code_widget.default_title'), language: pre.getAttribute('data-language') || 'none', content: '' };
                 }
                 
                 // Estrazione pulita tramite helper
@@ -95,7 +95,7 @@ const CodeManager = {
             } else if (AppState.databases[trueId]) {
                 state = AppState.databases[trueId];
             } else {
-                state = { title: 'Codice', language: 'none', content: legacyText };
+                state = { title: I18n.t('code_widget.default_title'), language: 'none', content: legacyText };
                 AppState.databases[trueId] = state;
             }
 
@@ -108,9 +108,9 @@ const CodeManager = {
                 wrapper.innerHTML = `
                     <div class="widget-header adv-table-header" style="display:flex;">
                         <span class="widget-drag-handle adv-drag-handle" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                        <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                        <span class="widget-options-btn adv-drag-handle" title="${I18n.t('adv_render.options')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                         <span class="widget-icon" style="display:inline-flex;"></span>
-                        <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${state.title || 'Codice'}</span>
+                        <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${state.title || I18n.t('code_widget.default_title')}</span>
                         <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                     </div>
                     <div class="widget-body">
@@ -142,7 +142,7 @@ const CodeManager = {
     _updateShell: (wrapperId, lang, isCollapsed, customTitle = null) => {
         if (typeof WidgetManager === 'undefined') return;
         
-        let finalTitle = customTitle || 'Codice';
+        let finalTitle = customTitle || I18n.t('code_widget.default_title');
 
         WidgetManager.updateShellUI(wrapperId, {
             icon: Icons.getCodeIcon(lang),
@@ -158,9 +158,9 @@ const CodeManager = {
                 Store.triggerAutoSave();
             },
             tools: [
-                { icon: Icons.download, title: 'Scarica Codice in un file', onClick: (e) => CodeManager.downloadCode(e, document.getElementById(wrapperId)) },
-                { icon: Icons.clipboard, title: 'Copia Codice', onClick: (e) => CodeManager.copyCode(e, document.getElementById(wrapperId)) },
-                { icon: isCollapsed ? Icons.chevronDown : Icons.searchUp, title: 'Espandi / Riduci Blocco', onClick: (e) => CodeManager.toggleCollapse(e, document.getElementById(wrapperId)) }
+                { icon: Icons.download, title: I18n.t('code_widget.download_file'), onClick: (e) => CodeManager.downloadCode(e, document.getElementById(wrapperId)) },
+                { icon: Icons.clipboard, title: I18n.t('code_widget.copy_code'), onClick: (e) => CodeManager.copyCode(e, document.getElementById(wrapperId)) },
+                { icon: isCollapsed ? Icons.chevronDown : Icons.searchUp, title: I18n.t('citation.expand_collapse'), onClick: (e) => CodeManager.toggleCollapse(e, document.getElementById(wrapperId)) }
             ]
         });
     },
@@ -175,7 +175,7 @@ const CodeManager = {
                     const trueId = wrapper.id.split('_cited_')[0];
                     if (!AppState.databases) AppState.databases = {};
                     if (!AppState.databases[trueId]) {
-                        AppState.databases[trueId] = { title: 'Codice', language: 'none', content: '' };
+                        AppState.databases[trueId] = { title: I18n.t('code_widget.default_title'), language: 'none', content: '' };
                     }
                     
                     let rawText = '';
@@ -226,7 +226,7 @@ const CodeManager = {
         const currentLang = CodeManager.activePre.getAttribute('data-language') || 'none';
         
         const langs = [
-            { id: 'none', label: 'Testo Semplice' }, 
+            { id: 'none', label: I18n.t('code_widget.lang_plain') }, 
             { id: 'js', label: 'JavaScript' },
             { id: 'json', label: 'JSON' },
             { id: 'php', label: 'PHP' }, 
@@ -248,11 +248,11 @@ const CodeManager = {
         }));
         
         UI.Menu.buildContextMenu(`adv-opt-btn-${id}`, [
-            { icon: Icons.down, label: 'Inserisci riga sotto', onClick: () => WidgetManager.insertLineBreakAfter(wrapper.id) },
+            { icon: Icons.down, label: I18n.t('code_widget.insert_line_below'), onClick: () => WidgetManager.insertLineBreakAfter(wrapper.id) },
             { type: 'divider' },
-            { icon: Icons.code, label: 'Seleziona Sintassi', type: 'submenu', items: langSubmenu },
+            { icon: Icons.code, label: I18n.t('code_widget.select_syntax'), type: 'submenu', items: langSubmenu },
             { type: 'divider' },
-            { icon: Icons.trash, label: 'Elimina Blocco Codice', danger: true, onClick: () => CodeManager.destroy(wrapper.id) }
+            { icon: Icons.trash, label: I18n.t('code_widget.delete_block'), danger: true, onClick: () => CodeManager.destroy(wrapper.id) }
         ]);
     },
 
@@ -323,11 +323,11 @@ const CodeManager = {
         textToCopy = textToCopy.replace(/\u00A0/g, ' ');
         
         navigator.clipboard.writeText(textToCopy).then(() => {
-            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Codice copiato negli appunti!", "success");
+            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('code_widget.copied'), "success");
             const btn = e.currentTarget;
             if (btn) {
                 const orig = btn.innerHTML;
-                btn.innerHTML = `${Icons.checkCircle} Copiato!`;
+                btn.innerHTML = `${Icons.checkCircle} ${I18n.t('code_widget.copied')}`;
                 btn.classList.add('active');
                 setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('active'); }, 1500);
             }
@@ -356,15 +356,15 @@ const CodeManager = {
         }
 
         if (textToDownload.trim() === '') {
-            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Il blocco di codice è vuoto.", "warning");
+            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('code_widget.empty_block_warning'), "warning");
             return;
         }
 
         let lang = 'none';
-        let title = 'Snippet';
+        let title = I18n.t('code_widget.default_title');
         if (AppState.databases && AppState.databases[trueId]) {
             lang = AppState.databases[trueId].language || 'none';
-            title = AppState.databases[trueId].title || 'Snippet';
+            title = AppState.databases[trueId].title || I18n.t('code_widget.default_title');
         }
 
         const extensionMap = {
@@ -406,7 +406,7 @@ const CodeManager = {
             window.URL.revokeObjectURL(url);
         }, 150);
 
-        if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(`File "${filename}" scaricato.`, "success");
+        if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('code_widget.file_downloaded_toast', { filename: filename }), "success");
     },
 
     highlightBlock: (preElement, force = false, overrideText = null) => {
@@ -565,7 +565,7 @@ const CodeManager = {
 
         // 3. Rendering finale (Sostituzione line endings + BR strutturale)
         html = html.replace(/\n/g, '<br>');
-            html += '<br>';
+        html += '<br>';
         
         preElement.innerHTML = html;
     }

@@ -49,7 +49,7 @@ Object.assign(AdvancedTable, {
         if (!state) return;
         
         let oldTitle = state.title;
-        let cleanTitle = newTitle.trim() || 'Senza Titolo';
+        let cleanTitle = newTitle.trim() || I18n.t('editor.untitled');
 
         let allNames = [];
         Object.keys(AppState.databases).forEach(id => {
@@ -322,7 +322,7 @@ Object.assign(AdvancedTable, {
     moveTableToNote: (tableId, targetNoteId) => {
         if (typeof AppState === 'undefined') return;
         if (AppState.currentNoteId === targetNoteId) {
-            alert("La tabella/dashboard è già in questa nota.");
+            alert(I18n.t('adv_actions.table_already_in_note'));
             return;
         }
 
@@ -348,7 +348,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable.closeDropdowns(true);
 
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast(`Spostamento in "${targetNote.title}" completato con successo.`, 'success');
+            UI.showToast(I18n.t('adv_actions.table_moved_success', { noteTitle: targetNote.title }), 'success');
         }
     },
 
@@ -381,7 +381,7 @@ Object.assign(AdvancedTable, {
 
         if (typeof UI !== 'undefined') {
             UI.closeDrawer();
-            UI.showToast("Collegamento rimosso con successo.", "info");
+            UI.showToast(I18n.t('adv_actions.unlink_success'), "info");
         }
     },
 
@@ -390,32 +390,32 @@ Object.assign(AdvancedTable, {
         AdvancedTable.closeDropdowns(true);
         AdvancedTable._pendingRelConfig = { realTableId, colId };
 
-        let optionsHTML = '<option value="">-- Seleziona Database --</option>';
+        let optionsHTML = `<option value="">${I18n.t('adv_actions.select_db_placeholder')}</option>`;
 
         if (AppState.databases) {
             Object.keys(AppState.databases).forEach(tId => {
                 const s = AppState.databases[tId];
                 if (s && !s.isPivot && !s.isLinkedView && s.columns && !tId.includes('adv_code_') && !tId.includes('adv_btnbar_') && !tId.includes('adv_cols_') && !tId.includes('adv_journal_')) {
                     const parentName = AdvancedTable.getParentNoteName(tId);
-                    optionsHTML += `<option value="${tId}">➔ [${parentName}] ${s.title || 'Database'}</option>`;
+                    optionsHTML += `<option value="${tId}">➔ [${parentName}] ${s.title || I18n.t('editor.database')}</option>`;
                 }
             });
         }
 
         const bodyHTML = `
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">1. Seleziona il Database di destinazione:</label>
+            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rel_target_db_label')}</label>
             <select id="relConfigTable" class="modern-input" style="margin-bottom: 15px; width: 100%;" onchange="AdvancedTable.updateRelationColOptions()">${optionsHTML}</select>
 
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">2. Quale dato (colonna) vuoi mostrare qui?</label>
+            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rel_target_col_label')}</label>
             <select id="relConfigCol" class="modern-input" style="margin-bottom: 25px; width: 100%;"></select>
         `;
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveRelationConfig()">Salva Relazione</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTable.saveRelationConfig()">${I18n.t('adv_actions.save_relation')}</button>
         `;
 
         if (typeof UI !== 'undefined') {
-            UI.openDrawer(`${Icons.relation} Configura Relazione`, bodyHTML, footerHTML);
+            UI.openDrawer(`${Icons.relation} ${I18n.t('adv_col_menu.configure_relation')}`, bodyHTML, footerHTML);
         }
 
         // Cerchiamo e pre-impostiamo i valori vecchi
@@ -443,7 +443,7 @@ Object.assign(AdvancedTable, {
     updateRelationColOptions: () => {
         const tId = document.getElementById('relConfigTable').value;
         const colSelect = document.getElementById('relConfigCol');
-        colSelect.innerHTML = '<option value="">-- Seleziona Colonna --</option>';
+        colSelect.innerHTML = `<option value="">${I18n.t('adv_actions.select_col_placeholder')}</option>`;
 
         if (!tId) return;
         const state = AdvancedTable.getTableState(tId);
@@ -457,7 +457,7 @@ Object.assign(AdvancedTable, {
     saveRelationConfig: () => {
         const tId = document.getElementById('relConfigTable').value;
         const cTargetId = document.getElementById('relConfigCol').value;
-        if (!tId || !cTargetId) { alert("Seleziona Sorgente Dati e Colonna."); return; }
+        if (!tId || !cTargetId) { alert(I18n.t('adv_actions.alert_select_db_and_col')); return; }
 
         const { realTableId, colId } = AdvancedTable._pendingRelConfig;
         let state = AdvancedTable.getState(realTableId);
@@ -506,36 +506,36 @@ Object.assign(AdvancedTable, {
         const state = AdvancedTable.getState(realTableId);
         const relationCols = state.columns.filter(c => c.type === 'relation' && c.targetTableId);
 
-        let relOptionsHTML = '<option value="">-- Seleziona Colonna Relazione --</option>';
+        let relOptionsHTML = `<option value="">${I18n.t('adv_actions.select_rel_col_placeholder')}</option>`;
         relationCols.forEach(c => {
             relOptionsHTML += `<option value="${c.id}">${c.name}</option>`;
         });
 
         if (relationCols.length === 0) {
-            relOptionsHTML = '<option value="" disabled>Nessuna relazione trovata nel database</option>';
+            relOptionsHTML = `<option value="" disabled>${I18n.t('adv_actions.no_relation_found')}</option>`;
         }
 
         const bodyHTML = `
             <div style="background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; border: 1px solid rgba(37, 99, 235, 0.2);">
-                Il <b>Rollup</b> ti permette di estrarre e mostrare i dati da un database collegato, senza scrivere formule.
+                ${I18n.t('adv_actions.rollup_banner_info')}
             </div>
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">1. Quale colonna Relazione vuoi usare?</label>
+            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rollup_rel_col_label')}</label>
             <select id="rollupConfigRel" class="modern-input" style="margin-bottom: 15px; width: 100%;" onchange="AdvancedTable.updateRollupTargetOptions()">
                 ${relOptionsHTML}
             </select>
 
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">2. Quale proprietà del record collegato vuoi estrarre?</label>
+            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rollup_target_prop_label')}</label>
             <select id="rollupConfigTarget" class="modern-input" style="margin-bottom: 25px; width: 100%;">
-                <option value="">-- Seleziona prima una relazione --</option>
+                <option value="">${I18n.t('adv_actions.rollup_select_rel_first')}</option>
             </select>
         `;
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveRollupConfig()">Salva Rollup</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTable.saveRollupConfig()">${I18n.t('adv_actions.save_rollup')}</button>
         `;
 
         if (typeof UI !== 'undefined') 
-            UI.openDrawer(`${Icons.rollup} Configura Rollup`, bodyHTML, footerHTML);
+            UI.openDrawer(`${Icons.rollup} ${I18n.t('adv_col_menu.configure_rollup')}`, bodyHTML, footerHTML);
 
         const col = state.columns.find(c => c.id === colId);
         setTimeout(() => {
@@ -556,7 +556,7 @@ Object.assign(AdvancedTable, {
     updateRollupTargetOptions: () => {
         const relColId = document.getElementById('rollupConfigRel').value;
         const tgtSelect = document.getElementById('rollupConfigTarget');
-        tgtSelect.innerHTML = '<option value="">-- Seleziona Colonna --</option>';
+        tgtSelect.innerHTML = `<option value="">${I18n.t('adv_actions.select_col_placeholder')}</option>`;
 
         if (!relColId) return;
 
@@ -579,7 +579,7 @@ Object.assign(AdvancedTable, {
         const targetColId = document.getElementById('rollupConfigTarget').value;
 
         if (!relColId || !targetColId) {
-            alert("Seleziona sia la Relazione che la Colonna di destinazione.");
+            alert(I18n.t('adv_actions.alert_select_rel_and_col'));
             return;
         }
 
@@ -610,7 +610,7 @@ Object.assign(AdvancedTable, {
         const col = state.columns.find(c => c.id === colId);
         
         if (col.type === 'relation_backlink') {
-            alert("Questo campo è una Relazione Inversa (Backlink) gestita automaticamente in base ai collegamenti del database d'origine.\nPer modificarla, vai all'interno del database d'origine ed edita la colonna Relazione associata a questa tabella.");
+            alert(I18n.t('adv_actions.backlink_readonly_alert'));
             return;
         }
         
@@ -620,11 +620,11 @@ Object.assign(AdvancedTable, {
         const targetColId = col.targetColId;
 
         const targetState = AdvancedTable.getTableState(targetDbId);
-        if (!targetState) { alert("Impossibile trovare la sorgente dati collegata."); return; }
+        if (!targetState) { alert(I18n.t('adv_col_menu.target_db_missing')); return; }
 
         const targetColDef = targetState.columns.find(c => c.id === targetColId);
-        const targetColName = targetColDef ? targetColDef.name : 'Sconosciuta';
-        const targetTabName = targetState.title || 'Sorgente Dati Sconosciuta';
+        const targetColName = targetColDef ? targetColDef.name : I18n.t('adv_actions.unknown');
+        const targetTabName = targetState.title || I18n.t('adv_actions.unknown_source');
 
         let currentVals = Array.isArray(row.cells[colId]) ? [...row.cells[colId]] : (row.cells[colId] ? [row.cells[colId]] : []);
 
@@ -638,14 +638,14 @@ Object.assign(AdvancedTable, {
 
         const bodyHTML = `
             <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 4px; border: 1px solid var(--border-color);">
-                ${Icons.link} Collegato a: <b style="color:var(--accent-color); cursor:pointer;" onclick="UI.closeDrawer(); setTimeout(() => UI.jumpToWidget('${targetDbId}'), 150)" title="Vai al Database di origine">${targetTabName}</b> ➔ Campo: <b>${targetColName}</b>
+                ${Icons.link} ${I18n.t('adv_actions.connected_to')} <b style="color:var(--accent-color); cursor:pointer;" onclick="UI.closeDrawer(); setTimeout(() => UI.jumpToWidget('${targetDbId}'), 150)" title="${I18n.t('adv_actions.go_to_source_db')}">${targetTabName}</b> ➔ ${I18n.t('adv_actions.field_label')} <b>${targetColName}</b>
             </div>
-            <input type="text" id="relSelectSearch" class="modern-input" placeholder="Cerca valore..." oninput="AdvancedTable.filterRelationOptions(this.value)">
+            <input type="text" id="relSelectSearch" class="modern-input" placeholder="${I18n.t('adv_actions.search_value_placeholder')}" oninput="AdvancedTable.filterRelationOptions(this.value)">
             <div id="relSelectList" class="link-modal-list" style="padding:10px 0; margin-top:10px; flex:1; overflow-y:auto; display: flex; flex-direction: column; gap: 4px;"></div>
         `;
 
         if (typeof UI !== 'undefined') 
-            UI.openDrawer(`Seleziona Record`, bodyHTML, null);
+            UI.openDrawer(I18n.t('adv_actions.select_record_title'), bodyHTML, null);
 
         setTimeout(() => {
             AdvancedTable.renderRelationOptions('');
@@ -711,7 +711,7 @@ Object.assign(AdvancedTable, {
 
             // Usa l'estrattore per gestire Date e Record Note
             let displayVal = AdvancedTable.getFormatDisplayValue(targetColDef, rawVal, renderCache);
-            if (!displayVal) displayVal = 'Senza Nome';
+            if (!displayVal) displayVal = I18n.t('editor.untitled');
 
             if (filter && !displayVal.toLowerCase().includes(lowerFilter)) {
                 continue; 
@@ -757,7 +757,7 @@ Object.assign(AdvancedTable, {
             const nextLimit = currentLimit + 50;
             const safeFilter = filter.replace(/'/g, "\\'");
             
-            html += `<button class="btn" style="width:100%; margin-top:10px; justify-content:center; border-style:dashed;" onclick="AdvancedTable.renderRelationOptions('${safeFilter}', ${nextLimit})">Mostra altri ${nextBatch} valori (Rimanenti: ${diff})</button>`;
+            html += `<button class="btn" style="width:100%; margin-top:10px; justify-content:center; border-style:dashed;" onclick="AdvancedTable.renderRelationOptions('${safeFilter}', ${nextLimit})">${I18n.t('adv_actions.show_more_values', { nextBatch, diff })}</button>`;
         }
 
         listEl.innerHTML = html;
@@ -834,7 +834,7 @@ Object.assign(AdvancedTable, {
             isAdding = true;
             const isCircular = AdvancedTable.checkCircularRelation(realTableId, rowId, targetDbId, targetRowId, colId);
             if (isCircular) {
-                alert("Operazione bloccata: L'aggiunta di questo record genererebbe un Riferimento Circolare (loop) lungo questo campo di relazione.");
+                alert(I18n.t('adv_actions.circular_relation_blocked'));
                 return;
             }
             
@@ -881,8 +881,8 @@ Object.assign(AdvancedTable, {
             AdvancedTable.updateData(tableId, rowId, colId, currentVals);
         }
 
-        const drawerTitle = document.getElementById('advDrawerTitle');
-        if (drawerTitle && (drawerTitle.innerText.includes('Dettaglio Record') || drawerTitle.innerText.includes('Tag e Proprietà'))) {
+        const drawer = document.getElementById('advGlobalDrawer');
+        if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
             AdvancedTable.openRecordView(tableId, rowId);
         } else {
             // Continuiamo a ri-renderizzare sfruttando il Current Limit salvato in memoria per non rovinare lo scroll
@@ -911,17 +911,17 @@ Object.assign(AdvancedTable, {
         }
 
         const readonlyAttr = (!AppState.isEditMode || isComputed) ? 'readonly' : '';
-        const modalTitle = isComputed ? `Visualizza: ${col.name}` : `Modifica: ${col.name}`;
+        const modalTitle = isComputed ? I18n.t('adv_actions.view_text_title', { colName: col.name }) : I18n.t('adv_actions.edit_text_title', { colName: col.name });
 
         const bodyHTML = `
             <textarea id="advLongTextInput" class="modern-input" ${readonlyAttr} style="width:100%; height:100%; min-height: 300px; resize:vertical; font-family:inherit; font-size:0.95rem; line-height:1.5; padding:10px; ${isComputed ? 'cursor:default;' : ''}">${UI.escapeHTML(String(val))}</textarea>
         `;
         
         const footerHTML = (isComputed || !AppState.isEditMode) ? `
-            <button class="btn btn-primary" onclick="UI.closeDrawer()">Chiudi</button>
+            <button class="btn btn-primary" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>
         ` : `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')">Salva Testo</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')">${I18n.t('adv_actions.save_text')}</button>
         `;
 
         if (typeof UI !== 'undefined') {
@@ -996,7 +996,7 @@ Object.assign(AdvancedTable, {
         // rimuove solo il contenitore visivo senza distruggere lo stato del database originale né le sue pagine record!
         const isCitation = tableId.includes('_cited_') || (document.getElementById(tableId) && document.getElementById(tableId).closest('.block-citation'));
         if (isCitation) {
-            if (!force && !confirm("Rimuovere questa visualizzazione del database citato? Il database originale non verrà modificato.")) return;
+            if (!force && !confirm(I18n.t('adv_actions.confirm_remove_cited_db'))) return;
             const wrapper = document.getElementById(tableId);
             if (wrapper) wrapper.remove();
             AdvancedTable.closeDropdowns(true);
@@ -1014,15 +1014,15 @@ Object.assign(AdvancedTable, {
             if (wrapper) wrapper.remove();
             
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Rimosso dall'editor visivo. I dati delle proprietà rimangono salvati in background.", "info");
+                UI.showToast(I18n.t('adv_actions.sys_db_soft_delete_toast'), "info");
             }
             AdvancedTable.closeDropdowns(true);
             return;
         }
 
-        let msg = "Eliminare interamente questo Database? Le Pivot e Viste Collegate smetteranno di funzionare.";
-        if (state.isPivot) msg = "Rimuovere questa Tabella Pivot?";
-        else if (state.isLinkedView) msg = "Rimuovere questa Vista Collegata? Il database originale NON verrà cancellato.";
+        let msg = I18n.t('adv_actions.confirm_delete_db');
+        if (state.isPivot) msg = I18n.t('adv_menus.remove_pivot');
+        else if (state.isLinkedView) msg = I18n.t('adv_actions.confirm_remove_linked_view');
 
         if (typeof AppState !== 'undefined' && !state.isPivot && !state.isLinkedView) {
             let isTargetOfRelation = false;
@@ -1044,7 +1044,7 @@ Object.assign(AdvancedTable, {
             }
 
             if (isTargetOfRelation) {
-                alert(`🚫 IMPOSSIBILE ELIMINARE:\nQuesto database è attualmente puntato dal database "${pointingTableName}" tramite una Relazione.\n\nRimuovi prima la relazione in quel database per poter procedere.`);
+                alert(I18n.t('adv_actions.cannot_delete_target_of_relation', { tableName: pointingTableName }));
                 AdvancedTable.closeDropdowns(true);
                 return;
             }
@@ -1088,13 +1088,13 @@ Object.assign(AdvancedTable, {
         if (!col || !sourceRow) return;
 
         if (!col.actionBlocks || col.actionBlocks.length === 0) {
-            if (typeof UI !== 'undefined') UI.showToast("Questo pulsante non ha azioni configurate. Clicca sull'intestazione della colonna per configurarlo.", "warning");
+            if (typeof UI !== 'undefined') UI.showToast(I18n.t('adv_actions.btn_no_actions_configured'), "warning");
             return;
         }
 
         if (col.requireConfirm) {
             const btnLabel = col.buttonLabel || col.name;
-            if (!confirm(`Vuoi eseguire l'azione: "${btnLabel}" su questa riga?`)) return;
+            if (!confirm(I18n.t('adv_actions.btn_confirm_execution', { label: btnLabel }))) return;
         }
 
         const response = await LogicEngine.executeMacroBlocks(col.actionBlocks, realTableId, sourceRow, false);
@@ -1111,17 +1111,17 @@ Object.assign(AdvancedTable, {
             
             if (response.errorsLog.length > 0) {
                 const errorHtml = `<div style="color:var(--danger-color); font-family:monospace;">${response.errorsLog.join('<br>')}</div>`;
-                UI.openDrawer(`${Icons.listFilter} Log Esecuzione Macro`, errorHtml, `<button class="btn" onclick="UI.closeDrawer()">Chiudi</button>`);
+                UI.openDrawer(`${Icons.listFilter} ${I18n.t('adv_actions.macro_execution_log')}`, errorHtml, `<button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>`);
             } else {
-                let msg = `Macro completata: Elaborati ${response.totalRowsAffected} record in ${response.updatedDbIds.size} database.`;
-                if (response.emailsSent > 0) msg += ` Generate ${response.emailsSent} Email.`;
+                let msg = I18n.t('adv_actions.macro_completed_msg', { rows: response.totalRowsAffected, dbs: response.updatedDbIds.size });
+                if (response.emailsSent > 0) msg += I18n.t('adv_actions.macro_emails_sent', { count: response.emailsSent });
                 if (typeof UI !== 'undefined') UI.showToast(msg, "success");
             }
         } else {
             if (response.errorsLog.length > 0) {
-                UI.openDrawer(`${Icons.listFilter} Log Esecuzione Macro`, `<div style="color:var(--danger-color); font-family:monospace;">${response.errorsLog.join('<br>')}</div>`, null);
+                UI.openDrawer(`${Icons.listFilter} ${I18n.t('adv_actions.macro_execution_log')}`, `<div style="color:var(--danger-color); font-family:monospace;">${response.errorsLog.join('<br>')}</div>`, null);
             } else {
-                if (typeof UI !== 'undefined') UI.showToast(`Nessun record modificato (Condizioni non soddisfatte o valori già uguali).`, "info");
+                if (typeof UI !== 'undefined') UI.showToast(I18n.t('adv_actions.macro_no_rows_affected'), "info");
             }
         }
     },
@@ -1175,12 +1175,12 @@ Object.assign(AdvancedTable, {
         const isAestheticOpen = window._openAesthetic !== undefined ? window._openAesthetic : true;
 
         const buttonColors = [
-            { val: '#2563eb', name: 'Blu (Default)' },
-            { val: '#22c55e', name: 'Verde (Successo)' },
-            { val: '#ef4444', name: 'Rosso (Pericolo)' },
-            { val: '#eab308', name: 'Giallo (Avviso)' },
-            { val: '#8b5cf6', name: 'Viola (Speciale)' },
-            { val: '#333333', name: 'Nero (Scuro)' }
+            { val: '#2563eb', name: I18n.t('adv_actions.btn_color_blue') },
+            { val: '#22c55e', name: I18n.t('adv_actions.btn_color_green') },
+            { val: '#ef4444', name: I18n.t('adv_actions.btn_color_red') },
+            { val: '#eab308', name: I18n.t('adv_actions.btn_color_yellow') },
+            { val: '#8b5cf6', name: I18n.t('adv_actions.btn_color_purple') },
+            { val: '#333333', name: I18n.t('adv_actions.btn_color_black') }
         ];
 
         let colorSwatchesHtml = `<div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">`;
@@ -1202,32 +1202,32 @@ Object.assign(AdvancedTable, {
             <details id="btnAestheticOptions" class="aesthetic-block-card" style="background:var(--item-hover); border-radius:8px; border:1px solid var(--border-color); margin-bottom:15px;" ${isAestheticOpen ? 'open' : ''}>
                 <summary style="padding:12px; font-weight:bold; cursor:pointer; outline:none; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);">
                     <div style="display:flex; flex-direction:column; gap:4px;">
-                        <span style="font-size:0.95rem; display:flex; align-items:center; gap:8px;">${Icons.palette} Aspetto e Comportamento</span>
+                        <span style="font-size:0.95rem; display:flex; align-items:center; gap:8px;">${Icons.palette} ${I18n.t('adv_actions.btn_appearance_behavior')}</span>
                     </div>
                     <span style="color:var(--text-secondary); font-size:0.8rem;">▼</span>
                 </summary>
                 
                 <div style="padding: 0 15px 15px 15px; display:flex; flex-direction:column; gap:10px; border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 15px;">
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">Testo visibile all'interno:</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_label_label')}</label>
                     <input type="text" id="btnConfigLabel" class="modern-input" style="width:100%; margin-bottom: 10px;" value="${(config.buttonLabel || config.name).replace(/"/g, '&quot;')}" onblur="AdvancedTable._triggerRefresh()">
                     
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">Colore Pulsante:</label>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_color_label')}</label>
                     ${colorSwatchesHtml}
                     
                     <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer; color:var(--text-secondary); margin-top:15px;">
                         <input type="checkbox" style="transform:scale(1.1);" ${config.requireConfirm ? 'checked' : ''} onchange="AdvancedTable._updateButtonColField('requireConfirm', this.checked)">
-                        Chiedi conferma all'utente prima dell'esecuzione
+                        ${I18n.t('adv_actions.btn_confirm_checkbox')}
                     </label>
                 </div>
             </details>
             
-            <h4 style="margin: 0; font-size: 0.95rem; color: var(--accent-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">Azioni da Eseguire (Macro)</h4>
+            <h4 style="margin: 0; font-size: 0.95rem; color: var(--accent-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">${I18n.t('adv_actions.btn_actions_title')}</h4>
         `;
 
         const formulaPreviews = [];
 
         if (!config.actionBlocks || config.actionBlocks.length === 0) {
-            html += `<div style="text-align:center; padding:20px; color:var(--text-secondary); font-style:italic; background:var(--bg-color); border:1px dashed var(--border-color); border-radius:6px; margin-top: 10px;">Nessuna azione configurata. Aggiungine una per iniziare.</div>`;
+            html += `<div style="text-align:center; padding:20px; color:var(--text-secondary); font-style:italic; background:var(--bg-color); border:1px dashed var(--border-color); border-radius:6px; margin-top: 10px;">${I18n.t('adv_actions.btn_no_actions_placeholder')}</div>`;
         } else {
             const callbacks = {
                 onBlockChange: "AdvancedTable._updateButtonColBlock",
@@ -1254,14 +1254,14 @@ Object.assign(AdvancedTable, {
             });
         }
 
-        html += `<button class="btn" style="width:100%; justify-content:center; padding:10px; border-style:dashed; margin-top:10px;" onclick="AdvancedTable._addButtonColBlock()">+ Aggiungi Blocco Azione</button></div>`;
+        html += `<button class="btn" style="width:100%; justify-content:center; padding:10px; border-style:dashed; margin-top:10px;" onclick="AdvancedTable._addButtonColBlock()">${I18n.t('adv_actions.btn_add_action_block')}</button></div>`;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTable._saveButtonColConfig()">Salva Azioni Macro</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTable._saveButtonColConfig()">${I18n.t('adv_actions.btn_save_actions')}</button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.settings} Configura Pulsante</span>`, html, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.settings} ${I18n.t('adv_actions.btn_configure_title')}</span>`, html, footerHTML);
 
         setTimeout(() => {
             const fullArea = document.getElementById('btnConfigFullArea');
@@ -1323,7 +1323,7 @@ Object.assign(AdvancedTable, {
 
     _removeButtonColBlock: (e, idx) => {
         if (e) e.stopPropagation();
-        if (!confirm("Eliminare questa azione?")) return;
+        if (!confirm(I18n.t('adv_actions.btn_confirm_delete_block'))) return;
         AdvancedTable._tempColButtonConfig.config.actionBlocks.splice(idx, 1);
         AdvancedTable._triggerRefresh();
     },
@@ -1413,7 +1413,7 @@ Object.assign(AdvancedTable, {
             targetNoteId = currentVal;
         }
 
-        UI.DocumentBrowser.open('link', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.link} Collega a Nota</span>`, (item) => {
+        UI.DocumentBrowser.open('link', `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.link} ${I18n.t('adv_col_menu.type_note_link')}</span>`, (item) => {
             const anchor = (item.refType === 'chapter') ? item.title : null;
             let displayTitle = item.noteTitle || item.title;
             if (item.refType !== 'note' && item.refType !== 'chapter') {

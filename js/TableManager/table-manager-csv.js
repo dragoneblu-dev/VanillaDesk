@@ -15,30 +15,30 @@ Object.assign(TableManager.CSV, {
 
         const bodyHTML = `
             <div id="tblCreationOptions">
-                <h3 style="font-size: 0.9rem; margin-bottom: 10px; color:var(--text-primary);">Opzione 1: Da Dimensioni</h3>
+                <h3 style="font-size: 0.9rem; margin-bottom: 10px; color:var(--text-primary);">${I18n.t('table_csv.opt1_dimensions')}</h3>
                 <div style="display: flex; gap: 10px; align-items: center;">
-                    <div style="flex:1"><label style="font-size: 0.8rem; color:var(--text-secondary);">Righe:</label><input type="number" id="tblRows" class="modern-input" value="3" min="2"></div>
-                    <div style="flex:1"><label style="font-size: 0.8rem; color:var(--text-secondary);">Colonne:</label><input type="number" id="tblCols" class="modern-input" value="3" min="2"></div>
-                    <button class="btn btn-primary" onclick="TableManager.CSV.createFromDimensions()" style="margin-top: 18px;">Crea Griglia</button>
+                    <div style="flex:1"><label style="font-size: 0.8rem; color:var(--text-secondary);">${I18n.t('table_csv.rows_label')}</label><input type="number" id="tblRows" class="modern-input" value="3" min="2"></div>
+                    <div style="flex:1"><label style="font-size: 0.8rem; color:var(--text-secondary);">${I18n.t('table_csv.cols_label')}</label><input type="number" id="tblCols" class="modern-input" value="3" min="2"></div>
+                    <button class="btn btn-primary" onclick="TableManager.CSV.createFromDimensions()" style="margin-top: 18px;">${I18n.t('table_csv.btn_create_grid')}</button>
                 </div>
             </div>
             <div class="separator-h" style="margin:20px 0;"></div>
             <div>
                 <h3 style="font-size: 0.9rem; margin-bottom: 10px; color:var(--text-primary); display:flex; justify-content:space-between; align-items:center;">
-                    Opzione 2: Importa Dati
+                    ${I18n.t('table_csv.opt2_import_data')}
                     <select id="tblCsvSeparator" class="modern-input" style="font-weight:normal; font-size:0.8rem; padding:2px 5px;">
                         <option value=";">Separatore: Punto e Virgola (;)</option>
                         <option value="TAB">Separatore: Tabulazione (TAB)</option>
                     </select>
                 </h3>
-                <textarea id="tblCsvInput" class="modern-input" rows="8" placeholder="Incolla qui i tuoi dati..." style="font-family: monospace; resize:vertical; min-height: 150px; width:100%; white-space: pre;"></textarea>
+                <textarea id="tblCsvInput" class="modern-input" rows="8" placeholder="${I18n.t('table_csv.paste_data_placeholder')}" style="font-family: monospace; resize:vertical; min-height: 150px; width:100%; white-space: pre;"></textarea>
                 <div style="display:flex; gap:10px; margin-top:10px;">
-                    <button class="btn btn-primary" onclick="TableManager.CSV.createFromCSV()" style="flex:1;"><span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} Genera da Testo</span></button>
+                    <button class="btn btn-primary" onclick="TableManager.CSV.createFromCSV()" style="flex:1;"><span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} ${I18n.t('table_csv.btn_generate_from_text')}</span></button>
                 </div>
             </div>
         `;
 
-        UI.openDrawer('🔲 Nuova Tabella', bodyHTML, null);
+        UI.openDrawer(I18n.t('table_csv.new_table_title'), bodyHTML, null);
     },
 
     createFromDimensions: () => {
@@ -46,7 +46,7 @@ Object.assign(TableManager.CSV, {
         const cols = parseInt(document.getElementById('tblCols').value, 10);
 
         if (isNaN(rows) || isNaN(cols) || rows < 1 || cols < 1) {
-            alert("Inserisci valori validi per righe e colonne (minimo 1).");
+            alert(I18n.t('table_csv.alert_invalid_dimensions'));
             return;
         }
 
@@ -58,7 +58,7 @@ Object.assign(TableManager.CSV, {
         for (let r = 0; r < rows; r++) {
             html += '<tr>';
             for (let c = 0; c < cols; c++) {
-                if (r === 0) html += `<th contenteditable="true">Intestazione</th>`;
+                if (r === 0) html += `<th contenteditable="true">${I18n.t('table_csv.default_header')}</th>`;
                 else html += '<td contenteditable="true"><br></td>';
             }
             html += '</tr>';
@@ -300,7 +300,7 @@ Object.assign(TableManager.CSV, {
 
         // 1. Controllo di sicurezza: Presenza di Widget o Elementi complessi.
         if (table.querySelector('ul, ol, img, audio, video, iframe, pre, table, .adv-checklist, .inline-note-marker')) {
-            alert("⚠️ IMPOSSIBILE UTILIZZARE L'EDITOR TESTUALE\n\nQuesta tabella contiene elementi complessi (immagini, audio, elenchi, codice, note inline o altre tabelle).\nModificando i dati tramite testo, tutti questi elementi andrebbero distrutti e perderesti i file ad essi collegati.\n\nPer favore, modifica le celle direttamente dall'editor visivo.");
+            alert(I18n.t('table_csv.warn_complex_elements'));
             return;
         }
 
@@ -313,7 +313,7 @@ Object.assign(TableManager.CSV, {
         });
 
         if (hasMergedCells) {
-            alert("⚠️ IMPOSSIBILE UTILIZZARE L'EDITOR TESTUALE\n\nQuesta tabella contiene celle unite (funzione Unisci Celle). L'editor testuale (CSV) supporta solo griglie perfettamente lineari e simmetriche.\nSe applicato, l'editor distruggerebbe in modo irreversibile l'impaginazione e la fusione delle celle.\n\nPer favore, modifica i dati direttamente dalla tabella oppure dividi prima le celle unite.");
+            alert(I18n.t('table_csv.warn_merged_cells'));
             return;
         }
 
@@ -323,28 +323,28 @@ Object.assign(TableManager.CSV, {
         const bodyHTML = `
             <div style="background: rgba(234, 179, 8, 0.1); border: 1px solid rgba(234, 179, 8, 0.3); padding: 10px; border-radius: 6px; margin-bottom: 12px; font-size: 0.85rem; color: var(--text-primary);">
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span><b>Attenzione:</b> Modifica i dati mantenendo il separatore di colonna.</span>
+                    <span>${I18n.t('table_csv.bulk_edit_warning')}</span>
                     <select id="tblCsvSeparator" class="modern-input" style="padding:2px 5px;" onchange="TableManager.CSV.refreshCsvTextarea(this.value)">
-                        <option value=";">Usa Punto e Virgola (;)</option>
-                        <option value="TAB">Usa Tabulazione (TAB)</option>
+                        <option value=";">${I18n.t('table_csv.use_semicolon')}</option>
+                        <option value="TAB">${I18n.t('table_csv.use_tab')}</option>
                     </select>
                 </div>
             </div>
             <div style="margin-bottom: 12px; display: flex; align-items: center; justify-content: space-between;">
                 <label style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; cursor: pointer; color: var(--text-primary); font-weight: 500;">
                     <input type="checkbox" id="tblCsvKeepFormatting" checked style="transform: scale(1.15); cursor: pointer;">
-                    Mantieni formattazione celle (colori, allineamenti e intestazioni)
+                    ${I18n.t('table_csv.keep_formatting_label')}
                 </label>
             </div>
-            <textarea id="tblCsvInput" class="modern-input" placeholder="Dati in formato testuale..." style="font-family: monospace; resize:vertical; min-height: 250px; width:100%; white-space: pre;">${initialCsvContent}</textarea>
+            <textarea id="tblCsvInput" class="modern-input" placeholder="${I18n.t('table_csv.paste_data_placeholder')}" style="font-family: monospace; resize:vertical; min-height: 250px; width:100%; white-space: pre;">${initialCsvContent}</textarea>
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="TableManager.CSV.updateCurrentTableFromCSV()">Aggiorna Dati</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="TableManager.CSV.updateCurrentTableFromCSV()">${I18n.t('table_csv.btn_update_data')}</button>
         `;
 
-        UI.openDrawer('📝 Modifica Massiva Dati (CSV / Testo)', bodyHTML, footerHTML);
+        UI.openDrawer(I18n.t('table_csv.bulk_edit_title'), bodyHTML, footerHTML);
     },
 
     exportToCSV: () => {
@@ -357,7 +357,7 @@ Object.assign(TableManager.CSV, {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = 'tabella_semplice.csv';
+        a.download = I18n.t('table_csv.export_filename');
         a.click();
         
         UI.Menu.closeAll(true);
@@ -371,7 +371,7 @@ Object.assign(TableManager.CSV, {
 
         navigator.clipboard.writeText(tsvContent).then(() => {
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Copiata negli appunti! Pronta per essere incollata su Excel.", "success");
+                UI.showToast(I18n.t('table_csv.copied_excel_toast'), "success");
             }
             UI.Menu.closeAll(true);
         }).catch(err => {
@@ -386,7 +386,7 @@ Object.assign(TableManager.CSV, {
 
         // FIX BLOCCO CONVERSIONE: Esclusione netta di Immagini e Audio per prevenire la perdita dei record in background (assets).
         if (table.querySelector('img, audio, video, iframe')) {
-            alert("⚠️ CONVERSIONE BLOCCATA\n\nQuesta tabella contiene file multimediali (Immagini, Audio o Video). I Database Avanzati memorizzano unicamente testo crudo e date all'interno delle loro celle.\nConvertendo questa tabella, tutti i riferimenti a questi file verrebbero distrutti per sempre.\n\nPer procedere, elimina prima gli elementi multimediali.");
+            alert(I18n.t('table_csv.warn_convert_media'));
             return;
         }
 
@@ -399,11 +399,11 @@ Object.assign(TableManager.CSV, {
         });
 
         if (hasMergedCells) {
-            alert("⚠️ CONVERSIONE BLOCCATA\n\nI Database Avanzati richiedono una struttura dati rigida (ogni colonna ha lo stesso numero di celle). La tua tabella attualmente contiene delle Celle Unite (Fuso), che il Database non può elaborare.\n\nPer procedere, dividi tutte le celle unite prima di convertire la tabella.");
+            alert(I18n.t('table_csv.warn_convert_merged'));
             return;
         }
 
-        if (!confirm("Sei sicuro di voler convertire questa tabella in un Database Avanzato?\nQuesta operazione modificherà l'architettura della tabella in modo irreversibile.")) {
+        if (!confirm(I18n.t('table_csv.confirm_convert_db'))) {
             return;
         }
 
@@ -427,7 +427,7 @@ Object.assign(TableManager.CSV, {
         const tableId = 'adv_tbl_' + Store.generateId();
         const now = Date.now();
         const state = {
-            title: 'Database Convertito',
+            title: I18n.t('table_csv.converted_db_title'),
             freeWidth: false,
             striped: true,
             columns: [],
@@ -441,7 +441,7 @@ Object.assign(TableManager.CSV, {
 
         const headers = rowsData[0];
         headers.forEach((h, index) => {
-            const cleanHeader = h.replace(/\n/g, ' ') || `Colonna ${index + 1}`;
+            const cleanHeader = h.replace(/\n/g, ' ') || I18n.t('table_csv.default_column_name', { index: index + 1 });
             state.columns.push({ id: 'c' + index, name: cleanHeader, type: 'text', width: 150 });
         });
 

@@ -43,7 +43,7 @@ const AdvancedTableConditionalColors = {
             listHTML = `
                 <div style="text-align:center; padding:30px 10px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color);">
                     <div style="margin-bottom:10px; color:var(--accent-color);">${Icons.palette}</div>
-                    <div style="color:var(--text-secondary); font-size:0.9rem;">Nessuna regola visiva attiva.<br>Aggiungi una regola per colorare automaticamente le righe della tabella.</div>
+                    <div style="color:var(--text-secondary); font-size:0.9rem;">${I18n.t('adv_cond_colors.no_rules_hint')}</div>
                 </div>
             `;
         } else {
@@ -52,7 +52,7 @@ const AdvancedTableConditionalColors = {
                 let colorSwatches = '';
                 
                 const noColorSel = (!rule.color || rule.color === 'none') ? 'outline: 2px solid var(--text-primary); transform: scale(1.1); box-shadow: 0 4px 8px rgba(0,0,0,0.2);' : '';
-                colorSwatches += `<div class="color-swatch bg-none" style="width: 24px; height: 24px; border-radius: 4px; cursor: pointer; ${noColorSel}" onclick="AdvancedTableConditionalColors._updateCondColor('${tableId}', ${idx}, 'none')" title="Nessun Colore (Predefinito)"></div>`;
+                colorSwatches += `<div class="color-swatch bg-none" style="width: 24px; height: 24px; border-radius: 4px; cursor: pointer; ${noColorSel}" onclick="AdvancedTableConditionalColors._updateCondColor('${tableId}', ${idx}, 'none')" title="${I18n.t('adv_cond_colors.no_color_title')}"></div>`;
                 
                 const pillColors = ['hl-c1', 'hl-c2', 'hl-c3', 'hl-c4', 'hl-c5', 'hl-c6', 'hl-c7', 'hl-c8', 'hl-c9', 'hl-c10'];
                 pillColors.forEach(c => {
@@ -73,17 +73,17 @@ const AdvancedTableConditionalColors = {
                 let resultConfigHTML = `
                     <div style="display:flex; flex-direction:column; gap:8px; cursor:default;" onmousedown="event.stopPropagation()">
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); width: 85px;">Sfondo:</span>
+                            <span style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); width: 85px;">${I18n.t('adv_cond_colors.bg_label')}</span>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; background:var(--item-hover); padding:5px; border-radius:6px; border:1px solid var(--border-color); flex:1;">
                                 ${colorSwatches}
                             </div>
                         </div>
                         <div style="display:flex; align-items:center; gap:10px;">
-                            <span style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); width: 85px;">Opacità:</span>
+                            <span style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); width: 85px;">${I18n.t('adv_cond_colors.opacity_label')}</span>
                             <div style="display:flex; gap:8px; align-items:center; background:var(--item-hover); padding:6px 10px; border-radius:6px; border:1px solid var(--border-color); flex:1;">
                                 <select class="modern-input" style="padding:4px; font-size:0.8rem; width: 120px;" onchange="AdvancedTableConditionalColors._updateCondOpacityType('${tableId}', ${idx}, this.value)">
-                                    <option value="fixed" ${opType === 'fixed' ? 'selected' : ''}>Fissa</option>
-                                    <option value="formula" ${opType === 'formula' ? 'selected' : ''}>Formula JS</option>
+                                    <option value="fixed" ${opType === 'fixed' ? 'selected' : ''}>${I18n.t('adv_cond_colors.opacity_fixed')}</option>
+                                    <option value="formula" ${opType === 'formula' ? 'selected' : ''}>${I18n.t('adv_cond_colors.opacity_formula')}</option>
                                 </select>
                                 ${opInputHtml}
                             </div>
@@ -93,7 +93,7 @@ const AdvancedTableConditionalColors = {
 
                 let conditionsHTML = '';
                 if (rule.conditions.length === 0) {
-                    conditionsHTML = `<div style="font-size:0.8rem; color:var(--danger-color); padding: 5px;">Seleziona una colonna per definire la condizione.</div>`;
+                    conditionsHTML = `<div style="font-size:0.8rem; color:var(--danger-color); padding: 5px;">${I18n.t('adv_cond_colors.empty_condition_warning')}</div>`;
                 } else {
                     rule.conditions.forEach((cond, cIdx) => {
                         const isFirst = cIdx === 0;
@@ -111,7 +111,7 @@ const AdvancedTableConditionalColors = {
                             if (['date', 'datetime'].includes(cDef.type)) {
                                 if (!cond.dateMode) cond.dateMode = 'exact';
                                 if (!cond.dateShift) cond.dateShift = 0;
-                                let dynamicHtml = `<select class="modern-input" style="flex:1; padding:6px; font-size:0.8rem;" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'dateMode', this.value)"><option value="exact" ${cond.dateMode === 'exact' ? 'selected' : ''}>Data Esatta</option><option value="today" ${cond.dateMode === 'today' ? 'selected' : ''}>Oggi</option></select>`;
+                                let dynamicHtml = `<select class="modern-input" style="flex:1; padding:6px; font-size:0.8rem;" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'dateMode', this.value)"><option value="exact" ${cond.dateMode === 'exact' ? 'selected' : ''}>${I18n.t('adv_automations.timer_mode_exact')}</option><option value="today" ${cond.dateMode === 'today' ? 'selected' : ''}>${I18n.t('adv_timeline.btn_today')}</option></select>`;
                                 if (cond.dateMode === 'exact') dynamicHtml += `<input type="date" class="modern-input" style="flex:1; padding:6px; font-size:0.8rem;" value="${safeVal}" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)">`;
                                 else dynamicHtml += `<div style="flex:1; font-size:0.75rem; color:var(--text-secondary); align-self:center; text-align:center;">( +/- Giorni )</div>`;
                                 dynamicHtml += `<input type="number" class="modern-input" style="width:50px; padding:6px; text-align:center; font-size:0.8rem;" title="Giorni (+/-)" value="${cond.dateShift}" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'dateShift', this.value)">`;
@@ -131,7 +131,7 @@ const AdvancedTableConditionalColors = {
 
                         conditionsHTML += `
                             <div style="display:flex; gap:8px; align-items:center; margin-bottom:8px;">
-                                <span style="font-size:0.75rem; font-weight:bold; color:var(--accent-color); width:25px; text-align:right;">${isFirst ? 'SE' : 'AND'}</span>
+                                <span style="font-size:0.75rem; font-weight:bold; color:var(--accent-color); width:25px; text-align:right;">${isFirst ? I18n.t('adv_automations.cond_if') : I18n.t('adv_automations.cond_and')}</span>
                                 <select class="modern-input" style="flex:1.5; padding:6px; font-size:0.8rem; font-weight:bold;" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'colId', this.value)">
                                     ${colOptions.replace(`value="${cond.colId}"`, `value="${cond.colId}" selected`)}
                                 </select>
@@ -159,21 +159,21 @@ const AdvancedTableConditionalColors = {
                                       draggable="true"
                                       ondragstart="AdvancedTableConditionalColors._onCondDragStart(event, ${idx})"
                                       ondragend="AdvancedTableConditionalColors._onCondDragEnd(event, ${idx})"
-                                      title="Trascina per riordinare">⠿</span>
-                                Regola ${idx + 1}
+                                      title="${I18n.t('adv_cond_colors.drag_handle_title')}">⠿</span>
+                                ${I18n.t('adv_cond_colors.rule_title', { index: idx + 1 })}
                             </span>
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; cursor:pointer; background: ${isActive ? 'rgba(34, 197, 94, 0.1)' : 'var(--item-hover)'}; color: ${isActive ? '#166534' : 'var(--text-secondary)'}; padding: 4px 8px; border-radius: 12px; font-weight: bold;">
                                     <input type="checkbox" style="margin:0;" ${isActive ? 'checked' : ''} onchange="AdvancedTableConditionalColors._toggleCondActive('${tableId}', ${idx}, this.checked)">
-                                    ${isActive ? 'Attiva' : 'Disattiva'}
+                                    ${isActive ? I18n.t('adv_cond_colors.btn_active') : I18n.t('adv_cond_colors.btn_inactive')}
                                 </label>
-                                <button class="adv-icon-btn danger" style="padding:4px;" onclick="AdvancedTableConditionalColors._deleteCondRule('${tableId}', ${idx})" title="Elimina Regola">${Icons.trash}</button>
+                                <button class="adv-icon-btn danger" style="padding:4px;" onclick="AdvancedTableConditionalColors._deleteCondRule('${tableId}', ${idx})" title="${I18n.t('adv_cond_colors.delete_rule_title')}">${Icons.trash}</button>
                             </div>
                         </div>
 
                         <div style="background:var(--item-hover); padding:10px; border-radius:6px; border:1px solid var(--border-color); margin-bottom:15px; cursor:default;" onmousedown="event.stopPropagation()">
                             ${conditionsHTML}
-                            <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary); font-size:0.75rem;" onclick="AdvancedTableConditionalColors._addCondRuleCondition('${tableId}', ${idx})">+ Aggiungi Condizione (AND)</button>
+                            <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary); font-size:0.75rem;" onclick="AdvancedTableConditionalColors._addCondRuleCondition('${tableId}', ${idx})">${I18n.t('adv_cond_colors.btn_add_and_condition')}</button>
                         </div>
 
                         ${resultConfigHTML}
@@ -186,19 +186,19 @@ const AdvancedTableConditionalColors = {
         const bodyHTML = `
             <div style="margin-bottom:20px;">
                 <p style="font-size:0.85rem; color:var(--text-secondary); line-height:1.5;">
-                    Le regole vengono valutate <b>in tempo reale</b> dall'alto verso il basso. <br>Questa formattazione cambia solo l'aspetto visivo e <b>non sovrascrive la data di Ultima Modifica</b> della riga.
+                    ${I18n.t('adv_cond_colors.panel_desc')}
                 </p>
-                <button class="btn btn-primary" style="width:100%; justify-content:center; padding:10px; font-size:0.9rem;" onclick="AdvancedTableConditionalColors._addCondRule('${tableId}')"><span style="margin-right:8px; display:flex;">${Icons.palette}</span> Nuova Regola di Colore</button>
+                <button class="btn btn-primary" style="width:100%; justify-content:center; padding:10px; font-size:0.9rem;" onclick="AdvancedTableConditionalColors._addCondRule('${tableId}')"><span style="margin-right:8px; display:flex;">${Icons.palette}</span> ${I18n.t('adv_cond_colors.btn_new_rule')}</button>
             </div>
             ${listHTML}
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedTableConditionalColors._saveConditionalColors('${tableId}')">Salva Regole</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTableConditionalColors._saveConditionalColors('${tableId}')">${I18n.t('adv_cond_colors.btn_save_rules')}</button>
         `;
 
-        UI.openDrawer(`🎨 Colorazione Condizionale`, bodyHTML, footerHTML);
+        UI.openDrawer(I18n.t('adv_cond_colors.panel_title'), bodyHTML, footerHTML);
     },
 
     _updateCondOpacityType: (tableId, idx, type) => {
@@ -226,7 +226,7 @@ const AdvancedTableConditionalColors = {
     },
 
     _deleteCondRule: (tableId, idx) => {
-        if (!confirm("Rimuovere questa regola visiva?")) return;
+        if (!confirm(I18n.t('adv_cond_colors.confirm_delete_rule'))) return;
         AdvancedTableConditionalColors._tempCondRules.splice(idx, 1);
         AdvancedTableConditionalColors._renderConditionalBuilder(tableId);
     },
@@ -322,7 +322,7 @@ const AdvancedTableConditionalColors = {
         
         for (let rule of AdvancedTableConditionalColors._tempCondRules) {
             if (rule.conditions.length === 0) {
-                alert("Rimuovi le regole vuote prima di salvare."); return;
+                alert(I18n.t('adv_cond_colors.alert_empty_rules')); return;
             }
         }
 

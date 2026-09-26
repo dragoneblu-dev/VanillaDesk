@@ -67,30 +67,29 @@ const PackageManager = {
 
         const bodyHTML = `
             <div style="background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2); padding: 15px; border-radius: 6px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
-                Stai per impacchettare questa nota in un <b>Modpack Autoinstallante</b>.<br>
-                Il sistema ha rilevato e incapsulerà automaticamente <b>${requiredDbs.size}</b> componenti avanzati (Database, Dashboard, Pulsanti) collegati tra loro.
+                ${I18n.t('pkg_manager.export_banner', { count: requiredDbs.size })}
             </div>
             <div style="display:flex; flex-direction:column; gap:15px;">
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Nome del Modpack:</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('pkg_manager.pack_name_label')}</label>
                     <input type="text" id="exportMpName" class="modern-input" value="${(note.title || 'Nuovo Modulo').replace(/"/g, '&quot;')}">
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Versione:</label>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('pkg_manager.version_label')}</label>
                     <input type="text" id="exportMpVersion" class="modern-input" value="1.0">
                 </div>
                 <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">Descrizione (Opzionale):</label>
-                    <textarea id="exportMpDesc" class="modern-input" rows="3" style="resize:vertical; width:100%; font-size:0.85rem;" placeholder="Cosa contiene questo pacchetto?"></textarea>
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('pkg_manager.desc_label')}</label>
+                    <textarea id="exportMpDesc" class="modern-input" rows="3" style="resize:vertical; width:100%; font-size:0.85rem;" placeholder="${I18n.t('pkg_manager.desc_placeholder')}"></textarea>
                 </div>
             </div>
         `;
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="PackageManager._finalizeExport('${noteId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.download} Genera e Scarica JSON</span></button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="PackageManager._finalizeExport('${noteId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.download} ${I18n.t('pkg_manager.generate_download_btn')}</span></button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.export} Esporta Modpack</span>`, bodyHTML, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.export} ${I18n.t('pkg_manager.export_title')}</span>`, bodyHTML, footerHTML);
 
         PackageManager._tempExportData = { html: html, databases: exportDbs };
     },
@@ -130,7 +129,7 @@ const PackageManager = {
 
         PackageManager._tempExportData = null;
         UI.closeDrawer();
-        if (typeof UI.showToast !== 'undefined') UI.showToast("Modpack generato ed esportato con successo!", "success");
+        if (typeof UI.showToast !== 'undefined') UI.showToast(I18n.t('pkg_manager.export_success_toast'), "success");
     },
 
     // =========================================================================
@@ -150,21 +149,21 @@ const PackageManager = {
             try {
                 modpack = JSON.parse(text);
             } catch (e) {
-                alert("Il file non è un JSON valido.");
+                alert(I18n.t('pkg_manager.invalid_json'));
                 return;
             }
 
             if (modpack.type !== 'vanilladesk_modpack_v2' || !modpack.html || !modpack.databases) {
-                alert("Il file non è un Modpack VanillaDesk V2 valido.");
+                alert(I18n.t('pkg_manager.invalid_modpack'));
                 return;
             }
 
-            if (confirm(`Vuoi installare il Modpack:\n\n"${modpack.manifest.name}" (v${modpack.manifest.version})\n${modpack.manifest.description}\n\nVerrà creata una nuova nota con gli elementi importati.`)) {
+            if (confirm(I18n.t('pkg_manager.confirm_install', { name: modpack.manifest.name, version: modpack.manifest.version, desc: modpack.manifest.description }))) {
                 PackageManager._executeV2Transaction(modpack);
             }
 
         } catch (err) {
-            if (err.name !== 'AbortError') alert("Errore lettura file: " + err.message);
+            if (err.name !== 'AbortError') alert(I18n.t('pkg_manager.error_read_file', { error: err.message }));
         }
     },
 
@@ -232,7 +231,7 @@ const PackageManager = {
             const newNote = {
                 id: newNoteId,
                 parentId: null,
-                title: (modpack.manifest && modpack.manifest.name) || "Modulo Importato",
+                title: (modpack.manifest && modpack.manifest.name) || I18n.t('pkg_manager.imported_module_title'),
                 content: htmlStr,
                 isMarked: false,
                 expanded: true,
@@ -252,11 +251,11 @@ const PackageManager = {
             UI.selectNote(newNoteId);
 
             Store.triggerAutoSave(true);
-            if (typeof UI.showToast !== 'undefined') UI.showToast(`Modpack "${newNote.title}" installato con successo!`, "success");
+            if (typeof UI.showToast !== 'undefined') UI.showToast(I18n.t('pkg_manager.install_success_toast', { title: newNote.title }), "success");
 
         } catch (err) {
             console.error("Errore transazione V2 Modpack:", err);
-            alert("Errore durante l'installazione del modulo: " + err.message);
+            alert(I18n.t('pkg_manager.error_install', { error: err.message }));
         }
     }
 };

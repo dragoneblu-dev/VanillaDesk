@@ -10,12 +10,12 @@ Object.assign(UI, {
         const note = Store.getNote(AppState.currentNoteId);
         if (!note) return;
 
-        const safeTitle = (note.title || 'Senza Titolo').replace(/</g, '&lt;');
+        const safeTitle = (note.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
 
         // 1. Calcolo Statistiche Testo
         const plainText = UI.extractSearchableText(note.content || '').trim();
         const wordCount = plainText ? plainText.split(/\s+/).filter(w => w.length > 0).length : 0;
-        const readTime = Math.max(1, Math.ceil(wordCount / 200)); 
+        const readTimeMinutes = Math.max(1, Math.ceil(wordCount / 200)); 
 
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = note.content || '';
@@ -53,14 +53,14 @@ Object.assign(UI, {
             const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
             const colsToRender = propsDb ? propsDb.columns.filter(c => c.id !== 'sys_c_note' && !c.hidden) : [];
 
-            let thHtml = `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">Titolo Nota</th>`;
+            let thHtml = `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">${I18n.t('notes_info.subnotes_col_title')}</th>`;
             colsToRender.forEach(c => {
                 thHtml += `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">${c.name.replace(/</g, '&lt;')}</th>`;
             });
 
             let trHtml = '';
             children.forEach(child => {
-                const childSafeTitle = (child.title || 'Senza Titolo').replace(/</g, '&lt;');
+                const childSafeTitle = (child.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
                 let rowPropsHtml = '';
 
                 if (propsDb) {
@@ -80,7 +80,7 @@ Object.assign(UI, {
                                     });
                                 }
                             } else if (c.type === 'checkbox') {
-                                displayVal = rawVal ? `<span style="color:var(--accent-color); font-weight:bold;">Sì</span>` : `<span style="color:var(--text-secondary);">No</span>`;
+                                displayVal = rawVal ? `<span style="color:var(--accent-color); font-weight:bold;">${I18n.t('notes_info.yes')}</span>` : `<span style="color:var(--text-secondary);">${I18n.t('notes_info.no')}</span>`;
                             } else {
                                 displayVal = AdvancedTable.getFormatDisplayValue(c, rawVal);
                                 if (!displayVal) displayVal = '-';
@@ -113,7 +113,7 @@ Object.assign(UI, {
                 </div>
             `;
         } else {
-            subNotesHtml = `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">Questa nota non contiene sotto-note.</div>`;
+            subNotesHtml = `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">${I18n.t('notes_info.subnotes_empty')}</div>`;
         }
 
         // COSTRUZIONE HTML DRAWER
@@ -124,34 +124,34 @@ Object.assign(UI, {
                 <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;">
                     <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${wordCount}</div>
-                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">Parole</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_words')}</div>
                     </div>
                     <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
-                        <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${readTime}m</div>
-                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">Tempo Lettura</div>
+                        <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${I18n.t('notes_info.stat_read_time_min', { time: readTimeMinutes })}</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_read_time')}</div>
                     </div>
                     <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${chapterCount}</div>
-                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">Capitoli</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_chapters')}</div>
                     </div>
                     <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
                         <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${widgetCount}</div>
-                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">Widget</div>
+                        <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_widgets')}</div>
                     </div>
                 </div>
 
                 <!-- Backlinks -->
                 <div>
                     <h4 style="margin:0 0 10px 0; color:var(--accent-color); font-size:0.95rem; border-bottom:1px solid var(--border-color); padding-bottom:5px; display:flex; align-items:center; gap:6px;">
-                        ${Icons.link} Menzioni in Entrata (Backlinks)
+                        ${Icons.link} ${I18n.t('notes_info.backlinks_title')}
                     </h4>
-                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:10px;">Queste note contengono un link o citano questa pagina:</div>
+                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:10px;">${I18n.t('notes_info.backlinks_desc')}</div>
         `;
 
         if (backlinks.length > 0) {
             bodyHTML += `<div style="display:flex; flex-direction:column; gap:6px;">`;
             backlinks.forEach(bl => {
-                const blTitle = (bl.title || 'Senza Titolo').replace(/</g, '&lt;');
+                const blTitle = (bl.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
                 bodyHTML += `
                     <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; cursor:pointer; transition:background 0.2s;" onmouseenter="this.style.background='var(--item-hover)'" onmouseleave="this.style.background='var(--bg-color)'" onclick="UI.selectNote('${bl.id}')">
                         <span style="color:var(--accent-color);">${Icons.arrowLeft}</span>
@@ -161,7 +161,7 @@ Object.assign(UI, {
             });
             bodyHTML += `</div>`;
         } else {
-            bodyHTML += `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">Nessuna nota punta a questa pagina.</div>`;
+            bodyHTML += `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">${I18n.t('notes_info.backlinks_empty')}</div>`;
         }
 
         bodyHTML += `</div>`;
@@ -170,9 +170,9 @@ Object.assign(UI, {
         bodyHTML += `
                 <div>
                     <h4 style="margin:0 0 10px 0; color:var(--tx-c4); font-size:0.95rem; border-bottom:1px solid var(--border-color); padding-bottom:5px; display:flex; align-items:center; gap:6px;">
-                        ${Icons.arrowRightUp} Menzioni in Uscita (Outlinks)
+                        ${Icons.arrowRightUp} ${I18n.t('notes_info.outlinks_title')}
                     </h4>
-                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:10px;">Questa pagina contiene link o cita le seguenti note:</div>
+                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:10px;">${I18n.t('notes_info.outlinks_desc')}</div>
         `;
 
         if (outlinks.size > 0) {
@@ -180,7 +180,7 @@ Object.assign(UI, {
             outlinks.forEach(outId => {
                 const outNote = Store.getNote(outId);
                 if (outNote && !outNote.deletedAt) {
-                    const outTitle = (outNote.title || 'Senza Titolo').replace(/</g, '&lt;');
+                    const outTitle = (outNote.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
                     bodyHTML += `
                         <div style="display:flex; align-items:center; gap:8px; padding:8px 10px; background:var(--bg-color); border:1px dashed var(--border-color); border-radius:6px; cursor:pointer; transition:background 0.2s;" onmouseenter="this.style.background='var(--item-hover)'" onmouseleave="this.style.background='var(--bg-color)'" onclick="UI.selectNote('${outNote.id}')">
                             <span style="color:var(--tx-c4);">${Icons.link}</span>
@@ -191,7 +191,7 @@ Object.assign(UI, {
             });
             bodyHTML += `</div>`;
         } else {
-            bodyHTML += `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">Questa pagina non punta verso altre note interne.</div>`;
+            bodyHTML += `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">${I18n.t('notes_info.outlinks_empty')}</div>`;
         }
 
         bodyHTML += `</div>`;
@@ -200,14 +200,14 @@ Object.assign(UI, {
         bodyHTML += `
                 <div>
                     <h4 style="margin:0 0 10px 0; color:var(--text-primary); font-size:0.95rem; border-bottom:1px solid var(--border-color); padding-bottom:5px; display:flex; align-items:center; gap:6px;">
-                        ${Icons.treeNode} Analisi Proprietà Sotto-note
+                        ${Icons.treeNode} ${I18n.t('notes_info.subnotes_audit_title')}
                     </h4>
-                    <div style="font-size:0.8rem; color:var(--text-secondary);">Verifica a colpo d'occhio che le note figlie siano taggate correttamente:</div>
+                    <div style="font-size:0.8rem; color:var(--text-secondary);">${I18n.t('notes_info.subnotes_audit_desc')}</div>
                     ${subNotesHtml}
                 </div>
             </div>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.info} Info: ${safeTitle}</span>`, bodyHTML, null);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.info} ${I18n.t('notes_info.drawer_title', { title: safeTitle })}</span>`, bodyHTML, null);
     }
 });

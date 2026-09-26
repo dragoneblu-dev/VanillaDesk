@@ -37,16 +37,16 @@ Object.assign(Editor, {
         }
 
         const items = [
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="margin-bottom: 2px;">Font</div>' },
-            { label: 'Standard (Mono)' + (activeFF === 'ff-default' ? chk : ''), onClick: () => executeFormat('ff', 'ff-default') },
-            { label: 'Serif' + (activeFF === 'ff-serif' ? chk : ''), onClick: () => executeFormat('ff', 'ff-serif') },
-            { label: 'Cursive' + (activeFF === 'ff-cursive' ? chk : ''), onClick: () => executeFormat('ff', 'ff-cursive') },
-            { label: 'EasyReading PRO' + (activeFF === 'ff-easyreading' ? chk : ''), onClick: () => executeFormat('ff', 'ff-easyreading') },
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom: 2px;">${I18n.t('format_text.font_group')}</div>` },
+            { label: I18n.t('format_text.font_default') + (activeFF === 'ff-default' ? chk : ''), onClick: () => executeFormat('ff', 'ff-default') },
+            { label: I18n.t('format_text.font_serif') + (activeFF === 'ff-serif' ? chk : ''), onClick: () => executeFormat('ff', 'ff-serif') },
+            { label: I18n.t('format_text.font_cursive') + (activeFF === 'ff-cursive' ? chk : ''), onClick: () => executeFormat('ff', 'ff-cursive') },
+            { label: I18n.t('format_text.font_easyreading') + (activeFF === 'ff-easyreading' ? chk : ''), onClick: () => executeFormat('ff', 'ff-easyreading') },
             { type: 'divider' },
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="margin-bottom: 2px;">Dimensione</div>' },
-            { label: 'Piccolo' + (activeFS === 'fs-small' ? chk : ''), onClick: () => executeFormat('fs', 'fs-small') },
-            { label: 'Normale' + (activeFS === 'fs-standard' ? chk : ''), onClick: () => executeFormat('fs', 'fs-standard') },
-            { label: 'Grande' + (activeFS === 'fs-large' ? chk : ''), onClick: () => executeFormat('fs', 'fs-large') }
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom: 2px;">${I18n.t('format_text.size_group')}</div>` },
+            { label: I18n.t('format_text.size_small') + (activeFS === 'fs-small' ? chk : ''), onClick: () => executeFormat('fs', 'fs-small') },
+            { label: I18n.t('format_text.size_standard') + (activeFS === 'fs-standard' ? chk : ''), onClick: () => executeFormat('fs', 'fs-standard') },
+            { label: I18n.t('format_text.size_large') + (activeFS === 'fs-large' ? chk : ''), onClick: () => executeFormat('fs', 'fs-large') }
         ];
 
         UI.Menu.buildContextMenu(anchorId, items);

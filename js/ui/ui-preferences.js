@@ -3,7 +3,8 @@
  * Sottomodulo di UI.
  * Gestione delle impostazioni dell'utente (Salvataggio in LocalStorage), 
  * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
- * REFACTOR CENTRALIZZATO: Menu principale (hamburger) gestito interamente tramite UI.Menu.buildContextMenu.
+ * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
+ * FEAT I18N: Voce "Lingua" trasformata in sottomenu dedicato per non occupare spazio verticale in "Configura".
  * FEAT CONTINUOUS EDIT: Modularizzazione di setContinuousEdit per attivazione programmatica all'apertura del Workspace.
  */
 
@@ -16,6 +17,7 @@ Object.assign(UI, {
         if (existing && e) return;
 
         const currentTheme = localStorage.getItem('theme') || 'light';
+        const currentLang = I18n.currentLang || 'it';
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
         
         const trashCount = AppState.notes ? AppState.notes.filter(n => n.deletedAt).length : 0;
@@ -25,34 +27,34 @@ Object.assign(UI, {
         const items = [
             {
                 icon: Icons.folderOpen,
-                label: 'Nuovo Workspace...',
+                label: I18n.t('menu.new_workspace'),
                 onClick: () => Store.createWorkspace(true)
             },
             {
                 icon: Icons.folder,
-                label: 'Apri Workspace...',
+                label: I18n.t('menu.open_workspace'),
                 onClick: () => Store.openWorkspace()
             },
             {
                 icon: Icons.file,
-                label: 'File JSON',
+                label: I18n.t('menu.json_files'),
                 type: 'submenu',
                 items: [
                     {
                         icon: Icons.import,
-                        label: 'Carica File JSON...',
+                        label: I18n.t('menu.load_json'),
                         onClick: () => Store.loadSnapshot()
                     },
                     {
                         icon: Icons.download,
-                        label: 'Scarica Backup JSON',
+                        label: I18n.t('menu.download_backup'),
                         onClick: () => Store.downloadSnapshot()
                     }
                 ]
             },
             {
                 icon: Icons.trash,
-                label: 'Cestino',
+                label: I18n.t('menu.trash'),
                 badge: trashCount > 0 ? trashCount : null,
                 badgeColor: 'var(--danger-color)',
                 onClick: () => UI.Trash.open()
@@ -60,80 +62,104 @@ Object.assign(UI, {
             { type: 'divider' },
             {
                 icon: Icons.lightning || '📦',
-                label: 'Installa Modulo (Modpack)...',
+                label: I18n.t('menu.install_modpack'),
                 onClick: () => PackageManager.importModpack()
             },
             {
                 icon: Icons.file,
-                label: 'Importa file Markdown...',
+                label: I18n.t('menu.import_markdown'),
                 onClick: () => ExportManager.importMarkdown()
             },
             {
                 icon: Icons.export,
-                label: 'Esporta Doc. Unico...',
+                label: I18n.t('menu.export_doc'),
                 onClick: () => ExportManager.openModal()
             },
             { type: 'divider' },
             {
                 icon: AppState.noWrapMode ? Icons.checkSquare : Icons.square,
-                label: 'No Word Wrap',
+                label: I18n.t('menu.no_word_wrap'),
                 onClick: () => UI.toggleWordWrap()
             },
             {
                 icon: AppState.continuousEditMode ? Icons.checkSquare : Icons.square,
-                label: 'Edit Continuo',
+                label: I18n.t('menu.continuous_edit'),
                 onClick: () => UI.toggleContinuousEdit()
             },
             {
                 icon: Icons.lock,
-                label: 'Sicurezza e Password...',
+                label: I18n.t('menu.security'),
                 onClick: () => UI.PasswordManager.openSettings()
             },
             { type: 'divider' },
             {
-                icon: Icons.palette,
-                label: 'Aspetto',
+                icon: Icons.settings || Icons.palette,
+                label: I18n.t('menu.configure'),
                 type: 'submenu',
                 items: [
                     {
                         type: 'custom',
-                        html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Layout Pagina</div>'
+                        html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('menu.page_layout')}</div>`
                     },
                     {
                         icon: isFullWidth ? Icons.widthFull : Icons.widthFit,
-                        label: isFullWidth ? 'Larghezza: Intera' : 'Larghezza: Standard',
+                        label: isFullWidth ? I18n.t('menu.width_full') : I18n.t('menu.width_standard'),
                         onClick: () => UI.togglePageWidth()
                     },
                     { type: 'divider' },
                     {
                         type: 'custom',
-                        html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Tema Colori</div>'
+                        html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('menu.color_theme')}</div>`
                     },
                     {
-                        label: 'Bianco Puro' + (currentTheme === 'white' ? chk : ''),
+                        label: I18n.t('menu.theme_white') + (currentTheme === 'white' ? chk : ''),
                         onClick: () => UI.setTheme('white')
                     },
                     {
-                        label: 'Carta avorio' + (currentTheme === 'light' ? chk : ''),
+                        label: I18n.t('menu.theme_light') + (currentTheme === 'light' ? chk : ''),
                         onClick: () => UI.setTheme('light')
                     },
                     {
-                        label: 'Fresco Pastello' + (currentTheme === 'pastel' ? chk : ''),
+                        label: I18n.t('menu.theme_pastel') + (currentTheme === 'pastel' ? chk : ''),
                         onClick: () => UI.setTheme('pastel')
                     },
                     {
-                        label: 'Blu lavagna' + (currentTheme === 'dark' ? chk : ''),
+                        label: I18n.t('menu.theme_dark') + (currentTheme === 'dark' ? chk : ''),
                         onClick: () => UI.setTheme('dark')
                     },
                     {
-                        label: 'Notte stellata' + (currentTheme === 'notion-dark' ? chk : ''),
+                        label: I18n.t('menu.theme_notion_dark') + (currentTheme === 'notion-dark' ? chk : ''),
                         onClick: () => UI.setTheme('notion-dark')
+                    },
+                    { type: 'divider' },
+                    {
+                        icon: Icons.globe || '🌐',
+                        label: I18n.t('menu.language'),
+                        type: 'submenu',
+                        items: [
+                            {
+                                label: 'Italiano' + (currentLang === 'it' ? chk : ''),
+                                onClick: () => I18n.setLanguage('it')
+                            },
+                            {
+                                label: 'English' + (currentLang === 'en' ? chk : ''),
+                                onClick: () => I18n.setLanguage('en')
+                            },
+                            {
+                                label: 'Español' + (currentLang === 'es' ? chk : ''),
+                                onClick: () => I18n.setLanguage('es')
+                            },
+                            {
+                                label: 'Deutsch' + (currentLang === 'de' ? chk : ''),
+                                onClick: () => I18n.setLanguage('de')
+                            }
+                        ]
                     },
                     { type: 'divider' },
                     {
                         type: 'custom',
                         html: `
-                            <div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Zoom Testo</div>
+                            <div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('menu.font_zoom')}</div>
                             <div style="display:flex; gap:5px; padding:4px 0;">
                                 <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(-1); event.stopPropagation();">A -</button>
                                 <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(1); event.stopPropagation();">A +</button>
@@ -145,7 +171,7 @@ Object.assign(UI, {
             { type: 'divider' },
             {
                 icon: Icons.book,
-                label: 'Manuale d\'Uso',
+                label: I18n.t('menu.manual'),
                 onClick: () => Manual.open()
             }
         ];
@@ -212,7 +238,7 @@ Object.assign(UI, {
             icon.innerHTML = !isFullWidth ? Icons.widthFull : Icons.widthFit;
         }
         if (text) {
-            text.innerText = !isFullWidth ? 'Larghezza: Intera' : 'Larghezza: Standard';
+            text.innerText = !isFullWidth ? I18n.t('menu.width_full') : I18n.t('menu.width_standard');
         }
     },
 
@@ -339,7 +365,7 @@ Object.assign(UI, {
             contentDiv.querySelectorAll('.adv-checklist input[type="checkbox"]').forEach(el => el.removeAttribute('disabled'));
 
             toolbar.classList.remove('hidden');
-            toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} Salva</span>`;
+            toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} ${I18n.t('common.save')}</span>`;
             toggleBtn.classList.add('btn-editing');
 
             if (typeof Editor !== 'undefined' && Editor.updateToolbarFormatting) {
@@ -355,7 +381,7 @@ Object.assign(UI, {
             contentDiv.querySelectorAll('.adv-checklist input[type="checkbox"]').forEach(el => el.setAttribute('disabled', 'true'));
 
             toolbar.classList.add('hidden');
-            toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.edit} Modifica</span>`;
+            toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.edit} ${I18n.t('common.edit')}</span>`;
             toggleBtn.classList.remove('btn-editing');
 
             if (typeof TableManager !== 'undefined') {
@@ -426,7 +452,7 @@ Object.assign(UI, {
             const icon = document.getElementById('pageWidthIcon');
             const text = document.getElementById('pageWidthBtn');
             if (icon) icon.innerHTML = savedPageWidth === '100%' ? Icons.widthFull : Icons.widthFit;
-            if (text) text.innerText = savedPageWidth === '100%' ? 'Larghezza: Intera' : 'Larghezza: Standard';
+            if (text) text.innerText = savedPageWidth === '100%' ? I18n.t('menu.width_full') : I18n.t('menu.width_standard');
         }
 
         const savedMinimap = localStorage.getItem('pronotes_minimap');
@@ -538,7 +564,7 @@ Object.assign(UI, {
                 if (target.classList.contains('file-link')) {
                     pathInfo = target.getAttribute('data-file-path') || '';
                 } else if (target.classList.contains('internal-link')) {
-                    pathInfo = 'Nota Interna (Workspace)';
+                    pathInfo = I18n.t('preferences.internal_note_badge');
                 } else {
                     pathInfo = pathInfo.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
                 }
@@ -550,8 +576,8 @@ Object.assign(UI, {
                 }
 
                 if (userNote) {
-                    htmlText = `<b>Note:</b> ${userNote}<br><span style="opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;">[ Path: ${displayPathInfo} ]</span>`;
-                } else if (displayPathInfo && displayPathInfo !== '#' && displayPathInfo !== 'Nota Interna (Workspace)') {
+                    htmlText = `<b>${I18n.t('preferences.note_prefix')}</b> ${userNote}<br><span style="opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;">[ ${I18n.t('preferences.path_prefix')} ${displayPathInfo} ]</span>`;
+                } else if (displayPathInfo && displayPathInfo !== '#' && displayPathInfo !== I18n.t('preferences.internal_note_badge')) {
                     htmlText = `<span style="font-size:0.85rem; word-break: break-all;">${displayPathInfo}</span>`;
                 }
             } 

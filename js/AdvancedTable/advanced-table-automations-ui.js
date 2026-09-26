@@ -29,7 +29,7 @@ Object.assign(AdvancedAutomations, {
             listHTML = `
                 <div style="text-align:center; padding:30px 10px; background: rgba(0,0,0,0.02); border-radius: 8px; border: 1px dashed var(--border-color);">
                     <div style="margin-bottom:10px; color:var(--accent-color);">${Icons.lightning}</div>
-                    <div style="color:var(--text-secondary); font-size:0.9rem;">Il database è attualmente manuale.<br>Aggiungi un'automazione per fargli fare il lavoro sporco.</div>
+                    <div style="color:var(--text-secondary); font-size:0.9rem;">${I18n.t('adv_automations.manual_db_hint')}</div>
                 </div>
             `;
         } else {
@@ -44,7 +44,7 @@ Object.assign(AdvancedAutomations, {
                 let errorBanner = '';
                 if (!auto.isValid) {
                     errorBanner = `<div style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color); padding: 8px; border-radius: 4px; font-size: 0.75rem; margin-bottom: 10px;">
-                        <b>⚠️ Errore Configurazione:</b><br> ${errors.join('<br>')}
+                        <b>${I18n.t('adv_automations.config_error')}</b><br> ${errors.join('<br>')}
                     </div>`;
                 }
 
@@ -65,15 +65,15 @@ Object.assign(AdvancedAutomations, {
                             </span>
                             <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; cursor:pointer; pointer-events:auto; background: ${isActive ? 'rgba(34, 197, 94, 0.1)' : 'var(--item-hover)'}; color: ${isActive ? '#166534' : 'var(--text-secondary)'}; padding: 4px 8px; border-radius: 12px; font-weight: bold;">
                                 <input type="checkbox" style="margin:0;" ${isActive ? 'checked' : ''} ${!auto.isValid ? 'disabled' : ''} onchange="AdvancedAutomations.toggleActive(event, '${tableId}', '${auto.id}', this.checked)">
-                                ${isActive ? 'Attiva' : (auto.isValid ? 'Spenta' : 'Bloccata')}
+                                ${isActive ? I18n.t('adv_automations.status_active') : (auto.isValid ? I18n.t('adv_automations.status_inactive') : I18n.t('adv_automations.status_blocked'))}
                             </label>
                         </div>
                         <div style="display:flex; gap:5px;">
-                            <button class="btn" style="flex:1; font-size:0.8rem; border-color: var(--border-color); color: var(--text-primary);" onclick="AdvancedAutomations.editAutomation(event, '${tableId}', '${auto.id}')"><span style="margin-right:5px; display:flex; align-items:center;">${Icons.edit}</span> Modifica / Correggi</button>
+                            <button class="btn" style="flex:1; font-size:0.8rem; border-color: var(--border-color); color: var(--text-primary);" onclick="AdvancedAutomations.editAutomation(event, '${tableId}', '${auto.id}')"><span style="margin-right:5px; display:flex; align-items:center;">${Icons.edit}</span> ${I18n.t('adv_automations.btn_edit_fix')}</button>
                             
-                            <button class="adv-icon-btn" style="padding:0 12px; background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius:4px; color: var(--accent-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.runMassiveAutomation(event, '${tableId}', '${auto.id}')" title="Esegui su tutte le righe">${Icons.play}</button>
+                            <button class="adv-icon-btn" style="padding:0 12px; background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius:4px; color: var(--accent-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.runMassiveAutomation(event, '${tableId}', '${auto.id}')" title="${I18n.t('adv_automations.title_run_all')}">${Icons.play}</button>
 
-                            <button class="adv-icon-btn danger" style="padding:0 12px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius:4px; color: var(--danger-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.deleteAutomation(event, '${tableId}', '${auto.id}')" title="Elimina">${Icons.trash}</button>
+                            <button class="adv-icon-btn danger" style="padding:0 12px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius:4px; color: var(--danger-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.deleteAutomation(event, '${tableId}', '${auto.id}')" title="${I18n.t('common.delete')}">${Icons.trash}</button>
                         </div>
                     </div>
                 `;
@@ -84,14 +84,14 @@ Object.assign(AdvancedAutomations, {
         const bodyHTML = `
             <div style="margin-bottom:20px;">
                 <p style="font-size:0.85rem; color:var(--text-secondary); line-height:1.5;">
-                    Le automazioni scattano in sequenza dall'alto verso il basso. Trascinane una per riordinarla. Le automazioni sono basate sugli eventi (scattano quando modifichi una cella). Clicca sul tasto "Play" per applicarle forzatamente allo storico.
+                    ${I18n.t('adv_automations.panel_desc')}
                 </p>
-                <button class="btn btn-primary" style="width:100%; justify-content:center; padding:10px; font-size:0.9rem;" onclick="AdvancedAutomations.createAutomation(event, '${tableId}')"><span style="margin-right:8px; display:flex;">${Icons.lightning}</span> Nuova Automazione</button>
+                <button class="btn btn-primary" style="width:100%; justify-content:center; padding:10px; font-size:0.9rem;" onclick="AdvancedAutomations.createAutomation(event, '${tableId}')"><span style="margin-right:8px; display:flex;">${Icons.lightning}</span> ${I18n.t('adv_automations.new_automation')}</button>
             </div>
             ${listHTML}
         `;
 
-        UI.openDrawer(`Automazioni Database`, bodyHTML, null);
+        UI.openDrawer(I18n.t('adv_automations.drawer_title'), bodyHTML, null);
     },
 
     onDragStart: (e, index) => {
@@ -151,7 +151,7 @@ Object.assign(AdvancedAutomations, {
 
     deleteAutomation: (e, tableId, autoId) => {
         if (e) e.stopPropagation();
-        if (!confirm("Sei sicuro di voler eliminare questa automazione?")) return;
+        if (!confirm(I18n.t('adv_automations.confirm_delete'))) return;
         let state = AdvancedTable.getState(tableId);
         state.automations = state.automations.filter(a => a.id !== autoId);
         AdvancedTable.setState(tableId, state);
@@ -187,11 +187,11 @@ Object.assign(AdvancedAutomations, {
 
     _buildRelationOptions: (colDef, selectedVal) => {
         const tState = AdvancedTable.getTableState(colDef.targetTableId);
-        if (!tState) return '<option value="">-- Errore DB --</option>';
+        if (!tState) return `<option value="">${I18n.t('adv_automations.error_db')}</option>`;
 
-        let opts = '<option value="">-- Seleziona --</option>';
+        let opts = `<option value="">${I18n.t('adv_automations.select_placeholder')}</option>`;
         tState.rows.forEach(r => {
-            let name = String(r.cells[colDef.targetColId] || 'Senza nome').replace(/"/g, '&quot;');
+            let name = String(r.cells[colDef.targetColId] || I18n.t('editor.untitled')).replace(/"/g, '&quot;');
             let sel = String(r.id) === String(selectedVal) ? 'selected' : '';
             opts += `<option value="${r.id}" ${sel}>${name}</option>`;
         });
@@ -204,7 +204,7 @@ Object.assign(AdvancedAutomations, {
             Object.keys(AppState.databases).forEach(id => {
                 const s = AppState.databases[id];
                 if (s && !s.isPivot && !s.isLinkedView && s.columns && !id.includes('adv_code_') && !id.includes('adv_btnbar_') && !id.includes('adv_cols_') && !id.includes('adv_journal_')) {
-                    dbList.push({ id: id, title: s.title || 'Database Sconosciuto' });
+                    dbList.push({ id: id, title: s.title || I18n.t('editor.database') });
                 }
             });
         }
@@ -277,7 +277,7 @@ Object.assign(AdvancedAutomations, {
             }
         });
 
-        colOptions += `</optgroup><optgroup label="Avanzate"><option value="SYS_JS_FORMULA" style="color:var(--accent-color); font-weight:bold;">Formula JS (Personalizzata)</option></optgroup>`;
+        colOptions += `</optgroup><optgroup label="${I18n.t('adv_automations.group_advanced')}"><option value="SYS_JS_FORMULA" style="color:var(--accent-color); font-weight:bold;">${I18n.t('adv_automations.timer_mode_formula')}</option></optgroup>`;
 
         const dateCols = cols.filter(c => c.type === 'date' || c.type === 'datetime');
 
@@ -324,10 +324,10 @@ Object.assign(AdvancedAutomations, {
 
                         let modeSelectHtml = `
                             <select class="modern-input" style="width:100%; font-weight:bold; margin-bottom:10px; background:rgba(0,0,0,0.02); padding:10px; border-radius:6px;" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'operator', this.value)">
-                                <option value="every_day" ${!isColumnBased && !isExactDate && !isFormula ? 'selected' : ''}>Orario Fisso (Ricorrente)</option>
-                                <option value="exact_date" ${isExactDate ? 'selected' : ''}>Data e Ora esatta (Una tantum)</option>
-                                <option value="col_reference" ${isColumnBased ? 'selected' : ''} ${dateCols.length===0 ? 'disabled' : ''}>Basato su Colonna Data del Record</option>
-                                <option value="formula" ${isFormula ? 'selected' : ''}>Formula JS (Personalizzata)</option>
+                                <option value="every_day" ${!isColumnBased && !isExactDate && !isFormula ? 'selected' : ''}>${I18n.t('adv_automations.timer_mode_recurring')}</option>
+                                <option value="exact_date" ${isExactDate ? 'selected' : ''}>${I18n.t('adv_automations.timer_mode_exact')}</option>
+                                <option value="col_reference" ${isColumnBased ? 'selected' : ''} ${dateCols.length===0 ? 'disabled' : ''}>${I18n.t('adv_automations.timer_mode_column')}</option>
+                                <option value="formula" ${isFormula ? 'selected' : ''}>${I18n.t('adv_automations.timer_mode_formula')}</option>
                             </select>
                         `;
 
@@ -336,7 +336,7 @@ Object.assign(AdvancedAutomations, {
                                 <div style="display:flex; flex-direction:column; width:100%;">
                                     ${modeSelectHtml}
                                     <div style="display:flex; align-items:center; gap:10px; width:100%; background:var(--bg-color); border:1px solid var(--border-color); padding:10px; border-radius:6px;">
-                                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">L'azione scatterà ESATTAMENTE il:</span>
+                                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_automations.timer_exact_label')}</span>
                                         <input type="datetime-local" class="modern-input" style="flex:1; padding:6px; font-size:1rem; font-weight:bold; color:var(--accent-color);" value="${safeVal}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">
                                     </div>
                                 </div>
@@ -352,12 +352,12 @@ Object.assign(AdvancedAutomations, {
                                     ${modeSelectHtml}
                                     <div style="display:flex; flex-direction:column; gap:5px; width:100%; background:var(--bg-color); border:1px solid var(--border-color); padding:10px; border-radius:6px;">
                                         <div style="display:flex; justify-content:space-between; align-items:center;">
-                                            <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">Condizione Javascript (deve ritornare TRUE):</span>
-                                            <button class="btn" style="padding:2px 6px; font-size:0.75rem;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btn_prompt_timer_${idx}')" id="btn_prompt_timer_${idx}">${Icons.clipboard} Aiuto AI</button>
+                                            <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_automations.js_condition_label')}</span>
+                                            <button class="btn" style="padding:2px 6px; font-size:0.75rem;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btn_prompt_timer_${idx}')" id="btn_prompt_timer_${idx}">${Icons.clipboard} ${I18n.t('adv_automations.ai_help')}</button>
                                         </div>
                                         <textarea id="${inputId}" class="modern-input" style="width:100%; font-family:monospace; min-height:80px; resize:vertical; font-size:0.85rem; color:var(--accent-color);" placeholder="Es: riga['Stato'] === 'In Lavorazione' && OGGI() === '2025-12-31'" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">${safeVal}</textarea>
                                         <div id="${prevId}" style="width:100%; background:rgba(0,0,0,0.02); padding:8px; border-radius:4px; font-family:monospace; font-size:0.85rem; border:1px dashed var(--border-color); margin-top:5px;"></div>
-                                        <div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8; margin-top:5px;">Il motore verificherà questa formula per ogni singola riga del database ogni minuto. Usala con cautela.</div>
+                                        <div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8; margin-top:5px;">${I18n.t('adv_automations.timer_formula_hint')}</div>
                                     </div>
                                 </div>
                             `;
@@ -376,7 +376,7 @@ Object.assign(AdvancedAutomations, {
                                         ${renderDayBtn('D', '0', activeDays)}
                                     </div>
                                     <div style="display:flex; align-items:center; gap:10px; width:100%; background:var(--bg-color); border:1px solid var(--border-color); padding:10px; border-radius:6px;">
-                                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">Fai scattare l'azione alle ore:</span>
+                                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_automations.timer_fire_at_time')}</span>
                                         <input type="time" class="modern-input" style="flex:1; padding:6px; font-size:1rem; font-weight:bold; color:var(--accent-color);" value="${safeVal || '09:00'}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">
                                     </div>
                                 </div>
@@ -396,20 +396,20 @@ Object.assign(AdvancedAutomations, {
                                 <div style="display:flex; flex-direction:column; width:100%;">
                                     ${modeSelectHtml}
                                     <div style="display:flex; align-items:center; gap:10px; width:100%; margin-bottom:10px; background:var(--bg-color); border:1px solid var(--border-color); padding:10px; border-radius:6px;">
-                                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">Quando arriva la data in:</span>
+                                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_automations.when_date_arrives')}</span>
                                         <select class="modern-input" style="flex:1; padding:6px; font-size:0.9rem; font-weight:bold;" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">${dateOpts}</select>
                                     </div>
                                     <div style="display:flex; align-items:center; gap:5px; width:100%;">
-                                        <span style="font-size:0.8rem; color:var(--text-secondary); margin-right:5px;">L'azione scatterà:</span>
+                                        <span style="font-size:0.8rem; color:var(--text-secondary); margin-right:5px;">${I18n.t('adv_automations.action_fires_shift')}</span>
                                         <input type="number" id="shiftNum_${idx}" class="modern-input" style="width:60px; padding:6px; font-size:0.85rem; text-align:center;" value="${shiftNum}" min="0" onchange="AdvancedAutomations._updateTimerShift(${idx})">
                                         <select id="shiftUnit_${idx}" class="modern-input" style="width:90px; padding:6px; font-size:0.85rem;" onchange="AdvancedAutomations._updateTimerShift(${idx})">
-                                            <option value="1" ${shiftUnit === 1 ? 'selected' : ''}>Minuti</option>
-                                            <option value="60" ${shiftUnit === 60 ? 'selected' : ''}>Ore</option>
-                                            <option value="1440" ${shiftUnit === 1440 ? 'selected' : ''}>Giorni</option>
+                                            <option value="1" ${shiftUnit === 1 ? 'selected' : ''}>${I18n.t('adv_automations.unit_minutes')}</option>
+                                            <option value="60" ${shiftUnit === 60 ? 'selected' : ''}>${I18n.t('adv_automations.unit_hours')}</option>
+                                            <option value="1440" ${shiftUnit === 1440 ? 'selected' : ''}>${I18n.t('adv_automations.unit_days')}</option>
                                         </select>
                                         <select id="shiftDir_${idx}" class="modern-input" style="width:90px; padding:6px; font-size:0.85rem;" onchange="AdvancedAutomations._updateTimerShift(${idx})">
-                                            <option value="-1" ${shiftDir === -1 ? 'selected' : ''}>Prima</option>
-                                            <option value="1" ${shiftDir === 1 ? 'selected' : ''}>Dopo</option>
+                                            <option value="-1" ${shiftDir === -1 ? 'selected' : ''}>${I18n.t('adv_automations.dir_before')}</option>
+                                            <option value="1" ${shiftDir === 1 ? 'selected' : ''}>${I18n.t('adv_automations.dir_after')}</option>
                                         </select>
                                     </div>
                                 </div>
@@ -419,11 +419,11 @@ Object.assign(AdvancedAutomations, {
                         operatorOptions = `<option value="${t.operator}" style="display:none;"></option>`;
 
                     } else {
-                        operatorOptions = `<option value="sys_trigger">Si verifica</option>`;
+                        operatorOptions = `<option value="sys_trigger">${I18n.t('adv_automations.event_occurs')}</option>`;
                         isHiddenValue = t.colId !== 'SYS_CROSS_DB';
                         
                         if (t.colId === 'SYS_CROSS_DB') {
-                            let dbOpts = '<option value="">-- Seleziona DB --</option>';
+                            let dbOpts = `<option value="">${I18n.t('adv_actions.select_db_placeholder')}</option>`;
                             allDBs.forEach(db => {
                                 if (db.id !== tableId) dbOpts += `<option value="${db.id}" ${t.value === db.id ? 'selected' : ''}>${db.title}</option>`;
                             });
@@ -481,26 +481,26 @@ Object.assign(AdvancedAutomations, {
                     }
                 }
 
-                let headerLeft = `<span style="font-size:0.75rem; font-weight:bold; color:var(--accent-color); width:25px; text-align:right;">${isFirst ? 'SE' : 'E'}</span>`;
+                let headerLeft = `<span style="font-size:0.75rem; font-weight:bold; color:var(--accent-color); width:25px; text-align:right;">${isFirst ? I18n.t('adv_automations.cond_if') : I18n.t('adv_automations.cond_and')}</span>`;
                 let delBtn = `<button class="adv-icon-btn danger" style="padding: 4px 6px; display:flex; flex-shrink:0;" onclick="AdvancedAutomations._removeTrigger(event, ${idx})">${Icons.trash}</button>`;
 
                 if (t.colId === 'SYS_TIMER') {
                     triggersHTML += `
                         <div style="position:relative; background: var(--bg-color); padding: 15px; border-radius: 6px; margin-bottom:10px;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; border-bottom:1px solid var(--border-color); padding-bottom:5px;">
-                                <div style="font-size:0.85rem; font-weight:bold; color:var(--accent-color); display:flex; align-items:center; gap:5px;">⏰ Condizione a Tempo</div>
+                                <div style="font-size:0.85rem; font-weight:bold; color:var(--accent-color); display:flex; align-items:center; gap:5px;">${I18n.t('adv_automations.time_condition_title')}</div>
                                 ${delBtn}
                             </div>
                             <div style="${rowLayout}">
                                 <select class="modern-input" style="${colSelectFlex} padding:6px; font-size:0.85rem; font-weight:bold; color:var(--text-primary);" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'colId', this.value)">
-                                    <optgroup label="Eventi di Sistema">
-                                        <option value="SYS_NEW_ROW" ${t.colId === 'SYS_NEW_ROW' ? 'selected' : ''}>⚡ Creazione Nuova Riga</option>
-                                        <option value="SYS_ANY_CHANGE" ${t.colId === 'SYS_ANY_CHANGE' ? 'selected' : ''}>⚡ Qualsiasi Modifica Dati</option>
-                                        <option value="SYS_TIMER" ${t.colId === 'SYS_TIMER' ? 'selected' : ''}>⏰ Orario Programmato</option>
-                                        <option value="SYS_CROSS_DB" ${t.colId === 'SYS_CROSS_DB' ? 'selected' : ''}>🌐 Modifica in altro Database</option>
-                                        <option value="SYS_ON_LOAD" ${t.colId === 'SYS_ON_LOAD' ? 'selected' : ''}>👁️ Al caricamento della Tabella</option>
+                                    <optgroup label="${I18n.t('adv_automations.group_sys_events')}">
+                                        <option value="SYS_NEW_ROW" ${t.colId === 'SYS_NEW_ROW' ? 'selected' : ''}>${I18n.t('adv_automations.evt_new_row')}</option>
+                                        <option value="SYS_ANY_CHANGE" ${t.colId === 'SYS_ANY_CHANGE' ? 'selected' : ''}>${I18n.t('adv_automations.evt_any_change')}</option>
+                                        <option value="SYS_TIMER" ${t.colId === 'SYS_TIMER' ? 'selected' : ''}>${I18n.t('adv_automations.evt_timer')}</option>
+                                        <option value="SYS_CROSS_DB" ${t.colId === 'SYS_CROSS_DB' ? 'selected' : ''}>${I18n.t('adv_automations.evt_cross_db')}</option>
+                                        <option value="SYS_ON_LOAD" ${t.colId === 'SYS_ON_LOAD' ? 'selected' : ''}>${I18n.t('adv_automations.evt_on_load')}</option>
                                     </optgroup>
-                                    <optgroup label="Valori Colonne">
+                                    <optgroup label="${I18n.t('adv_automations.group_col_values')}">
                                         ${colOptions.replace(`value="${t.colId}"`, `value="${t.colId}" selected`)}
                                     </optgroup>
                                 </select>
@@ -515,14 +515,14 @@ Object.assign(AdvancedAutomations, {
                         <div style="${rowLayout} background: var(--bg-color); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); ${tColDef && tColDef.id === 'SYS_JS_FORMULA' ? 'align-items:flex-start;' : ''}">
                             ${headerLeft}
                             <select class="modern-input" style="${colSelectFlex} padding:6px; font-size:0.85rem; font-weight:bold; color:var(--text-primary); ${tColDef && tColDef.id === 'SYS_JS_FORMULA' ? 'margin-top:5px;' : ''}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'colId', this.value)">
-                                <optgroup label="Eventi di Sistema">
-                                    <option value="SYS_NEW_ROW" ${t.colId === 'SYS_NEW_ROW' ? 'selected' : ''}>⚡ Creazione Nuova Riga</option>
-                                    <option value="SYS_ANY_CHANGE" ${t.colId === 'SYS_ANY_CHANGE' ? 'selected' : ''}>⚡ Qualsiasi Modifica Dati</option>
-                                    <option value="SYS_TIMER" ${t.colId === 'SYS_TIMER' ? 'selected' : ''}>⏰ Orario Programmato</option>
-                                    <option value="SYS_CROSS_DB" ${t.colId === 'SYS_CROSS_DB' ? 'selected' : ''}>🌐 Modifica in altro Database</option>
-                                    <option value="SYS_ON_LOAD" ${t.colId === 'SYS_ON_LOAD' ? 'selected' : ''}>👁️ Al caricamento della Tabella</option>
+                                <optgroup label="${I18n.t('adv_automations.group_sys_events')}">
+                                    <option value="SYS_NEW_ROW" ${t.colId === 'SYS_NEW_ROW' ? 'selected' : ''}>${I18n.t('adv_automations.evt_new_row')}</option>
+                                    <option value="SYS_ANY_CHANGE" ${t.colId === 'SYS_ANY_CHANGE' ? 'selected' : ''}>${I18n.t('adv_automations.evt_any_change')}</option>
+                                    <option value="SYS_TIMER" ${t.colId === 'SYS_TIMER' ? 'selected' : ''}>${I18n.t('adv_automations.evt_timer')}</option>
+                                    <option value="SYS_CROSS_DB" ${t.colId === 'SYS_CROSS_DB' ? 'selected' : ''}>${I18n.t('adv_automations.evt_cross_db')}</option>
+                                    <option value="SYS_ON_LOAD" ${t.colId === 'SYS_ON_LOAD' ? 'selected' : ''}>${I18n.t('adv_automations.evt_on_load')}</option>
                                 </optgroup>
-                                <optgroup label="Valori Colonne">
+                                <optgroup label="${I18n.t('adv_automations.group_col_values')}">
                                     ${colOptions.replace(`value="${t.colId}"`, `value="${t.colId}" selected`)}
                                 </optgroup>
                             </select>
@@ -554,16 +554,16 @@ Object.assign(AdvancedAutomations, {
         });
 
         let targetColOptions = `
-            <optgroup label="Azioni di Sistema">
+            <optgroup label="${I18n.t('adv_automations.group_sys_actions')}">
                 <option value="SYS_ACTION">⚙️ Esegui...</option>
             </optgroup>
-            <optgroup label="Colonne Tabella">
+            <optgroup label="${I18n.t('adv_automations.group_tbl_columns')}">
                 ${colsForActions}
             </optgroup>
         `;
 
         if (auto.actions.length === 0) {
-            actionsHTML = `<div style="font-size:0.8rem; color:var(--danger-color); margin:10px 0; text-align:center;">Seleziona cosa deve fare l'automazione.</div>`;
+            actionsHTML = `<div style="font-size:0.8rem; color:var(--danger-color); margin:10px 0; text-align:center;">${I18n.t('adv_automations.empty_actions_warning')}</div>`;
         } else {
             auto.actions.forEach((a, idx) => {
                 let aColDef = cols.find(c => c.id === a.colId);
@@ -577,22 +577,22 @@ Object.assign(AdvancedAutomations, {
 
                 if (a.colId === 'SYS_ACTION') {
                     typeOptionsHTML = `
-                        <option value="color_row" ${a.type === 'color_row' ? 'selected' : ''}>Colora Sfondo Riga Database</option>
-                        <option value="show_toast" ${a.type === 'show_toast' ? 'selected' : ''}>Invia Notifica a scomparsa</option>
-                        <option value="alarm" ${a.type === 'alarm' ? 'selected' : ''}>Allarme Sonoro Continuo</option>
-                        <option value="stop_execution" ${a.type === 'stop_execution' ? 'selected' : ''}>Ferma Automazione (Stop)</option>
-                        <option value="insert_row" ${a.type === 'insert_row' ? 'selected' : ''}>Crea Record in Altro DB</option>
+                        <option value="color_row" ${a.type === 'color_row' ? 'selected' : ''}>${I18n.t('adv_automations.act_color_row')}</option>
+                        <option value="show_toast" ${a.type === 'show_toast' ? 'selected' : ''}>${I18n.t('adv_automations.act_toast')}</option>
+                        <option value="alarm" ${a.type === 'alarm' ? 'selected' : ''}>${I18n.t('adv_automations.act_alarm')}</option>
+                        <option value="stop_execution" ${a.type === 'stop_execution' ? 'selected' : ''}>${I18n.t('adv_automations.act_stop')}</option>
+                        <option value="insert_row" ${a.type === 'insert_row' ? 'selected' : ''}>${I18n.t('adv_automations.act_insert_other_db')}</option>
                     `;
                     if (a.type === 'show_toast' || a.type === 'alarm') {
-                        valInputHTML = `<input type="text" class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="Messaggio (Usa = per le Formule)" oninput="AdvancedAutomations._updateAction(event, ${idx}, 'value', this.value)">`;
+                        valInputHTML = `<input type="text" class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="${I18n.t('adv_automations.toast_msg_placeholder')}" oninput="AdvancedAutomations._updateAction(event, ${idx}, 'value', this.value)">`;
                     } else if (a.type === 'insert_row') {
-                        let dbOpts = '<option value="">-- Seleziona DB --</option>';
+                        let dbOpts = `<option value="">${I18n.t('adv_actions.select_db_placeholder')}</option>`;
                         allDBs.forEach(db => {
                             if (db.id !== tableId) dbOpts += `<option value="${db.id}" ${a.value === db.id ? 'selected' : ''}>📊 ${db.title}</option>`;
                         });
                         valInputHTML = `
                             <select class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" onchange="AdvancedAutomations._updateAction(event, ${idx}, 'value', this.value)">${dbOpts}</select>
-                            <input type="text" class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" value="${String(a.value2 || '').replace(/"/g, '&quot;')}" placeholder="Nome della nuova riga (Titolo)..." oninput="AdvancedAutomations._updateAction(event, ${idx}, 'value2', this.value)">
+                            <input type="text" class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" value="${String(a.value2 || '').replace(/"/g, '&quot;')}" placeholder="${I18n.t('adv_automations.new_record_title_placeholder')}" oninput="AdvancedAutomations._updateAction(event, ${idx}, 'value2', this.value)">
                         `;
                     } else if (a.type === 'color_row') {
                         
@@ -608,15 +608,15 @@ Object.assign(AdvancedAutomations, {
 
                         let opInput = `
                             <div style="display:flex; align-items:center; gap:5px; margin-left:auto; padding:4px 8px; border-radius:4px; border:1px solid var(--border-color); flex-shrink:0;">
-                                <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:bold;">Opacità:</span>
+                                <span style="font-size:0.75rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('adv_automations.opacity_label')}</span>
                                 <select class="modern-input" style="padding:2px; font-size:0.75rem;" onchange="
                                     const isF = this.value === 'formula';
                                     const newVal = isF ? '=riga[\\'\\']' : '100';
                                     AdvancedAutomations._updateAction(event, ${idx}, 'value2', newVal);
                                     AdvancedAutomations._renderBuilder('${tableId}');
                                 ">
-                                    <option value="fixed" ${!isFormulaOp ? 'selected' : ''}>Fissa %</option>
-                                    <option value="formula" ${isFormulaOp ? 'selected' : ''}>Formula JS</option>
+                                    <option value="fixed" ${!isFormulaOp ? 'selected' : ''}>${I18n.t('adv_automations.opacity_fixed')}</option>
+                                    <option value="formula" ${isFormulaOp ? 'selected' : ''}>${I18n.t('adv_automations.opacity_formula')}</option>
                                 </select>
                                 ${!isFormulaOp 
                                     ? `<input type="number" class="modern-input action-val2" style="padding:2px; text-align:center;" value="${safeOpVal}" min="0" max="100" oninput="AdvancedAutomations._updateAction(event, ${idx}, 'value2', this.value)">`
@@ -631,7 +631,7 @@ Object.assign(AdvancedAutomations, {
                     actionsHTML += `
                         <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px; align-items:flex-start; background: var(--bg-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
                             <div style="display:flex; width:100%; align-items:center; gap:8px;">
-                                <span style="font-size:0.75rem; font-weight:bold; color:var(--tx-c4); width:55px; text-align:right;">ALLORA</span>
+                                <span style="font-size:0.75rem; font-weight:bold; color:var(--tx-c4); width:55px; text-align:right;">${I18n.t('adv_automations.cond_then')}</span>
                                 <select class="modern-input" style="flex:1; margin:0; font-weight:bold; color:var(--text-primary);" onchange="AdvancedAutomations._updateAction(event, ${idx}, 'colId', this.value)">
                                     ${targetColOptions.replace(`value="${a.colId}"`, `value="${a.colId}" selected`)}
                                 </select>
@@ -659,7 +659,7 @@ Object.assign(AdvancedAutomations, {
                         actionsHTML += `
                             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px; background: var(--bg-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
                                 <div style="display:flex; align-items:center; width:100%; gap:8px;">
-                                    <span style="font-size:0.75rem; font-weight:bold; color:var(--tx-c4); width:55px; text-align:right;">ALLORA</span>
+                                    <span style="font-size:0.75rem; font-weight:bold; color:var(--tx-c4); width:55px; text-align:right;">${I18n.t('adv_automations.cond_then')}</span>
                                     <select class="modern-input" style="flex:1; margin:0; font-weight:bold; color:var(--text-primary);" onchange="AdvancedAutomations._updateAction(event, ${idx}, 'colId', this.value)">
                                         ${targetColOptions.replace(`value="${a.colId}"`, `value="${a.colId}" selected`)}
                                     </select>
@@ -679,7 +679,7 @@ Object.assign(AdvancedAutomations, {
                     } else {
                         actionsHTML += `
                             <div style="display:flex; gap:8px; margin-bottom:8px; align-items:center; background: var(--bg-color); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
-                                <span style="font-size:0.75rem; font-weight:bold; color:var(--tx-c4); width:55px; text-align:right;">ALLORA</span>
+                                <span style="font-size:0.75rem; font-weight:bold; color:var(--tx-c4); width:55px; text-align:right;">${I18n.t('adv_automations.cond_then')}</span>
                                 <select class="modern-input" style="flex:1; margin:0; font-weight:bold; color:var(--text-primary);" onchange="AdvancedAutomations._updateAction(event, ${idx}, 'colId', this.value)">
                                     ${targetColOptions.replace(`value="${a.colId}"`, `value="${a.colId}" selected`)}
                                 </select>
@@ -705,10 +705,10 @@ Object.assign(AdvancedAutomations, {
                 <div style="background: rgba(37, 99, 235, 0.05); padding: 10px 12px; border-radius: 6px; border: 1px solid rgba(37, 99, 235, 0.2); margin-bottom: 10px; font-size: 0.8rem; display:flex; align-items:center; gap:10px;">
                     <span style="display:inline-flex; color:var(--accent-color);">${Icons.formula}</span>
                     <div style="flex:1; color:var(--text-secondary);">
-                        <b>Modo Formula attivo:</b> Usa <code>riga["Nome"]</code> per leggere i dati. Per farti aiutare da un'IA, copia le istruzioni.
+                        <b>${I18n.t('adv_automations.formula_mode_title')}</b> ${I18n.t('adv_automations.formula_mode_desc')}
                     </div>
                     <button id="btnCopyAutoAIPrompt_Auto" class="btn" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink:0;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btnCopyAutoAIPrompt_Auto')" title="Copia Prompt per AI">
-                        <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} Copia Prompt AI</span>
+                        <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${I18n.t('adv_automations.copy_ai_prompt')}</span>
                     </button>
                 </div>
             `;
@@ -717,22 +717,22 @@ Object.assign(AdvancedAutomations, {
         const bodyHTML = `
             <div style="display:flex; flex-direction:column; gap:15px; height:100%; padding-bottom:20px;">
                 <div>
-                    <label style="font-size:0.85rem; font-weight:bold; color:var(--text-secondary);">Nome Automazione (Opzionale):</label>
-                    <input type="text" class="modern-input" style="font-size:1.1rem; font-weight:bold; border-bottom:2px solid var(--border-color)!important;" value="${safeAutoName}" placeholder="Es: Seleziona Stato In Corso, auto-imposta la data" oninput="AdvancedAutomations._tempAuto.name = this.value">
+                    <label style="font-size:0.85rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_automations.auto_name_label')}</label>
+                    <input type="text" class="modern-input" style="font-size:1.1rem; font-weight:bold; border-bottom:2px solid var(--border-color)!important;" value="${safeAutoName}" placeholder="${I18n.t('adv_automations.auto_name_placeholder')}" oninput="AdvancedAutomations._tempAuto.name = this.value">
                 </div>
 
                 <div style="background:var(--item-hover); padding:15px; border-radius:8px; border:1px solid var(--border-color);">
                     <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                        <h4 style="margin:0; font-size:0.95rem; color:var(--accent-color); display:flex; align-items:center; gap:6px;">${Icons.lightning} CONDIZIONI</h4>
-                        <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary);" onclick="AdvancedAutomations._addTrigger(event, '${tableId}')">+ Aggiungi Condizione</button>
+                        <h4 style="margin:0; font-size:0.95rem; color:var(--accent-color); display:flex; align-items:center; gap:6px;">${Icons.lightning} ${I18n.t('adv_automations.conditions_header')}</h4>
+                        <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary);" onclick="AdvancedAutomations._addTrigger(event, '${tableId}')">${I18n.t('adv_automations.btn_add_condition')}</button>
                     </div>
                     ${triggersHTML}
                 </div>
 
                 <div style="background:var(--item-hover); padding:15px; border-radius:8px; border:1px solid var(--border-color);">
                     <div style="display:flex; justify-content:space-between; margin-bottom:15px;">
-                        <h4 style="margin:0; font-size:0.95rem; color:var(--tx-c4); display:flex; align-items:center; gap:6px;">${Icons.data} AZIONI</h4>
-                        <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary);" onclick="AdvancedAutomations._addAction(event, '${tableId}')">+ Aggiungi Azione</button>
+                        <h4 style="margin:0; font-size:0.95rem; color:var(--tx-c4); display:flex; align-items:center; gap:6px;">${Icons.data} ${I18n.t('adv_automations.actions_header')}</h4>
+                        <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary);" onclick="AdvancedAutomations._addAction(event, '${tableId}')">${I18n.t('adv_automations.btn_add_action')}</button>
                     </div>
                     ${formulaHelperHTML}
                     ${actionsHTML}
@@ -741,11 +741,11 @@ Object.assign(AdvancedAutomations, {
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="AdvancedAutomations.openPanel(event, '${tableId}')">Annulla</button>
-            <button class="btn btn-primary" onclick="AdvancedAutomations.saveAutomation(event, '${tableId}')">Salva Automazione</button>
+            <button class="btn" onclick="AdvancedAutomations.openPanel(event, '${tableId}')">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="AdvancedAutomations.saveAutomation(event, '${tableId}')">${I18n.t('adv_automations.save_automation')}</button>
         `;
 
-        UI.openDrawer(`Configura Automazione`, bodyHTML, footerHTML);
+        UI.openDrawer(I18n.t('adv_automations.configure_automation'), bodyHTML, footerHTML);
 
         setTimeout(() => {
             formulaPreviews.forEach(p => {

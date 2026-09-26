@@ -36,7 +36,7 @@ Object.assign(AdvancedTable, {
         }
 
         if (!state) {
-            alert("Database o Diario non trovato. L'operazione è stata annullata.");
+            alert(I18n.t('adv_col_menu.target_db_missing'));
             return;
         }
 
@@ -154,7 +154,7 @@ Object.assign(AdvancedTable, {
                             content += `<span class="adv-select-pill ${colorClass}" style="margin-right:4px;">${v}</span>`;
                         });
                     } else {
-                        content = `<span class="adv-select-empty" style="color:var(--text-secondary);">Clicca per Selezionare...</span>`;
+                        content = `<span class="adv-select-empty" style="color:var(--text-secondary);">${I18n.t('adv_record.click_to_select')}</span>`;
                     }
                     const cellId = `adv-sel-rec-${tableId}-${rowId}-${col.id}`;
                     displayVal = `<div id="${cellId}" class="adv-select-container" style="justify-content:flex-end; padding:6px; border:1px dashed var(--border-color); border-radius:4px; min-width:150px; cursor:pointer;" onclick="AdvancedTable.openSelectMenu(event, '${tableId}', '${rowId}', '${col.id}')">${content}</div>`;
@@ -171,7 +171,7 @@ Object.assign(AdvancedTable, {
                     if (linkObj && linkObj.noteId) {
                         targetNote = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
                         if (targetNote && !targetNote.deletedAt) {
-                            noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || 'Senza Titolo');
+                            noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || I18n.t('editor.untitled'));
                         } else if (targetNote && targetNote.deletedAt) {
                             noteTitle = 'Nota nel Cestino';
                         } else {
@@ -185,14 +185,14 @@ Object.assign(AdvancedTable, {
                         displayVal = `
                             <div style="display:flex; align-items:center; gap:6px; justify-content:flex-end; width:100%;">
                                 <a class="internal-link" style="cursor:pointer;" ${clickNav}>${safeTitle}</a>
-                                <button class="btn" style="padding:2px 8px; font-size:0.75rem;" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${rowId}', '${col.id}')">${Icons.edit} Cambia</button>
-                                <button class="adv-icon-btn danger" style="padding:2px 6px;" title="Rimuovi" onclick="event.stopPropagation(); AdvancedTable.clearNoteLink(event, '${tableId}', '${rowId}', '${col.id}')">${Icons.close}</button>
+                                <button class="btn" style="padding:2px 8px; font-size:0.75rem;" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${rowId}', '${col.id}')">${Icons.edit} ${I18n.t('adv_record.change_link')}</button>
+                                <button class="adv-icon-btn danger" style="padding:2px 6px;" title="${I18n.t('common.delete')}" onclick="event.stopPropagation(); AdvancedTable.clearNoteLink(event, '${tableId}', '${rowId}', '${col.id}')">${Icons.close}</button>
                             </div>
                         `;
                     } else {
                         displayVal = `
                             <button class="btn" style="padding:4px 10px; font-size:0.8rem; border:1px dashed var(--accent-color); color:var(--accent-color);" onclick="event.stopPropagation(); AdvancedTable.openNoteLinkSelector(event, '${tableId}', '${rowId}', '${col.id}')">
-                                <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.link} Seleziona Nota...</span>
+                                <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.link} ${I18n.t('adv_record.select_note_btn')}</span>
                             </button>
                         `;
                     }
@@ -208,13 +208,13 @@ Object.assign(AdvancedTable, {
                         const ctxStr = `{srcTable: '${tableId}', srcRow: '${rowId}', srcCol: '${col.id}', isBacklink: false}`;
                         details.forEach(rel => {
                             if (rel.name === 'Orfano') {
-                                pills += `<span class="adv-select-pill hl-c10">Orfano</span>`;
+                                pills += `<span class="adv-select-pill hl-c10">${I18n.t('adv_record.orphan_badge')}</span>`;
                             } else {
                                 pills += `<span class="adv-select-pill default-color" style="margin-right:4px;" onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxStr}), 100)">${UI.escapeHTML(rel.name)}</span>`;
                             }
                         });
                     } else {
-                        pills = `<span class="adv-select-empty" style="color:var(--text-secondary);">Clicca per Selezionare...</span>`;
+                        pills = `<span class="adv-select-empty" style="color:var(--text-secondary);">${I18n.t('adv_record.click_to_select')}</span>`;
                     }
                     
                     const clickEvent = `onclick="AdvancedTable.openRelationSelector(event, '${tableId}', '${rowId}', '${col.id}')"`;
@@ -226,7 +226,7 @@ Object.assign(AdvancedTable, {
                     if (noteObj && noteObj.deletedAt) noteObj = null;
                     
                     const isAttached = !!noteObj;
-                    const noteTitle = isAttached ? (noteObj.title || 'Senza Titolo') : 'Apri Pagina';
+                    const noteTitle = isAttached ? (noteObj.title || I18n.t('editor.untitled')) : I18n.t('adv_record.open_page');
                     const btnStyle = isAttached ? 'color: var(--record-color, #10b981); font-weight: bold; background: var(--record-bg, rgba(16, 185, 129, 0.1)); border-color: var(--record-color, #10b981);' : 'color: var(--text-secondary); opacity: 0.7;';
                     displayVal = `<button class="btn" style="padding: 4px 10px; border: 1px solid var(--border-color); width: 100%; justify-content: flex-end; ${btnStyle}" onclick="UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordNote('${tableId}', '${row.id}', '${col.id}'), 50);">
                                     <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordPage} ${noteTitle}</span>
@@ -261,7 +261,7 @@ Object.assign(AdvancedTable, {
                                     <span class="adv-select-pill default-color" style="font-family:monospace; padding:2px 8px;">${val || 0}</span>
                                 </div>`;
                     } else if (col.backlinkDisplay === 'property') {
-                        displayVal = `<div style="text-align:right; white-space:pre-wrap; word-break:break-word; width:100%; box-sizing:border-box; font-size:0.9em;" ${readOnlyTip}>${val || '<span class="adv-select-empty" style="float:right;">Vuoto</span>'}</div>`;
+                        displayVal = `<div style="text-align:right; white-space:pre-wrap; word-break:break-word; width:100%; box-sizing:border-box; font-size:0.9em;" ${readOnlyTip}>${val || `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`}</div>`;
                     } else {
                         const targetDbId = col.linkedTableId;
                         const details = AdvancedTable.resolveRelationDetails(col, val, state._renderCache || {});
@@ -272,14 +272,14 @@ Object.assign(AdvancedTable, {
 
                             details.forEach(rel => {
                                 if (rel.name === 'Orfano') {
-                                    displayVal += `<span class="adv-select-pill hl-c10">Orfano</span>`;
+                                    displayVal += `<span class="adv-select-pill hl-c10">${I18n.t('adv_record.orphan_badge')}</span>`;
                                 } else {
                                     displayVal += `<span class="adv-select-pill default-color" style="margin:0; pointer-events:auto; cursor:pointer;" onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxStr}), 100)">${UI.escapeHTML(rel.name)} <span style="margin-left:4px;">${Icons.recordView}</span></span>`;
                                 }
                             });
                             displayVal += `</div>`;
                         } else {
-                            displayVal = `<span class="adv-select-empty" style="float:right;" ${readOnlyTip}>Vuoto</span>`;
+                            displayVal = `<span class="adv-select-empty" style="float:right;" ${readOnlyTip}>${I18n.t('adv_record.empty_placeholder')}</span>`;
                         }
                     }
                 } 
@@ -295,7 +295,7 @@ Object.assign(AdvancedTable, {
                     if (linkObj && linkObj.noteId) {
                         targetNote = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
                         if (targetNote && !targetNote.deletedAt) {
-                            noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || 'Senza Titolo');
+                            noteTitle = linkObj.anchor ? `${targetNote.title} > ${linkObj.anchor}` : (targetNote.title || I18n.t('editor.untitled'));
                         } else if (targetNote && targetNote.deletedAt) {
                             noteTitle = 'Nota nel Cestino';
                         } else {
@@ -308,7 +308,7 @@ Object.assign(AdvancedTable, {
                         const clickNav = `onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => UI.selectNote('${linkObj.noteId}', ${linkObj.anchor ? `'${linkObj.anchor.replace(/'/g, "\\'")}'` : 'null'}, ${linkObj.refId ? `'${linkObj.refId}'` : 'null'}), 100);"`;
                         displayVal = `<div style="display:flex; justify-content:flex-end;"><a class="internal-link" style="cursor:pointer; ${pointerEvent}" ${clickNav}>${safeTitle}</a></div>`;
                     } else {
-                        displayVal = `<span class="adv-select-empty" style="float:right;">Vuoto</span>`;
+                        displayVal = `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`;
                     }
                 }
                 else if (col.type === 'relation') {
@@ -321,14 +321,14 @@ Object.assign(AdvancedTable, {
 
                         details.forEach(rel => {
                             if (rel.name === 'Orfano') {
-                                displayVal += `<span class="adv-select-pill hl-c10">Orfano</span>`;
+                                displayVal += `<span class="adv-select-pill hl-c10">${I18n.t('adv_record.orphan_badge')}</span>`;
                             } else {
                                 displayVal += `<span class="adv-select-pill default-color" style="margin:0; pointer-events:auto; cursor:pointer;" onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxStr}), 100)">${UI.escapeHTML(rel.name)} <span style="margin-left:4px;">${Icons.recordView}</span></span>`;
                             }
                         });
                         displayVal += `</div>`;
                     } else {
-                        displayVal = `<span class="adv-select-empty" style="float:right;">Vuoto</span>`;
+                        displayVal = `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`;
                     }
                 }
                 else if (col.type === 'record_note') {
@@ -337,14 +337,14 @@ Object.assign(AdvancedTable, {
                     if (noteObj && noteObj.deletedAt) noteObj = null;
                     
                     const isAttached = !!noteObj;
-                    const noteTitle = isAttached ? (noteObj.title || 'Senza Titolo') : 'Nessuna Pagina';
+                    const noteTitle = isAttached ? (noteObj.title || I18n.t('editor.untitled')) : I18n.t('adv_record.no_page');
                     
                     const jumpAction = isSysDB ? '' : `setTimeout(() => UI.jumpToWidget('${tableId}'), 50);`;
                     
                     if (isAttached) {
                         displayVal = `<span style="color:var(--record-color, #10b981); font-weight:bold; ${pointerEvent}" onclick="event.stopPropagation(); UI.closeDrawer(); ${jumpAction} setTimeout(() => UI.selectNote('${val}'), 100);"><span style="display:inline-flex; vertical-align:middle; gap:5px; margin-right:5px;">${Icons.recordPage}</span>${noteTitle}</span>`;
                     } else {
-                        displayVal = `<span class="adv-select-empty" style="float:right;">Nessuna Pagina</span>`;
+                        displayVal = `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.no_page')}</span>`;
                     }
                 } 
                 else {
@@ -381,12 +381,12 @@ Object.assign(AdvancedTable, {
                             });
                             displayVal += `</div>`;
                         } else {
-                            displayVal = `<span class="adv-select-empty" style="float:right;">Vuoto</span>`;
+                            displayVal = `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`;
                         }
                     } 
                     else if (col.type === 'formula' || col.type === 'rollup' || col.type === 'number') {
                         let displayValToUse = AdvancedTable.getFormatDisplayValue(col, val);
-                        displayVal = `<div style="text-align:right;">${displayValToUse !== '' && displayValToUse !== null ? displayValToUse : '<span class="adv-select-empty" style="float:right;">Vuoto</span>'}</div>`;
+                        displayVal = `<div style="text-align:right;">${displayValToUse !== '' && displayValToUse !== null ? displayValToUse : `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`}</div>`;
                     }
                     else if (col.type === 'url') {
                         if (val) {
@@ -400,14 +400,14 @@ Object.assign(AdvancedTable, {
                                 displayVal = `<div style="text-align:right;"><a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline; word-break:break-all; ${pointerEvent}">${val}</a></div>`;
                             }
                         } else {
-                            displayVal = `<span class="adv-select-empty" style="float:right;">Vuoto</span>`;
+                            displayVal = `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`;
                         }
                     }
                     else if (col.type === 'text') {
                         const isVeryLong = val && val.includes('\n');
-                        displayVal = `<div style="text-align:${isVeryLong ? 'left' : 'right'}; white-space:pre-wrap; word-break:break-word; width:100%; box-sizing:border-box; font-size:0.9em;">${val || '<span class="adv-select-empty" style="float:right;">Vuoto</span>'}</div>`;
+                        displayVal = `<div style="text-align:${isVeryLong ? 'left' : 'right'}; white-space:pre-wrap; word-break:break-word; width:100%; box-sizing:border-box; font-size:0.9em;">${val || `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`}</div>`;
                     }
-                    else displayVal = `<div style="text-align:right;">${val || '<span class="adv-select-empty" style="float:right;">Vuoto</span>'}</div>`;
+                    else displayVal = `<div style="text-align:right;">${val || `<span class="adv-select-empty" style="float:right;">${I18n.t('adv_record.empty_placeholder')}</span>`}</div>`;
                 }
             }
 
@@ -427,7 +427,7 @@ Object.assign(AdvancedTable, {
             // FIX ETICHETTA NASCOSTA: Basata sul reale stato visivo per non confondere l'utente.
             html += `
                 <div style="display:flex; ${isLongText ? 'flex-direction:column; align-items:flex-start;' : 'align-items:center;'} gap:6px; padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px;">
-                    <div style="${labelStyle}" ${clickMenu}>${col.name} ${isColCurrentlyHidden ? '<span style="opacity:0.5; font-weight:normal; text-transform:none;">(Nascosta)</span>' : ''}</div>
+                    <div style="${labelStyle}" ${clickMenu}>${col.name} ${isColCurrentlyHidden ? `<span style="opacity:0.5; font-weight:normal; text-transform:none;">${I18n.t('adv_record.hidden_badge')}</span>` : ''}</div>
                     <div style="${isLongText ? 'width:100%; box-sizing:border-box;' : 'flex:1; display:flex; justify-content:flex-end;'}">${displayVal}</div>
                 </div>
             `;
@@ -441,10 +441,10 @@ Object.assign(AdvancedTable, {
                 html += `
                     <div style="display:flex; gap:10px; flex-wrap:wrap;">
                         <button class="adv-add-btn" id="btn_sys_add_prop" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTableColumnMenus.openAddColumnMenu(event, '${tableId}')">
-                            <span style="margin-right:5px; display:inline-flex;">${Icons.plus}</span> Nuova Proprietà
+                            <span style="margin-right:5px; display:inline-flex;">${Icons.plus}</span> ${I18n.t('adv_record.new_property')}
                         </button>
                         <button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color); color: var(--accent-color);" onclick="AdvancedAutomations.openPanel(event, '${tableId}')">
-                            <span style="margin-right:5px; display:inline-flex;">${Icons.lightning}</span> Automazioni (${activeAutos})
+                            <span style="margin-right:5px; display:inline-flex;">${Icons.lightning}</span> ${I18n.t('adv_record.automations_count', { count: activeAutos })}
                         </button>
                     </div>
                 `;
@@ -457,7 +457,7 @@ Object.assign(AdvancedTable, {
                     const ctxStr = `'${relationCtx.srcTable}', '${relationCtx.srcRow}', '${relationCtx.srcCol}', '${rowId}', ${relationCtx.isBacklink}`;
                     html += `
                         <button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.unlinkRelation(${ctxStr})">
-                            <span style="margin-right:5px; display:inline-flex;">${Icons.close}</span> Scollega Record
+                            <span style="margin-right:5px; display:inline-flex;">${Icons.close}</span> ${I18n.t('adv_record.unlink_record')}
                         </button>
                     `;
                 }
@@ -465,7 +465,7 @@ Object.assign(AdvancedTable, {
 
                 html += `
                     <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: rgba(239, 68, 68, 0.05);" onclick="AdvancedTable.deleteRecord('${tableId}', '${rowId}')">
-                        <span style="margin-right:5px; display:inline-flex;">${Icons.trash}</span> Elimina Definitivamente il Record
+                        <span style="margin-right:5px; display:inline-flex;">${Icons.trash}</span> ${I18n.t('adv_record.delete_permanently')}
                     </button>
                 `;
             }
@@ -474,7 +474,7 @@ Object.assign(AdvancedTable, {
 
         html += '</div>';
 
-        const titlePrefix = isSysDB ? '🏷️ Tag e Proprietà Pagina' : '📄 Dettaglio Record';
+        const titlePrefix = isSysDB ? I18n.t('adv_record.title_system') : I18n.t('adv_record.title_record');
         UI.openDrawer(titlePrefix, html, null);
 
         setTimeout(() => {
@@ -490,7 +490,7 @@ Object.assign(AdvancedTable, {
 // Listener Evento BACK di ritorno da un Sottomenu del Drawer
 document.addEventListener('drawer-restored', (e) => {
     const titleText = e.detail.titleText || '';
-    if (titleText.includes('Dettaglio Record') || titleText.includes('Tag e Proprietà')) {
+    if (titleText.includes('Record') || titleText.includes('Proprietà') || titleText.includes('Eigenschaften') || titleText.includes('Propiedades')) { // Intercetta 'Dettaglio Record' e 'Tag e Proprietà'
         if (AdvancedTable.activeTableId && AdvancedTable.activeRecordId) {
             AdvancedTable.openRecordView(AdvancedTable.activeTableId, AdvancedTable.activeRecordId);
         }
