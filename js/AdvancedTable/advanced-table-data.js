@@ -410,7 +410,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable.renderTable(tableId);
     },
 
-    deleteSelectedRows: (tableId) => {
+    deleteSelectedRows: (tableId, force = false) => {
         if (!tableId) return;
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
@@ -421,6 +421,14 @@ Object.assign(AdvancedTable, {
         if (!state || !viewState || state.isPivot) return;
         if (!viewState.selectedRows || viewState.selectedRows.length === 0) return;
 
+        const count = viewState.selectedRows.length;
+        const confirmMessage = count === 1
+            ? "Sei sicuro di voler eliminare definitivamente il record selezionato dal database?\nL'operazione non può essere annullata."
+            : `Sei sicuro di voler eliminare definitivamente i ${count} record selezionati dal database?\nL'operazione non può essere annullata.`;
+
+        if (!force && !confirm(confirmMessage)) return;
+
+        // Pulizia ricorsiva delle eventuali note collegate
         state.columns.filter(c => c.type === 'record_note').forEach(c => {
             viewState.selectedRows.forEach(rowId => {
                 const row = state.rows.find(r => r.id === rowId);
@@ -431,11 +439,24 @@ Object.assign(AdvancedTable, {
         state.rows = state.rows.filter(r => !viewState.selectedRows.includes(r.id));
         viewState.selectedRows = [];
 
+        // Reset del selettore fluttuante globale
+        const globalSelector = document.getElementById('adv-global-row-selector');
+        if (globalSelector) {
+            globalSelector.classList.remove('selected');
+            const cb = globalSelector.querySelector('input');
+            if (cb) cb.checked = false;
+        }
+
         AdvancedTable.setState(realTableId, state);
         if (realTableId !== tableId) AdvancedTable.setState(tableId, viewState);
         
         AdvancedTable.updateDependentViews(realTableId);
         Store.triggerAutoSave();
+
+        if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+            const toastMsg = count === 1 ? "Record eliminato dal database." : `${count} record eliminati dal database.`;
+            UI.showToast(toastMsg, "warning");
+        }
     },
 
     addColumn: (tableId, type) => {
