@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VanillaDesk - Automated Test Suite</title>
+
+    <!-- Sandbox di Isolamento per localStorage nel Test Runner: Previene la contaminazione di index.html -->
+    <script>
+        (function() {
+            const memoryStorage = {};
+            const mockStorage = {
+                getItem: function(key) {
+                    return Object.prototype.hasOwnProperty.call(memoryStorage, key) ? memoryStorage[key] : null;
+                },
+                setItem: function(key, value) {
+                    memoryStorage[key] = String(value);
+                },
+                removeItem: function(key) {
+                    delete memoryStorage[key];
+                },
+                clear: function() {
+                    for (const k in memoryStorage) delete memoryStorage[k];
+                },
+                key: function(i) {
+                    return Object.keys(memoryStorage)[i] || null;
+                },
+                get length() {
+                    return Object.keys(memoryStorage).length;
+                }
+            };
+            try {
+                Object.defineProperty(window, 'localStorage', {
+                    value: mockStorage,
+                    configurable: true,
+                    enumerable: true,
+                    writable: true
+                });
+            } catch(e) {
+                console.warn("[TEST RUNNER] Impossibile sovrascrivere localStorage:", e);
+            }
+        })();
+    </script>
+
+    <style>
+        :root {
+            --bg: #090d16;
+            --surface: #131b2e;
+            --surface-hover: #1e293b;
+            --border: #25334d;
+            --text: #f8fafc;
+            --text-muted: #94a3b8;
+            --pass: #22c55e;
+            --fail: #ef4444;
+            --accent: #38bdf8;
+            --warn: #f59e0b;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            background-color: var(--bg);
+            color: var(--text);
+            padding: 25px;
+            line-height: 1.5;
+        }
+
+        .container { max-width: 1200px; margin: 0 auto; }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 20px;
+            margin-bottom: 25px;
+        }
+
+        h1 { font-size: 1.5rem; color: var(--accent); display: flex; align-items: center; gap: 10px; }
+        .subtitle { color: var(--text-muted); font-size: 0.82rem; margin-top: 4px; }
+
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+
+        .stat-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px 20px;
+            display: flex;
+            flex-direction: column;
+        }
+        .stat-card.pass { border-left: 4px solid var(--pass); }
+        .stat-card.fail { border-left: 4px solid var(--fail); }
+        .stat-card.total { border-left: 4px solid var(--accent); }
+        .stat-card.time { border-left: 4px solid var(--warn); }
+
+        .stat-label { font-size: 0.72rem; text-transform: uppercase; color: var(--text-muted); font-weight: bold; }
+        .stat-val { font-size: 1.8rem; font-weight: bold; margin-top: 5px; }
+
+        .toolbar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 10px;
+        }
+
+        .btn-group { display: flex; gap: 8px; }
+
+        button {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+            padding: 8px 16px;
+            font-weight: 600;
+            font-size: 0.82rem;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        button:hover { background: var(--surface-hover); border-color: var(--accent); }
+        button.primary { background: var(--accent); color: #000; border-color: var(--accent); }
+        button.primary:hover { opacity: 0.9; }
+
+        .suite-box {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+        }
+
+        .suite-header {
+            padding: 12px 18px;
+            background: rgba(255,255,255,0.02);
+            border-bottom: 1px solid var(--border);
+            font-weight: bold;
+            font-size: 0.92rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            user-select: none;
+        }
+        .suite-header:hover { background: rgba(255,255,255,0.04); }
+
+        .test-list { list-style: none; }
+        
+        .test-item {
+            padding: 8px 18px;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            font-size: 0.85rem;
+        }
+        .test-item:last-child { border-bottom: none; }
+        .test-item.fail-row { background: rgba(239, 68, 68, 0.08); }
+
+        .test-info { display: flex; align-items: flex-start; gap: 10px; flex: 1; }
+        .badge {
+            font-size: 0.68rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: bold;
+            text-transform: uppercase;
+            flex-shrink: 0;
+            margin-top: 2px;
+        }
+        .badge.pass { background: rgba(34, 197, 94, 0.2); color: var(--pass); }
+        .badge.fail { background: rgba(239, 68, 68, 0.25); color: var(--fail); }
+
+        .error-trace {
+            margin-top: 8px;
+            padding: 10px 14px;
+            background: rgba(0,0,0,0.4);
+            border-radius: 6px;
+            color: #fca5a5;
+            font-family: monospace;
+            font-size: 0.78rem;
+            white-space: pre-wrap;
+            word-break: break-all;
+            border-left: 3px solid var(--fail);
+        }
+
+        .all-pass-banner {
+            background: rgba(34, 197, 94, 0.1);
+            border: 1px solid rgba(34, 197, 94, 0.3);
+            color: var(--pass);
+            padding: 30px;
+            border-radius: 8px;
+            text-align: center;
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-bottom: 20px;
+        }
+    </style>
+
+    <!-- Moduli Core di VanillaDesk da Collaudare -->
+    <script src="../js/icons.js"></script>
+    <script src="../js/state.js"></script>
+    <script src="../js/store.js"></script>
+    <script src="../js/color-manager.js"></script>
+    <script src="../js/link-manager.js"></script>
+    <script src="../js/export-manager.js"></script>
+    <script src="../js/image-manager.js"></script>
+    <script src="../js/audio-manager.js"></script>
+    <script src="../js/widget-manager.js"></script>
+    <script src="../js/citation-manager.js"></script>
+    <script src="../js/template-manager.js"></script>
+    <script src="../js/journal-manager.js"></script>
+    <script src="../js/column-manager.js"></script>
+    <script src="../js/button-manager-core.js"></script>
+    <script src="../js/button-manager-ui.js"></script>
+
+    <!-- Script UI -->
+    <script src="../js/ui/ui-core.js"></script>
+    <script src="../js/ui/ui-security.js"></script>
+    <script src="../js/ui/ui-notifications.js"></script>
+    <script src="../js/ui/ui-drawer.js"></script>
+    <script src="../js/ui/ui-menu.js"></script>
+    <script src="../js/ui/ui-minimap.js"></script>
+    <script src="../js/ui/ui-tree.js"></script>
+    <script src="../js/ui/ui-notes-lifecycle.js"></script>
+    <script src="../js/ui/ui-notes-info.js"></script>
+    <script src="../js/ui/ui-notes-utils.js"></script>
+    <script src="../js/ui/ui-inline-footnotes.js"></script>
+    <script src="../js/ui/ui-preferences.js"></script>
+    <script src="../js/ui/ui-scrollspy.js"></script>
+    <script src="../js/ui/ui-trash.js"></script>
+    <script src="../js/ui/ui-document-browser.js"></script>
+    <script src="../js/sidebar-manager.js"></script>
+
+    <!-- Script Editor Base -->
+    <script src="../js/editor-core.js"></script>
+    <script src="../js/editor-keyboard.js"></script>
+    <script src="../js/editor-keyboard-mutations.js"></script>
+    <script src="../js/editor-keyboard-navigation.js"></script>
+    <script src="../js/editor-multicursor.js"></script>
+    <script src="../js/editor-history.js"></script>
+    <script src="../js/editor-format-text.js"></script>
+    <script src="../js/editor-format-lists.js"></script>
+    <script src="../js/editor-format-blocks.js"></script>
+    <script src="../js/editor-bookmarks.js"></script>
+    <script src="../js/editor-inline-notes.js"></script>
+    <script src="../js/editor-paste.js"></script>
+    <script src="../js/code-highlighter.js"></script>
+
+    <!-- Script Motore Logico (Formule, Macro e Condizioni) -->
+    <script src="../js/logic-engine-core.js"></script>
+    <script src="../js/logic-engine-macro.js"></script>
+    <script src="../js/logic-engine-ui.js"></script>
+    <script src="../js/logic-engine-ai.js"></script>
+
+    <!-- Script Tabelle Semplici -->
+    <script src="../js/TableManager/table-manager-core.js"></script>
+    <script src="../js/TableManager/table-manager-ui.js"></script>
+    <script src="../js/TableManager/table-manager-selection.js"></script>
+    <script src="../js/TableManager/table-manager-drag.js"></script>
+    <script src="../js/TableManager/table-manager-csv.js"></script>
+
+    <!-- Script Database Avanzati (RDBMS) -->
+    <script src="../js/AdvancedTable/advanced-table-core.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-context.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-formula.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-actions.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-data.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-render.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-cell.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-record.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-pivot.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-tree.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-board.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-calendar.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-timeline.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-timeline-drag.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-timeline-render.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-select.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-sort.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-filter.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-conditional-colors.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-column-menus.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-menus.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-pivot-menus.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-automations-core.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-automations-ui.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-csv.js"></script>
+    <script src="../js/AdvancedTable/advanced-table-charts.js"></script>
+
+    <script src="../js/package-manager.js"></script>
+
+    <!-- Moduli Workflow Studio -->
+    <script src="../workflow/workflow-core.js"></script>
+    <script src="../workflow/workflow-canvas.js"></script>
+    <script src="../workflow/workflow-nodes.js"></script>
+    <script src="../workflow/workflow-connections.js"></script>
+    <script src="../workflow/workflow-layout.js"></script>
+    <script src="../workflow/workflow-ui.js"></script>
+
+    <!-- Mock difensivo per Chart.js in ambiente di test headless privo di lib esterne -->
+    <script>
+        if (typeof Chart === 'undefined') {
+            window.Chart = class {
+                constructor(canvas, config) {
+                    this.canvas = canvas;
+                    this.config = config;
+                }
+                destroy() {}
+            };
+        }
+    </script>
+
+    <!-- Framework e Suite di Test Modulari -->
+    <!-- Moduli di Test Riorganizzati (1:1 con js/) -->
+    <script src="test-framework.js"></script>
+    <script src="test-fixtures.js"></script>
+    <script src="test-advanced-table-actions.js"></script>
+    <script src="test-advanced-table-automations-core.js"></script>
+    <script src="test-advanced-table-automations-ui.js"></script>
+    <script src="test-advanced-table-calendar.js"></script>
+    <script src="test-advanced-table-charts.js"></script>
+    <script src="test-advanced-table-column-menus.js"></script>
+    <script src="test-advanced-table-conditional-colors.js"></script>
+    <script src="test-advanced-table-context.js"></script>
+    <script src="test-advanced-table-core.js"></script>
+    <script src="test-advanced-table-data.js"></script>
+    <script src="test-advanced-table-formula.js"></script>
+    <script src="test-advanced-table-pivot-menus.js"></script>
+    <script src="test-advanced-table-pivot.js"></script>
+    <script src="test-advanced-table-select.js"></script>
+    <script src="test-advanced-table-sort.js"></script>
+    <script src="test-advanced-table-timeline-drag.js"></script>
+    <script src="test-advanced-table-timeline-render.js"></script>
+    <script src="test-advanced-table-timeline.js"></script>
+    <script src="test-advanced-table-tree.js"></script>
+    <script src="test-audio-manager.js"></script>
+    <script src="test-button-manager-core.js"></script>
+    <script src="test-citation-manager.js"></script>
+    <script src="test-code-highlighter.js"></script>
+    <script src="test-color-manager.js"></script>
+    <script src="test-column-manager.js"></script>
+    <script src="test-editor-bookmarks.js"></script>
+    <script src="test-editor-core.js"></script>
+    <script src="test-editor-format-blocks.js"></script>
+    <script src="test-editor-format-lists.js"></script>
+    <script src="test-editor-format-text.js"></script>
+    <script src="test-editor-inline-notes.js"></script>
+    <script src="test-editor-keyboard-mutations.js"></script>
+    <script src="test-editor-keyboard-navigation.js"></script>
+    <script src="test-editor-keyboard.js"></script>
+    <script src="test-editor-multicursor.js"></script>
+    <script src="test-export-manager.js"></script>
+    <script src="test-image-manager.js"></script>
+    <script src="test-journal-manager.js"></script>
+    <script src="test-link-manager.js"></script>
+    <script src="test-logic-engine-core.js"></script>
+    <script src="test-logic-engine-macro.js"></script>
+    <script src="test-package-manager.js"></script>
+    <!--script src="test-regression-edge-cases.js"></script-->
+    <script src="test-state.js"></script>
+    <script src="test-store.js"></script>
+    <script src="test-table-manager-core.js"></script>
+    <script src="test-table-manager-csv.js"></script>
+    <script src="test-table-manager-drag.js"></script>
+    <script src="test-table-manager-selection.js"></script>
+    <script src="test-table-manager-ui.js"></script>
+    <script src="test-template-manager.js"></script>
+    <script src="test-ui-core.js"></script>
+    <script src="test-ui-document-browser.js"></script>
+    <script src="test-ui-inline-footnotes.js"></script>
+    <script src="test-ui-notes-utils.js"></script>
+    <script src="test-ui-notifications.js"></script>
+    <script src="test-ui-preferences.js"></script>
+    <script src="test-ui-security.js"></script>
+    <script src="test-widget-manager.js"></script>
+    <script src="test-workflow.js"></script>
+    <script src="test-altro.js"></script>
+</head>
+<body>
+
+    <!-- Sandbox DOM isolato per consentire il collaudo headless dei moduli UI ed Editor -->
+    <div id="testSandBox" style="position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; overflow: hidden; pointer-events: none;">
+        <div id="noteContent" class="editor-content" contenteditable="true"></div>
+        <div id="emptyNoteOverlay"></div>
+        <div id="templateGrid"></div>
+        <div id="advGlobalDrawer" class="adv-drawer">
+            <div class="adv-drawer-header"><div id="advDrawerTitle"></div></div>
+            <div id="advDrawerBody" class="adv-drawer-body"></div>
+            <div id="advDrawerFooter" class="adv-drawer-footer"></div>
+        </div>
+        <div id="adv-toast-container" class="toast-container"></div>
+        <div id="advCustomTooltip" class="adv-custom-tooltip"></div>
+        <div id="hlBar" class="btn-color-bar"></div>
+        <div id="txBar" class="btn-color-bar"></div>
+        <span id="breadcrumb"></span>
+        <button id="btnNoteProperties"></button>
+    </div>
+
+    <div class="container">
+        <header>
+            <div>
+                <h1>⚙️ VanillaDesk Test Automation Pipeline</h1>
+                <div class="subtitle">Suite Modulare di Collaudo Unitario, Logico e Regressione</div>
+            </div>
+            <div class="btn-group">
+                <button class="primary" onclick="TestFramework.run()">Riesegui Tutti i Test</button>
+            </div>
+        </header>
+
+        <div class="dashboard">
+            <div class="stat-card total">
+                <span class="stat-label">Asserzioni Eseguite</span>
+                <span id="statTotal" class="stat-val">0</span>
+            </div>
+            <div class="stat-card pass">
+                <span class="stat-label">Test Superati</span>
+                <span id="statPass" class="stat-val" style="color:var(--pass)">0</span>
+            </div>
+            <div class="stat-card fail">
+                <span class="stat-label">Test Falliti</span>
+                <span id="statFail" class="stat-val" style="color:var(--fail)">0</span>
+            </div>
+            <div class="stat-card time">
+                <span class="stat-label">Durata Pipeline</span>
+                <span id="statTime" class="stat-val" style="color:var(--warn)">0ms</span>
+            </div>
+        </div>
+
+        <div class="toolbar">
+            <div class="btn-group">
+                <button onclick="TestFramework.filterView('fail')" id="btnFilterFail" class="primary">Solo Falliti</button>
+                <button onclick="TestFramework.filterView('all')" id="btnFilterAll">Tutti</button>
+                <button onclick="TestFramework.toggleAllSuites(true)">Espandi Tutto</button>
+                <button onclick="TestFramework.toggleAllSuites(false)">Comprimi Tutto</button>
+            </div>
+            <div id="statusMessage" style="font-size:0.85rem; color:var(--text-muted);">In attesa...</div>
+        </div>
+
+        <div id="suitesContainer"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            TestFramework.run();
+        });
+    </script>
+</body>
+</html>
