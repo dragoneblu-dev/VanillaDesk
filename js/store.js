@@ -4,7 +4,7 @@
  * SINCRONISMO IBRIDO ROBUSTO PER PRODUZIONE:
  * 1. Database: 3-Way Field-Level Merge a livello di singola cella tramite tracciamento antenato comune (_baseDatabases).
  * 2. Diario / Log: Supporto esplicito per la fusione LWW di state.entries in _mergeDatabaseStates (Zero perdita dati).
- * 3. Note: Strategia rigorosa Last-Write-Wins (LWW) senza generazione di note di conflitto duplicate.
+ * 3. Note: Concorrenza Ottimistica deterministica basata su Revision Token (revId). Rilevamento conflitti pre-save con dialog di scelta, blocco re-entrancy e Undo Stash protetto.
  * 4. Autorità index.json: In fase di caricamento, solo le note censite in noteOrder vengono importate.
  * 5. Verifica JIT su disco: Funzione syncNoteFromDisk per allineare le note all'apertura o rilevarne l'eliminazione remota.
  * 6. Media & Storage: Utility _base64ToBlob per retrocompatibilità.
@@ -75,6 +75,7 @@ const Store = {
     dbPromise: null,
     _isSavingFile: false,
     _saveQueuePending: false,
+    _isConflictResolving: false,
     _pendingRecoveryData: null,
     _syncChannel: null,
     
@@ -381,8 +382,11 @@ const Store = {
                 if (diskNote.deletedAt) {
                     return { status: 'deleted' };
                 }
+                if (!diskNote.revId) diskNote.revId = Store.generateId();
                 const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
-                Store._diskHashes.notes[noteId] = Store._hashObj(diskNote, cryptoPrefix);
+                const cleanDisk = { ...diskNote };
+                Object.keys(cleanDisk).forEach(k => { if (k.startsWith('_')) delete cleanDisk[k]; });
+                Store._diskHashes.notes[noteId] = Store._hashObj(cleanDisk, cryptoPrefix);
                 return { status: 'success', note: diskNote };
             }
         } catch (e) {
@@ -557,8 +561,81 @@ const Store = {
         return merged;
     },
 
+    handleNoteConflict: async (localNote, diskNote) => {
+        Store._isConflictResolving = true;
+        let choice = 'reload';
+
+        try {
+        if (typeof UI !== 'undefined' && typeof UI.promptNoteConflict === 'function') {
+            choice = await UI.promptNoteConflict(localNote, diskNote);
+        } else {
+            choice = 'reload';
+        }
+        } finally {
+            Store._isConflictResolving = false;
+        }
+
+        if (choice === 'reload') {
+            // 1. Salvaguardia: salva la versione locale nello stack Undo dell'editor
+            if (typeof Editor !== 'undefined' && AppState.currentNoteId === localNote.id) {
+                Editor.saveSnapshot();
+            }
+
+            // 2. Allinea la nota in RAM con la copia del disco
+            Object.assign(localNote, diskNote);
+            localNote._baseRevId = diskNote.revId || Store.generateId();
+            localNote.revId = localNote._baseRevId;
+            localNote._isDirty = false;
+            delete localNote._isDraft;
+
+            const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
+            const cleanDisk = { ...diskNote };
+            Object.keys(cleanDisk).forEach(key => { if (key.startsWith('_')) delete cleanDisk[key]; });
+            Store._diskHashes.notes[localNote.id] = Store._hashObj(cleanDisk, cryptoPrefix);
+
+            // 3. Ricarica la nota a schermo se è quella correntemente aperta
+            if (AppState.currentNoteId === localNote.id) {
+                AppState.isSwitchingNote = true; // Impedisce a eventi input spuri di ri-sporcare la nota
+                try {
+                const titleInput = document.getElementById('noteTitle');
+                const contentDiv = document.getElementById('noteContent');
+                if (titleInput) titleInput.value = localNote.title || "";
+                if (contentDiv) {
+                    contentDiv.innerHTML = localNote.content || "<p><br></p>";
+                    if (typeof Editor !== 'undefined') {
+                        if (Editor.hydrateMedia) Editor.hydrateMedia(contentDiv);
+                        if (Editor.saveSnapshot) Editor.saveSnapshot();
+                    }
+                    if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll(contentDiv);
+                    if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
+                }
+                if (typeof UI !== 'undefined') {
+                    UI.updateBreadcrumb(localNote);
+                    UI.renderInlineFootnotes();
+                    if (typeof UI.renderTree === 'function') UI.renderTree();
+                    if (typeof UI.showToast === 'function') {
+                        UI.showToast("Nota ricaricata da disco. Le tue modifiche sono recuperabili con Ctrl+Z.", "info");
+                    }
+                }
+                } finally {
+                    setTimeout(() => { AppState.isSwitchingNote = false; }, 100);
+                }
+            }
+            return 'reload';
+        } else {
+            // Scelta: Sovrascrivi (Forza la versione locale corrente)
+            localNote._baseRevId = diskNote.revId;
+            localNote._isDirty = true;
+            return 'overwrite';
+        }
+    },
+
     saveToFile: async () => {
-        if (Store._isSavingFile) { Store._saveQueuePending = true; return; }
+        // Se un salvataggio è già in corso o se stiamo aspettando la scelta sul pop-up di conflitto, non procedere
+        if (Store._isSavingFile || Store._isConflictResolving) { 
+            Store._saveQueuePending = true; 
+            return; 
+        }
         if (!AppState.workspaceHandle) { 
             Store.saveLocalBackup(); 
             if (typeof UI !== 'undefined') UI.showStatus("unsaved"); 
@@ -679,13 +756,45 @@ const Store = {
                 UI.showToast(`Sincronizzazione: Fusi ${syncedDatabasesCount} database concorrenti a livello di cella.`, "info");
             }
 
-            // 3. SALVATAGGIO NOTE (LAST WRITE WINS RIGOROSO, NESSUN CONFLITTO DUPLICATO)
+            // 3. SALVATAGGIO NOTE (GESTIONE CONFLITTI TRAMITE REVISION TOKEN revId)
             for (const note of AppState.notes) {
                 const cleanNote = { ...note };
                 Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
                 const currentHash = Store._hashObj(cleanNote, cryptoPrefix);
 
                 if (note._isDirty || Store._diskHashes.notes[note.id] !== currentHash) {
+                    
+                    // Verifica Conflitto Concorrente al Pre-Save (circoscritta alla nota attiva per prevenire prompt multipli)
+                    if (!note._isDraft && !note.deletedAt) {
+                        const diskRes = await Store._readFragmentFromDisk(notesDir, `${note.id}.json`);
+                        if (diskRes.status === 'success') {
+                            try {
+                                const diskNote = JSON.parse(diskRes.data);
+                                
+                                // Rilevamento conflitto tramite divergenza del Revision Token
+                                if (diskNote.revId && note._baseRevId && diskNote.revId !== note._baseRevId) {
+                                    if (AppState.currentNoteId === note.id) {
+                                    const resolution = await Store.handleNoteConflict(note, diskNote);
+                                    if (resolution === 'reload') {
+                                        continue; // Salta il salvataggio: ricaricata versione disco
+                                    }
+                                    } else {
+                                        // Nota in background: allinea la base per prevenire blocchi fantasma
+                                        note._baseRevId = diskNote.revId;
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("[SYNC] Errore lettura disco per pre-save check:", e);
+                            }
+                        }
+                    }
+
+                    // Genera nuovo token di revisione per questo salvataggio
+                    const nextRevId = Store.generateId();
+                    note.revId = nextRevId;
+                    cleanNote.revId = nextRevId;
+                    note._baseRevId = nextRevId;
+
                     try {
                         const noteStr = JSON.stringify(cleanNote, null, 2);
                         let dataToWrite = AppState.documentPassword ? await CryptoUtils.encrypt(noteStr, AppState.documentPassword) : noteStr;
@@ -694,7 +803,7 @@ const Store = {
                         await writable.write(dataToWrite);
                         await writable.close();
 
-                        Store._diskHashes.notes[note.id] = currentHash;
+                        Store._diskHashes.notes[note.id] = Store._hashObj(cleanNote, cryptoPrefix);
                         note._isDirty = false;
                         delete note._isDraft;
 
@@ -725,11 +834,17 @@ const Store = {
             console.error("I/O Write Error:", err);
         } finally {
             Store._isSavingFile = false;
-            if (Store._saveQueuePending) { Store._saveQueuePending = false; Store.saveToFile(); }
+            if (Store._saveQueuePending && !Store._isConflictResolving) { 
+                Store._saveQueuePending = false; 
+                Store.saveToFile(); 
+            }
         }
     },
 
     triggerAutoSave: (forceImmediate = false, isManualAction = false) => {
+        // Se l'utente sta interagendo con il modale di conflitto, nessun salvataggio automatico deve partire
+        if (Store._isConflictResolving) return;
+
         Store.isDirty = true;
         Store.saveLocalBackup();
 
@@ -748,7 +863,9 @@ const Store = {
         UI.showStatus("pending");
         clearTimeout(Store.debounceTimer);
         Store.debounceTimer = setTimeout(() => {
-            if (Store.isDirty && AppState.workspaceHandle) Store.saveToFile();
+            if (Store.isDirty && AppState.workspaceHandle && !Store._isConflictResolving) {
+                Store.saveToFile();
+            }
         }, 1500);
     },
 
@@ -968,6 +1085,7 @@ const Store = {
             if (AppState.notes.length === 0) {
                 const newNoteId = Store.generateId();
                 const now = new Date().toISOString();
+                const initialRevId = Store.generateId();
 
                 // Creazione della prima nota informativa, formattata e accattivante
                 AppState.notes.push({
@@ -1055,6 +1173,8 @@ const Store = {
                     expanded: true,
                     createdAt: now,
                     updatedAt: now,
+                    revId: initialRevId,
+                    _baseRevId: initialRevId,
                     _isDraft: false,
                     _isDirty: true
                 });
@@ -1134,8 +1254,14 @@ const Store = {
             AppState._noteOrderCache = data.noteOrder || []; 
             Store._diskHashes.index = Store._hashObj(data, cryptoPrefix);
         } else if (type === 'note') {
+            if (!data.revId) data.revId = Store.generateId();
+            data._baseRevId = data.revId;
             AppState.notes.push(data);
-            Store._diskHashes.notes[data.id] = Store._hashObj(data, cryptoPrefix);
+            
+            // L'hash iniziale viene calcolato pulendo le chiavi volatili (_*) per coerenza assoluta con saveToFile
+            const cleanData = { ...data };
+            Object.keys(cleanData).forEach(k => { if (k.startsWith('_')) delete cleanData[k]; });
+            Store._diskHashes.notes[data.id] = Store._hashObj(cleanData, cryptoPrefix);
         } else if (type === 'database') {
             const dbId = data._id_hack; 
             delete data._id_hack;
@@ -1191,6 +1317,9 @@ const Store = {
                 });
                 if (changed) note.content = doc.body.innerHTML;
             }
+
+            if (!note.revId) note.revId = Store.generateId();
+            note._baseRevId = note.revId;
             return note;
         });
 
@@ -1427,9 +1556,11 @@ if (typeof BroadcastChannel !== 'undefined') {
                         if (existingNote) {
                             if (!existingNote._isDirty) {
                                 Object.assign(existingNote, syncRes.note);
+                                existingNote._baseRevId = syncRes.note.revId || existingNote.revId;
                                 existingNote._isDirty = false;
                             }
                         } else {
+                            syncRes.note._baseRevId = syncRes.note.revId;
                             AppState.notes.push(syncRes.note);
                         }
                     } else if (syncRes.status === 'deleted') {
@@ -1449,6 +1580,7 @@ if (typeof BroadcastChannel !== 'undefined') {
                         const syncRes = await Store.syncNoteFromDisk(noteId);
                         if (syncRes.status === 'success' && syncRes.note) {
                             Object.assign(currentNote, syncRes.note);
+                            currentNote._baseRevId = syncRes.note.revId || currentNote.revId;
                             currentNote._isDirty = false;
 
                             const titleInput = document.getElementById('noteTitle');
@@ -1456,8 +1588,9 @@ if (typeof BroadcastChannel !== 'undefined') {
                             if (titleInput) titleInput.value = currentNote.title || "";
                             if (contentDiv) {
                                 contentDiv.innerHTML = currentNote.content || "<p><br></p>";
-                                if (typeof Editor !== 'undefined' && Editor.hydrateMedia) {
-                                    Editor.hydrateMedia(contentDiv);
+                                if (typeof Editor !== 'undefined') {
+                                    if (Editor.hydrateMedia) Editor.hydrateMedia(contentDiv);
+                                    if (Editor.saveSnapshot) Editor.saveSnapshot();
                                 }
                                 if (typeof WidgetManager !== 'undefined') {
                                     WidgetManager.mountAll(contentDiv);
