@@ -1,0 +1,14 @@
+Manual.registerSection(
+    'sec-11',
+    '11. Workspace, Cestino, Backup e Modpacks',
+    `<p>Poiché l'app vive nel tuo browser, il salvataggio è gestito tramite la <b>File System Access API</b>, un ponte diretto e sicuro tra l'applicazione web e il tuo disco fisso locale.</p>
+    
+    <ul>
+        <li><b>Workspace a Cartelle (Frammentato):</b> Quando crei un nuovo Workspace, l'app genera una vera e propria cartella sul tuo PC. Al suo interno creerà le directory <code>notes/</code>, <code>databases/</code> e <code>assets/</code>. Questo significa che se l'app crasha o il browser si chiude, hai perso al massimo l'ultimo secondo di digitazione. Questa frammentazione permette anche a più schede (o servizi cloud come OneDrive) di sincronizzare i file senza distruggersi a vicenda.</li>
+        <li><b>Il Cestino (Soft & Hard Delete):</b> Quando cancelli una nota, questa non sparisce davvero, ma finisce nel <b>Cestino</b> (accessibile dal menu principale). Da lì puoi decidere se <i>Ripristinarla</i> o <i>Eliminarla Definitivamente</i>. L'Hard Delete farà scattare un Garbage Collector che pulirà fisicamente l'Hard Disk, eliminando anche i file audio/video ad essa associati per liberare spazio!</li>
+        <li><b>Il Pulsante "Scarica Backup" (↓):</b> Se il sistema operativo ti toglie i permessi di scrittura, usa questo tasto. L'app compilerà forzatamente un enorme file di salvataggio ZIP/JSON nella tua cartella Download includendo la data esatta nel nome, mettendoti al riparo da perdite di dati.</li>
+        <li><b>Package Manager (Modpacks V2):</b> Hai creato una fantastica combinazione di Note, Database e Pulsanti Macro e vuoi passarla a un tuo collega? Usa <b>"Esporta come Modulo (Modpack)"</b>! Il sistema rintraccerà tutte le dipendenze, clonerà i database e genererà un pacchetto isolato. Il tuo collega potrà fare <b>Installa Modulo</b> per vederlo comparire magicamente nel suo Workspace senza corrompere o sovrascrivere i suoi dati.</li>
+        <li><b>Importazione Markdown (.md):</b> Hai vecchi appunti su Obsidian, Notion o Logseq? Usa <i>"Importa file Markdown..."</i> per trasformarli istantaneamente in note native compatibili con l'editor di VanillaDesk, mantenendo le checkbox, i grassetti e le liste.</li>
+        <li><b>Protezione Crittografica:</b> Nel menu principale troverai l'opzione "Sicurezza e Password...". Inserendo una password, <b>l'intero Workspace verrà cifrato</b> usando crittografia militare (AES-GCM 256bit). Se qualcuno dovesse rubare i tuoi file dal disco, troverebbe solo polvere illeggibile. <b>Attenzione:</b> la crittografia in-memory non prevede meccanismi di recupero. Se perdi la password, perdi i dati!</li>
+    </ul>`
+);
