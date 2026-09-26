@@ -23,6 +23,7 @@
     <link rel="stylesheet" href="css/modals.css">
 
     <script src="js/icons.js"></script>
+    <script src="js/i18n.js"></script>
 </head>
 
 <body class="light-theme">
@@ -38,40 +39,41 @@
             </svg>
             <span id="fileNameDisplay" onclick="UI.goHome()" style="cursor:pointer;" title="Torna alla Home">Nessun Workspace</span>
             <button id="editToggleBtn" class="btn" style="margin-left: 15px;" onclick="UI.toggleEditMode()">
-                <script>document.write(Icons.edit)</script> Modifica
+                <script>document.write(Icons.edit)</script> <script>document.write(I18n.t('common.edit'))</script>
             </button>
-            <span id="saveStatus" class="status-pill status-saved hidden">Salvato</span>
+            <span id="saveStatus" class="status-pill status-saved hidden"><script>document.write(I18n.t('common.saved'))</script></span>
         </div>
 
         <div class="controls-group">
             <div id="noteContextActions" style="display:flex; align-items:center; gap:8px;" class="hidden">
-                <button class="icon-btn" onclick="UI.goUpOneLevel()" id="goUpBtn" title="Risali di un livello (Genitore)">
-                    <script>document.write(Icons.cornerUpLeft)</script>
+                <button class="icon-btn" onclick="UI.goUpOneLevel()" id="goUpBtn">
+                    <script>document.write(Icons.cornerUpLeft); document.getElementById('goUpBtn').title = I18n.t('toolbar.go_up');</script>
                 </button>
-                <button class="icon-btn" onclick="UI.toggleMark()" id="markBtn" title="Aggiungi ai Preferiti">
-                    <script>document.write(Icons.starEmpty)</script>
+                <button class="icon-btn" onclick="UI.toggleMark()" id="markBtn">
+                    <script>document.write(Icons.starEmpty); document.getElementById('markBtn').title = I18n.t('toolbar.favorite');</script>
                 </button>
-                <button id="btnNoteProperties" class="icon-btn" title="Proprietà / Tag Pagina">
-                    <script>document.write(Icons.tag)</script>
+                <button id="btnNoteProperties" class="icon-btn">
+                    <script>document.write(Icons.tag); document.getElementById('btnNoteProperties').title = I18n.t('toolbar.page_properties');</script>
                 </button>
-                <button id="btnNoteInfo" class="icon-btn" title="Informazioni e Collegamenti Nota" onclick="UI.openNoteInfoPanel()">
-                    <script>document.write(Icons.info)</script>
+                <button id="btnNoteInfo" class="icon-btn" onclick="UI.openNoteInfoPanel()">
+                    <script>document.write(Icons.info); document.getElementById('btnNoteInfo').title = I18n.t('toolbar.page_info');</script>
                 </button>
                 <div class="separator"></div>
             </div>
 
-            <button class="icon-btn active" id="sidebarToggleBtn" onclick="UI.toggleSidebar()" title="Mostra/Nascondi Struttura documento">
-                <script>document.write(Icons.focus)</script>
+            <button class="icon-btn active" id="sidebarToggleBtn" onclick="UI.toggleSidebar()">
+                <script>document.write(Icons.focus); document.getElementById('sidebarToggleBtn').title = I18n.t('toolbar.toggle_sidebar');</script>
             </button>
             
-            <button class="icon-btn" id="minimapBtn" onclick="UI.toggleMinimap()" title="Toggle Minimap">
-                <script>document.write(Icons.minimap)</script>
+            <button class="icon-btn" id="minimapBtn" onclick="UI.toggleMinimap()">
+                <script>document.write(Icons.minimap); document.getElementById('minimapBtn').title = I18n.t('toolbar.toggle_minimap');</script>
             </button>
             
             <div class="separator"></div>
 
             <div style="position: relative;" id="mainMenuWrapper">
-                <button class="icon-btn main-menu-btn" id="mainMenuBtn" onclick="UI.toggleMainMenu(event)" title="Menu Principale">
+                <button class="icon-btn main-menu-btn" id="mainMenuBtn" onclick="UI.toggleMainMenu(event)">
+                    <script>document.getElementById('mainMenuBtn').title = I18n.t('toolbar.main_menu');</script>
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <line x1="3" y1="12" x2="21" y2="12"></line>
                         <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -86,16 +88,18 @@
         <aside id="sidebar">
             <div class="search-box">
                 <div class="search-wrapper">
-                    <input type="text" id="searchInput" class="search-input" placeholder="Cerca o digita Tag..." autocomplete="off">
+                    <input type="text" id="searchInput" class="search-input" autocomplete="off">
+                    <script>document.getElementById('searchInput').placeholder = I18n.t('common.search_sidebar_placeholder');</script>
                     <div class="search-controls hidden" id="searchControls">
                         <span class="search-counter" id="searchCounter">0/0</span>
-                        <button class="search-nav-btn" onclick="AppState.findPrevious()" title="Precedente">
-                            <script>document.write(Icons.searchUp)</script>
+                        <button class="search-nav-btn" id="btnSearchPrev" onclick="AppState.findPrevious()">
+                            <script>document.write(Icons.searchUp); document.getElementById('btnSearchPrev').title = I18n.t('toolbar.search_prev');</script>
                         </button>
-                        <button class="search-nav-btn" onclick="AppState.findNext()" title="Successivo">
-                            <script>document.write(Icons.searchDown)</script>
+                        <button class="search-nav-btn" id="btnSearchNext" onclick="AppState.findNext()">
+                            <script>document.write(Icons.searchDown); document.getElementById('btnSearchNext').title = I18n.t('toolbar.search_next');</script>
                         </button>
-                        <button id="searchClearBtn" class="search-clear-btn" title="Chiudi ricerca e filtri">✕</button>
+                        <button id="searchClearBtn" class="search-clear-btn">✕</button>
+                        <script>document.getElementById('searchClearBtn').title = I18n.t('toolbar.search_clear');</script>
                     </div>
                 </div>
                 <!-- Contenitore Filtri Attivi (Pills) -->
@@ -103,25 +107,30 @@
             </div>
             
             <div class="sidebar-tabs-container">
-                <button class="sidebar-tab active" id="tab-notes" onclick="UI.switchToNotes()" title="Note">
+                <button class="sidebar-tab active" id="tab-notes" onclick="UI.switchToNotes()">
+                    <script>document.getElementById('tab-notes').title = I18n.t('toolbar.tab_notes');</script>
                     <span class="menu-icon-svg" style="display:flex; width:16px; height:16px;"><script>document.write(Icons.file)</script></span>
-                    <span class="tab-label">Note</span>
+                    <span class="tab-label"><script>document.write(I18n.t('toolbar.tab_notes'))</script></span>
                 </button>
-                <button class="sidebar-tab" id="tab-favorites" onclick="UI.toggleFavoritesInTree()" title="Preferiti">
+                <button class="sidebar-tab" id="tab-favorites" onclick="UI.toggleFavoritesInTree()">
+                    <script>document.getElementById('tab-favorites').title = I18n.t('toolbar.tab_favorites');</script>
                     <span class="menu-icon-svg" style="display:flex; width:16px; height:16px;"><script>document.write(Icons.starEmpty)</script></span>
-                    <span class="tab-label">Preferiti</span>
+                    <span class="tab-label"><script>document.write(I18n.t('toolbar.tab_favorites'))</script></span>
                 </button>
-                <button class="sidebar-tab" id="tab-bookmarks" onclick="UI.toggleBookmarksInTree()" title="Segnalibri">
+                <button class="sidebar-tab" id="tab-bookmarks" onclick="UI.toggleBookmarksInTree()">
+                    <script>document.getElementById('tab-bookmarks').title = I18n.t('toolbar.tab_bookmarks');</script>
                     <span class="menu-icon-svg" style="display:flex; width:16px; height:16px;"><script>document.write(Icons.bookmark)</script></span>
-                    <span class="tab-label">Segnalibri</span>
+                    <span class="tab-label"><script>document.write(I18n.t('toolbar.tab_bookmarks'))</script></span>
                 </button>
-                <button class="sidebar-tab" id="tab-databases" onclick="UI.toggleDbNotesInTree()" title="Database">
+                <button class="sidebar-tab" id="tab-databases" onclick="UI.toggleDbNotesInTree()">
+                    <script>document.getElementById('tab-databases').title = I18n.t('toolbar.tab_databases');</script>
                     <span class="menu-icon-svg" style="display:flex; width:16px; height:16px;"><script>document.write(Icons.tableDatabase)</script></span>
-                    <span class="tab-label">Database</span>
+                    <span class="tab-label"><script>document.write(I18n.t('toolbar.tab_databases'))</script></span>
                 </button>
 
                 <div class="sidebar-tools">
-                    <button class="icon-btn" onclick="UI.addNote(null)" title="Nuova Nota">+</button>
+                    <button class="icon-btn" id="btnSideAddNote" onclick="UI.addNote(null)">+</button>
+                    <script>document.getElementById('btnSideAddNote').title = I18n.t('toolbar.new_note');</script>
                 </div>
             </div>
 
@@ -148,12 +157,12 @@
                         <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.createWorkspace(true)">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folderOpen)</script>
-                            </span> Crea Nuovo Workspace
+                            </span> <script>document.write(I18n.t('menu.new_workspace'))</script>
                         </button>
                         <button class="btn" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.openWorkspace()">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folder)</script>
-                            </span> Apri Workspace...
+                            </span> <script>document.write(I18n.t('menu.open_workspace'))</script>
                         </button>
                         <button id="btnRecoverSession" class="btn" style="padding: 10px 20px; font-size: 1rem; display:none; background: rgba(37, 99, 235, 0.1); border-color: var(--accent-color); color: var(--accent-color); font-weight: bold;" onclick="Store.restoreRecoveredSession()">
                             <span style="display:inline-block; margin-right:5px;">
@@ -179,9 +188,8 @@
                     <div style="margin-bottom: 20px; color:var(--text-secondary);">
                         <script>document.write(Icons.lock)</script>
                     </div>
-                    <h2>Modalità Lettura</h2>
-                    <p>Seleziona una nota dalla barra laterale per visualizzarla.<br>Clicca "Modifica" in alto a destra
-                        per apportare cambiamenti.</p>
+                    <h2><script>document.write(I18n.t('editor.read_mode_notice'))</script></h2>
+                    <p><script>document.write(I18n.t('editor.read_mode_desc'))</script></p>
                 </div>
             </div>
 
@@ -191,23 +199,40 @@
                 <div id="editorToolbar" class="toolbar hidden">
                     
                     <div style="display:flex; gap:2px;">
-                        <button onclick="Editor.undo()" title="Annulla Ultima Modifica (Ctrl+Z)"><script>document.write(Icons.undo)</script></button>
-                        <button onclick="Editor.redo()" title="Ripeti (Ctrl+Y / Ctrl+Shift+Z)"><script>document.write(Icons.redo)</script></button>
+                        <button id="btnUndo" onclick="Editor.undo()">
+                            <script>document.write(Icons.undo); document.getElementById('btnUndo').title = I18n.t('toolbar.undo');</script>
+                        </button>
+                        <button id="btnRedo" onclick="Editor.redo()">
+                            <script>document.write(Icons.redo); document.getElementById('btnRedo').title = I18n.t('toolbar.redo');</script>
+                        </button>
                     </div>
-                    <button onmousedown="event.preventDefault(); Editor.saveSelection();" onclick="Editor.clearFormatting()" title="Gomma Formattazioni"><script>document.write(Icons.eraser)</script></button>
+                    <button id="btnClearFormat" onmousedown="event.preventDefault(); Editor.saveSelection();" onclick="Editor.clearFormatting()">
+                        <script>document.write(Icons.eraser); document.getElementById('btnClearFormat').title = I18n.t('toolbar.eraser');</script>
+                    </button>
                     
                     <div class="separator" style="height:38px;"></div>
 
-                    <button id="btnFormatB" onclick="Editor.exec('bold')" title="Grassetto (Ctrl+B)"><b>B</b></button>
-                    <button id="btnFormatI" onclick="Editor.exec('italic')" title="Corsivo (Ctrl+I)"><i>I</i></button>
-                    <button id="btnFormatU" onclick="Editor.exec('underline')" title="Sottolineato (Ctrl+U)"><u>U</u></button>
-                    <button id="btnFormatS" onclick="Editor.exec('strikeThrough')" title="Barrato"><s>S</s></button>
-                    <button onclick="Editor.toggleCase()" title="Maiuscolo/Minuscolo (Ctrl+K)"><script>document.write(Icons.caseToggle)</script></button>
+                    <button id="btnFormatB" onclick="Editor.exec('bold')">
+                        <script>document.getElementById('btnFormatB').title = I18n.t('toolbar.bold');</script><b>B</b>
+                    </button>
+                    <button id="btnFormatI" onclick="Editor.exec('italic')">
+                        <script>document.getElementById('btnFormatI').title = I18n.t('toolbar.italic');</script><i>I</i>
+                    </button>
+                    <button id="btnFormatU" onclick="Editor.exec('underline')">
+                        <script>document.getElementById('btnFormatU').title = I18n.t('toolbar.underline');</script><u>U</u>
+                    </button>
+                    <button id="btnFormatS" onclick="Editor.exec('strikeThrough')">
+                        <script>document.getElementById('btnFormatS').title = I18n.t('toolbar.strikethrough');</script><s>S</s>
+                    </button>
+                    <button id="btnToggleCase" onclick="Editor.toggleCase()">
+                        <script>document.write(Icons.caseToggle); document.getElementById('btnToggleCase').title = I18n.t('toolbar.toggle_case');</script>
+                    </button>
                     
                     <div class="separator" style="height:38px;"></div>
 
                     <div class="color-picker-group">
-                        <button class="btn-color-main" onclick="ColorManager.applyLast('highlight')" title="Evidenziatore">
+                        <button class="btn-color-main" id="btnColorHlMain" onclick="ColorManager.applyLast('highlight')">
+                            <script>document.getElementById('btnColorHlMain').title = I18n.t('toolbar.highlight_color');</script>
                             <span style="display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px;"><script>document.write(Icons.pen)</script></span>
                             <div id="hlBar" class="btn-color-bar hl-c5"></div>
                         </button>
@@ -215,7 +240,8 @@
                     </div>
 
                     <div class="color-picker-group">
-                        <button class="btn-color-main" onclick="ColorManager.applyLast('text')" title="Colore Testo">
+                        <button class="btn-color-main" id="btnColorTxMain" onclick="ColorManager.applyLast('text')">
+                            <script>document.getElementById('btnColorTxMain').title = I18n.t('toolbar.text_color');</script>
                             <span style="font-weight:bold">A</span>
                             <div id="txBar" class="btn-color-bar tx-c10"></div>
                         </button>
@@ -223,7 +249,8 @@
                     </div>
 
                     <div class="color-picker-group" style="border:none;">
-                        <button id="btnFormatTMenu" class="btn-color-main" title="Carattere e Dimensione" onclick="Editor.openTextFormatMenu(event, 'btnFormatTMenu')">
+                        <button id="btnFormatTMenu" class="btn-color-main" onclick="Editor.openTextFormatMenu(event, 'btnFormatTMenu')">
+                            <script>document.getElementById('btnFormatTMenu').title = I18n.t('toolbar.typography');</script>
                             <span style="font-weight:bold; font-family: serif; font-size: 1.1em;">T</span>
                         </button>
                         <button class="btn-color-arrow" onclick="Editor.openTextFormatMenu(event, 'btnFormatTMenu')">▼</button>
@@ -231,18 +258,19 @@
 
                     <div class="separator" style="height:38px;"></div>
 
-                    <button id="btnFormatH1" onclick="Editor.toggleHeader('h2')" title="Titolo Principale (H1)">
-                        <script>document.write(Icons.h1)</script>
+                    <button id="btnFormatH1" onclick="Editor.toggleHeader('h2')">
+                        <script>document.write(Icons.h1); document.getElementById('btnFormatH1').title = I18n.t('toolbar.h1');</script>
                     </button>
-                    <button id="btnFormatH2" onclick="Editor.toggleHeader('h3')" title="Titolo Secondario (H2)">
-                        <script>document.write(Icons.h2)</script>
+                    <button id="btnFormatH2" onclick="Editor.toggleHeader('h3')">
+                        <script>document.write(Icons.h2); document.getElementById('btnFormatH2').title = I18n.t('toolbar.h2');</script>
                     </button>
-                    <button id="btnFormatQuote" onclick="Editor.toggleBlockquote()" title="Citazione a Blocco / Riquadro (Quote)">
-                        <script>document.write(Icons.quote)</script>
+                    <button id="btnFormatQuote" onclick="Editor.toggleBlockquote()">
+                        <script>document.write(Icons.quote); document.getElementById('btnFormatQuote').title = I18n.t('toolbar.quote');</script>
                     </button>
 
                     <div class="color-picker-group" style="border:none;">
-                        <button id="btnListMenu" class="btn-color-main" title="Elenchi e Diario" onclick="Editor.openListMenu(event, 'btnListMenu')" style="padding:5px;">
+                        <button id="btnListMenu" class="btn-color-main" onclick="Editor.openListMenu(event, 'btnListMenu')" style="padding:5px;">
+                            <script>document.getElementById('btnListMenu').title = I18n.t('toolbar.lists');</script>
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="8" y1="6" x2="21" y2="6"></line>
@@ -259,17 +287,19 @@
                     <div class="separator" style="height:38px;"></div>
 
                     <div class="color-picker-group" style="border:none;">
-                        <button id="btnInsertMenu" class="btn-color-main" title="Inserisci Elemento (Link, Img, ecc.)" onclick="Editor.openInsertMenu(event, 'btnInsertMenu')" style="padding:5px; flex-direction:row; gap:5px;">
+                        <button id="btnInsertMenu" class="btn-color-main" onclick="Editor.openInsertMenu(event, 'btnInsertMenu')" style="padding:5px; flex-direction:row; gap:5px;">
+                            <script>document.getElementById('btnInsertMenu').title = I18n.t('toolbar.insert_title');</script>
                             <span style="color:var(--accent-color);"><script>document.write(Icons.plus)</script></span>
-                            <span style="font-size:0.8rem; font-weight:bold;">Inserisci</span>
+                            <span style="font-size:0.8rem; font-weight:bold;"><script>document.write(I18n.t('toolbar.insert'))</script></span>
                         </button>
                         <button class="btn-color-arrow" onclick="Editor.openInsertMenu(event, 'btnInsertMenu')">▼</button>
                     </div>
 
                     <div class="color-picker-group" style="border:none;">
-                        <button id="btnWidgetsMenu" class="btn-color-main" title="Inserisci Modulo o Tabella" onclick="Editor.openWidgetsMenu(event, 'btnWidgetsMenu')" style="padding:5px; flex-direction:row; gap:5px;">
+                        <button id="btnWidgetsMenu" class="btn-color-main" onclick="Editor.openWidgetsMenu(event, 'btnWidgetsMenu')" style="padding:5px; flex-direction:row; gap:5px;">
+                            <script>document.getElementById('btnWidgetsMenu').title = I18n.t('toolbar.blocks_title');</script>
                             <span style="color:var(--tx-c4);"><script>document.write(Icons.tableSimple)</script></span>
-                            <span style="font-size:0.8rem; font-weight:bold;">Blocchi</span>
+                            <span style="font-size:0.8rem; font-weight:bold;"><script>document.write(I18n.t('toolbar.blocks'))</script></span>
                         </button>
                         <button class="btn-color-arrow" onclick="Editor.openWidgetsMenu(event, 'btnWidgetsMenu')">▼</button>
                     </div>
@@ -278,9 +308,9 @@
                     <input type="file" id="audioUpload" accept="audio/*" style="display:none" onchange="AudioManager.handleUpload(this)">
 
                     <button id="btnContextEdit" onclick="Editor.editContextElement()"
-                        title="Opzioni Elemento Selezionato"
                         style="color:var(--accent-color); font-weight:bold; display:none; margin-left:auto;">
-                        <span style="display:inline-flex; align-items:center; gap:5px;"><script>document.write(Icons.editTbl)</script> Modifica</span>
+                        <script>document.getElementById('btnContextEdit').title = I18n.t('toolbar.context_edit_title');</script>
+                        <span style="display:inline-flex; align-items:center; gap:5px;"><script>document.write(Icons.editTbl)</script> <script>document.write(I18n.t('toolbar.context_edit'))</script></span>
                     </button>
                 </div>
 
@@ -294,21 +324,22 @@
                                     style="font-size:0.75rem; color:var(--text-secondary); margin-right:10px;"></span>
                                 
                                 <div style="position: relative;">
-                                    <button id="btnNoteOptions" class="icon-btn" onclick="UI.openNoteOptionsMenu(event, 'btnNoteOptions')" title="Opzioni Nota">
-                                        <script>document.write(Icons.dotsVertical)</script>
+                                    <button id="btnNoteOptions" class="icon-btn" onclick="UI.openNoteOptionsMenu(event, 'btnNoteOptions')">
+                                        <script>document.write(Icons.dotsVertical); document.getElementById('btnNoteOptions').title = I18n.t('toolbar.note_options');</script>
                                     </button>
                                 </div>
                             </div>
                         </div>
 
-                        <input type="text" id="noteTitle" name="dummy_title_field" class="title-input" placeholder="Titolo della nota" readonly autocomplete="off" spellcheck="false"
+                        <input type="text" id="noteTitle" name="dummy_title_field" class="title-input" readonly autocomplete="off" spellcheck="false"
                             oninput="UI.updateCurrentNote()">
+                        <script>document.getElementById('noteTitle').placeholder = I18n.t('editor.note_title_placeholder');</script>
 
                         <div id="noteContent" class="editor-content monospace" contenteditable="false">
                         </div>
 
                         <div id="emptyNoteOverlay" class="empty-note-overlay" style="display: none;">
-                            <div class="empty-overlay-text">Inizia a scrivere oppure seleziona un template:</div>
+                            <div class="empty-overlay-text"><script>document.write(I18n.t('toolbar.template_hint'))</script></div>
                             <div id="templateGrid" class="template-grid"></div>
                         </div>
 
@@ -369,7 +400,7 @@
     <script src="js/TableManager/table-manager-drag.js"></script>
     <script src="js/TableManager/table-manager-csv.js"></script>
     
-    <!-- Script Motore Logico (Formule, Macre e Condizioni) -->
+    <!-- Script Motore Logico (Formule, Macro e Condizioni) -->
     <script src="js/logic-engine-core.js"></script>
     <script src="js/logic-engine-macro.js"></script>
     <script src="js/logic-engine-ui.js"></script>
