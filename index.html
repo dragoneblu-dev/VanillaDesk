@@ -37,7 +37,7 @@
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
                 </path>
             </svg>
-            <span id="fileNameDisplay" onclick="UI.goHome()" style="cursor:pointer;" title="Torna alla Home">Nessun Workspace</span>
+            <span id="fileNameDisplay" onclick="UI.goHome()" style="cursor:pointer;" title=""><script>document.write(I18n.t('common.no_workspace')); document.getElementById('fileNameDisplay').title = I18n.t('toolbar.breadcrumb_home');</script></span>
             <button id="editToggleBtn" class="btn" style="margin-left: 15px;" onclick="UI.toggleEditMode()">
                 <script>document.write(Icons.edit)</script> <script>document.write(I18n.t('common.edit'))</script>
             </button>
@@ -145,13 +145,12 @@
                     <div style="margin-bottom: 25px; color:var(--accent-color); transform: scale(1.8);">
                         <script>document.write(Icons.lightning || Icons.book)</script>
                     </div>
-                    <h1 style="margin-bottom: 10px; font-size: 2.2rem; color: var(--text-primary);">Il tuo Secondo Cervello.<br>Ora con i superpoteri.</h1>
+                    <h1 style="margin-bottom: 10px; font-size: 2.2rem; color: var(--text-primary);"><script>document.write(I18n.t('onboarding.title'))</script></h1>
                     <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;">
                         Realizzato da dragoneblu@gmail.com
                     </div>
                     <p style="font-size:1.1rem; line-height:1.7; color:var(--text-secondary); margin-bottom: 35px;">
-                        Non il solito blocco note. Scrivi liberamente, ed organizza con la mente di uno sviluppatore: trasforma le tue idee in <b>database relazionali</b>, <b>diagrammi di Gantt</b>, bacheche Kanban e grafici interattivi.<br><br>
-                        Imposta le tue automazioni e goditi un workspace che gira alla velocità della luce. Zero cloud, zero abbonamenti: <b>tutto resta al sicuro, solo sul tuo computer.</b>
+                        <script>document.write(I18n.t('onboarding.desc'))</script>
                     </p>
                     <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
                         <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.createWorkspace(true)">
@@ -167,7 +166,7 @@
                         <button id="btnRecoverSession" class="btn" style="padding: 10px 20px; font-size: 1rem; display:none; background: rgba(37, 99, 235, 0.1); border-color: var(--accent-color); color: var(--accent-color); font-weight: bold;" onclick="Store.restoreRecoveredSession()">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.restore)</script>
-                            </span> Recupera Sessione Precedente
+                            </span> <script>document.write(I18n.t('onboarding.btn_recover'))</script>
                         </button>
                     </div>
                 </div>
@@ -176,8 +175,8 @@
                     style="width: 100%; max-width: 900px; display:flex; flex-direction:column; gap:15px; margin: 0 auto;">
                     <div
                         style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border-color); padding-bottom:15px;">
-                        <h2 style="margin:0;">Dashboard Workspace</h2>
-                        <button class="btn btn-primary" onclick="CitationManager.openModal(true)">+ Aggiungi Citazione Live in Home</button>
+                        <h2 style="margin:0;"><script>document.write(I18n.t('home_dashboard.title'))</script></h2>
+                        <button class="btn btn-primary" onclick="CitationManager.openModal(true)">+ <script>document.write(I18n.t('home_dashboard.add_citation'))</script></button>
                     </div>
                     <div id="homeCitationsContainer"
                         style="width:100%; display:flex; flex-direction:column; gap:10px; text-align:left;">
