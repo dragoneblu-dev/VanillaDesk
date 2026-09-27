@@ -79,22 +79,22 @@ window.UI = {
         el.style.cursor = 'default';
 
         if (state === 'pending') {
-            el.textContent = 'Modificato...';
+            el.textContent = I18n.t('common.pending');
             el.classList.add('status-saving');
         } else if (state === 'saving') {
-            el.textContent = 'Salvataggio in corso...';
+            el.textContent = I18n.t('common.saving');
             el.classList.add('status-saving');
         } else if (state === 'saved') {
-            el.textContent = 'Salvato';
+            el.textContent = I18n.t('common.saved');
             el.classList.add('status-saved');
         } else if (state === 'error') {
-            el.textContent = 'Errore Salvataggio';
+            el.textContent = I18n.t('common.error');
             el.classList.add('status-error');
         } else if (state === 'unsaved') {
-            el.textContent = '⚠️ Salva File (Solo RAM)';
+            el.textContent = I18n.t('preferences.status_unsaved');
             el.classList.add('status-error');
             el.style.cursor = 'pointer';
-            el.title = 'I dati sono salvati solo nella memoria temporanea. Clicca per scegliere una cartella e salvare l\'intero Workspace su disco.';
+            el.title = I18n.t('preferences.status_unsaved_title');
             el.onclick = () => {
                 if (typeof Store !== 'undefined' && Store.createWorkspace) {
                     Store.createWorkspace(false);
@@ -118,28 +118,28 @@ window.UI = {
                 <div class="link-modal modal-animate" style="width: 560px; max-width: 95vw; padding: 25px; border-radius: 8px;">
                     <div style="display:flex; align-items:center; gap:12px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
                         <span style="color:var(--accent-color); display:inline-flex; transform:scale(1.2);">${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'}</span>
-                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">Cos'è un Workspace e come iniziare</h2>
+                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">${I18n.t('workspace_guide.title')}</h2>
                     </div>
                     <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); margin-bottom: 20px;">
                         <p style="margin-bottom: 12px;">
-                            In VanillaDesk <b>non esistono server cloud o account remoti</b>: tutti i tuoi dati risiedono esclusivamente sul tuo computer.
+                            ${I18n.t('workspace_guide.p1')}
                         </p>
                         <p style="margin-bottom: 15px;">
-                            Un <b>Workspace</b> è semplicemente una <b>cartella sul tuo disco fisso</b> (ad esempio nella cartella <i>Documenti</i> o sul <i>Desktop</i>) che conterrà in modo trasparente e permanente le tue note, i database e gli allegati.
+                            ${I18n.t('workspace_guide.p2')}
                         </p>
                         <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 6px; padding: 12px 16px; margin-bottom: 10px;">
-                            <div style="font-weight: bold; font-size: 0.8rem; color: var(--accent-color); text-transform: uppercase; margin-bottom: 6px;">Cosa fare adesso:</div>
+                            <div style="font-weight: bold; font-size: 0.8rem; color: var(--accent-color); text-transform: uppercase; margin-bottom: 6px;">${I18n.t('workspace_guide.box_title')}</div>
                             <ol style="padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
-                                <li>Clicca su <b>"Procedi e Scegli Cartella"</b> qui sotto.</li>
-                                <li>Nella finestra di sistema, seleziona una cartella dedicata (ti consigliamo di crearne una nuova vuota, ad esempio <i>"Note Personali"</i>).</li>
-                                <li>Quando il browser ti chiede la conferma dei permessi per salvare i file, clicca su <b>"Visualizza file"</b> o <b>"Salva modifiche"</b>.</li>
+                                <li>${I18n.t('workspace_guide.step1')}</li>
+                                <li>${I18n.t('workspace_guide.step2')}</li>
+                                <li>${I18n.t('workspace_guide.step3')}</li>
                             </ol>
                         </div>
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
-                        <button class="btn" id="btnCancelWorkspaceGuide">Annulla</button>
+                        <button class="btn" id="btnCancelWorkspaceGuide">${I18n.t('common.cancel')}</button>
                         <button class="btn btn-primary" id="btnConfirmWorkspaceGuide" style="padding: 8px 18px;">
-                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'} Procedi e Scegli Cartella</span>
+                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'} ${I18n.t('workspace_guide.btn_confirm')}</span>
                         </button>
                     </div>
                 </div>
@@ -153,6 +153,57 @@ window.UI = {
             };
 
             document.getElementById('btnConfirmWorkspaceGuide').onclick = () => {
+                overlay.remove();
+                resolve(true);
+            };
+        });
+    },
+
+    promptModpackGuide: () => {
+        return new Promise((resolve) => {
+            const overlay = document.createElement('div');
+            overlay.className = 'link-modal-overlay';
+            overlay.style.zIndex = '9999';
+
+            overlay.innerHTML = `
+                <div class="link-modal modal-animate" style="width: 580px; max-width: 95vw; padding: 25px; border-radius: 8px;">
+                    <div style="display:flex; align-items:center; gap:12px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
+                        <span style="color:var(--accent-color); display:inline-flex; transform:scale(1.3);">${typeof Icons !== 'undefined' ? Icons.lightning : '📦'}</span>
+                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">${I18n.t('modpack_guide.title')}</h2>
+                    </div>
+                    <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); margin-bottom: 20px;">
+                        <p style="margin-bottom: 12px;">
+                            ${I18n.t('modpack_guide.p1')}
+                        </p>
+                        <p style="margin-bottom: 15px;">
+                            ${I18n.t('modpack_guide.p2')}
+                        </p>
+                        <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 6px; padding: 12px 16px; margin-bottom: 10px;">
+                            <div style="font-weight: bold; font-size: 0.8rem; color: var(--accent-color); text-transform: uppercase; margin-bottom: 6px;">${I18n.t('modpack_guide.box_title')}</div>
+                            <ol style="padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
+                                <li>${I18n.t('modpack_guide.step1')}</li>
+                                <li>${I18n.t('modpack_guide.step2')}</li>
+                                <li>${I18n.t('modpack_guide.step3')}</li>
+                            </ol>
+                        </div>
+                    </div>
+                    <div style="display:flex; justify-content:flex-end; gap:10px;">
+                        <button class="btn" id="btnCancelModpackGuide">${I18n.t('common.cancel')}</button>
+                        <button class="btn btn-primary" id="btnConfirmModpackGuide" style="padding: 8px 18px;">
+                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} ${I18n.t('modpack_guide.btn_confirm')}</span>
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+
+            document.getElementById('btnCancelModpackGuide').onclick = () => {
+                overlay.remove();
+                resolve(false);
+            };
+
+            document.getElementById('btnConfirmModpackGuide').onclick = () => {
                 overlay.remove();
                 resolve(true);
             };

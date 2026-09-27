@@ -146,7 +146,7 @@ Object.assign(UI, {
         let parentNoteName = "Nota Sconosciuta / Orfano";
         for (let n of AppState.notes) {
             if (n.content && n.content.includes(dbId)) {
-                parentNoteName = n.title || 'Senza Titolo';
+                parentNoteName = n.title || I18n.t('editor.untitled');
                 break;
             }
         }
@@ -676,7 +676,7 @@ Object.assign(UI, {
             }
         }
 
-        title.innerHTML = `<span style="opacity:0.8; ${iconColorStyle}">${customIcon}</span> <span>${node.title || 'Senza Titolo'}</span>`;
+        title.innerHTML = `<span style="opacity:0.8; ${iconColorStyle}">${customIcon}</span> <span>${node.title || I18n.t('editor.untitled')}</span>`;
 
         // ISOLAMENTO RIGOROSO: il timer e l'appunto del segnalibro vengono calcolati unicamente dal contenuto della specifica nota 'node'
         if (reqBook && !isGhost && node.content) {
@@ -713,7 +713,7 @@ Object.assign(UI, {
         const addBtn = document.createElement('span');
         addBtn.className = 'node-add-btn';
         addBtn.textContent = '+';
-        addBtn.title = "Aggiungi Sotto-nota";
+        addBtn.title = I18n.t('editor_alerts.tree_add_subnote');
         addBtn.onclick = (e) => { e.stopPropagation(); node.expanded = true; if(typeof UI.addNote !== 'undefined') UI.addNote(node.id); };
 
         content.append(toggle, title, addBtn);

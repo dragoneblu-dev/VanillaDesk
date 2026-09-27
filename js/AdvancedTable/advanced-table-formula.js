@@ -198,27 +198,27 @@ Object.assign(AdvancedTable, {
                 
                 <div id="advFormulaValidationBar" style="background: var(--bg-color); padding: 8px 12px; border-radius: 4px; border: 1px solid var(--border-color); font-size: 0.8rem; display:flex; align-items:center; gap:8px;">
                     <span id="advFormulaStatusIcon" style="display:inline-flex;">${Icons.hourglass}</span>
-                    <span id="advFormulaStatusText" style="color:var(--text-secondary); font-family:monospace; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">In attesa...</span>
+                    <span id="advFormulaStatusText" style="color:var(--text-secondary); font-family:monospace; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${I18n.t('formula_editor.waiting')}</span>
                 </div>
 
                 <div style="background: rgba(37, 99, 235, 0.05); padding: 8px 12px; border-radius: 4px; border: 1px solid rgba(37, 99, 235, 0.2); font-size: 0.8rem; display:flex; align-items:center; gap:8px;">
-                    <span style="flex:1; color:var(--text-secondary);">Se vuoi farti aiutare da un LLM per scrivere la formula, copia questo prompt e chiedilo all'intelligenza artificiale:</span>
-                    <button id="btnCopyAIPrompt" class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="AdvancedTable.copyAIPrompt('${tableId}')" title="Copia Prompt per AI"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} Copia Prompt</span></button>
+                    <span style="flex:1; color:var(--text-secondary);">${I18n.t('formula_editor.ai_helper_desc')}</span>
+                    <button id="btnCopyAIPrompt" class="btn" style="padding: 4px 8px; font-size: 0.75rem;" onclick="AdvancedTable.copyAIPrompt('${tableId}')" title="${I18n.t('formula_editor.copy_prompt_title')}"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${I18n.t('formula_editor.copy_prompt')}</span></button>
                 </div>
 
                 <div style="background: var(--item-hover); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); flex: 1; display:flex; flex-direction:column; overflow:hidden;">
-                    <div id="advFormulaContextHelp" style="margin-bottom: 8px; font-weight: bold; font-size:0.85rem; color: var(--accent-color); flex-shrink:0; display:none;">Suggerimenti Dinamici:</div>
+                    <div id="advFormulaContextHelp" style="margin-bottom: 8px; font-weight: bold; font-size:0.85rem; color: var(--accent-color); flex-shrink:0; display:none;">${I18n.t('formula_editor.dynamic_hints')}</div>
                     <div id="advFormulaAvailableCols" style="display:flex; flex-direction: column; gap:4px; overflow-y:auto; flex:1; padding-right:5px;" class="adv-scroll-container"></div>
                 </div>
             </div>
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button id="advFormulaSaveBtn" class="btn btn-primary" onclick="AdvancedTable.saveFormula()">Salva Formula</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button id="advFormulaSaveBtn" class="btn btn-primary" onclick="AdvancedTable.saveFormula()">${I18n.t('formula_editor.btn_save')}</button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.formula} Modifica Formula: ${col.name}</span>`, bodyHTML, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.formula} ${I18n.t('formula_editor.drawer_title', { colName: col.name })}</span>`, bodyHTML, footerHTML);
 
         setTimeout(() => {
             const inputArea = document.getElementById('advFormulaInput');
@@ -431,7 +431,7 @@ LA MIA RICHIESTA:
             const btn = document.getElementById('btnCopyAIPrompt');
             if (btn) {
                 const originalHTML = btn.innerHTML;
-                btn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} Copiato!</span>`;
+                btn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} ${I18n.t('formula_editor.prompt_copied')}</span>`;
                 btn.classList.add('btn-primary');
                 setTimeout(() => {
                     btn.innerHTML = originalHTML;
@@ -659,7 +659,7 @@ LA MIA RICHIESTA:
         // SUGGERIMENTO DINAMICO: L'utente sta digitando tabella["... (Formato compatto a pillole orizzontali)
         if (textBeforeCursor.match(/tabella\[['"]([^'"]*)$/)) {
             contextTitle.style.display = 'block';
-            contextTitle.textContent = `Seleziona il Database Esistente:`;
+            contextTitle.textContent = I18n.t('formula_editor.select_db');
             if (dbList.length > 0) {
                 const pillContainer = document.createElement('div');
                 pillContainer.style.display = 'flex'; 
@@ -682,14 +682,14 @@ LA MIA RICHIESTA:
                 });
                 dynContainer.appendChild(pillContainer);
             } else {
-                dynContainer.innerHTML = '<span style="color:var(--text-secondary); font-size:0.8rem; width:100%; padding-left:5px;">Nessun database trovato nello spazio di lavoro.</span>';
+                dynContainer.innerHTML = `<span style="color:var(--text-secondary); font-size:0.8rem; width:100%; padding-left:5px;">${I18n.t('formula_editor.no_db_found')}</span>`;
             }
             return;
         }
 
         if (textBeforeCursor.match(/riga\[['"]([^'"]*)$/)) {
             contextTitle.style.display = 'block';
-            contextTitle.textContent = `Completa nome Colonna Locale:`;
+            contextTitle.textContent = I18n.t('formula_editor.complete_col_name');
             const pillCont = document.createElement('div');
             pillCont.style.display = 'flex'; pillCont.style.flexWrap = 'wrap'; pillCont.style.gap = '4px';
             (state.columns || []).forEach(c => {
@@ -716,25 +716,25 @@ LA MIA RICHIESTA:
 
             if (expectedType) {
                 contextTitle.style.display = 'block';
-                contextTitle.textContent = `Metodi concatenati disponibili:`;
+                contextTitle.textContent = I18n.t('formula_editor.chain_methods_title');
                 if (expectedType === 'array') {
-                    createLogicRow('.map(r => ...)', `map(r => r["Colonna"])`, 'Estrae una colonna specifica da tutti i record.', dynContainer);
-                    createLogicRow('.filter(r => ...)', `filter(r => r["Colonna"] === "Valore")`, 'Mantiene solo i record corrispondenti al criterio.', dynContainer);
-                    createLogicRow('.find(r => ...)', `find(r => r["Colonna"] === "Valore")`, 'Trova e restituisce il PRIMO record corrispondente.', dynContainer);
-                    createLogicRow('.reduce(...)', `reduce((somma, r) => somma + Number(r["Colonna"] || 0), 0)`, 'Calcola un valore unico aggregato (es. somma totale).', dynContainer);
-                    createLogicRow('.join(...)', `join(", ")`, 'Unisce un array testuale in una singola stringa.', dynContainer);
-                    createLogicRow('.length', `length`, 'Restituisce il numero totale di elementi della lista.', dynContainer);
+                    createLogicRow('.map(r => ...)', `map(r => r["Colonna"])`, I18n.t('formula_editor.desc_map'), dynContainer);
+                    createLogicRow('.filter(r => ...)', `filter(r => r["Colonna"] === "Valore")`, I18n.t('formula_editor.desc_filter'), dynContainer);
+                    createLogicRow('.find(r => ...)', `find(r => r["Colonna"] === "Valore")`, I18n.t('formula_editor.desc_find'), dynContainer);
+                    createLogicRow('.reduce(...)', `reduce((somma, r) => somma + Number(r["Colonna"] || 0), 0)`, I18n.t('formula_editor.desc_reduce'), dynContainer);
+                    createLogicRow('.join(...)', `join(", ")`, I18n.t('formula_editor.desc_join'), dynContainer);
+                    createLogicRow('.length', `length`, I18n.t('formula_editor.desc_length'), dynContainer);
                 } else if (expectedType === 'object') {
-                    createLogicRow('["Colonna"]', `[""]`, 'Accedi a una colonna di questo specifico record.', dynContainer);
+                    createLogicRow('["Colonna"]', `[""]`, I18n.t('formula_editor.desc_col_access'), dynContainer);
                 } else if (expectedType === 'string') {
-                    createLogicRow('.includes(...) ? ...', `includes("@") ? "Valida" : "Non Valida"`, 'Verifica se contiene un testo (Operatore ternario If/Else).', dynContainer);
-                    createLogicRow('.replace(...)', `replace("Admin", "Amministratore")`, 'Sostituisce una porzione di testo con un\'altra.', dynContainer);
-                    createLogicRow('.substring(...)', `substring(0, 3)`, 'Taglia il testo mantenendo solo l\'intervallo (es. primi 3 caratteri).', dynContainer);
-                    createLogicRow('.toLowerCase()', `toLowerCase()`, 'Converte tutto il testo in minuscolo.', dynContainer);
-                    createLogicRow('.toUpperCase()', `toUpperCase()`, 'Converte tutto il testo in MAIUSCOLO.', dynContainer);
-                    createLogicRow('.length', `length`, 'Lunghezza in numero di caratteri.', dynContainer);
+                    createLogicRow('.includes(...) ? ...', `includes("@") ? "Valida" : "Non Valida"`, I18n.t('formula_editor.desc_ternary'), dynContainer);
+                    createLogicRow('.replace(...)', `replace("Admin", "Amministratore")`, I18n.t('formula_editor.desc_replace'), dynContainer);
+                    createLogicRow('.substring(...)', `substring(0, 3)`, I18n.t('formula_editor.desc_substring'), dynContainer);
+                    createLogicRow('.toLowerCase()', `toLowerCase()`, I18n.t('formula_editor.desc_tolower'), dynContainer);
+                    createLogicRow('.toUpperCase()', `toUpperCase()`, I18n.t('formula_editor.desc_toupper'), dynContainer);
+                    createLogicRow('.length', `length`, I18n.t('formula_editor.desc_str_length'), dynContainer);
                 } else if (expectedType === 'number') {
-                    dynContainer.innerHTML = '<span style="color:var(--text-secondary); font-size:0.8rem; padding-left:5px;">Nessun metodo testuale/array da suggerire per valori puramente numerici.</span>';
+                    dynContainer.innerHTML = `<span style="color:var(--text-secondary); font-size:0.8rem; padding-left:5px;">${I18n.t('formula_editor.no_numeric_methods')}</span>`;
                 }
                 return;
             }
@@ -742,7 +742,7 @@ LA MIA RICHIESTA:
         
         contextTitle.style.display = 'none';
 
-        const varGroup = createGroup('Variabili Principali', Icons.gear, true);
+        const varGroup = createGroup(I18n.t('formula_editor.grp_variables'), Icons.gear, true);
         const varPillCont = document.createElement('div');
         varPillCont.style.display = 'flex'; varPillCont.style.gap = '4px'; varPillCont.style.flexWrap = 'wrap';
         createCompactPill('riga["..."]', 'riga[""]', varPillCont);
@@ -751,51 +751,51 @@ LA MIA RICHIESTA:
         varGroup.content.appendChild(varPillCont);
         dynContainer.appendChild(varGroup.details);
 
-        const logicGroup = createGroup('Condizioni e Aggregazioni', Icons.listFilter, false);
-        createLogicRow('SE()', 'SE(riga[""] === "", "Vero", "Falso")', 'Esegue un test: se vero mostra un risultato, altrimenti un altro.', logicGroup.content);
-        createLogicRow('SOMMA()', 'SOMMA(tabella[""], "")', 'Somma tutti i numeri di una specifica colonna (o argomenti multipli).', logicGroup.content);
-        createLogicRow('MEDIA()', 'MEDIA(tabella[""], "")', 'Calcola la media matematica ignorando le celle vuote.', logicGroup.content);
-        createLogicRow('CERCA()', 'CERCA(tabella[""], "ColRicerca", riga["ColInterna"], "DatoRitorno")', 'Cerca un valore in un altro Database.', logicGroup.content);
-        createLogicRow('CONTA()', 'CONTA(tabella[""], "Colonna", "ValoreEsatto")', 'Conta quante volte compare un valore esatto.', logicGroup.content);
-        createLogicRow('UNISCI()', 'UNISCI(tabella[""], "Colonna")', 'Unisce i testi in una singola stringa, separati da virgola.', logicGroup.content);
+        const logicGroup = createGroup(I18n.t('formula_editor.grp_conditions_agg'), Icons.listFilter, false);
+        createLogicRow('SE()', 'SE(riga[""] === "", "Vero", "Falso")', I18n.t('formula_editor.desc_se'), logicGroup.content);
+        createLogicRow('SOMMA()', 'SOMMA(tabella[""], "")', I18n.t('formula_editor.desc_somma'), logicGroup.content);
+        createLogicRow('MEDIA()', 'MEDIA(tabella[""], "")', I18n.t('formula_editor.desc_media'), logicGroup.content);
+        createLogicRow('CERCA()', 'CERCA(tabella[""], "ColRicerca", riga["ColInterna"], "DatoRitorno")', I18n.t('formula_editor.desc_cerca'), logicGroup.content);
+        createLogicRow('CONTA()', 'CONTA(tabella[""], "Colonna", "ValoreEsatto")', I18n.t('formula_editor.desc_conta'), logicGroup.content);
+        createLogicRow('UNISCI()', 'UNISCI(tabella[""], "Colonna")', I18n.t('formula_editor.desc_unisci'), logicGroup.content);
         dynContainer.appendChild(logicGroup.details);
         
-        const hierGroup = createGroup('Struttura (Padri e Figli)', Icons.treeNode, false);
-        createLogicRow('NOTA_CORRENTE()', 'NOTA_CORRENTE()', "Restituisce l'ID della nota corrente.", hierGroup.content);
-        createLogicRow('PADRE()', 'PADRE(NOTA_CORRENTE())', "Ottiene l'ID del genitore di una nota.", hierGroup.content);
-        createLogicRow('FIGLI()', 'FIGLI(NOTA_CORRENTE())', "Ottiene gli ID delle note figlie.", hierGroup.content);
-        createLogicRow('PROPRIETA()', 'PROPRIETA(PADRE(NOTA_CORRENTE()), "Tag")', "Estrae un valore dai tag di una pagina.", hierGroup.content);
+        const hierGroup = createGroup(I18n.t('formula_editor.grp_hierarchy'), Icons.treeNode, false);
+        createLogicRow('NOTA_CORRENTE()', 'NOTA_CORRENTE()', I18n.t('formula_editor.desc_nota_corrente'), hierGroup.content);
+        createLogicRow('PADRE()', 'PADRE(NOTA_CORRENTE())', I18n.t('formula_editor.desc_padre'), hierGroup.content);
+        createLogicRow('FIGLI()', 'FIGLI(NOTA_CORRENTE())', I18n.t('formula_editor.desc_figli'), hierGroup.content);
+        createLogicRow('PROPRIETA()', 'PROPRIETA(PADRE(NOTA_CORRENTE()), "Tag")', I18n.t('formula_editor.desc_proprieta'), hierGroup.content);
         dynContainer.appendChild(hierGroup.details);
 
-        const dateGroup = createGroup('Date, Tempi e Scadenze', Icons.time, false);
-        createLogicRow('DATA_DIFF()', 'DATA_DIFF(riga["Scadenza"], riga["Inizio"], "giorni")', 'Calcola la differenza tra due date. Unità: giorni, ore, minuti, secondi, mesi, anni.', dateGroup.content);
-        createLogicRow('DATA_AGGIUNGI()', 'DATA_AGGIUNGI(riga["Inizio"], 7, "giorni")', 'Aggiunge o sottrae tempo a una data restituendo un nuovo Timestamp.', dateGroup.content);
-        createLogicRow('OGGI()', 'OGGI()', 'Restituisce la data odierna (Senza orario: AAAA-MM-GG).', dateGroup.content);
-        createLogicRow('ADESSO()', 'ADESSO()', 'Restituisce data e ora esatta (AAAA-MM-GG HH:MM).', dateGroup.content);
-        createLogicRow('ANNO()', 'ANNO(riga["Data"])', 'Estrae solo l\'anno da una data.', dateGroup.content);
-        createLogicRow('MESE()', 'MESE(riga["Data"])', 'Estrae il numero del mese (1-12) da una data.', dateGroup.content);
-        createLogicRow('GIORNO()', 'GIORNO(riga["Data"])', 'Estrae il giorno del mese (1-31).', dateGroup.content);
-        createLogicRow('GIORNO_SETTIMANA()', 'GIORNO_SETTIMANA(riga["Data"])', 'Restituisce il giorno della settimana in numero (1 = Lunedì, 7 = Domenica).', dateGroup.content);
-        createLogicRow('ORA()', 'ORA(riga["Data"])', 'Estrae l\'ora (0-23).', dateGroup.content);
-        createLogicRow('MINUTO()', 'MINUTO(riga["Data"])', 'Estrae il minuto (0-59).', dateGroup.content);
+        const dateGroup = createGroup(I18n.t('formula_editor.grp_date'), Icons.time, false);
+        createLogicRow('DATA_DIFF()', 'DATA_DIFF(riga["Scadenza"], riga["Inizio"], "giorni")', I18n.t('formula_editor.desc_data_diff'), dateGroup.content);
+        createLogicRow('DATA_AGGIUNGI()', 'DATA_AGGIUNGI(riga["Inizio"], 7, "giorni")', I18n.t('formula_editor.desc_data_aggiungi'), dateGroup.content);
+        createLogicRow('OGGI()', 'OGGI()', I18n.t('formula_editor.desc_oggi'), dateGroup.content);
+        createLogicRow('ADESSO()', 'ADESSO()', I18n.t('formula_editor.desc_adesso'), dateGroup.content);
+        createLogicRow('ANNO()', 'ANNO(riga["Data"])', I18n.t('formula_editor.desc_anno'), dateGroup.content);
+        createLogicRow('MESE()', 'MESE(riga["Data"])', I18n.t('formula_editor.desc_mese'), dateGroup.content);
+        createLogicRow('GIORNO()', 'GIORNO(riga["Data"])', I18n.t('formula_editor.desc_giorno'), dateGroup.content);
+        createLogicRow('GIORNO_SETTIMANA()', 'GIORNO_SETTIMANA(riga["Data"])', I18n.t('formula_editor.desc_giorno_settimana'), dateGroup.content);
+        createLogicRow('ORA()', 'ORA(riga["Data"])', I18n.t('formula_editor.desc_ora'), dateGroup.content);
+        createLogicRow('MINUTO()', 'MINUTO(riga["Data"])', I18n.t('formula_editor.desc_minuto'), dateGroup.content);
         dynContainer.appendChild(dateGroup.details);
 
-        const mathGroup = createGroup('Matematica Avanzata', Icons.formula, false);
-        createLogicRow('Math.max(...)', `Math.max(...righe.map(r => Number(r["Colonna"]||0)))`, 'Trova il valore massimo assoluto in una colonna.', mathGroup.content);
-        createLogicRow('Math.min(...)', `Math.min(...righe.map(r => Number(r["Colonna"]||0)))`, 'Trova il valore minimo assoluto in una colonna.', mathGroup.content);
-        createLogicRow('Math.round(...)', `Math.round( )`, 'Arrotonda un numero decimale all\'intero più vicino.', mathGroup.content);
+        const mathGroup = createGroup(I18n.t('formula_editor.grp_math'), Icons.formula, false);
+        createLogicRow('Math.max(...)', `Math.max(...righe.map(r => Number(r["Colonna"]||0)))`, I18n.t('formula_editor.desc_max'), mathGroup.content);
+        createLogicRow('Math.min(...)', `Math.min(...righe.map(r => Number(r["Colonna"]||0)))`, I18n.t('formula_editor.desc_min'), mathGroup.content);
+        createLogicRow('Math.round(...)', `Math.round( )`, I18n.t('formula_editor.desc_round'), mathGroup.content);
         dynContainer.appendChild(mathGroup.details);
 
         let dictHTML = `
-            <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing: 0.05em; margin-bottom:5px;">Dizionario Colonne</div>
+            <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing: 0.05em; margin-bottom:5px;">${I18n.t('formula_editor.col_dictionary')}</div>
             <div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:10px; margin-bottom:8px;">
-                <div style="font-size:0.8rem; font-weight:bold; color:var(--accent-color); margin-bottom:8px; display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.tableDatabase}</span> ${state.title} (Attuale)</div>
+                <div style="font-size:0.8rem; font-weight:bold; color:var(--accent-color); margin-bottom:8px; display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.tableDatabase}</span> ${state.title} ${I18n.t('formula_editor.current_db_badge')}</div>
                 <div style="display:flex; flex-wrap:wrap; gap:4px;">
         `;
         (state.columns || []).forEach(c => {
             if (c.id !== colId) {
                 const safeName = (c.name || '').replace(/'/g, "\\'");
-                dictHTML += `<span class="adv-select-pill default-color" style="cursor:pointer; font-family:monospace; font-size:0.75rem;" title="Aggiungi colonna locale" onmousedown="event.preventDefault(); AdvancedTable.insertCodeAtCaret(document.getElementById('advFormulaInput'), 'riga[\\'${safeName}\\']')">${c.name}</span>`;
+                dictHTML += `<span class="adv-select-pill default-color" style="cursor:pointer; font-family:monospace; font-size:0.75rem;" title="${I18n.t('formula_editor.tip_add_local_col')}" onmousedown="event.preventDefault(); AdvancedTable.insertCodeAtCaret(document.getElementById('advFormulaInput'), 'riga[\\'${safeName}\\']')">${c.name}</span>`;
             }
         });
         dictHTML += `</div></div>`;
@@ -810,7 +810,7 @@ LA MIA RICHIESTA:
                 `;
                 schema.forEach(c => {
                     const safeName = (c.name || '').replace(/"/g, '\\"');
-                    dictHTML += `<span class="adv-select-pill default-color" style="cursor:pointer; font-family:monospace; font-size:0.75rem;" title="Inserisci nome colonna come testo" onmousedown='event.preventDefault(); AdvancedTable.insertCodeAtCaret(document.getElementById("advFormulaInput"), "\\"${safeName}\\"")'>"${c.name}"</span>`;
+                    dictHTML += `<span class="adv-select-pill default-color" style="cursor:pointer; font-family:monospace; font-size:0.75rem;" title="${I18n.t('formula_editor.tip_insert_col_name')}" onmousedown='event.preventDefault(); AdvancedTable.insertCodeAtCaret(document.getElementById("advFormulaInput"), "\\"${safeName}\\"")'>"${c.name}"</span>`;
                 });
                 dictHTML += `</div></div>`;
             }
@@ -825,12 +825,12 @@ LA MIA RICHIESTA:
         const btn = document.getElementById('advFormulaSaveBtn');
 
         icon.innerHTML = Icons.hourglass;
-        text.textContent = 'Validazione in corso...';
+        text.textContent = I18n.t('formula_editor.validating');
         text.style.color = 'var(--text-secondary)';
 
         AdvancedTable._validationTimer = setTimeout(async () => {
             if (!formulaStr.trim()) {
-                icon.innerHTML = Icons.info; text.textContent = 'Formula vuota.'; btn.disabled = false; return;
+                icon.innerHTML = Icons.info; text.textContent = I18n.t('formula_editor.empty_formula'); btn.disabled = false; return;
             }
 
             const { state, tableId } = AdvancedTable._pendingFormulaConfig;
@@ -858,13 +858,13 @@ LA MIA RICHIESTA:
 
                 icon.innerHTML = Icons.checkCircle;
                 icon.style.color = 'var(--accent-color)';
-                text.textContent = `Risultato (Riga 1): ${String(result)}`;
+                text.textContent = I18n.t('formula_editor.result_row1', { result: String(result) });
                 text.style.color = 'var(--accent-color)';
                 btn.disabled = false;
             } catch (e) {
                 icon.innerHTML = Icons.alertTriangle;
                 icon.style.color = 'var(--danger-color)';
-                text.textContent = `Errore Sintassi: ${e.message}`;
+                text.textContent = I18n.t('formula_editor.syntax_error', { error: e.message });
                 text.style.color = 'var(--danger-color)';
             }
         }, 300);

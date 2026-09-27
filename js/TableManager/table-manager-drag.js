@@ -80,7 +80,7 @@ Object.assign(TableManager.Drag, {
         if (isSourceSpanIntersecting) {
             e.preventDefault();
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Impossibile spostare: La riga o colonna contiene celle unite che si estendono oltre. Dividi le celle prima di spostare.", "warning");
+                UI.showToast(I18n.t('table_manager.drag_intersect_merge'), "warning");
             }
             return;
         }

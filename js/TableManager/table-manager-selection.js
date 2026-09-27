@@ -262,7 +262,7 @@ Object.assign(TableManager.Selection, {
 
         navigator.clipboard.writeText(tsvContent).then(() => {
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Selezione copiata per Excel!", "success");
+                UI.showToast(I18n.t('table_manager.copied_selection_excel'), "success");
             }
             TableManager.Selection.clearSelection();
         }).catch(err => {

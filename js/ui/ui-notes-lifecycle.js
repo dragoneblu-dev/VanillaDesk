@@ -22,7 +22,7 @@ Object.assign(UI, {
             overlay.className = 'link-modal-overlay';
             overlay.style.zIndex = '10001';
 
-            const localTitle = localNote.title || 'Senza Titolo';
+            const localTitle = localNote.title || I18n.t('editor.untitled');
             const diskDateStr = diskNote.updatedAt ? UI.formatDate(diskNote.updatedAt) : 'Data sconosciuta';
             const localDateStr = localNote.updatedAt ? UI.formatDate(localNote.updatedAt) : 'Data sconosciuta';
 
@@ -30,36 +30,36 @@ Object.assign(UI, {
                 <div class="link-modal modal-animate" style="width: 580px; max-width: 95vw; padding: 25px; border-radius: 8px; border: 1px solid var(--danger-color); box-shadow: 0 10px 30px rgba(0,0,0,0.35);">
                     <div style="display:flex; align-items:center; gap:12px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
                         <span style="color:var(--danger-color); display:inline-flex; transform:scale(1.3);">${typeof Icons !== 'undefined' ? Icons.alertTriangle : '⚠️'}</span>
-                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">Conflitto di Modifica Rilevato</h2>
+                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">${I18n.t('conflict.title')}</h2>
                     </div>
 
                     <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); margin-bottom: 20px;">
                         <p style="margin-bottom: 12px;">
-                            La nota <b>"${UI.escapeHTML(localTitle)}"</b> è stata modificata e salvata su disco da un altro utente, processo o scheda dopo che l'avevi aperta.
+                            ${I18n.t('conflict.desc', { title: UI.escapeHTML(localTitle) })}
                         </p>
                         
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                             <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 6px; padding: 10px;">
-                                <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent-color); text-transform: uppercase;">Versione su Disco:</div>
+                                <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent-color); text-transform: uppercase;">${I18n.t('conflict.disk_version')}:</div>
                                 <div style="font-size: 0.85rem; margin-top: 4px; font-weight: 500;">Salvataggio: ${diskDateStr}</div>
                             </div>
                             <div style="background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 6px; padding: 10px;">
-                                <div style="font-size: 0.75rem; font-weight: bold; color: #b45309; text-transform: uppercase;">La tua versione (RAM):</div>
+                                <div style="font-size: 0.75rem; font-weight: bold; color: #b45309; text-transform: uppercase;">${I18n.t('conflict.local_version')}:</div>
                                 <div style="font-size: 0.85rem; margin-top: 4px; font-weight: 500;">Salvataggio: ${localDateStr}</div>
                             </div>
                         </div>
 
                         <div style="background: rgba(0, 0, 0, 0.02); border: 1px dashed var(--border-color); border-radius: 6px; padding: 12px; font-size: 0.82rem; color: var(--text-secondary); line-height: 1.5;">
-                            <b>Nota di sicurezza:</b> Se scegli di <i>Ricaricare da Disco</i>, le parole che hai digitato localmente non andranno perse nel nulla: verranno memorizzate nello storico di annullamento e potrai recuperarle in qualsiasi momento premendo <kbd>Ctrl+Z</kbd>.
+                            ${I18n.t('conflict.safety_note')}
                         </div>
                     </div>
 
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn" id="btnConflictOverwrite" style="border-color: var(--danger-color); color: var(--danger-color);">
-                            Sovrascrivi su Disco (Forza la mia versione)
+                            ${I18n.t('conflict.btn_overwrite')}
                         </button>
                         <button class="btn btn-primary" id="btnConflictReload" style="padding: 8px 18px;">
-                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.restore : '↺'} Ricarica da Disco (Consigliato)</span>
+                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.restore : '↺'} ${I18n.t('conflict.btn_reload')}</span>
                         </button>
                     </div>
                 </div>
@@ -132,7 +132,7 @@ Object.assign(UI, {
                         <span>Questa nota si trova nel Cestino (Sola Lettura). I database al suo interno continuano a funzionare per i collegamenti esterni.</span>
                     </div>
                     <button class="btn" style="background: var(--danger-color); color: white; border: none; padding: 4px 10px; font-weight: bold; cursor: pointer; flex-shrink: 0;" onclick="UI.restoreNoteFromBanner('${note.id}')">
-                        <span style="display: inline-flex; align-items: center; gap: 4px;">${typeof Icons !== 'undefined' ? Icons.restore : '↺'} Ripristina Nota</span>
+                        <span style="display: inline-flex; align-items: center; gap: 4px;">${typeof Icons !== 'undefined' ? Icons.restore : '↺'} ${I18n.t('trash.restore_btn')}</span>
                     </button>
                 `;
                 banner.style.display = 'flex';
@@ -646,7 +646,7 @@ Object.assign(UI, {
                 }
             }
 
-            treeTitleContainer.innerHTML = `<span style="opacity:0.8; ${iconColorStr}">${customIcon}</span> <span>${note.title || 'Senza Titolo'}</span>`;
+            treeTitleContainer.innerHTML = `<span style="opacity:0.8; ${iconColorStr}">${customIcon}</span> <span>${note.title || I18n.t('editor.untitled')}</span>`;
         }
 
         UI.updateBreadcrumb(note);
@@ -685,7 +685,7 @@ Object.assign(UI, {
         const note = Store.getNote(AppState.currentNoteId);
         if (!note || note.deletedAt) return;
 
-        if (!confirm("Spostare questa nota e tutte le sue sotto-note nel cestino?")) return;
+        if (!confirm(I18n.t('notes_utils.confirm_move_trash'))) return;
         
         const parentIdToReturn = note.parentId;
 
@@ -716,7 +716,7 @@ Object.assign(UI, {
         
         if (typeof UI.renderTree !== 'undefined') UI.renderTree(); 
         if (typeof Store !== 'undefined') Store.triggerAutoSave();
-        UI.showToast("Nota spostata nel cestino.", "warning");
+        UI.showToast(I18n.t('notes_utils.toast_moved_trash'), "warning");
 
         if (parentIdToReturn && Store.getNote(parentIdToReturn) && !Store.getNote(parentIdToReturn).deletedAt) {
             UI.selectNote(parentIdToReturn);

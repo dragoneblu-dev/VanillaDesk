@@ -124,7 +124,7 @@ Object.assign(UI, {
                 ghostBtn.id = 'advDrawerGhostBtn';
                 ghostBtn.className = 'adv-icon-btn';
                 ghostBtn.innerHTML = typeof Icons !== 'undefined' ? Icons.eye : '👁';
-                ghostBtn.title = 'Modalità X-Ray (Scompare temporaneamente)';
+                ghostBtn.title = I18n.t('preferences.drawer_ghost_title');
                 ghostBtn.onclick = UI.toggleDrawerGhost;
 
                 // Tasto Spostamento Laterale (Dock)
@@ -137,7 +137,7 @@ Object.assign(UI, {
                 dockBtn.innerHTML = isDockRight 
                     ? '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M15 18l-6-6 6-6"/></svg>' 
                     : '<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><path d="M9 18l6-6-6-6"/></svg>';
-                dockBtn.title = 'Sposta il pannello a Destra/Sinistra';
+                dockBtn.title = I18n.t('preferences.drawer_dock_title');
                 dockBtn.onclick = UI.toggleDrawerDock;
 
                 // Spostiamo il tasto di chiusura nativo dentro il gruppo per mantenerli allineati
@@ -165,7 +165,7 @@ Object.assign(UI, {
                     backBtn.id = 'advDrawerBackBtn';
                     backBtn.className = 'close-modal-btn';
                     backBtn.innerHTML = typeof Icons !== 'undefined' ? Icons.arrowLeft : '←';
-                    backBtn.title = 'Torna Indietro';
+                    backBtn.title = I18n.t('common.back');
                     backBtn.style.marginRight = '8px';
                     backBtn.style.padding = '2px 6px';
                     backBtn.style.display = 'inline-flex';

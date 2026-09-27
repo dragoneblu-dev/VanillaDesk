@@ -27,8 +27,10 @@ Object.assign(TableManager.CSV, {
                 <h3 style="font-size: 0.9rem; margin-bottom: 10px; color:var(--text-primary); display:flex; justify-content:space-between; align-items:center;">
                     ${I18n.t('table_csv.opt2_import_data')}
                     <select id="tblCsvSeparator" class="modern-input" style="font-weight:normal; font-size:0.8rem; padding:2px 5px;">
-                        <option value=";">Separatore: Punto e Virgola (;)</option>
-                        <option value="TAB">Separatore: Tabulazione (TAB)</option>
+                        <option value=";">${I18n.t('table_csv.sep_semicolon')}</option>
+                        <option value=",">${I18n.t('table_csv.sep_comma')}</option>
+                        <option value="TAB">${I18n.t('table_csv.sep_tab')}</option>
+                        <option value="|">${I18n.t('table_csv.sep_pipe')}</option>
                     </select>
                 </h3>
                 <textarea id="tblCsvInput" class="modern-input" rows="8" placeholder="${I18n.t('table_csv.paste_data_placeholder')}" style="font-family: monospace; resize:vertical; min-height: 150px; width:100%; white-space: pre;"></textarea>
@@ -77,7 +79,12 @@ Object.assign(TableManager.CSV, {
 
     createFromCSV: () => {
         const sepVal = document.getElementById('tblCsvSeparator').value;
-        const html = TableManager.CSV._generateHTMLFromCSV(sepVal === 'TAB' ? '\t' : ';');
+        let sepChar = ';';
+        if (sepVal === 'TAB') sepChar = '\t';
+        else if (sepVal === ',') sepChar = ',';
+        else if (sepVal === '|') sepChar = '|';
+
+        const html = TableManager.CSV._generateHTMLFromCSV(sepChar);
         if (!html) return;
 
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
@@ -167,7 +174,11 @@ Object.assign(TableManager.CSV, {
         const csvText = document.getElementById('tblCsvInput').value.trim();
         if (!csvText) return;
 
-        const separatorChar = sepVal === 'TAB' ? '\t' : ';';
+        let separatorChar = ';';
+        if (sepVal === 'TAB') separatorChar = '\t';
+        else if (sepVal === ',') separatorChar = ',';
+        else if (sepVal === '|') separatorChar = '|';
+
         const rows = TableManager.CSV.parseFullCSV(csvText, separatorChar);
         if (rows.length < 1) return;
 
@@ -289,7 +300,10 @@ Object.assign(TableManager.CSV, {
         if (!table) return;
         const textarea = document.getElementById('tblCsvInput');
         if (textarea) {
-            const sepChar = separatorRaw === 'TAB' ? '\t' : ';';
+            let sepChar = ';';
+            if (separatorRaw === 'TAB') sepChar = '\t';
+            else if (separatorRaw === ',') sepChar = ',';
+            else if (separatorRaw === '|') sepChar = '|';
             textarea.value = TableManager.CSV.getTableAsCSVText(table, sepChar);
         }
     },
@@ -326,7 +340,9 @@ Object.assign(TableManager.CSV, {
                     <span>${I18n.t('table_csv.bulk_edit_warning')}</span>
                     <select id="tblCsvSeparator" class="modern-input" style="padding:2px 5px;" onchange="TableManager.CSV.refreshCsvTextarea(this.value)">
                         <option value=";">${I18n.t('table_csv.use_semicolon')}</option>
+                        <option value=",">${I18n.t('table_csv.use_comma')}</option>
                         <option value="TAB">${I18n.t('table_csv.use_tab')}</option>
+                        <option value="|">${I18n.t('table_csv.use_pipe')}</option>
                     </select>
                 </div>
             </div>
@@ -336,7 +352,7 @@ Object.assign(TableManager.CSV, {
                     ${I18n.t('table_csv.keep_formatting_label')}
                 </label>
             </div>
-            <textarea id="tblCsvInput" class="modern-input" placeholder="${I18n.t('table_csv.paste_data_placeholder')}" style="font-family: monospace; resize:vertical; min-height: 250px; width:100%; white-space: pre;">${initialCsvContent}</textarea>
+            <textarea id="tblCsvInput" class="modern-input" placeholder="${I18n.t('table_csv.paste_data_placeholder')}" style="font-family: monospace; resize:vertical; height: 100%; width:100%; white-space: pre;">${initialCsvContent}</textarea>
         `;
 
         const footerHTML = `

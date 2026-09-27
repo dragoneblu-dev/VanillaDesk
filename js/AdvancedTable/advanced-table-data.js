@@ -423,8 +423,8 @@ Object.assign(AdvancedTable, {
 
         const count = viewState.selectedRows.length;
         const confirmMessage = count === 1
-            ? "Sei sicuro di voler eliminare definitivamente il record selezionato dal database?\nL'operazione non può essere annullata."
-            : `Sei sicuro di voler eliminare definitivamente i ${count} record selezionati dal database?\nL'operazione non può essere annullata.`;
+            ? I18n.t('table.delete_confirm_single')
+            : I18n.t('table.delete_confirm_plural', { count: count });
 
         if (!force && !confirm(confirmMessage)) return;
 
@@ -454,7 +454,7 @@ Object.assign(AdvancedTable, {
         Store.triggerAutoSave();
 
         if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-            const toastMsg = count === 1 ? "Record eliminato dal database." : `${count} record eliminati dal database.`;
+            const toastMsg = count === 1 ? I18n.t('table.row_deleted_single') : I18n.t('table.row_deleted_plural', { count: count });
             UI.showToast(toastMsg, "warning");
         }
     },
