@@ -124,6 +124,24 @@ Object.assign(Editor, {
 
     handlePaste: (e) => {
         const clipboardData = (e.clipboardData || window.clipboardData);
+        if (!clipboardData) return;
+
+        // ISOLAMENTO RIGOROSO CONTROLLI NATIVI:
+        // Se l'incolla avviene all'interno di un tag INPUT o TEXTAREA (es. celle numeriche del DB, date, ricerche),
+        // lasciamo che sia il browser a gestire l'operazione senza bloccarla con alert ingannevoli.
+        const target = e.target;
+        if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) {
+            if (target.classList && target.classList.contains('adv-number-input')) {
+                const text = clipboardData.getData('text/plain');
+                if (text && (text.includes(',') || /^\s+|\s+$/.test(text))) {
+                    e.preventDefault();
+                    document.execCommand('insertText', false, text.trim().replace(',', '.'));
+                    return;
+                }
+            }
+            return;
+        }
+
         const pastedText = clipboardData.getData('text/plain');
         const pastedHTML = clipboardData.getData('text/html');
         
