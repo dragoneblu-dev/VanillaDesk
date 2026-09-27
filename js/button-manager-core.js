@@ -131,7 +131,7 @@ const ButtonManager = {
         if (node.nodeType === 3) node = node.parentNode;
 
         if (node && node.closest('.widget-type-columns')) {
-            alert("Non è permesso inserire Widget Complessi all'interno delle Colonne per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.");
+            alert(I18n.t('buttons.alert_column_barrier'));
             return;
         }
 
@@ -143,7 +143,7 @@ const ButtonManager = {
             buttons: [
                 {
                     id: 'btn_' + Store.generateId(),
-                    label: 'Nuovo Pulsante',
+                    label: I18n.t('buttons.default_button_label'),
                     icon: Icons.lightning,
                     color: 'var(--accent-color)',
                     requireConfirm: false,
@@ -196,7 +196,7 @@ const ButtonManager = {
 
         state.buttons.push({
             id: 'btn_' + Store.generateId(),
-            label: 'Nuovo Pulsante',
+            label: I18n.t('buttons.default_button_label'),
             icon: Icons.lightning,
             color: 'var(--accent-color)',
             requireConfirm: false,
@@ -208,7 +208,7 @@ const ButtonManager = {
     },
 
     deleteButtonFromBar: (barId, btnId) => {
-        if(!confirm("Eliminare questo pulsante?")) return;
+        if(!confirm(I18n.t('buttons.confirm_delete_button'))) return;
         let state = ButtonManager.getState(barId);
         if(!state) return;
 
@@ -341,13 +341,13 @@ const ButtonManager = {
         }
 
         if (!btnState || !btnState.actionBlocks || btnState.actionBlocks.length === 0) {
-            UI.showToast("Questo pulsante non ha azioni configurate.", "warning");
+            UI.showToast(I18n.t('buttons.warn_no_actions'), "warning");
             return;
         }
 
         if (btnState.requireConfirm) {
             const displayLabel = ButtonManager._evaluateDynamicLabel(btnState.label || '');
-            if (!confirm(`Vuoi eseguire l'azione: "${displayLabel}"?`)) return;
+            if (!confirm(I18n.t('buttons.confirm_execution', { label: displayLabel }))) return;
         }
 
         const response = await LogicEngine.executeMacroBlocks(btnState.actionBlocks, null, null, isTestMode);
@@ -399,7 +399,7 @@ const ButtonManager = {
             if (response.errorsLog.length > 0) {
                 UI.openDrawer('📋 Log Esecuzione Pulsante', `<b>${response.errorsLog.length} errori rilevati.</b> Nessuna operazione riuscita.<br><br>` + response.errorsLog.join('<br>'), null);
             } else {
-                UI.showToast(`Nessun record ha soddisfatto le condizioni. Operazione ignorata.`, "warning");
+                UI.showToast(I18n.t('buttons.warn_no_rows_matched'), "warning");
             }
         }
     }

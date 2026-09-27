@@ -18,7 +18,7 @@ const AppState = {
     searchFilter: "",
     activePropertyFilters: [], // Array di { colId, realValue, colName, visualText, colorClass }
     
-    fileName: "Nessun Workspace",
+    fileName: typeof I18n !== 'undefined' ? I18n.t('common.no_workspace') : "Nessun Workspace",
     isEditMode: false,
     dragPosition: null,
     continuousEditMode: false,

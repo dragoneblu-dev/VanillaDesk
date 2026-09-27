@@ -3,6 +3,8 @@
  * Modulo di Interscambio: Permette l'esportazione dell'ambiente vivo in formato Modpack
  * e l'installazione di moduli JSON con Re-Idratazione e Mappatura ID Intelligente.
  * Tracciamento del dirty state volatile (_isDirty, _isDraft) all'importazione di una nuova nota da modpack.
+ * FEAT GUIDE: Presentazione della finestra modale informativa (UI.promptModpackGuide) prima della selezione file.
+ * Localizzazione dinamica con supporto multilingua I18n.
  */
 
 const PackageManager = {
@@ -139,11 +141,37 @@ const PackageManager = {
         try {
             if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
             
-            const [fileHandle] = await window.showOpenFilePicker({
-                types: [{ description: 'Modpack JSON', accept: { 'application/json': ['.json'] } }],
-            });
-            const file = await fileHandle.getFile();
-            const text = await file.text();
+            // Presentazione della finestra modale guidata sui Modpack
+            if (typeof UI !== 'undefined' && typeof UI.promptModpackGuide === 'function') {
+                const proceed = await UI.promptModpackGuide();
+                if (!proceed) return;
+            }
+
+            let text = "";
+            if (window.showOpenFilePicker) {
+                const [fileHandle] = await window.showOpenFilePicker({
+                    types: [{ description: 'Modpack JSON', accept: { 'application/json': ['.json'] } }],
+                });
+                const file = await fileHandle.getFile();
+                text = await file.text();
+            } else {
+                text = await new Promise((resolve, reject) => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.json';
+                    input.onchange = (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return resolve(null);
+                        const reader = new FileReader();
+                        reader.onload = (event) => resolve(event.target.result);
+                        reader.onerror = (err) => reject(err);
+                        reader.readAsText(file);
+                    };
+                    input.click();
+                });
+            }
+
+            if (!text) return;
             
             let modpack;
             try {

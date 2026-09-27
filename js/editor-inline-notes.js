@@ -97,11 +97,11 @@ Object.assign(Editor, {
         `;
         
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="Editor.saveInlineNote()">Salva Appunto</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="Editor.saveInlineNote()">${I18n.t('inline_notes.btn_save')}</button>
         `;
 
-        UI.openDrawer('💬 Modifica Appunto Nascosto', bodyHTML, footerHTML);
+        UI.openDrawer(I18n.t('inline_notes.drawer_title'), bodyHTML, footerHTML);
 
         setTimeout(() => {
             const input = document.getElementById('inlineNoteInput');
@@ -126,7 +126,7 @@ Object.assign(Editor, {
                          .replace(/<\/li>/gi, '')
                          .replace(/<\/?(ul|ol|h[1-6]|blockquote)[^>]*>/gi, '');
                          
-        // Rimuove eventuali a capo rindondanti all'inizio
+        // Rimuove eventuali a capo ridondanti all'inizio
         newHTML = newHTML.replace(/^(<br\s*\/?>)+/i, '');
 
         Editor.saveSnapshot();

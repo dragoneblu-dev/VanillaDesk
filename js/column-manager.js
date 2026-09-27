@@ -191,7 +191,7 @@ const ColumnManager = {
         bodyContainer.innerHTML = `
             <div class="adv-columns-container-wrap">
                 ${isEdit ? `
-                <button class="adv-icon-btn columns-opt-btn" id="col-opt-${id}" title="Configura Colonne" onclick="ColumnManager.openMenu(event, '${id}')">
+                <button class="adv-icon-btn columns-opt-btn" id="col-opt-${id}" title="${I18n.t('columns_widget.opt_title')}" onclick="ColumnManager.openMenu(event, '${id}')">
                     ${Icons.gear}
                 </button>
                 ` : ''}
@@ -224,14 +224,14 @@ const ColumnManager = {
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
         const menuItems = [
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Numero di Colonne</div>' },
-            { icon: Icons.text, label: 'Testo Normale (1 Colonna)', onClick: () => ColumnManager.destroyAndUnwrap(id) },
-            { icon: Icons.columns, label: '2 Colonne' + (state.columns === 2 ? chk : ''), onClick: () => ColumnManager.setColumns(id, 2) },
-            { icon: Icons.columns, label: '3 Colonne' + (state.columns === 3 ? chk : ''), onClick: () => ColumnManager.setColumns(id, 3) },
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('columns_widget.col_count_group')}</div>` },
+            { icon: Icons.text, label: I18n.t('columns_widget.col_1'), onClick: () => ColumnManager.destroyAndUnwrap(id) },
+            { icon: Icons.columns, label: I18n.t('columns_widget.col_2') + (state.columns === 2 ? chk : ''), onClick: () => ColumnManager.setColumns(id, 2) },
+            { icon: Icons.columns, label: I18n.t('columns_widget.col_3') + (state.columns === 3 ? chk : ''), onClick: () => ColumnManager.setColumns(id, 3) },
             { type: 'divider' },
-            { type: 'custom', html: '<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">Comportamento Testo</div>' },
-            { icon: Icons.listFilter, label: 'Flusso Continuo (Auto)' + (state.mode === 'continuous' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'continuous') },
-            { icon: Icons.viewBoard, label: 'Moduli Indipendenti' + (state.mode === 'independent' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'independent') }
+            { type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('columns_widget.behavior_group')}</div>` },
+            { icon: Icons.listFilter, label: I18n.t('columns_widget.mode_continuous') + (state.mode === 'continuous' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'continuous') },
+            { icon: Icons.viewBoard, label: I18n.t('columns_widget.mode_independent') + (state.mode === 'independent' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'independent') }
         ];
 
         UI.Menu.buildContextMenu(`col-opt-${id}`, menuItems);

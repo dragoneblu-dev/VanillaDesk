@@ -40,7 +40,7 @@ Object.assign(Editor, {
         });
 
         if (hasCommentedExisting) {
-            if (!confirm("Il segnalibro presente in questa pagina contiene un appunto o commento. Vuoi procedere e sostituirlo? La nota andrà persa.")) {
+            if (!confirm(I18n.t('bookmarks.confirm_overwrite'))) {
                 return;
             }
         }
@@ -197,7 +197,7 @@ Object.assign(Editor, {
             Store.triggerAutoSave();
             if (typeof UI !== 'undefined') {
                 if (UI.renderTree) UI.renderTree();
-                if (UI.showToast) UI.showToast(`Promemoria posticipato di ${minutes} minuti.`, "info");
+                if (UI.showToast) UI.showToast(I18n.t('bookmarks.toast_snoozed', { minutes: minutes }), "info");
             }
         }
     },
@@ -227,7 +227,7 @@ Object.assign(Editor, {
     showBookmarkMenu: (marker) => {
         Editor.hideBookmarkMenu();
         Editor.activeBookmark = marker;
-        const dateStr = marker.getAttribute('data-date') || 'Data sconosciuta';
+        const dateStr = marker.getAttribute('data-date') || I18n.t('bookmarks.date_unknown');
         
         if (!marker.id) {
             marker.id = 'bkm_' + Store.generateId();
@@ -236,27 +236,27 @@ Object.assign(Editor, {
 
         const hasComment = Editor.hasBookmarkComment(marker);
         const commentColor = hasComment ? 'color:var(--accent-color);' : 'color:var(--text-secondary);';
-        const commentTitle = hasComment ? 'Modifica appunto del segnalibro' : 'Aggiungi appunto al segnalibro';
+        const commentTitle = hasComment ? I18n.t('bookmarks.comment_edit_title') : I18n.t('bookmarks.comment_add_title');
 
         const popover = document.createElement('div');
         popover.id = 'adv-bookmark-popover';
         popover.className = 'adv-floating-popover';
         
         popover.innerHTML = `
-            <button class="adv-icon-btn" style="padding: 2px 6px; margin: 0; color:var(--text-primary); font-size:0.75rem; font-weight:bold;" onclick="Editor.addBookmarkTimer('${marker.id}')" title="Aggiungi 15 Minuti">
+            <button class="adv-icon-btn" style="padding: 2px 6px; margin: 0; color:var(--text-primary); font-size:0.75rem; font-weight:bold;" onclick="Editor.addBookmarkTimer('${marker.id}')" title="${I18n.t('bookmarks.btn_add_15m')}">
                 <span style="display:inline-flex; align-items:center; gap:4px; color:var(--accent-color);">${Icons.time}</span>
                 <span id="bkm-timer-display" style="font-family:monospace;"></span>
             </button>
-            <button id="bkm-timer-clear" class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0; display:none;" onclick="Editor.clearBookmarkTimer('${marker.id}')" title="Azzera Timer">${Icons.close}</button>
+            <button id="bkm-timer-clear" class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0; display:none;" onclick="Editor.clearBookmarkTimer('${marker.id}')" title="${I18n.t('bookmarks.btn_clear_timer')}">${Icons.close}</button>
             
             <button id="bkm-comment-btn" class="adv-icon-btn" style="padding: 2px 6px; margin: 0; ${commentColor} font-size:0.75rem;" onclick="Editor.openBookmarkCommentDrawer('${marker.id}')" title="${commentTitle}">
                 <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.noteInline}</span>
             </button>
 
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
-            <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: bold; margin: 0 6px; white-space: nowrap;">Piazzato il: ${dateStr}</span>
+            <span style="font-size: 0.75rem; color: var(--text-secondary); font-weight: bold; margin: 0 6px; white-space: nowrap;">${I18n.t('bookmarks.label_placed_on', { date: dateStr })}</span>
             <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
-            <button class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0;" onclick="Editor.deleteBookmark()" title="Rimuovi segnalibro">${Icons.trash}</button>
+            <button class="adv-icon-btn danger" style="padding: 2px 4px; margin: 0;" onclick="Editor.deleteBookmark()" title="${I18n.t('bookmarks.btn_delete')}">${Icons.trash}</button>
         `;
         
         document.body.appendChild(popover);
@@ -303,11 +303,11 @@ Object.assign(Editor, {
         `;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="Editor.saveBookmarkComment('${markerId}')">Salva Appunto</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="Editor.saveBookmarkComment('${markerId}')">${I18n.t('bookmarks.btn_save_comment')}</button>
         `;
 
-        UI.openDrawer('💬 Appunto Segnalibro', bodyHTML, footerHTML);
+        UI.openDrawer(I18n.t('bookmarks.drawer_comment_title'), bodyHTML, footerHTML);
 
         setTimeout(() => {
             const input = document.getElementById('bookmarkCommentInput');
@@ -377,7 +377,7 @@ Object.assign(Editor, {
     deleteBookmark: () => {
         if (Editor.activeBookmark) {
             if (Editor.hasBookmarkComment(Editor.activeBookmark)) {
-                if (!confirm("Questo segnalibro contiene un appunto o commento. Sei sicuro di volerlo eliminare?")) {
+                if (!confirm(I18n.t('bookmarks.confirm_delete_commented'))) {
                     return;
                 }
             }
@@ -459,7 +459,7 @@ Object.assign(Editor, {
                                 needsSave = true;
 
                                 if (typeof UI !== 'undefined' && UI.Alarm && note.id !== AppState.currentNoteId) {
-                                    const safeTitle = (note.title || 'Senza Titolo').replace(/'/g, "\\'");
+                                    const safeTitle = (note.title || I18n.t('editor.untitled')).replace(/'/g, "\\'");
                                     
                                     const actionHtml = `
                                         <div style="margin-top: 5px;">

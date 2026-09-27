@@ -52,7 +52,7 @@ Object.assign(Editor, {
 
         const isCodeBlock = !!sel.anchorNode.parentNode?.closest?.('.code-content');
         if (WidgetManager.isProtectedBlock(sel.anchorNode) && !isCodeBlock) {
-            UI.showToast("Multi-cursore non supportato nei Widget complessi.", "warning");
+            UI.showToast(I18n.t('editor_alerts.multicursor_no_widget'), "warning");
             return;
         }
 
@@ -180,7 +180,7 @@ Object.assign(Editor, {
                 sel.addRange(selRange);
             }
         } else {
-            UI.showToast("Nessun'altra occorrenza trovata.", "info");
+            UI.showToast(I18n.t('editor_alerts.multicursor_no_more'), "info");
         }
     },
 

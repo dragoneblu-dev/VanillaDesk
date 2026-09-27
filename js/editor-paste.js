@@ -205,7 +205,7 @@ Object.assign(Editor, {
                     const isEditable = WidgetManager.isInsideEditableWidgetArea(targetNode) || !!targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th');
                     
                     if (!isEditable) {
-                        alert("⚠️ Cursore in area non valida. Clicca all'interno di un'area di testo prima di incollare.");
+                        alert(I18n.t('editor_alerts.paste_invalid_area'));
                         return;
                     }
 
@@ -404,7 +404,7 @@ Object.assign(Editor, {
                             if (tag === 'SVG' && ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'].includes(attr.name)) return;
                             if (['PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'].includes(tag) && ['d', 'points', 'x1', 'y1', 'x2', 'y2', 'x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'rx', 'ry'].includes(attr.name)) return;
                             if (attr.name === 'href' && tag === 'A') return;
-                            if (attr.name === 'src' && tag === 'IMG') return;
+                            if (attr.name === 'src' && (tag === 'IMG' || tag === 'AUDIO')) return;
                             if (attr.name === 'type' && ['UL', 'OL', 'INPUT'].includes(tag)) return;
                             if (attr.name === 'contenteditable') return;
                             if (attr.name === 'id' && isInternalWidget) return; 
@@ -505,7 +505,7 @@ Object.assign(Editor, {
         };
 
         if (isHeavyLoad) {
-            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("⏳ Incollando e ripulendo grande quantità di dati...", "warning");
+            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('editor_alerts.paste_heavy_load'), "warning");
             setTimeout(processPaste, 50); 
         } else {
             processPaste();

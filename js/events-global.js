@@ -424,7 +424,7 @@ const EventsGlobal = {
 
                     if (intersectsProtected || (isInsideProtected && !WidgetManager.isInsideEditableWidgetArea(elementNode))) {
                         e.preventDefault();
-                        alert("⚠️ Taglio non consentito: Stai tentando di tagliare elementi complessi (Widget) mischiati a testo normale.\nPer evitare corruzioni, sposta o elimina questi elementi tramite i loro menu dedicati.");
+                        alert(I18n.t('editor_alerts.cut_blocked_widgets'));
                         return;
                     }
                 }
@@ -865,7 +865,7 @@ const EventsGlobal = {
 
                 // CITAZIONI: Rilascio bloccato
                 if (target.closest('.block-citation')) {
-                    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Azione bloccata: Non puoi aggiungere elementi all'interno di una citazione.", "warning");
+                    if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('citation.block_insert_error'), "warning");
                     return;
                 }
 
@@ -984,7 +984,7 @@ const EventsGlobal = {
             if (targetNode.closest('.block-citation')) {
                 e.preventDefault();
                 e.stopPropagation();
-                if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Azione bloccata: Non puoi aggiungere elementi all'interno di una citazione.", "warning");
+                if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('citation.block_insert_error'), "warning");
                 return;
             }
 
@@ -994,7 +994,7 @@ const EventsGlobal = {
                         e.preventDefault();
                         e.stopPropagation();
                         if (typeof UI !== 'undefined' && UI.showToast) {
-                            UI.showToast("Azione bloccata: Non puoi rilasciare testo libero sopra l'infrastruttura di un Widget.", "warning");
+                            UI.showToast(I18n.t('editor_alerts.drop_blocked_on_widget'), "warning");
                         }
                         return;
                     }

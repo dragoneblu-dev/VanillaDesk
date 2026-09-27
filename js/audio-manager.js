@@ -11,7 +11,7 @@ const AudioManager = {
         if (!input.files || !input.files[0]) return;
         
         if (!AppState.assetsHandle) {
-            alert("Devi prima creare un Workspace per poter allegare file fisici.");
+            alert(I18n.t('audio.alert_no_workspace'));
             input.value = '';
             return;
         }
@@ -20,7 +20,7 @@ const AudioManager = {
         const maxSizeMB = 50; 
         
         if (file.size > maxSizeMB * 1024 * 1024) {
-            alert(`Il file audio è troppo grande (${(file.size / 1024 / 1024).toFixed(1)} MB). Il limite massimo consigliato è ${maxSizeMB} MB.`);
+            alert(I18n.t('audio.alert_file_too_large', { size: (file.size / 1024 / 1024).toFixed(1), max: maxSizeMB }));
             input.value = '';
             return;
         }
@@ -28,7 +28,7 @@ const AudioManager = {
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast("Salvataggio audio su disco in corso...", "info");
+            UI.showToast(I18n.t('audio.toast_saving'), "info");
         }
         
         // REFACTOR: Salva su cartella locale e ottiene il filename
@@ -52,7 +52,7 @@ const AudioManager = {
             if(node && node.nodeType === 3) node = node.parentNode;
 
             if (node && node.closest('.widget-type-columns')) {
-                alert("Sposta il cursore fuori dalle colonne prima di inserire un audio.");
+                alert(I18n.t('audio.alert_column_barrier'));
                 input.value = '';
                 return;
             }
@@ -73,7 +73,7 @@ const AudioManager = {
             if (typeof Store !== 'undefined') Store.triggerAutoSave();
             
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Audio inserito con successo!", "success");
+                UI.showToast(I18n.t('audio.toast_success'), "success");
             }
         }
         
@@ -97,12 +97,12 @@ const AudioManager = {
         }
         
         if (!src) {
-            alert("Impossibile trovare i dati audio in memoria.");
+            alert(I18n.t('audio.error_not_in_memory'));
             return;
         }
 
         const titleEl = wrapper.querySelector('.adv-table-title');
-        let filename = titleEl ? titleEl.innerText.trim() : 'Traccia_Audio';
+        let filename = titleEl ? titleEl.innerText.trim() : I18n.t('audio.default_track_name').replace(/\s+/g, '_');
         filename = filename.replace(/[^a-z0-9]/gi, '_').toLowerCase();
         
         let ext = ref ? ref.split('.').pop() : 'mp3';
@@ -119,16 +119,17 @@ const AudioManager = {
         if (e) e.stopPropagation();
         UI.Menu.closeAll(true);
         UI.Menu.buildContextMenu(`adv-opt-btn-${widgetId}`, [
-            { icon: Icons.download, label: 'Scarica Audio (Export)', onClick: () => AudioManager.downloadAudio(widgetId) },
+            { icon: Icons.download, label: I18n.t('audio.menu_download'), onClick: () => AudioManager.downloadAudio(widgetId) },
             { type: 'divider' },
-            { icon: Icons.trash, label: 'Elimina Player Audio', danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
+            { icon: Icons.trash, label: I18n.t('audio.menu_delete'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
         ]);
     },
 
-    _updateWidgetUI: (widgetId, title = 'Traccia Audio') => {
+    _updateWidgetUI: (widgetId, title = null) => {
+        const defaultTitle = I18n.t('audio.default_track_name');
         WidgetManager.updateShellUI(widgetId, {
             icon: Icons.play,
-            title: title,
+            title: title || defaultTitle,
             optionsId: `adv-opt-btn-${widgetId}`,
             onOptionsClick: AudioManager.openMenu,
             onTitleChange: (id, newTitle) => {
@@ -165,7 +166,7 @@ const AudioManager = {
             }
 
             const titleNode = wrapper.querySelector('.adv-table-title');
-            AudioManager._updateWidgetUI(currentId, titleNode ? titleNode.innerText : 'Traccia Audio');
+            AudioManager._updateWidgetUI(currentId, titleNode ? titleNode.innerText : I18n.t('audio.default_track_name'));
         });
     }
 };

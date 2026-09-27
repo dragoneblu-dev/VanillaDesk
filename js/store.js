@@ -614,7 +614,7 @@ const Store = {
                     UI.renderInlineFootnotes();
                     if (typeof UI.renderTree === 'function') UI.renderTree();
                     if (typeof UI.showToast === 'function') {
-                        UI.showToast("Nota ricaricata da disco. Le tue modifiche sono recuperabili con Ctrl+Z.", "info");
+                        UI.showToast(I18n.t('conflict.toast_reloaded'), "info");
                     }
                 }
                 } finally {
@@ -1415,7 +1415,7 @@ const Store = {
                 Store._processLoadedMonolith(result);
             }
 
-            AppState.fileName = "Sessione Ripristinata (Senza Workspace)";
+            AppState.fileName = I18n.t('common.session_recovered');
             if (typeof AdvancedTable !== 'undefined') {
                 AdvancedTable.ensureSystemPropertiesDB();
             }
