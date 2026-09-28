@@ -252,7 +252,10 @@ const WidgetManager = {
             return;
         }
 
-        const wrapper = document.getElementById(widgetId);
+        let wrapper = document.getElementById(widgetId);
+        if (!wrapper) {
+            wrapper = document.querySelector(`img[data-image-ref="${widgetId}"]`);
+        }
         if (!wrapper) return;
 
         const targetNote = Store.getNote(targetNoteId);
@@ -261,12 +264,24 @@ const WidgetManager = {
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
         if (typeof AdvancedTable !== 'undefined') AdvancedTable.closeDropdowns(true);
 
+        // Se è presente un blocco di codice attivo, assicurati che il testo digitato sia sincronizzato in RAM prima dello spostamento
+        if (typeof CodeManager !== 'undefined' && typeof CodeManager.forceSyncAll === 'function') {
+            CodeManager.forceSyncAll();
+        }
+
         // FIX BLOAT JSON: Applica la minificazione forzata per estrarre l'html 
         // nudo del guscio vuoto invece di trascinarsi dietro megabyte di UI renderizzata!
-        const htmlCopy = typeof Editor !== 'undefined' ? Editor.minifyHTMLForStorage(wrapper.outerHTML) : wrapper.outerHTML;
+        let htmlCopy = '';
+        if (wrapper.tagName === 'IMG') {
+            htmlCopy = wrapper.outerHTML;
+        } else {
+            htmlCopy = typeof Editor !== 'undefined' ? Editor.minifyHTMLForStorage(wrapper.outerHTML) : wrapper.outerHTML;
+        }
 
         targetNote.content = (targetNote.content || '') + '<p><br></p>' + htmlCopy + '<p><br></p>';
         targetNote.updatedAt = new Date().toISOString();
+        targetNote._isDirty = true;
+        delete targetNote._isDraft;
 
         wrapper.remove();
 
@@ -275,7 +290,8 @@ const WidgetManager = {
             Editor.sanitizeContent();
         }
 
-        Store.triggerAutoSave();
+        // Salvataggio immediato e prioritario per impedire che una navigazione rapida sulla nota target ricarichi la vecchia copia dal disco
+        Store.triggerAutoSave(true);
 
         if (typeof UI !== 'undefined' && UI.showToast) {
             UI.showToast(`Spostamento in "${targetNote.title}" completato con successo.`, 'success');

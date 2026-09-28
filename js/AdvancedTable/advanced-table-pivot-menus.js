@@ -144,6 +144,7 @@ const AdvancedPivotMenus = {
             const centerCheck = document.getElementById('chartCenterTotal');
             const legendPosSel = document.getElementById('chartLegendPos');
             const paletteSel = document.getElementById('chartColorPalette');
+            const heightSel = document.getElementById('chartHeight');
 
             if (chartTypeInput) AdvancedPivotMenus.pendingConfig.chartConfig.type = chartTypeInput.value;
             if (stackCheck) AdvancedPivotMenus.pendingConfig.chartConfig.stacked = stackCheck.checked;
@@ -151,6 +152,7 @@ const AdvancedPivotMenus = {
             if (centerCheck) AdvancedPivotMenus.pendingConfig.chartConfig.centerTotal = centerCheck.checked;
             if (legendPosSel) AdvancedPivotMenus.pendingConfig.chartConfig.legendPos = legendPosSel.value;
             if (paletteSel) AdvancedPivotMenus.pendingConfig.chartConfig.colorPalette = paletteSel.value;
+            if (heightSel) AdvancedPivotMenus.pendingConfig.chartConfig.height = heightSel.value;
         }
         AdvancedPivotMenus.openCreateWizard(tableId, false);
     },
@@ -176,7 +178,7 @@ const AdvancedPivotMenus = {
             sourceId: null,
             groupBy: [],
             aggregations: [],
-            chartConfig: { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default' }
+                chartConfig: { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium' }
         };
         }
 
@@ -192,7 +194,7 @@ const AdvancedPivotMenus = {
                 
                 if (state.chartConfig) {
                     AdvancedPivotMenus.pendingConfig.chartConfig = Object.assign(
-                        AdvancedPivotMenus.pendingConfig.chartConfig, 
+                            { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium' }, 
                         JSON.parse(JSON.stringify(state.chartConfig))
                     );
                 }
@@ -209,6 +211,7 @@ const AdvancedPivotMenus = {
         const chartType = cCfg.type || 'bar';
         const legendPos = cCfg.legendPos || 'bottom';
         const currentPalette = cCfg.colorPalette || 'default';
+        const currentHeight = cCfg.height || 'medium';
 
         const svgBar = `<svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="18" y="3" width="4" height="18"></rect><rect x="10" y="8" width="4" height="13"></rect><rect x="2" y="13" width="4" height="8"></rect></svg>`;
         const svgHBar = `<svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="1.5" fill="none"><rect x="3" y="2" width="18" height="4"></rect><rect x="3" y="10" width="13" height="4"></rect><rect x="3" y="18" width="8" height="4"></rect></svg>`;
@@ -407,6 +410,16 @@ const AdvancedPivotMenus = {
                                 <option value="right" ${legendPos === 'right' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_right')}</option>
                                 <option value="left" ${legendPos === 'left' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_left')}</option>
                                 <option value="none" ${legendPos === 'none' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_none')}</option>
+                            </select>
+                        </div>
+
+                        <!-- Selettore Dimensione / Altezza Grafico -->
+                        <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
+                            <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.chart_height_label') || 'Altezza grafico:'}</label>
+                            <select id="chartHeight" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
+                                <option value="small" ${currentHeight === 'small' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_small') || 'Piccola (Compatta)'}</option>
+                                <option value="medium" ${currentHeight === 'medium' || !currentHeight ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_medium') || 'Media (Standard)'}</option>
+                                <option value="large" ${currentHeight === 'large' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_large') || 'Grande (Estesa)'}</option>
                             </select>
                         </div>
                     </div>
@@ -810,6 +823,7 @@ const AdvancedPivotMenus = {
         const centerCheck = document.getElementById('chartCenterTotal');
         const legendPosSel = document.getElementById('chartLegendPos');
         const paletteSel = document.getElementById('chartColorPalette');
+        const heightSel = document.getElementById('chartHeight');
         
         const isChart = displaySelect ? displaySelect.value === 'chart' : true;
 
@@ -820,7 +834,8 @@ const AdvancedPivotMenus = {
             showLabels: labelsCheck ? labelsCheck.checked : true,
             centerTotal: centerCheck ? centerCheck.checked : true,
             legendPos: legendPosSel ? legendPosSel.value : 'bottom',
-            colorPalette: paletteSel ? paletteSel.value : 'default'
+            colorPalette: paletteSel ? paletteSel.value : 'default',
+            height: heightSel ? heightSel.value : 'medium'
         };
 
         AdvancedPivot.createOrUpdate(config.tableId, config.sourceId, config.groupBy, config.aggregations, null, config.chartConfig);

@@ -13,6 +13,7 @@
  * eliminata alla radice la generazione della stringa "Invalid Date Invalid Date" in presenza di date italiane o ri-formattate.
  * CONTRACT RESTORATION: Ripristinato il contratto canonico di getFormatDisplayValue per date singole (stringa inalterata)
  * e range temporali (start ➔ end in formato ISO), garantendo la conformità con la suite di test e l'interscambio dati.
+ * FEAT ROLLUP BIDIREZIONALE: Risoluzione di rollup sia su relazioni uscenti che su relazioni entranti/inverse da altri DB.
  */
 
 Object.assign(AdvancedTable, {
@@ -414,63 +415,151 @@ Object.assign(AdvancedTable, {
                 return;
             }
 
+            // RISOLUZIONE ROLLUP (Sia uscenti che entranti/inversi da altri database)
             if (col.type === 'rollup' && col.relationColId && col.targetColId) {
-                const relationVals = (row.cells || {})[col.relationColId];
-                if (!relationVals || !Array.isArray(relationVals) || relationVals.length === 0) {
+                let targetTableId = col.targetTableId;
+                let targetRows = [];
+
+                const isIncoming = (col.rollupDirection === 'incoming') || String(col.relationColId).startsWith('INCOMING:');
+
+                if (isIncoming) {
+                    const parts = String(col.relationColId).startsWith('INCOMING:') ? col.relationColId.split(':') : [];
+                    targetTableId = targetTableId || parts[1];
+                    const foreignColId = col.foreignRelColId || parts[2];
+
+                    if (!targetTableId || !foreignColId) {
+                        vRow.virtualCells[col.id] = '';
+                        return;
+                    }
+
+                    // Utilizziamo la cache per lookup O(1) velocissimo
+                    if (!renderCache.backlinks) renderCache.backlinks = {};
+                    const cacheKey = `rollup_${targetTableId}_${foreignColId}`;
+                    if (!renderCache.backlinks[cacheKey]) {
+                        renderCache.backlinks[cacheKey] = {};
+                        const sourceDbState = AdvancedTable.getTableState(targetTableId);
+                        if (sourceDbState) {
+                            (sourceDbState.rows || []).forEach(srcRow => {
+                                let foreignVals = srcRow.cells[foreignColId];
+                                if (!Array.isArray(foreignVals)) foreignVals = foreignVals ? [foreignVals] : [];
+                                foreignVals.forEach(v => {
+                                    if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
+                                    renderCache.backlinks[cacheKey][v].push(srcRow);
+                                });
+                            });
+                        }
+                    }
+
+                    targetRows = renderCache.backlinks[cacheKey][row.id] || [];
+                } else {
+                    const relColDef = (state.columns || []).find(c => c.id === col.relationColId);
+                    if (!relColDef) {
+                        vRow.virtualCells[col.id] = '';
+                        return;
+                    }
+
+                    // Se è un backlink locale già presente nella tabella
+                    if (relColDef.type === 'relation_backlink') {
+                        targetTableId = relColDef.linkedTableId;
+                        const foreignColId = relColDef.linkedColId;
+
+                        if (!targetTableId || !foreignColId) {
+                            vRow.virtualCells[col.id] = '';
+                            return;
+                        }
+
+                        if (!renderCache.backlinks) renderCache.backlinks = {};
+                        const cacheKey = `rollup_${targetTableId}_${foreignColId}`;
+                        if (!renderCache.backlinks[cacheKey]) {
+                            renderCache.backlinks[cacheKey] = {};
+                            const sourceDbState = AdvancedTable.getTableState(targetTableId);
+                            if (sourceDbState) {
+                                (sourceDbState.rows || []).forEach(srcRow => {
+                                    let foreignVals = srcRow.cells[foreignColId];
+                                    if (!Array.isArray(foreignVals)) foreignVals = foreignVals ? [foreignVals] : [];
+                                    foreignVals.forEach(v => {
+                                        if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
+                                        renderCache.backlinks[cacheKey][v].push(srcRow);
+                                    });
+                                });
+                            }
+                        }
+                        targetRows = renderCache.backlinks[cacheKey][row.id] || [];
+                    } else {
+                        // Relazione uscente classica
+                        targetTableId = relColDef.targetTableId;
+                        const relationVals = (row.cells || {})[col.relationColId];
+                        if (!relationVals || !Array.isArray(relationVals) || relationVals.length === 0) {
+                            vRow.virtualCells[col.id] = '';
+                            return;
+                        }
+
+                        if (!renderCache.rowIndexes) renderCache.rowIndexes = {};
+                        if (!renderCache.rowIndexes[targetTableId]) {
+                            renderCache.rowIndexes[targetTableId] = {};
+                            const ts = AdvancedTable.getTableState(targetTableId);
+                            if (ts) ts.rows.forEach(r => renderCache.rowIndexes[targetTableId][r.id] = { state: ts, row: r });
+                        }
+
+                        relationVals.forEach(tId => {
+                            const cacheRef = renderCache.rowIndexes[targetTableId] ? renderCache.rowIndexes[targetTableId][tId] : null;
+                            if (cacheRef && cacheRef.row) {
+                                targetRows.push(cacheRef.row);
+                            }
+                        });
+                    }
+                }
+
+                if (targetRows.length === 0 || !targetTableId) {
                     vRow.virtualCells[col.id] = '';
                     return;
                 }
 
-                const relColDef = state.columns.find(c => c.id === col.relationColId);
-                if (!relColDef || !relColDef.targetTableId) return;
-
-                if (!renderCache.rowIndexes) renderCache.rowIndexes = {};
-                if (!renderCache.rowIndexes[relColDef.targetTableId]) {
-                    renderCache.rowIndexes[relColDef.targetTableId] = {};
-                    const ts = AdvancedTable.getTableState(relColDef.targetTableId);
-                    if (ts) ts.rows.forEach(r => renderCache.rowIndexes[relColDef.targetTableId][r.id] = { state: ts, row: r });
+                const targetState = AdvancedTable.getTableState(targetTableId);
+                if (!targetState) {
+                    vRow.virtualCells[col.id] = '';
+                    return;
                 }
 
-                const targetState = AdvancedTable.getTableState(relColDef.targetTableId);
-                if (!targetState) return;
-
-                const targetColDef = targetState.columns.find(c => c.id === col.targetColId);
-                if (!targetColDef) return;
+                const targetColDef = (targetState.columns || []).find(c => c.id === col.targetColId);
+                if (!targetColDef) {
+                    vRow.virtualCells[col.id] = '';
+                    return;
+                }
 
                 let rolled = [];
-                relationVals.forEach(tId => {
-                    const cacheRef = renderCache.rowIndexes[relColDef.targetTableId][tId];
-                    if (cacheRef) {
-                        const tRow = cacheRef.row;
-                        let val;
-                        
-                        if (targetColDef.type === 'created_time') val = AdvancedTable.formatTime(tRow.createdAt);
-                        else if (targetColDef.type === 'last_edited_time') val = AdvancedTable.formatTime(tRow.updatedAt);
-                        else if (targetColDef.type === 'formula' && typeof AdvancedTable.evaluateFormula === 'function') {
-                            let tVirtualCells = {};
-                            targetState.columns.forEach(tc => {
-                                if(tc.type === 'created_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.createdAt);
-                                else if(tc.type === 'last_edited_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.updatedAt);
-                                else tVirtualCells[tc.id] = tRow.cells[tc.id];
-                            });
-                            try {
-                                val = AdvancedTable.evaluateFormula(targetColDef.formula, {cells: tVirtualCells, createdAt: tRow.createdAt, updatedAt: tRow.updatedAt}, targetState.columns, relColDef.targetTableId, targetState.title, tVirtualCells, renderCache);
-                            } catch(e) { val = ''; }
-                        }
-                        else val = tRow.cells[col.targetColId];
+                targetRows.forEach(tRow => {
+                    let val;
+                    if (targetColDef.type === 'created_time') val = AdvancedTable.formatTime(tRow.createdAt);
+                    else if (targetColDef.type === 'last_edited_time') val = AdvancedTable.formatTime(tRow.updatedAt);
+                    else if (targetColDef.type === 'formula' && typeof AdvancedTable.evaluateFormula === 'function') {
+                        let tVirtualCells = {};
+                        (targetState.columns || []).forEach(tc => {
+                            if (tc.type === 'created_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.createdAt);
+                            else if (tc.type === 'last_edited_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.updatedAt);
+                            else tVirtualCells[tc.id] = (tRow.cells || {})[tc.id];
+                        });
+                        try {
+                            val = AdvancedTable.evaluateFormula(targetColDef.formula, {cells: tVirtualCells, createdAt: tRow.createdAt, updatedAt: tRow.updatedAt}, targetState.columns, targetTableId, targetState.title, tVirtualCells, renderCache);
+                        } catch(e) { val = ''; }
+                    }
+                    else val = (tRow.cells || {})[col.targetColId];
 
-                        if (val !== undefined && val !== null && val !== '') {
-                            if (typeof val === 'object' && !Array.isArray(val)) {
-                                if (val.start && val.end) val = `${val.start} ➔ ${val.end}`;
-                                else if (val.start) val = val.start;
-                                else val = JSON.stringify(val);
-                            }
-                            if (Array.isArray(val)) rolled.push(...val);
-                            else rolled.push(val);
+                    if (val !== undefined && val !== null && val !== '') {
+                        if (targetColDef.type === 'relation' || targetColDef.type === 'relation_backlink') {
+                            const details = AdvancedTable.resolveRelationDetails(targetColDef, val, renderCache);
+                            val = details.map(d => d.name).filter(n => n && n !== 'Orfano');
                         }
+                        if (typeof val === 'object' && !Array.isArray(val)) {
+                            if (val.start && val.end) val = `${val.start} ➔ ${val.end}`;
+                            else if (val.start) val = val.start;
+                            else val = JSON.stringify(val);
+                        }
+                        if (Array.isArray(val)) rolled.push(...val);
+                        else rolled.push(val);
                     }
                 });
-                
+
                 vRow.virtualCells[col.id] = [...new Set(rolled)].join(', ');
             }
         });

@@ -6,6 +6,9 @@
  * e r.cells in ensureSystemPropertiesDB, syncSystemPropertiesRow e deleteSystemPropertiesRow.
  * FIX MULTI-WIDGET ROUTING: updateDependentViews ora riconosce esplicitamente i diari (JournalManager),
  * blocchi codice (CodeManager) e button bar (ButtonManager), evitando che vengano ridisegnati come tabelle RDBMS.
+ * FEAT DEFAULT COMMENT: Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
+ * FEAT REACTIVE DEPENDENCIES: updateDependentViews rinfresca reattivamente qualsiasi tabella che possieda
+ * relazioni, backlink o rollup dipendenti dal database modificato.
  */
 
 const AdvancedTable = {
@@ -157,8 +160,18 @@ const AdvancedTable = {
         
         Object.keys(AppState.databases).forEach(id => {
             const s = AppState.databases[id];
-            if (s && (id === targetTrueId || s.sourceTableId === targetTrueId)) {
-                
+            if (!s) return;
+
+            let hasDependency = false;
+            if (s.columns && Array.isArray(s.columns)) {
+                hasDependency = s.columns.some(col => 
+                    (col.type === 'relation' && col.targetTableId === targetTrueId) ||
+                    (col.type === 'relation_backlink' && col.linkedTableId === targetTrueId) ||
+                    (col.type === 'rollup' && (col.targetTableId === targetTrueId || (col.relationColId && String(col.relationColId).includes(targetTrueId))))
+                );
+            }
+
+            if (id === targetTrueId || s.sourceTableId === targetTrueId || hasDependency) {
                 const wrapper = document.getElementById(id);
                 if (wrapper) {
                     if (s.isPivot && typeof AdvancedPivot !== 'undefined') {

@@ -320,35 +320,10 @@ Object.assign(AdvancedTable, {
     },
 
     moveTableToNote: (tableId, targetNoteId) => {
-        if (typeof AppState === 'undefined') return;
-        if (AppState.currentNoteId === targetNoteId) {
-            alert(I18n.t('adv_actions.table_already_in_note'));
-            return;
-        }
-
-        const wrapper = document.getElementById(tableId);
-        if (!wrapper) return;
-
-        const targetNote = Store.getNote(targetNoteId);
-        if (!targetNote) return;
-
-        const tableHTML = wrapper.outerHTML;
-
-        targetNote.content = (targetNote.content || '') + '<p><br></p>' + tableHTML + '<p><br></p>';
-        targetNote.updatedAt = new Date().toISOString();
-
-        wrapper.remove();
-
-        if (typeof Editor !== 'undefined') {
-            Editor.saveSnapshot();
-            Editor.sanitizeContent();
-        }
-
-        Store.triggerAutoSave();
+        // Delega al gestore universale dei widget per garantire l'uniformità del salvataggio e della minificazione
+        if (typeof WidgetManager !== 'undefined' && typeof WidgetManager.moveWidgetToNote === 'function') {
+            WidgetManager.moveWidgetToNote(tableId, targetNoteId);
         AdvancedTable.closeDropdowns(true);
-
-        if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast(I18n.t('adv_actions.table_moved_success', { noteTitle: targetNote.title }), 'success');
         }
     },
 
@@ -482,6 +457,22 @@ Object.assign(AdvancedTable, {
         col.targetTableId = tId;
         col.targetColId = cTargetId;
 
+        // Pulizia attributi residui di altri tipi di dato per non lasciare lo stato ibrido
+        delete col.hasEndDate;
+        delete col.formula;
+        delete col.decimals;
+        delete col.relationColId;
+        delete col.rollupDirection;
+        delete col.foreignRelColId;
+        delete col.buttonLabel;
+        delete col.buttonColor;
+        delete col.buttonIcon;
+        delete col.requireConfirm;
+        delete col.actionBlocks;
+        if (state.selectOptions && state.selectOptions[colId]) delete state.selectOptions[colId];
+        if (state.selectColors && state.selectColors[colId]) delete state.selectColors[colId];
+
+        // Se il target è cambiato o se la colonna prima non era una relazione, azzera le celle
         if (hasTargetChanged) {
             state.rows.forEach(r => r.cells[colId] = []);
         }
@@ -504,14 +495,74 @@ Object.assign(AdvancedTable, {
         AdvancedTable._pendingRollupConfig = { realTableId, colId };
 
         const state = AdvancedTable.getState(realTableId);
-        const relationCols = state.columns.filter(c => c.type === 'relation' && c.targetTableId);
+        
+        // 1. Relazioni uscenti locali (relation e relation_backlink)
+        const outgoingRelationCols = (state.columns || []).filter(c => 
+            (c.type === 'relation' && c.targetTableId) || 
+            (c.type === 'relation_backlink' && c.linkedTableId)
+        );
+
+        // 2. Relazioni da altri database verso questo database (Entranti / Inverse)
+        const incomingRelations = [];
+        if (AppState.databases) {
+            Object.keys(AppState.databases).forEach(dbId => {
+                const otherDb = AppState.databases[dbId];
+                if (!otherDb || otherDb.isPivot || otherDb.isLinkedView || !Array.isArray(otherDb.columns)) return;
+                if (dbId.includes('adv_code_') || dbId.includes('adv_btnbar_') || dbId.includes('adv_cols_') || dbId.includes('adv_journal_')) return;
+
+                otherDb.columns.forEach(otherCol => {
+                    if (otherCol.type === 'relation' && otherCol.targetTableId === realTableId) {
+                        // DEDUPLICAZIONE ELEGANTE:
+                        // Se questa tabella possiede già una colonna fisica di tipo relation_backlink
+                        // associata esattamente a questa tabella remota e a questa colonna remota,
+                        // scartiamo la voce virtuale per evitare duplicati identici nella tendina.
+                        const alreadyHasLocalBacklink = (state.columns || []).some(localCol => 
+                            localCol.type === 'relation_backlink' && 
+                            localCol.linkedTableId === dbId && 
+                            localCol.linkedColId === otherCol.id
+                        );
+                        if (alreadyHasLocalBacklink) return;
+
+                        const parentName = AdvancedTable.getParentNoteName(dbId);
+                        incomingRelations.push({
+                            val: `INCOMING:${dbId}:${otherCol.id}`,
+                            label: `➔ Da [${otherDb.title || 'DB'}] campo '${otherCol.name}' (in: ${parentName})`,
+                            dbId: dbId,
+                            colId: otherCol.id
+                        });
+                    }
+                });
+            });
+        }
 
         let relOptionsHTML = `<option value="">${I18n.t('adv_actions.select_rel_col_placeholder')}</option>`;
-        relationCols.forEach(c => {
-            relOptionsHTML += `<option value="${c.id}">${c.name}</option>`;
-        });
 
-        if (relationCols.length === 0) {
+        if (outgoingRelationCols.length > 0) {
+            const outgoingLabel = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
+                ? I18n.t('adv_actions.rollup_outgoing_relations')
+                : "Relazioni di questa tabella (Uscenti)";
+            relOptionsHTML += `<optgroup label="${outgoingLabel}">`;
+            outgoingRelationCols.forEach(c => {
+                const targetDb = AdvancedTable.getTableState(c.targetTableId || c.linkedTableId);
+                const targetName = targetDb ? targetDb.title : 'DB';
+                const kind = c.type === 'relation_backlink' ? 'Backlink' : 'Relazione';
+                relOptionsHTML += `<option value="${c.id}">[${c.name}] ➔ verso '${targetName}' (${kind})</option>`;
+        });
+            relOptionsHTML += `</optgroup>`;
+        }
+
+        if (incomingRelations.length > 0) {
+            const incomingLabel = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
+                ? I18n.t('adv_actions.rollup_incoming_relations')
+                : "Relazioni da altri database verso questa tabella (Entranti / Inverse)";
+            relOptionsHTML += `<optgroup label="${incomingLabel}">`;
+            incomingRelations.forEach(inc => {
+                relOptionsHTML += `<option value="${inc.val}">${inc.label}</option>`;
+            });
+            relOptionsHTML += `</optgroup>`;
+        }
+
+        if (outgoingRelationCols.length === 0 && incomingRelations.length === 0) {
             relOptionsHTML = `<option value="" disabled>${I18n.t('adv_actions.no_relation_found')}</option>`;
         }
 
@@ -554,19 +605,29 @@ Object.assign(AdvancedTable, {
     },
 
     updateRollupTargetOptions: () => {
-        const relColId = document.getElementById('rollupConfigRel').value;
+        const relColVal = document.getElementById('rollupConfigRel').value;
         const tgtSelect = document.getElementById('rollupConfigTarget');
         tgtSelect.innerHTML = `<option value="">${I18n.t('adv_actions.select_col_placeholder')}</option>`;
 
-        if (!relColId) return;
+        if (!relColVal) return;
 
         const { realTableId } = AdvancedTable._pendingRollupConfig;
         const state = AdvancedTable.getState(realTableId);
-        const relCol = state.columns.find(c => c.id === relColId);
 
-        if (!relCol || !relCol.targetTableId) return;
+        let targetDbId = null;
 
-        const targetState = AdvancedTable.getTableState(relCol.targetTableId);
+        if (relColVal.startsWith('INCOMING:')) {
+            const parts = relColVal.split(':');
+            targetDbId = parts[1];
+        } else {
+            const relCol = (state.columns || []).find(c => c.id === relColVal);
+            if (!relCol) return;
+            targetDbId = relCol.targetTableId || relCol.linkedTableId;
+        }
+
+        if (!targetDbId) return;
+
+        const targetState = AdvancedTable.getTableState(targetDbId);
         if (targetState && targetState.columns) {
             targetState.columns.forEach(c => {
                 tgtSelect.innerHTML += `<option value="${c.id}">${c.name} (${c.type})</option>`;
@@ -575,10 +636,10 @@ Object.assign(AdvancedTable, {
     },
 
     saveRollupConfig: () => {
-        const relColId = document.getElementById('rollupConfigRel').value;
+        const relColVal = document.getElementById('rollupConfigRel').value;
         const targetColId = document.getElementById('rollupConfigTarget').value;
 
-        if (!relColId || !targetColId) {
+        if (!relColVal || !targetColId) {
             alert(I18n.t('adv_actions.alert_select_rel_and_col'));
             return;
         }
@@ -586,9 +647,44 @@ Object.assign(AdvancedTable, {
         const { realTableId, colId } = AdvancedTable._pendingRollupConfig;
         let state = AdvancedTable.getState(realTableId);
         const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
 
-        col.relationColId = relColId;
+        col.type = 'rollup';
+        col.relationColId = relColVal;
         col.targetColId = targetColId;
+
+        // Pulizia attributi residui di altri tipi di dato per non lasciare lo stato ibrido
+        delete col.hasEndDate;
+        delete col.formula;
+        delete col.singleRecord;
+        delete col.showBacklink;
+        delete col.backlinkColId;
+        delete col.buttonLabel;
+        delete col.buttonColor;
+        delete col.buttonIcon;
+        delete col.requireConfirm;
+        delete col.actionBlocks;
+        if (state.selectOptions && state.selectOptions[colId]) delete state.selectOptions[colId];
+        if (state.selectColors && state.selectColors[colId]) delete state.selectColors[colId];
+
+        // Svuota le vecchie celle fisiche di testo/numeri poiché il rollup è calcolato dinamicamente a runtime
+        state.rows.forEach(r => r.cells[colId] = '');
+
+        if (relColVal.startsWith('INCOMING:')) {
+            const parts = relColVal.split(':');
+            col.rollupDirection = 'incoming';
+            col.targetTableId = parts[1];
+            col.foreignRelColId = parts[2];
+        } else {
+            col.rollupDirection = 'outgoing';
+            const localRel = (state.columns || []).find(c => c.id === relColVal);
+            col.targetTableId = localRel ? (localRel.targetTableId || localRel.linkedTableId) : null;
+            if (localRel && localRel.type === 'relation_backlink') {
+                col.foreignRelColId = localRel.linkedColId;
+            } else {
+                delete col.foreignRelColId;
+            }
+        }
 
         AdvancedTable.setState(realTableId, state);
 

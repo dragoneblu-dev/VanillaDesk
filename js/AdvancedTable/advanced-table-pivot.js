@@ -36,7 +36,7 @@ const AdvancedPivot = {
             filters: {},
             sorts: [],
             rows:[],
-            chartConfig: chartConfig || { visible: false }
+            chartConfig: chartConfig || { visible: false, height: 'medium' }
         };
 
         if (tableId) {
@@ -351,8 +351,13 @@ const AdvancedPivot = {
         let html = '';
 
         if (hasChart) {
+            const chartHeight = state.chartConfig?.height || 'medium';
+            let minH = '350px';
+            if (chartHeight === 'small') minH = '260px';
+            else if (chartHeight === 'large') minH = '550px';
+
             html += `
-                <div id="chart_container_${tableId}" style="width:100%; min-height:350px; padding:15px; margin-bottom:5px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-color); box-sizing:border-box;">
+                <div id="chart_container_${tableId}" style="width:100%; min-height:${minH}; padding:15px; margin-bottom:5px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-color); box-sizing:border-box;">
                     <!-- Il canvas verra iniettato qui da AdvancedTableCharts -->
                 </div>
             `;

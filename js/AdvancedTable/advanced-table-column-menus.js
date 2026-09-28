@@ -5,6 +5,10 @@
  * Gestione dinamica della visibilità del campo (compatibile con griglia e Drawer).
  * Pulizia a cascata dello stato (sort, filtri, viste e formattazione condizionale) su eliminazione colonna.
  * Integrazione del tipo 'note_link' (Collegamento a Nota).
+ * PROTEZIONE ROLLUP BIDIREZIONALE: Verifica che nessuna tabella dello spazio di lavoro possieda
+ * rollup o relazioni (uscenti o entranti) puntate a questa colonna prima di consentirne la cancellazione.
+ * FIX CONVERSIONE RELAZIONE/ROLLUP: Richiesta di conferma preventiva su perdita dati prima dell'apertura
+ * dei drawer di configurazione per evitare che le colonne rimangano in stato ibrido.
  */
 
 const AdvancedTableColumnMenus = {
@@ -516,26 +520,42 @@ const AdvancedTableColumnMenus = {
     },
 
     changeColType: (tableId, colId, newType) => {
-        if (newType === 'relation') {
-            AdvancedTable.openRelationConfig(tableId, colId);
-            return;
-        } else if (newType === 'rollup') {
-            AdvancedTable.openRollupConfig(tableId, colId);
-            return;
-        }
-
-        let state = AdvancedTable.getState(tableId);
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        let state = AdvancedTable.getState(realTableId);
         const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
         const oldType = col.type;
 
         if (oldType === newType) return;
+
+        // Se passiamo a 'relation' o 'rollup', verifichiamo prima se ci sono dati che andranno persi
+        if (newType === 'relation' || newType === 'rollup') {
+            const hasData = state.rows.some(r => {
+                const val = r.cells[colId];
+                return val !== undefined && val !== null && val !== '' && !(Array.isArray(val) && val.length === 0);
+            });
+
+            if (hasData) {
+                if (!confirm(I18n.t('adv_col_menu.warn_data_loss'))) {
+                    AdvancedTable.closeDropdowns(true);
+                    return;
+                }
+            }
+
+            if (newType === 'relation') {
+                AdvancedTable.openRelationConfig(realTableId, colId);
+            } else {
+                AdvancedTable.openRollupConfig(realTableId, colId);
+            }
+            return;
+        }
 
         let hasDataLoss = false;
 
         let formulaValues = {};
         if (oldType === 'formula' || oldType === 'rollup' || oldType === 'relation_backlink') {
             state.rows.forEach(r => {
-                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state);
+                const vRow = AdvancedTable.buildVirtualRow(realTableId, r, state);
                 formulaValues[r.id] = vRow.virtualCells[colId];
             });
         }
@@ -698,6 +718,8 @@ const AdvancedTableColumnMenus = {
         if (oldType === 'rollup' && newType !== 'rollup') {
             delete col.relationColId;
             delete col.targetColId;
+            delete col.rollupDirection;
+            delete col.foreignRelColId;
         }
 
         if (newType === 'select' || newType === 'multi-select') {
@@ -721,14 +743,14 @@ const AdvancedTableColumnMenus = {
             col.actionBlocks = [];
         }
 
-        AdvancedTable.setState(tableId, state);
+        AdvancedTable.setState(realTableId, state);
         
-        if (tableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
-            AdvancedTable.openRecordView(tableId, AdvancedTable.activeRecordId);
+        if (realTableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
+            AdvancedTable.openRecordView(realTableId, AdvancedTable.activeRecordId);
         } else {
-            AdvancedTable.updateDependentViews(tableId);
+            AdvancedTable.updateDependentViews(realTableId);
             if (AdvancedTable.activeRecordId) {
-                const activeTId = AdvancedTable.activeTableId || tableId;
+                const activeTId = AdvancedTable.activeTableId || realTableId;
                 AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
             }
         }
@@ -793,6 +815,29 @@ const AdvancedTableColumnMenus = {
         let pointingTableName = "";
 
         const searchPattern = `riga["${col.name}"]`;
+
+        // Scansione di protezione su tutti i database per rilevare formule, relazioni e rollup (uscenti o entranti)
+        if (AppState.databases) {
+            Object.keys(AppState.databases).forEach(otherDbId => {
+                if (otherDbId === realTableId) return;
+                const otherDb = AppState.databases[otherDbId];
+                if (!otherDb || !Array.isArray(otherDb.columns)) return;
+
+                otherDb.columns.forEach(cDef => {
+                    if (cDef.type === 'formula' && cDef.formula && cDef.formula.includes(searchPattern)) {
+                        isUsedInFormula = true;
+                    }
+                    if (cDef.type === 'relation' && cDef.targetTableId === realTableId && cDef.targetColId === colId) {
+                        isTargetOfRelation = true;
+                        pointingTableName = otherDb.title || 'Altro DB';
+                    }
+                    if (cDef.type === 'rollup' && cDef.targetColId === colId && (cDef.targetTableId === realTableId || (cDef.relationColId && String(cDef.relationColId).includes(realTableId)))) {
+                        isTargetOfRelation = true;
+                        pointingTableName = otherDb.title || 'Altro DB';
+                    }
+                });
+            });
+        }
 
         AppState.notes.forEach(n => {
             if (!n.content) return;

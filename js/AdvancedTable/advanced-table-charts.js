@@ -5,6 +5,9 @@
  * FIX: Layout della Torta/Ciambella con marginazione dinamica e Flexbox affiancato.
  * FIX: Rimozione di alias obsoleti per il salvataggio della configurazione.
  * FIX: Risolta registrazione ripetuta del plugin ChartDataLabels.
+ * FEAT DIMENSIONI: Supporto per 3 altezze configurabili (Piccola, Media, Grande) per Barre, Linee, Torta e Ciambella.
+ * FIX CIAMBELLA COMPATTA: Calcolo matematico proporzionale e auto-scaling del numero centrale (centerText)
+ * basato su innerRadius e dimensione del widget, eliminando il testo sovradimensionato nei grafici piccoli.
  */
 
 const AdvancedTableCharts = {
@@ -123,22 +126,56 @@ const AdvancedTableCharts = {
                 let sum = 0;
                 data.datasets[0].data.forEach((val, i) => {
                     const meta = chart.getDatasetMeta(0);
-                    if (!meta.data[i].hidden) {
+                    if (meta && meta.data && meta.data[i] && !meta.data[i].hidden) {
                         sum += (val || 0);
                     }
                 });
 
                 if (sum % 1 !== 0) sum = Math.round(sum * 100) / 100;
+                const sumText = String(sum);
 
                 const centerX = (chartArea.left + chartArea.right) / 2;
                 const centerY = (chartArea.top + chartArea.bottom) / 2;
 
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-                
-                ctx.font = 'bold 30px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+
+                // Calcolo dinamico e proporzionale della dimensione del font
+                const meta0 = chart.getDatasetMeta(0);
+                const firstArc = meta0 && meta0.data && meta0.data[0];
+                const innerRadius = (firstArc && firstArc.innerRadius) ? firstArc.innerRadius : 0;
+
+                const chartHeight = pluginOptions.chartHeight || 'medium';
+
+                let targetFontSize = 24;
+                if (chartHeight === 'small') {
+                    targetFontSize = 15;
+                } else if (chartHeight === 'large') {
+                    targetFontSize = 34;
+                }
+
+                // Auto-scaling sul raggio interno reale della ciambella per non sforare mai
+                if (innerRadius > 0) {
+                    const maxAllowedWidth = innerRadius * 1.6;
+                    const maxAllowedHeight = innerRadius * 1.2;
+
+                    // Limita l'altezza del font all'ingombro del foro centrale
+                    if (targetFontSize > maxAllowedHeight) {
+                        targetFontSize = Math.floor(maxAllowedHeight);
+                    }
+
+                    // Verifica la larghezza del testo e scala verso il basso se eccede
+                    ctx.font = `bold ${targetFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
+                    let textWidth = ctx.measureText(sumText).width;
+
+                    if (textWidth > maxAllowedWidth && textWidth > 0) {
+                        targetFontSize = Math.max(9, Math.floor(targetFontSize * (maxAllowedWidth / textWidth)));
+                    }
+                }
+
+                ctx.font = `bold ${targetFontSize}px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif`;
                 ctx.fillStyle = textColor;
-                ctx.fillText(sum, centerX, centerY);
+                ctx.fillText(sumText, centerX, centerY);
 
                 ctx.restore();
             }
@@ -153,7 +190,7 @@ const AdvancedTableCharts = {
 
         AdvancedTableCharts._clearInstances(tableId);
 
-        const config = state.chartConfig || { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default' };
+        const config = state.chartConfig || { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium' };
         if (!config.visible) return;
 
         if (!state.groupBy || state.groupBy.length === 0 || !state.aggregations || state.aggregations.length === 0) {
@@ -200,6 +237,22 @@ const AdvancedTableCharts = {
         const isPie = chartType === 'doughnut' || chartType === 'pie';
         const isStackedEngine = config.stacked && state.groupBy.length >= 2 && !isPie;
         const legendPos = config.legendPos || 'bottom';
+        const chartHeight = config.height || 'medium';
+
+        // Definizione altezze personalizzabili
+        let standardBarHeight = '400px';
+        let pieWrapperHeight = '350px';
+        let pieWrapperMaxWidth = '500px';
+
+        if (chartHeight === 'small') {
+            standardBarHeight = '260px';
+            pieWrapperHeight = '240px';
+            pieWrapperMaxWidth = '380px';
+        } else if (chartHeight === 'large') {
+            standardBarHeight = '600px';
+            pieWrapperHeight = '520px';
+            pieWrapperMaxWidth = '700px';
+        }
 
         const hasDataLabelsPlugin = typeof ChartDataLabels !== 'undefined';
         const customPlugins = [AdvancedTableCharts._getCenterTextPlugin()];
@@ -241,9 +294,9 @@ const AdvancedTableCharts = {
                 if (dataValues.every(v => v === 0)) return;
 
                 const wrapper = document.createElement('div');
-                wrapper.style.flex = '1 1 300px';
-                wrapper.style.maxWidth = '500px'; 
-                wrapper.style.height = '350px'; 
+                wrapper.style.flex = '1 1 280px';
+                wrapper.style.maxWidth = pieWrapperMaxWidth; 
+                wrapper.style.height = pieWrapperHeight; 
                 wrapper.style.position = 'relative';
                 
                 const canvas = document.createElement('canvas');
@@ -280,7 +333,7 @@ const AdvancedTableCharts = {
                                 display: true, 
                                 text: agg.label || 'Metrica', 
                                 color: textColor, 
-                                font: { size: 14 }
+                                font: { size: chartHeight === 'small' ? 12 : 14 }
                             },
                             legend: { 
                                 display: legendPos !== 'none', 
@@ -289,7 +342,10 @@ const AdvancedTableCharts = {
                             },
                             customDataLabels: { display: config.showLabels !== false },
                             datalabels: { display: false },
-                            centerText: { display: config.centerTotal !== false && chartType === 'doughnut' }
+                            centerText: { 
+                                display: config.centerTotal !== false && chartType === 'doughnut',
+                                chartHeight: chartHeight
+                            }
                         }
                     },
                     plugins: customPlugins
@@ -308,7 +364,7 @@ const AdvancedTableCharts = {
         container.innerHTML = '<canvas id="canvas_' + tableId + '"></canvas>';
         const ctx = document.getElementById('canvas_' + tableId);
         container.style.display = 'block';
-        container.style.height = '400px';
+        container.style.height = standardBarHeight;
 
         let labels =[];
         let datasets =[];
@@ -419,7 +475,7 @@ const AdvancedTableCharts = {
                         formatter: Math.round,
                         font: {
                             family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
-                            size: 11
+                            size: chartHeight === 'small' ? 9 : 11
                         }
                     }
                 },
