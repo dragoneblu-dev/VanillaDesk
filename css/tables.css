@@ -51,6 +51,27 @@
     color: #e5e7eb;
 }
 
+/* INTESTAZIONE FISSA ALLO SCORRIMENTO (STICKY HEADER) */
+.editor-content table.table-sticky-header th {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background-color: var(--editor-bg);
+    box-shadow: inset 0 1px 0 var(--border-color), inset 0 -1px 0 var(--border-color);
+}
+
+/* Background solido anti-trasparenza per intestazioni colorate quando sticky */
+.editor-content table.table-sticky-header th.hl-c1 { background-color: color-mix(in srgb, var(--hl-c1) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c2 { background-color: color-mix(in srgb, var(--hl-c2) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c3 { background-color: color-mix(in srgb, var(--hl-c3) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c4 { background-color: color-mix(in srgb, var(--hl-c4) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c5 { background-color: color-mix(in srgb, var(--hl-c5) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c6 { background-color: color-mix(in srgb, var(--hl-c6) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c7 { background-color: color-mix(in srgb, var(--hl-c7) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c8 { background-color: color-mix(in srgb, var(--hl-c8) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c9 { background-color: color-mix(in srgb, var(--hl-c9) 40%, var(--editor-bg)) !important; }
+.editor-content table.table-sticky-header th.hl-c10 { background-color: color-mix(in srgb, var(--hl-c10) 40%, var(--editor-bg)) !important; }
+
 /* FIX FOCUS CELLE: Stessa logica della selezione per preservare i colori */
 .editor-content td:focus,
 .editor-content th:focus {

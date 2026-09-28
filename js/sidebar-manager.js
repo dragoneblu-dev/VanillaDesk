@@ -6,6 +6,7 @@
  * visualizzazione delle opzioni disponibili per proprietà e rimozione isolata su click della ✕.
  * FIX RELATION LABELS: Risoluzione semantica dei record collegati (nessun ID 'sys_r_*' esposto all'utente).
  * UX COMPACT PILL MENU: Spaziatura compatta ottimizzata (padding 2px 4px) per l'elenco delle opzioni a pillola.
+ * FIX REATTIVITÀ PILLS: Invocazione diretta di renderPills() all'aggiunta e rimozione filtri.
  */
 
 const SidebarManager = {
@@ -190,7 +191,7 @@ const SidebarManager = {
                     html += `
                         <div class="adv-filter-autocomplete-item" style="display:flex; align-items:center; gap:8px;" onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.select('${sug.colId}', '${safeRealValue}', '${safeColName}', '🏷️ ${safeColName}')">
                             <span style="color:var(--text-primary); font-weight:bold; font-size:0.8rem;">🏷️ ${sug.colName}</span>
-                            <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7;">(Mostra note con questo campo compilato)</span>
+                            <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7;">(${sug.displayValue})</span>
                         </div>
                     `;
                 } else {
@@ -254,6 +255,7 @@ const SidebarManager = {
             }
 
             SidebarManager.SearchAutocomplete.hide('Selezione Effettuata');
+            SidebarManager.SearchAutocomplete.renderPills();
             
             if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._triggerSearchUpdate === 'function') {
                 EventsGlobal._triggerSearchUpdate();
@@ -264,6 +266,8 @@ const SidebarManager = {
             if (AppState.activePropertyFilters && AppState.activePropertyFilters.length > index) {
                 AppState.activePropertyFilters.splice(index, 1);
                 
+                SidebarManager.SearchAutocomplete.renderPills();
+
                 if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._triggerSearchUpdate === 'function') {
                     EventsGlobal._triggerSearchUpdate();
                 }

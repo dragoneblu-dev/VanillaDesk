@@ -121,7 +121,7 @@ const AppState = {
                 if (!propsDb) {
                     isValidMatch = false;
                 } else {
-                    const sysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === note.id);
+                    const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
                     if (!sysRow) {
                         isValidMatch = false;
                     } else {
@@ -143,6 +143,14 @@ const AppState = {
                             // Array (Multi-select)
                             if (Array.isArray(cellVal)) {
                                 return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
+                            }
+
+                            // Date Range con oggetto {start, end}
+                            if (typeof cellVal === 'object' && cellVal !== null) {
+                                const searchLower = String(f.realValue).toLowerCase();
+                                const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
+                                const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
+                                return !!(startMatch || endMatch);
                             }
 
                             // Testo/Numero semplice

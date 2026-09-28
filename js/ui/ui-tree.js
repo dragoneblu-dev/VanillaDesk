@@ -69,9 +69,17 @@ Object.assign(UI, {
     renderTree: () => {
         const container = document.getElementById('treeContainer');
         if (!container) return;
+        
+        // Pulizia immediata dell'evidenziazione di drag ad ogni ciclo di render
+        container.classList.remove('drag-over-root');
         container.innerHTML = "";
         
         AppState._globalHighlights = 0;
+
+        // Assicura che il database di sistema delle proprietà sia sincronizzato con tutte le note attuali
+        if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.ensureSystemPropertiesDB === 'function') {
+            AdvancedTable.ensureSystemPropertiesDB();
+        }
 
         const hasFilterText = AppState.searchFilter && AppState.searchFilter.length > 0;
         const hasFilterProp = AppState.activePropertyFilters && AppState.activePropertyFilters.length > 0;
@@ -262,6 +270,47 @@ Object.assign(UI, {
         return pureText;
     },
 
+    _checkNotePropertyMatch: (sysRow, activePropFilters) => {
+        if (!sysRow || !sysRow.cells) return false;
+
+        return activePropFilters.every(f => {
+            const cellVal = sysRow.cells[f.colId];
+            
+            // 1. Controllo di presenza (*EXISTS*) coerente su tutti i tipi di proprietà
+            if (f.realValue === '*EXISTS*') {
+                if (cellVal === undefined || cellVal === null || cellVal === '') return false;
+                if (Array.isArray(cellVal)) return cellVal.length > 0;
+                if (typeof cellVal === 'boolean') return cellVal === true;
+                if (typeof cellVal === 'object') {
+                    return (cellVal.start !== undefined && String(cellVal.start).trim() !== '') ||
+                           (cellVal.end !== undefined && String(cellVal.end).trim() !== '');
+                }
+                return String(cellVal).trim() !== '';
+            }
+
+            // 2. Booleani (Checkbox)
+            if (typeof f.realValue === 'boolean') {
+                return (cellVal === true || cellVal === 'true') === f.realValue;
+            }
+
+            // 3. Array (Multi-select o Relazioni)
+            if (Array.isArray(cellVal)) {
+                return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
+            }
+
+            // 4. Date Range con oggetto {start, end}
+            if (typeof cellVal === 'object' && cellVal !== null) {
+                const searchLower = String(f.realValue).toLowerCase();
+                const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
+                const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
+                return !!(startMatch || endMatch);
+            }
+
+            // 5. Testo, Numeri e Singoli Valori
+            return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
+        });
+    },
+
     buildDatabaseVirtualTreeElement: (dbId, dbState, dbNotes, forceExpandForActiveNote = false, isExplicitDbMode = false) => {
         const filter = AppState.searchFilter ? AppState.searchFilter.toLowerCase() : null;
         const activePropFilters = AppState.activePropertyFilters || [];
@@ -335,34 +384,11 @@ Object.assign(UI, {
             let noteDirectMatch = true;
 
             if (activePropFilters.length > 0) {
-                if (!propsDb) {
+                if (!propsDb || !Array.isArray(propsDb.rows)) {
                     noteDirectMatch = false;
                 } else {
-                    const sysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === note.id);
-                    if (!sysRow) {
-                        noteDirectMatch = false;
-                    } else {
-                        const satisfiesAll = activePropFilters.every(f => {
-                            let cellVal = sysRow.cells[f.colId];
-                            
-                            if (f.realValue === '*EXISTS*') {
-                                if (cellVal === undefined || cellVal === null || cellVal === '') return false;
-                                if (Array.isArray(cellVal) && cellVal.length === 0) return false;
-                                return true;
-                            }
-
-                            if (typeof f.realValue === 'boolean') {
-                                return (cellVal === true || cellVal === 'true') === f.realValue;
-                            }
-
-                            if (Array.isArray(cellVal)) {
-                                return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
-                            }
-
-                            return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
-                        });
-                        if (!satisfiesAll) noteDirectMatch = false;
-                    }
+                    const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
+                    noteDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);
                 }
             }
 
@@ -486,34 +512,11 @@ Object.assign(UI, {
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
         if (activePropFilters.length > 0) {
-            if (!propsDb) {
+            if (!propsDb || !Array.isArray(propsDb.rows)) {
                 nodeDirectMatch = false;
             } else {
-                const sysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === node.id);
-                if (!sysRow) {
-                    nodeDirectMatch = false;
-                } else {
-                    const satisfiesAll = activePropFilters.every(f => {
-                        let cellVal = sysRow.cells[f.colId];
-                        
-                        if (f.realValue === '*EXISTS*') {
-                            if (cellVal === undefined || cellVal === null || cellVal === '') return false;
-                            if (Array.isArray(cellVal) && cellVal.length === 0) return false;
-                            return true;
-                        }
-
-                        if (typeof f.realValue === 'boolean') {
-                            return (cellVal === true || cellVal === 'true') === f.realValue;
-                        }
-
-                        if (Array.isArray(cellVal)) {
-                            return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
-                        }
-
-                        return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
-                    });
-                    if (!satisfiesAll) nodeDirectMatch = false;
-                }
+                const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === node.id);
+                nodeDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);
             }
         }
 
@@ -620,6 +623,7 @@ Object.assign(UI, {
             e.stopPropagation();
             e.preventDefault();
             
+            // Apertura con flag scrollToTop = true per posizionarsi direttamente in cima alla nota
             if (typeof UI.selectNote !== 'undefined') UI.selectNote(node.id);
             
             if (!AppState.isEditMode) {

@@ -156,9 +156,9 @@ Object.assign(AdvancedTable, {
                 if (isEdit) {
                     return `
                         <div class="adv-date-ro-row" style="width:100%;">
-                            <input type="${inputType}" value="${startVal}" class="adv-range-input" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'start')" ${readonly}>
+                            <input type="${inputType}" value="${startVal}" class="adv-range-input" onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'start')" ${readonly}>
                             <span class="adv-date-ro-label">➔</span>
-                            <input type="${inputType}" value="${endVal}" class="adv-range-input" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'end')" ${readonly}>
+                            <input type="${inputType}" value="${endVal}" class="adv-range-input" onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'end')" ${readonly}>
                         </div>
                     `;
                 } else {
@@ -181,11 +181,11 @@ Object.assign(AdvancedTable, {
                     if (displayVal && col.type === 'datetime') displayVal = displayVal.replace('T', ' ');
                     return `<div class="adv-cell-text adv-text-right">${displayVal}</div>`;
                 }
-                return `<div class="adv-cell-date"><input type="${inputType}" value="${singleVal}" data-row="${row.id}" data-col="${col.id}" ${readonly}></div>`;
+                return `<div class="adv-cell-date"><input type="${inputType}" value="${singleVal}" data-row="${row.id}" data-col="${col.id}" onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}" ${readonly}></div>`;
             }
         } else if (col.type === 'time') {
             if (!isEdit) return `<div class="adv-cell-text adv-text-right">${val || ''}</div>`;
-            return `<div class="adv-cell-date"><input type="time" value="${val}" data-row="${row.id}" data-col="${col.id}" ${readonly}></div>`;
+            return `<div class="adv-cell-date"><input type="time" value="${val}" data-row="${row.id}" data-col="${col.id}" onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}" ${readonly}></div>`;
         
         } else if (col.type === 'number') {
             const rawVal = val !== null && val !== undefined ? val : '';
@@ -207,6 +207,7 @@ Object.assign(AdvancedTable, {
                            placeholder="..." 
                            class="adv-input-right adv-number-input" 
                            onfocus="this.type='number'; this.value=this.getAttribute('data-raw-value');" 
+                           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}"
                            onblur="this.setAttribute('data-raw-value', this.value); this.type='text'; this.value=AdvancedTable.formatDecimal(this.value, this.getAttribute('data-decimals'));" 
                            ${readonly}>
                 </div>`;
@@ -236,7 +237,7 @@ Object.assign(AdvancedTable, {
             let content = '';
             const targetDbId = col.type === 'relation' ? col.targetTableId : col.linkedTableId;
             
-            // LA MODIFICA: Usiamo il core e ci godiamo i risultati pronti
+            // Usiamo il core e ci godiamo i risultati pronti
             const details = AdvancedTable.resolveRelationDetails(col, val, state._renderCache || {});
             
             if (details.length > 0) {

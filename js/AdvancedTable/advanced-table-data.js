@@ -14,6 +14,8 @@
  * LIVE REFRESH DA DISCO: forceRecalculate ricarica i dati freschi dal file system (evitando sovrascritture concorrenti).
  * FEAT CLEAR SELECTION: Aggiunta funzione clearSelectedRows per azzerare tutte le righe selezionate.
  * FEAT INTERVAL ALGEBRA: Supporto completo e unificato per filtri su intervalli temporali e range con delimitatore ➔.
+ * FEAT PAGINAZIONE: Opzioni scala bilanciata [10, 25, 50, 100, 200], default a 25 e clamp massimo a 200.
+ * FEAT SYS_PROPERTIES PROPAGATION: Invocazione automatica di triggerFromPropertyChange quando viene mutato SYS_PROPERTIES_DB.
  */
 
 Object.assign(AdvancedTable, {
@@ -122,6 +124,7 @@ Object.assign(AdvancedTable, {
         }
 
         let oldRowContext = JSON.parse(JSON.stringify(row));
+        const oldValue = oldRowContext.cells[colId];
         row.cells[colId] = value;
         row.updatedAt = Date.now();
 
@@ -130,6 +133,14 @@ Object.assign(AdvancedTable, {
         if (typeof AdvancedAutomations !== 'undefined') {
             await AdvancedAutomations.evaluate(realTableId, rowId, false, oldRowContext);
             await AdvancedAutomations.triggerCrossDB(realTableId); 
+
+            // Se stiamo modificando una proprietà/tag nel database di sistema, propaga l'evento alle tabelle collegate
+            if (realTableId === 'SYS_PROPERTIES_DB') {
+                const noteId = row.cells['sys_c_note'];
+                if (noteId && typeof AdvancedAutomations.triggerFromPropertyChange === 'function') {
+                    await AdvancedAutomations.triggerFromPropertyChange(noteId, colId, oldValue, value);
+                }
+            }
         }
         
         state = AdvancedTable.getState(realTableId);
@@ -190,6 +201,7 @@ Object.assign(AdvancedTable, {
             }
 
             let oldRowContext = JSON.parse(JSON.stringify(row));
+            const oldPartValue = current[part];
             current[part] = value;
 
             if (JSON.stringify(row.cells[colId]) !== JSON.stringify(current)) {
@@ -201,6 +213,13 @@ Object.assign(AdvancedTable, {
                 if (typeof AdvancedAutomations !== 'undefined') {
                     await AdvancedAutomations.evaluate(realTableId, rowId, false, oldRowContext);
                     await AdvancedAutomations.triggerCrossDB(realTableId);
+
+                    if (realTableId === 'SYS_PROPERTIES_DB') {
+                        const noteId = row.cells['sys_c_note'];
+                        if (noteId && typeof AdvancedAutomations.triggerFromPropertyChange === 'function') {
+                            await AdvancedAutomations.triggerFromPropertyChange(noteId, colId, oldRowContext.cells[colId], current);
+                        }
+                    }
                 }
             }
         }
@@ -535,7 +554,7 @@ Object.assign(AdvancedTable, {
         }
     },
 
-    forceRecalculate: async (tableId) => {
+    forceRecalculate: async (tableId, silent = false) => {
         if (!tableId) return;
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
@@ -554,7 +573,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable.updateDependentViews(realTableId);
         if (typeof AdvancedPivot !== 'undefined') AdvancedPivot.updateDependent(realTableId);
 
-        if (typeof UI !== 'undefined' && UI.showToast) {
+        if (!silent && typeof UI !== 'undefined' && UI.showToast) {
             UI.showToast("Tabella e dati ricaricati con successo.", "info");
         }
     },
@@ -584,15 +603,16 @@ Object.assign(AdvancedTable, {
         dropdown.onclick = (ev) => ev.stopPropagation();
 
         const opts = [
-            { val: 'all', label: 'Tutte (Nessuna impaginazione)' },
             { val: 10, label: '10 righe per pagina' },
-            { val: 20, label: '20 righe per pagina' },
-            { val: 50, label: '50 righe per pagina' }
+            { val: 25, label: '25 righe per pagina (Default)' },
+            { val: 50, label: '50 righe per pagina' },
+            { val: 100, label: '100 righe per pagina' },
+            { val: 200, label: '200 righe per pagina (Max)' }
         ];
 
         let html = `<div class="adv-dropdown-title">Righe per pagina</div>`;
         opts.forEach(opt => {
-            let isActive = (state.pageSize || 'all') == opt.val;
+            let isActive = (state.pageSize || 25) == opt.val;
             html += `<div class="adv-dropdown-item ${isActive ? 'active' : ''}" onclick="AdvancedTable.setPageSize('${tableId}', '${opt.val}')">
                         <span>${opt.label}</span>
                      </div>`;
@@ -607,7 +627,10 @@ Object.assign(AdvancedTable, {
         if (!tableId) return;
         let state = AdvancedTable.getState(tableId);
         if (!state) return;
-        state.pageSize = size;
+        let parsed = parseInt(size, 10);
+        if (isNaN(parsed) || parsed <= 0) parsed = 25;
+        if (parsed > 200) parsed = 200;
+        state.pageSize = parsed;
         state.currentPage = 1;
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);

@@ -5,6 +5,8 @@
  * questo viene convertito in veri e propri <p> per permettere al tasto TAB di identificare la riga fisica.
  * FIX SNIPPET & INLINE WIDGETS: Protezione assoluta dalle andate a capo (\n) negli snippet e
  * prevenzione dello split del DOM nativo del browser tramite BR-Shielding.
+ * PURIFICAZIONE ISTANTANEA ALL'INCOLLA: Intercettore in fase di cattura su #inlineNoteInput e #bookmarkCommentInput
+ * che applica immediatamente la funzione unica Editor.sanitizeMiniText, mostrando a video solo il testo pulito.
  */
 
 Object.assign(Editor, {
@@ -206,9 +208,8 @@ Object.assign(Editor, {
         let targetNode = sel.anchorNode;
         if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
 
-        // FIX INLINE WIDGETS: Controlliamo sia i blocchi (DB/Codice) che gli inline (Snippet/Appunti)
+        // Controllo contesti protetti ed editor dedicati (Note Inline e Commenti Segnalibri)
         const isInsideWidget = WidgetManager.isProtectedBlock(targetNode) || WidgetManager.isProtectedInline(targetNode);
-        const isInlineNote = !!targetNode.closest('#inlineNoteInput');
         const codeWrapper = targetNode.closest('[data-widget-type="code"]');
         const snippetText = targetNode.closest('.snippet-text');
 
@@ -227,8 +228,7 @@ Object.assign(Editor, {
                         return;
                     }
 
-                    // FIX ASSOLUTO SNIPPET COPIABILE MULTI-LINEA: Incolla l'HTML pulito
-                    // usando i <br> per non spaccare in due il DOM dello span!
+                    // Snippet copiabile multi-linea: Incolla l'HTML pulito con <br> per non spezzare lo span
                     if (snippetText) {
                         let cleanTextWithBrs = pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         cleanTextWithBrs = cleanTextWithBrs.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
@@ -276,15 +276,10 @@ Object.assign(Editor, {
                             formattedCellText = formattedCellText.replace(/\r\n|\n|\r/g, '<br>');
                             document.execCommand('insertHTML', false, formattedCellText);
                         } else {
-                        	document.execCommand('insertText', false, cleanText);
-                    	}
+                            document.execCommand('insertText', false, cleanText);
+                        }
                     }
                     Store.triggerAutoSave();
-                    return;
-                }
-
-                if (isInlineNote) {
-                    document.execCommand('insertText', false, pastedText);
                     return;
                 }
 
@@ -436,15 +431,15 @@ Object.assign(Editor, {
                                 if ((node.classList.contains('inline-note-data') || node.classList.contains('bookmark-comment-data')) && attr.value.includes('none')) {
                                     node.setAttribute('style', 'display: none;'); 
                                 } else if (isInternalWidget) {
-                                    return; // I widget mantengono gli stili (es. larghezza colonne)
+                                    return; 
                                 } else {
-                                    node.removeAttribute('style'); // Nuke totale per testo normale
+                                    node.removeAttribute('style'); 
                                 }
                             }
                             // Gestione Dati
                             else if (attr.name.startsWith('data-')) {
                                 if (allowedDataAttrs.includes(attr.name)) return;
-                                node.removeAttribute(attr.name); // Rimuove data-attributes alieni
+                                node.removeAttribute(attr.name);
                             }
                             else {
                                 node.removeAttribute(attr.name);
@@ -490,11 +485,9 @@ Object.assign(Editor, {
                 // Rimozione di link vuoti creati dai siti web
                 finalHTML = finalHTML.replace(/<a[^>]*>\s*(<br\s*\/?>)?\s*<\/a>/gi, '');
 
-                // ==============================================================
                 // FIX BR TO P: Se il target finale della pasta non si trova dentro un 
                 // contenitore che richiede la presenza assoluta dei <br> (come tabelle o liste),
                 // converto i <br> isolati in blocchi di paragrafo in modo che il tasto TAB funzioni.
-                // ==============================================================
                 if (!targetNode.closest('td, th, li, pre')) {
                     let tempWrapper = document.createElement('div');
                     tempWrapper.innerHTML = finalHTML;
@@ -530,3 +523,41 @@ Object.assign(Editor, {
         }
     }
 });
+
+// INTERCETTORE DIRETTO E ISTANTANEO INCOLLA PER NOTE INLINE E SEGNALIBRI:
+// Pulisce l'HTML al momento esatto del paste tramite la procedura unica Editor.sanitizeMiniText,
+// impedendo che l'utente veda anche solo temporaneamente testo sporco o formattazioni aliene a video.
+document.addEventListener('paste', (e) => {
+    let target = e.target;
+    if (target && target.nodeType === 3) target = target.parentNode;
+    if (!target || !target.closest) return;
+
+    const miniEditor = target.closest('#inlineNoteInput, #bookmarkCommentInput');
+    if (!miniEditor) return;
+
+    e.preventDefault();
+    e.stopPropagation();
+
+    const clipboardData = (e.clipboardData || window.clipboardData);
+    if (!clipboardData) return;
+
+    const pastedHTML = clipboardData.getData('text/html');
+    const pastedText = clipboardData.getData('text/plain') || '';
+
+    let textToClean = '';
+    if (pastedHTML) {
+        textToClean = pastedHTML;
+    } else {
+        textToClean = pastedText
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/\r\n|\n|\r/g, '<br>');
+    }
+
+    const cleanHTML = typeof Editor.sanitizeMiniText === 'function'
+        ? Editor.sanitizeMiniText(textToClean)
+        : pastedText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+    document.execCommand('insertHTML', false, cleanHTML);
+}, true);

@@ -71,8 +71,7 @@ const ImageManager = {
         ImageManager.hideResizerOverlay();
         ImageManager.activeImage = img;
 
-        // FIX UX: Disabilita brutalmente i trigger di TableManager per cedere il passo
-        // alla cornice di ridimensionamento delle immagini.
+        // Disabilita i trigger di TableManager per cedere il passo alla cornice dell'immagine
         if (typeof TableManager !== 'undefined') {
             if (typeof TableManager.UI.hideTriggers === 'function') TableManager.UI.hideTriggers();
             if (typeof TableManager.UI.hideMenus === 'function') TableManager.UI.hideMenus();

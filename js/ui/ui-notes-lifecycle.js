@@ -5,6 +5,7 @@
  * Gestione sicura e visiva delle note visualizzate dal Cestino (Read-Only Guard, Danger Banner e Restore).
  * Tracciamento del dirty state volatile (_isDirty, _isDraft) su modifiche al corpo testo e titolo.
  * Gestione conflitti di concorrenza tramite Revision Token (Modal di risoluzione, isolamento eventi e Undo Stash).
+ * Supporto al parametro scrollToTop in selectNote per aprire e centrare immediatamente l'intestazione su doppio click.
  */
 
 Object.assign(UI, {
@@ -96,14 +97,13 @@ Object.assign(UI, {
     },
 
     _updateTrashedNoteUI: (note) => {
-        const editorScrollContent = document.getElementById('editorScrollContent');
         const titleInput = document.getElementById('noteTitle');
         const editToggleBtn = document.getElementById('editToggleBtn');
         let banner = document.getElementById('trashedNoteWarningBanner');
 
         if (note && note.deletedAt) {
-            // 1. Iniezione o visualizzazione del Banner di Pericolo
-            if (!banner && editorScrollContent && titleInput) {
+            // 1. Iniezione o visualizzazione del Banner di Pericolo ancorato con certezza a titleInput.parentNode
+            if (!banner && titleInput && titleInput.parentNode) {
                 banner = document.createElement('div');
                 banner.id = 'trashedNoteWarningBanner';
                 banner.style.cssText = `
@@ -122,7 +122,7 @@ Object.assign(UI, {
                     margin-right: auto;
                     box-sizing: border-box;
                 `;
-                editorScrollContent.insertBefore(banner, titleInput);
+                titleInput.parentNode.insertBefore(banner, titleInput);
             }
 
             if (banner) {
@@ -236,7 +236,7 @@ Object.assign(UI, {
 
         if (typeof UI.renderTree !== 'undefined') UI.renderTree();
         
-        UI.selectNote(newNote.id);
+        UI.selectNote(newNote.id, null, null, true);
         
         UI.toggleEditMode(true);
         setTimeout(() => {
@@ -250,9 +250,13 @@ Object.assign(UI, {
         if (typeof Store !== 'undefined') Store.triggerAutoSave(true);
     },
 
-    selectNote: async (id, anchorText = null, refId = null) => {
+    selectNote: async (id, anchorText = null, refId = null, scrollToTop = false) => {
         AppState.isSwitchingNote = true;
         
+        // Pulizia immediata di qualsiasi evidenziazione drag residua sul pannello laterale
+        const tc = document.getElementById('treeContainer');
+        if (tc) tc.classList.remove('drag-over-root');
+
         if (AppState.currentNoteId && AppState.currentNoteId !== id) {
             clearTimeout(UI.updateCurrentNoteTimer);
             const scrollArea = document.querySelector('.editor-scroll-content');
@@ -304,6 +308,11 @@ Object.assign(UI, {
 
         let note = Store.getNote(id);
         if (!note) { AppState.isSwitchingNote = false; return; }
+
+        // Se è stata richiesta l'apertura forzata all'inizio (es. doppio click per editare il titolo), azzera la posizione di scroll
+        if (scrollToTop) {
+            note._lastScroll = 0;
+        }
 
         // VERIFICA JIT SU DISCO
         if (AppState.workspaceHandle !== null) {
@@ -544,10 +553,10 @@ Object.assign(UI, {
             setTimeout(() => {
                 const scrollArea = document.querySelector('.editor-scroll-content');
                 if (scrollArea) {
-                    if (note._lastScroll !== undefined) 
-                     scrollArea.scrollTop = note._lastScroll;
+                    if (!scrollToTop && note._lastScroll !== undefined) 
+                        scrollArea.scrollTop = note._lastScroll;
                     else 
-                     scrollArea.scrollTop = 0;
+                        scrollArea.scrollTop = 0;
                 }
                 setTimeout(() => { AppState.isSwitchingNote = false; UI.updateTOCScrollSpy(); }, 100);
             }, 150);
@@ -565,6 +574,9 @@ Object.assign(UI, {
     goHome: () => {
         AppState.isSwitchingNote = true;
         if (typeof UI.updateCurrentNoteTimer !== 'undefined') clearTimeout(UI.updateCurrentNoteTimer);
+
+        const tc = document.getElementById('treeContainer');
+        if (tc) tc.classList.remove('drag-over-root');
 
         if (AppState.currentNoteId) {
             const scrollArea = document.querySelector('.editor-scroll-content');

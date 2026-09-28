@@ -39,7 +39,7 @@ const EventsGlobal = {
             }
         }
 
-        AppState.searchFilter = searchInput.value.toLowerCase();
+        AppState.searchFilter = (searchInput.value || '').toLowerCase();
         
         // Ridisegniamo i filtri a pillola attivi
         if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
@@ -60,7 +60,13 @@ const EventsGlobal = {
 
         UI.renderTree();
         
-        if (AppState.currentNoteId) UI.selectNote(AppState.currentNoteId);
+        // Se c'è una ricerca testuale esplicita, ricarica la nota aperta per applicare i mark gialli;
+        // altrimenti aggiorna solo la classe attiva sull'albero evitando cicli di re-rendering asincroni
+        if (AppState.searchFilter.length > 0) {
+            if (AppState.currentNoteId) UI.selectNote(AppState.currentNoteId);
+        } else if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
+            UI.highlightTreeNode(AppState.currentNoteId);
+        }
         
         setTimeout(() => {
             const editor = document.getElementById('noteContent');

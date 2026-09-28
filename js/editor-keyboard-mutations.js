@@ -225,6 +225,43 @@ Object.assign(Editor, {
             }
         }
 
+        // --- GESTIONE INVIO SU BLOCKQUOTE: DOPPIO INVIO SU RIGA VUOTA PER USCIRE ---
+        const quoteBlock = node.closest('blockquote:not(.adv-widget-shell)');
+        if (quoteBlock) {
+            const currentBlock = node.closest('p, div, li') || quoteBlock;
+            const isEmptyLine = currentBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' && !currentBlock.querySelector('img, audio, iframe');
+
+            // Se la riga attuale è vuota, scatta l'uscita dalla citazione
+            if (isEmptyLine) {
+                e.preventDefault();
+                Editor.saveSnapshot();
+
+                if (currentBlock !== quoteBlock) {
+                    currentBlock.remove();
+                }
+
+                const p = document.createElement('p');
+                p.innerHTML = '<br>';
+                quoteBlock.parentNode.insertBefore(p, quoteBlock.nextSibling);
+
+                // Se l'intero blockquote è rimasto vuoto, lo ripulisce
+                if (quoteBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' && !quoteBlock.querySelector('img, audio, iframe')) {
+                    quoteBlock.remove();
+                }
+
+                const newRange = document.createRange();
+                newRange.setStart(p, 0);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+
+                Store.triggerAutoSave();
+                Editor.updateToolbarFormatting();
+                return;
+            }
+            // Se la riga non è vuota, lasciamo che il browser vada a capo normalmente dentro il blockquote
+        }
+
         const closestLi = node.closest('li');
         const closestList = closestLi ? closestLi.parentElement : null;
 

@@ -4,6 +4,11 @@
  * Valutazione indipendente dall'interfaccia per i Database di Sistema.
  * Supporto per Opacità Dinamica nell'azione color_row.
  * Isolamento tra azioni globali (scatto singolo) e azioni a riga nel Cron Engine.
+ * FEAT RECORD NOTE PROPS: Valutazione condizioni e mutazione azioni per tutte le proprietà
+ * e i tag associati alla nota (SYS_PROPERTIES_DB) tramite identificatori {colId}_PROP_{propColId}.
+ * FIX SYS_PROPERTIES SYNC: Risolto bug di sovrascrittura stato su mutazioni interne a SYS_PROPERTIES_DB.
+ * FEAT TRIGGER FROM PROPERTY CHANGE: Propagazione bidirezionale automatica dei cambi tag/proprietà 
+ * delle note verso qualsiasi database collegato tramite triggerFromPropertyChange.
  */
 
 const AdvancedAutomations = {
@@ -232,12 +237,67 @@ const AdvancedAutomations = {
         AdvancedAutomations.evaluate(tableId, rowId, false, null, null, false, override, null, false, 0);
     },
 
+    // Innesca le automazioni su qualsiasi tabella collegata quando un tag o proprietà di una nota viene modificato
+    triggerFromPropertyChange: async (noteId, propColId, oldVal, newVal, recursionDepth = 0) => {
+        if (!AppState.databases || !noteId) return;
+
+        for (const tId of Object.keys(AppState.databases)) {
+            if (tId === 'SYS_PROPERTIES_DB') continue;
+            const state = AppState.databases[tId];
+            if (!state || !state.automations || state.isPivot || state.isLinkedView) continue;
+
+            // Trova se questo database ha colonne di tipo record_note
+            const recordNoteCols = state.columns.filter(c => c.type === 'record_note');
+            if (recordNoteCols.length === 0) continue;
+
+            // Trova se ci sono automazioni attive che ascoltano ${col.id}_PROP_${propColId}
+            const relevantAutos = state.automations.filter(a => 
+                a.active && a.isValid && a.triggers.some(t => {
+                    if (!t.colId.includes('_PROP_')) return false;
+                    const parts = t.colId.split('_PROP_');
+                    return recordNoteCols.some(rc => rc.id === parts[0]) && parts[1] === propColId;
+                })
+            );
+
+            if (relevantAutos.length === 0) continue;
+
+            // Trova tutte le righe di questo database che puntano a noteId
+            const matchingRows = state.rows.filter(r => 
+                recordNoteCols.some(rc => r.cells[rc.id] === noteId)
+            );
+
+            let tableChanged = false;
+            for (const r of matchingRows) {
+                for (const auto of relevantAutos) {
+                    const changed = await AdvancedAutomations.evaluate(tId, r.id, false, null, null, false, null, auto.id, false, recursionDepth + 1);
+                    if (changed) tableChanged = true;
+                }
+            }
+
+            if (tableChanged && document.getElementById(tId)) {
+                AdvancedTable.renderTable(tId);
+            }
+        }
+    },
+
     _validateAutomation: (auto, state) => {
         let errors = [];
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
         auto.triggers.forEach((t, i) => {
             if (t.colId.startsWith('SYS_')) return;
             
+            if (t.colId.includes('_PROP_')) {
+                const parts = t.colId.split('_PROP_');
+                const baseCol = (state.id === 'SYS_PROPERTIES_DB' || state.title === 'Proprietà e Tag di Pagina') ? state.columns.find(col => col.id === parts[1]) : state.columns.find(col => col.id === parts[0]);
+                if (!baseCol) {
+                    errors.push(`Condizione ${i + 1}: Colonna Pagina eliminata`);
+                } else if (!propsDb || !propsDb.columns.some(c => c.id === parts[1])) {
+                    errors.push(`Condizione ${i + 1}: Proprietà della Nota collegata eliminata dal sistema`);
+                }
+                return;
+            }
+
             let actualColId = t.colId;
             if (actualColId.endsWith('_TITLE')) actualColId = actualColId.replace('_TITLE', '');
             if (actualColId.endsWith('_CONTENT')) actualColId = actualColId.replace('_CONTENT', '');
@@ -253,6 +313,18 @@ const AdvancedAutomations = {
 
         auto.actions.forEach((a, i) => {
             if (a.colId === 'SYS_ACTION') return; 
+
+            if (a.colId.includes('_PROP_')) {
+                const parts = a.colId.split('_PROP_');
+                const baseCol = (state.id === 'SYS_PROPERTIES_DB' || state.title === 'Proprietà e Tag di Pagina') ? state.columns.find(col => col.id === parts[1]) : state.columns.find(col => col.id === parts[0]);
+                if (!baseCol) {
+                    errors.push(`Azione ${i + 1}: Colonna Pagina destinazione eliminata`);
+                } else if (!propsDb || !propsDb.columns.some(c => c.id === parts[1])) {
+                    errors.push(`Azione ${i + 1}: Proprietà della Nota collegata eliminata dal sistema`);
+                }
+                return;
+            }
+
             let c = state.columns.find(col => col.id === a.colId);
             if (!c) {
                 errors.push(`Azione ${i + 1}: Colonna destinazione eliminata`);
@@ -293,7 +365,13 @@ const AdvancedAutomations = {
                 else if (t.colId === 'SYS_CROSS_DB') tName = "Evento DB Esterno";
                 else if (t.colId === 'SYS_ON_LOAD') tName = "Caricamento Tabella";
                 else if (t.colId === 'SYS_JS_FORMULA') tName = "Condizione Personalizzata JS";
-                else {
+                else if (t.colId.includes('_PROP_')) {
+                    const parts = t.colId.split('_PROP_');
+                    const c = state.columns.find(col => col.id === parts[0]);
+                    const pDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+                    const pCol = pDb ? pDb.columns.find(col => col.id === parts[1]) : null;
+                    tName = `${c ? c.name : 'Pagina'} ➔ ${pCol ? pCol.name : 'Proprietà'}`;
+                } else {
                     let actualColId = t.colId;
                     if (actualColId.endsWith('_TITLE')) actualColId = actualColId.replace('_TITLE', '');
                     if (actualColId.endsWith('_CONTENT')) actualColId = actualColId.replace('_CONTENT', '');
@@ -307,8 +385,13 @@ const AdvancedAutomations = {
                 if (a.colId === 'SYS_ACTION') {
                     if (a.type === 'alarm') aName = "Allarme Sonoro";
                     else aName = "Sistema";
-                }
-                else {
+                } else if (a.colId.includes('_PROP_')) {
+                    const parts = a.colId.split('_PROP_');
+                    const c = state.columns.find(col => col.id === parts[0]);
+                    const pDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+                    const pCol = pDb ? pDb.columns.find(col => col.id === parts[1]) : null;
+                    aName = `${c ? c.name : 'Pagina'} ➔ ${pCol ? pCol.name : 'Proprietà'}`;
+                } else {
                     const c = state.columns.find(col => col.id === a.colId);
                     if (c) aName = c.name;
                 }
@@ -415,6 +498,9 @@ const AdvancedAutomations = {
         if (!executedAutoIds) {
             executedAutoIds = new Set();
         }
+
+        const isSysPropertiesContext = (tableId === 'SYS_PROPERTIES_DB' || (state && state.title === "Proprietà e Tag di Pagina"));
+        const propsDb = isSysPropertiesContext ? state : (AppState.databases && AppState.databases['SYS_PROPERTIES_DB']);
         
         try {
             let stopAllExecution = false;
@@ -456,6 +542,45 @@ const AdvancedAutomations = {
 
                     if (t.colId === 'SYS_NEW_ROW' || t.colId === 'SYS_ANY_CHANGE' || t.colId === 'SYS_TIMER' || t.colId === 'SYS_CROSS_DB' || t.colId === 'SYS_ON_LOAD') {
                         if (t.colId === 'SYS_NEW_ROW' && !isNewRow) allMatch = false;
+                        continue;
+                    }
+
+                    // --- VALUTAZIONE CONDIZIONE SU PROPRIETA' DELLA NOTA (record_note ➔ SYS_PROPERTIES_DB) ---
+                    if (t.colId.includes('_PROP_')) {
+                        const parts = t.colId.split('_PROP_');
+                        const baseColId = parts[0];
+                        const propColId = parts[1];
+
+                        const propColDef = propsDb ? propsDb.columns.find(c => c.id === propColId) : null;
+                        if (!propColDef) { allMatch = false; break; }
+
+                        let propCellVal = undefined;
+                        let oldPropCellVal = undefined;
+
+                        if (isSysPropertiesContext) {
+                            propCellVal = row.cells[propColId];
+                            oldPropCellVal = oldRowContext ? oldRowContext.cells[propColId] : propCellVal;
+                        } else {
+                            const noteId = row.cells[baseColId];
+                            if (noteId && propsDb && propsDb.rows) {
+                                const sysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === noteId);
+                                propCellVal = sysRow ? sysRow.cells[propColId] : undefined;
+                            }
+
+                            if (oldRowContext) {
+                                const oldNoteId = oldRowContext.cells[baseColId];
+                                if (oldNoteId && propsDb && propsDb.rows) {
+                                    const oldSysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === oldNoteId);
+                                    oldPropCellVal = oldSysRow ? oldSysRow.cells[propColId] : undefined;
+                                }
+                            } else {
+                                oldPropCellVal = propCellVal;
+                            }
+                        }
+
+                        const dateOpts = { mode: t.dateMode, shift: t.dateShift };
+                        const match = LogicEngine.evaluateCondition(t.operator, t.value, propCellVal, oldPropCellVal, propColDef, dateOpts, vRow, state);
+                        if (!match) allMatch = false;
                         continue;
                     }
 
@@ -588,6 +713,88 @@ const AdvancedAutomations = {
 
                         if (isSystemActionOnly) continue;
 
+                        // --- ESECUZIONE AZIONE SU PROPRIETA' DELLA NOTA (record_note ➔ SYS_PROPERTIES_DB) ---
+                        if (act.colId.includes('_PROP_')) {
+                            const parts = act.colId.split('_PROP_');
+                            const baseColId = parts[0];
+                            const propColId = parts[1];
+
+                            let noteId = isSysPropertiesContext ? row.cells['sys_c_note'] : row.cells[baseColId];
+
+                            // Se la riga non ha ancora una pagina collegata, la creiamo al volo per poterle associare la proprietà
+                            if (!noteId || !Store.getNote(noteId)) {
+                                if (!isSysPropertiesContext) {
+                                    const newNoteId = Store.generateId();
+                                    const nowStr = new Date().toISOString();
+                                    const newNote = {
+                                        id: newNoteId,
+                                        parentId: AppState.currentNoteId || null,
+                                        title: "Record Dedicato",
+                                        content: `<p><br></p>`,
+                                        isMarked: false,
+                                        expanded: true,
+                                        createdAt: nowStr,
+                                        updatedAt: nowStr,
+                                        isRecordNote: true,
+                                        linkedTableId: AdvancedTable._resolveSourceId(tableId),
+                                        linkedRowId: row.id
+                                    };
+                                    AppState.notes.push(newNote);
+                                    row.cells[baseColId] = newNoteId;
+                                    vRow.virtualCells[baseColId] = newNoteId;
+                                    noteId = newNoteId;
+                                    rowChanged = true;
+                                    if (typeof UI !== 'undefined' && UI.renderTree) setTimeout(() => UI.renderTree(), 10);
+                                }
+                            }
+
+                            if (noteId && propsDb) {
+                                let sysRow = isSysPropertiesContext ? row : (propsDb.rows ? propsDb.rows.find(r => r.cells['sys_c_note'] === noteId) : null);
+                                if (!sysRow && !isSysPropertiesContext && propsDb.rows) {
+                                    sysRow = {
+                                        id: 'sys_r_' + noteId,
+                                        createdAt: Date.now(),
+                                        updatedAt: Date.now(),
+                                        cells: { 'sys_c_note': noteId, 'sys_c_tags': [] }
+                                    };
+                                    propsDb.rows.push(sysRow);
+                                }
+
+                                const propColDef = propsDb.columns ? propsDb.columns.find(c => c.id === propColId) : null;
+                                if (propColDef && sysRow) {
+                                    const curPropVal = sysRow.cells[propColId];
+                                    const newPropVal = await LogicEngine.calculateNewValue(actType, act.value, act.value2, curPropVal, propColDef, sysRow, propsDb);
+
+                                    if (['select', 'multi-select'].includes(propColDef.type)) {
+                                        const valArray = Array.isArray(newPropVal) ? newPropVal : (newPropVal ? [newPropVal] : []);
+                                        valArray.forEach(strVal => {
+                                            if (String(strVal).trim() !== '') {
+                                                let opts = propsDb.selectOptions[propColId] || [];
+                                                if (!opts.includes(strVal)) propsDb.selectOptions[propColId] = [...opts, strVal];
+                                            }
+                                        });
+                                    }
+
+                                    if (JSON.stringify(curPropVal) !== JSON.stringify(newPropVal)) {
+                                        sysRow.cells[propColId] = newPropVal;
+                                        sysRow.updatedAt = Date.now();
+                                        rowChanged = true;
+
+                                        if (isSysPropertiesContext) {
+                                            row.cells[propColId] = newPropVal;
+                                            vRow.virtualCells[propColId] = newPropVal;
+                                        }
+
+                                        AdvancedTable.setState('SYS_PROPERTIES_DB', propsDb);
+                                        if (typeof UI !== 'undefined' && typeof UI.checkAndUpdatePropertiesIcon === 'function') {
+                                            UI.checkAndUpdatePropertiesIcon(noteId);
+                                        }
+                                    }
+                                }
+                            }
+                            continue;
+                        }
+
                         let targetColDef = state.columns.find(c => c.id === act.colId);
                         if (!targetColDef) continue;
 
@@ -691,7 +898,7 @@ const AdvancedAutomations = {
 
                 // Se stiamo aggiornando un database di sistema (Proprietà) 
                 // e questo record corrisponde alla nota correntemente aperta, forziamo l'aggiornamento grafico
-                if (tableId === 'SYS_PROPERTIES_DB') {
+                if (isSysPropertiesContext) {
                     if (typeof UI !== 'undefined' && typeof UI.checkAndUpdatePropertiesIcon === 'function') {
                         UI.checkAndUpdatePropertiesIcon(row.cells['sys_c_note']);
                     }

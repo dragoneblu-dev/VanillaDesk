@@ -764,7 +764,7 @@ LA MIA RICHIESTA:
         createLogicRow('NOTA_CORRENTE()', 'NOTA_CORRENTE()', I18n.t('formula_editor.desc_nota_corrente'), hierGroup.content);
         createLogicRow('PADRE()', 'PADRE(NOTA_CORRENTE())', I18n.t('formula_editor.desc_padre'), hierGroup.content);
         createLogicRow('FIGLI()', 'FIGLI(NOTA_CORRENTE())', I18n.t('formula_editor.desc_figli'), hierGroup.content);
-        createLogicRow('PROPRIETA()', 'PROPRIETA(PADRE(NOTA_CORRENTE()), "Tag")', I18n.t('formula_editor.desc_proprieta'), hierGroup.content);
+        createLogicRow('PROPRIETA()', 'PROPRIETA(PADRE(NOTA_CORRENTE()), "#Tag")', I18n.t('formula_editor.desc_proprieta'), hierGroup.content);
         dynContainer.appendChild(hierGroup.details);
 
         const dateGroup = createGroup(I18n.t('formula_editor.grp_date'), Icons.time, false);

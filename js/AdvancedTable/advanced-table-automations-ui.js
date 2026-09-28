@@ -4,6 +4,8 @@
  * FIX FILTRI: Aggiunta opzione SYS_JS_FORMULA per creare Trigger dinamici.
  * FIX UI FORMULE: Qualsiasi azione di tipo formula ora apre la Textarea estesa.
  * REFACTOR: Usa AutomationUIBuilder per generare i selettori di Colore e abbattere duplicazioni.
+ * FEAT RECORD NOTE PROPS: Integrazione dinamica di tutte le proprietà e tag da SYS_PROPERTIES_DB
+ * per campi di tipo record_note, sia tra le Condizioni (WHERE) che tra le Azioni (SET).
  */
 
 Object.assign(AdvancedAutomations, {
@@ -251,6 +253,7 @@ Object.assign(AdvancedAutomations, {
         const auto = AdvancedAutomations._tempAuto;
         const cols = state.columns;
         const allDBs = AdvancedAutomations._getAllDatabases();
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
         
         const formulaPreviews = [];
 
@@ -270,8 +273,16 @@ Object.assign(AdvancedAutomations, {
             if(c.type === 'url') icon = Icons.url;
 
             if (c.type === 'record_note') {
-                colOptions += `<option value="${c.id}_TITLE">${Icons.recordPage} ${safeColName} (Titolo)</option>`;
-                colOptions += `<option value="${c.id}_CONTENT">${Icons.recordPage} ${safeColName} (Corpo Nota)</option>`;
+                colOptions += `<option value="${c.id}_TITLE">${Icons.recordPage} ${safeColName}: Titolo</option>`;
+                colOptions += `<option value="${c.id}_CONTENT">${Icons.recordPage} ${safeColName}: Corpo Testo</option>`;
+
+                // Iniezione di tutte le proprietà/tag da SYS_PROPERTIES_DB
+                if (propsDb && Array.isArray(propsDb.columns)) {
+                    propsDb.columns.forEach(pCol => {
+                        if (pCol.id === 'sys_c_note') return;
+                        colOptions += `<option value="${c.id}_PROP_${pCol.id}">${Icons.tag} ${safeColName} ➔ ${UI.escapeHTML(pCol.name)} (${pCol.type})</option>`;
+                    });
+                }
             } else {
                 colOptions += `<option value="${c.id}">${icon} ${safeColName}</option>`;
             }
@@ -288,14 +299,18 @@ Object.assign(AdvancedAutomations, {
             auto.triggers.forEach((t, idx) => {
                 const isFirst = idx === 0;
                 
-                let actualColId = t.colId;
-                if (actualColId.endsWith('_TITLE')) actualColId = actualColId.replace('_TITLE', '');
-                if (actualColId.endsWith('_CONTENT')) actualColId = actualColId.replace('_CONTENT', '');
-
                 let tColDef = null;
-                if (actualColId === 'SYS_JS_FORMULA') {
+
+                if (t.colId.includes('_PROP_')) {
+                    const parts = t.colId.split('_PROP_');
+                    const propColId = parts[1];
+                    tColDef = propsDb ? propsDb.columns.find(c => c.id === propColId) : null;
+                } else if (t.colId === 'SYS_JS_FORMULA') {
                     tColDef = { id: 'SYS_JS_FORMULA', type: 'special' };
                 } else {
+                    let actualColId = t.colId;
+                    if (actualColId.endsWith('_TITLE')) actualColId = actualColId.replace('_TITLE', '');
+                    if (actualColId.endsWith('_CONTENT')) actualColId = actualColId.replace('_CONTENT', '');
                     tColDef = cols.find(c => c.id === actualColId);
                 }
 
@@ -439,7 +454,9 @@ Object.assign(AdvancedAutomations, {
                     if (tColDef.id === 'SYS_JS_FORMULA') {
                         valInput = `<textarea class="modern-input" style="flex:2; padding:6px; font-size:0.85rem; font-family:monospace; min-height:80px; resize:vertical; color:var(--accent-color);" placeholder="Es: riga['Stato'] === 'Aperto' || Number(riga['Importo']) > 100" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">${safeVal}</textarea>`;
                     } else if (tColDef.type === 'select' || tColDef.type === 'multi-select') {
-                        let opts = state.selectOptions[tColDef.id] || [];
+                        // Risoluzione opzioni dal database ospitante o da SYS_PROPERTIES_DB se è una proprietà nota
+                        const targetOptionsState = t.colId.includes('_PROP_') ? propsDb : state;
+                        let opts = (targetOptionsState && targetOptionsState.selectOptions) ? (targetOptionsState.selectOptions[tColDef.id] || []) : [];
                         let listId = `dl_trg_${tColDef.id}_${idx}`;
                         valInput = `
                             <input type="text" list="${listId}" class="modern-input" style="flex:2; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="Scrivi o scegli..." oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">
@@ -546,10 +563,19 @@ Object.assign(AdvancedAutomations, {
             // Previene l'assegnazione arbitraria di valori a colonne protette dal motore
             if (['created_time', 'last_edited_time', 'formula', 'rollup'].includes(c.type)) return;
 
-            if(c.type !== 'record_note') {
-                colsForActions += `<option value="${c.id}">${c.name}</option>`;
+            if (c.type === 'record_note') {
+                colsForActions += `<option value="${c.id}">${c.name}: Titolo Nota</option>`;
+                
+                // Iniezione delle proprietà scrivibili della nota da SYS_PROPERTIES_DB
+                if (propsDb && Array.isArray(propsDb.columns)) {
+                    propsDb.columns.forEach(pCol => {
+                        if (pCol.id === 'sys_c_note') return;
+                        if (['created_time', 'last_edited_time', 'formula', 'rollup'].includes(pCol.type)) return;
+                        colsForActions += `<option value="${c.id}_PROP_${pCol.id}">${c.name} ➔ ${UI.escapeHTML(pCol.name)} (${pCol.type})</option>`;
+                    });
+                }
             } else {
-                colsForActions += `<option value="${c.id}">Pagina: ${c.name} (Titolo Nota)</option>`;
+                colsForActions += `<option value="${c.id}">${c.name}</option>`;
             }
         });
 
@@ -566,7 +592,16 @@ Object.assign(AdvancedAutomations, {
             actionsHTML = `<div style="font-size:0.8rem; color:var(--danger-color); margin:10px 0; text-align:center;">${I18n.t('adv_automations.empty_actions_warning')}</div>`;
         } else {
             auto.actions.forEach((a, idx) => {
-                let aColDef = cols.find(c => c.id === a.colId);
+                let aColDef = null;
+
+                if (a.colId && a.colId.includes('_PROP_')) {
+                    const parts = a.colId.split('_PROP_');
+                    const propColId = parts[1];
+                    aColDef = propsDb ? propsDb.columns.find(c => c.id === propColId) : null;
+                } else if (a.colId && a.colId !== 'SYS_ACTION') {
+                    aColDef = cols.find(c => c.id === a.colId);
+                }
+
                 let safeVal = String(a.value || '').replace(/"/g, '&quot;');
 
                 let typeOptionsHTML = '';
@@ -650,12 +685,13 @@ Object.assign(AdvancedAutomations, {
                     
                     const isFormula = a.type && a.type.includes('formula');
                     const inputId = `in_auto_${tableId}_${idx}`;
-                    valInputHTML = LogicEngine.getActionInputHTML(aColDef, a.type, a.value, a.value2, state, changeCallback, { inputId: inputId });
+                    const targetStateForInput = a.colId.includes('_PROP_') ? propsDb : state;
+                    valInputHTML = LogicEngine.getActionInputHTML(aColDef, a.type, a.value, a.value2, targetStateForInput, changeCallback, { inputId: inputId });
 
                     const prevId = `prev_auto_${tableId}_${idx}`;
 
                     if (isFormula) {
-                        formulaPreviews.push({ id: prevId, inputId: inputId, formula: a.value, targetState: state, filters: auto.triggers });
+                        formulaPreviews.push({ id: prevId, inputId: inputId, formula: a.value, targetState: targetStateForInput, filters: auto.triggers });
                         actionsHTML += `
                             <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px; background: var(--bg-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
                                 <div style="display:flex; align-items:center; width:100%; gap:8px;">
@@ -795,7 +831,16 @@ Object.assign(AdvancedAutomations, {
 
         if (field === 'colId') {
             const state = AdvancedTable.getState(tId);
-            const col = state.columns.find(c => c.id === val);
+            const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+            
+            let col = null;
+            if (val.includes('_PROP_')) {
+                const propId = val.split('_PROP_')[1];
+                col = propsDb ? propsDb.columns.find(c => c.id === propId) : null;
+            } else {
+                col = state.columns.find(c => c.id === val);
+            }
+
             AdvancedAutomations._tempAuto.triggers[idx].value = '';
 
             if (val === 'SYS_TIMER') {
@@ -868,7 +913,16 @@ Object.assign(AdvancedAutomations, {
                 AdvancedAutomations._tempAuto.actions[idx].type = 'show_toast';
             } else {
                 const state = AdvancedTable.getState(tId);
-                const col = state.columns.find(c => c.id === val);
+                const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+                
+                let col = null;
+                if (val.includes('_PROP_')) {
+                    const propId = val.split('_PROP_')[1];
+                    col = propsDb ? propsDb.columns.find(c => c.id === propId) : null;
+                } else {
+                    col = state.columns.find(c => c.id === val);
+                }
+
                 if (col) {
                     if (col.type === 'checkbox') AdvancedAutomations._tempAuto.actions[idx].type = 'set_true';
                     else if (['multi-select', 'relation'].includes(col.type)) AdvancedAutomations._tempAuto.actions[idx].type = 'add_fixed';

@@ -2,7 +2,7 @@
  * editor-core.js
  * Inizializzazione editor e core engine (Caret, Boundaries, RawText e Sanificazione JSON).
  * Scansione transitiva nel Garbage Collector per tutelare database relazionali, template e asset.
- * Re-idratazione immediata post-salvataggio.
+ * Re-idratazione immediata post-salvataggio con rilevamento immagini non trovate e placeholder SVG.
  * Estirpazione degli Zero-Width Space (\u200B) orfani dal DOM.
  * Inseriti .adv-board-card e gli eventi calendario nella Whitelist di handleSmartClickEscape.
  * Normalizzazione retroattiva degli appunti inline salvati con tag a blocco.
@@ -10,7 +10,9 @@
  * FIX UNDO/REDO CARET: minifyHTMLForStorage preserva il marcatore di cronologia quando richiesto dagli snapshot RAM.
  * FIX ARCHITETTURA: Ricollocato _getRawText nativamente in editor-core per garantire disponibilità globale.
  * FIX RESTORE SELECTION: Invocazione del focus prima dell'assegnazione del range per evitare il reset all'inizio del blocco.
-  * FEAT HEAL FONT ARTIFACTS: Rimozione chirurgica degli span parassiti con style="font-size: ..." generati da WebKit su unione blocchi.
+ * FEAT HEAL FONT ARTIFACTS: Rimozione chirurgica degli span parassiti con style="font-size: ..." generati da WebKit su unione blocchi.
+ * PROCEDURA UNICA SANITIZZAZIONE: Motore centralizzato per note inline e segnalibri limitato alle sole 4 opzioni permesse (Bold, Italic, Underline, Bullet).
+ * FEAT BROKEN IMAGES: Generazione di un segnaposto visivo vettoriale chiaro ed evidente per immagini rimosse dal disco o non trovate.
  */
 
 const Editor = {
@@ -34,6 +36,158 @@ const Editor = {
         return text;
     },
 
+    // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine cancellata o non reperibile
+    getBrokenImagePlaceholder: (ref = '') => {
+        const cleanRef = (ref || 'Immagine mancante')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;');
+        
+        const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="110" viewBox="0 0 340 110">
+            <rect x="2" y="2" width="336" height="106" rx="8" fill="#fff5f5" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4"/>
+            <g transform="translate(16, 28)">
+                <rect x="0" y="0" width="48" height="48" rx="8" fill="#fee2e2" stroke="#f87171" stroke-width="1.5"/>
+                <path d="M14 34 L22 22 L28 30 L34 20 L40 34 Z" fill="#ef4444" opacity="0.6"/>
+                <circle cx="18" cy="14" r="4" fill="#ef4444" opacity="0.6"/>
+                <line x1="6" y1="42" x2="42" y2="6" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
+            </g>
+            <text x="76" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="bold" fill="#991b1b">⚠️ Immagine non trovata</text>
+            <text x="76" y="62" font-family="monospace" font-size="11" fill="#b91c1c">${cleanRef.length > 32 ? cleanRef.slice(0, 29) + '...' : cleanRef}</text>
+            <text x="76" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" fill="#7f1d1d" opacity="0.8">File eliminato o mancante dagli assets</text>
+        </svg>`;
+        return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    },
+
+    markImageBroken: (img, ref = '') => {
+        if (!img) return;
+        img.classList.add('broken-image');
+        img.setAttribute('data-broken', 'true');
+        img.src = Editor.getBrokenImagePlaceholder(ref);
+        img.setAttribute('title', `Immagine non trovata: ${ref} (File eliminato dal disco o mancante)`);
+    },
+
+    handleImageError: (img) => {
+        if (!img || img.getAttribute('data-broken') === 'true') return;
+        const ref = img.getAttribute('data-image-ref') || img.getAttribute('alt') || 'Immagine';
+        Editor.markImageBroken(img, ref);
+    },
+
+    // Sanificazione centralizzata e rigorosa per testi di note in linea e segnalibri:
+    // Permette ESCLUSIVAMENTE le 4 opzioni della toolbar: Grassetto (b), Corsivo (i), Sottolineato (u), Lista puntata (•) e i ritorni a capo (<br>).
+    sanitizeMiniText: (rawHTML) => {
+        if (!rawHTML || typeof rawHTML !== 'string') return '';
+
+        // 1. Pre-conversione dei tag a blocco in ritorni a capo ed elementi di lista con punto elenco
+        let html = rawHTML
+            .replace(/<div[^>]*>/gi, '<br>')
+            .replace(/<\/div>/gi, '')
+            .replace(/<p[^>]*>/gi, '<br>')
+            .replace(/<\/p>/gi, '')
+            .replace(/<li[^>]*>/gi, '<br>• ')
+            .replace(/<\/li>/gi, '')
+            .replace(/<\/?(ul|ol|h[1-6]|blockquote|tr|table|tbody|thead|tfoot|header|footer|section|article|aside)[^>]*>/gi, '<br>');
+
+        const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
+        const container = doc.body.firstElementChild;
+        if (!container) return '';
+
+        // 2. Rimozione integrale di script, stili, media o elementi interattivi alieni
+        container.querySelectorAll('script, style, iframe, object, embed, audio, video, svg, canvas, form, input, button, select, textarea, img').forEach(el => el.remove());
+
+        const allowedFinalTags = new Set(['B', 'I', 'U', 'BR']);
+
+        // 3. Normalizzazione ricorsiva dal basso verso l'alto
+        const cleanElement = (el) => {
+            const children = Array.from(el.children);
+            children.forEach(cleanElement);
+
+            const tag = el.tagName.toUpperCase();
+
+            let isBold = tag === 'B' || tag === 'STRONG';
+            let isItalic = tag === 'I' || tag === 'EM';
+            let isUnderline = tag === 'U';
+
+            // Riconoscimento stili CSS applicati da browser tramite span o font
+            if (tag === 'SPAN' || tag === 'FONT') {
+                const fw = el.style.fontWeight;
+                if (fw === 'bold' || fw === 'bolder' || parseInt(fw, 10) >= 700) isBold = true;
+                const fs = el.style.fontStyle;
+                if (fs === 'italic' || fs === 'oblique') isItalic = true;
+                const td = el.style.textDecoration || el.style.textDecorationLine;
+                if (td && td.includes('underline')) isUnderline = true;
+            }
+
+            if (tag === 'BR') {
+                while (el.attributes.length > 0) el.removeAttribute(el.attributes[0].name);
+                return;
+            }
+
+            if (isBold || isItalic || isUnderline) {
+                const frag = doc.createDocumentFragment();
+                while (el.firstChild) {
+                    frag.appendChild(el.firstChild);
+                }
+
+                let currentWrapper = frag;
+                if (isUnderline) {
+                    const u = doc.createElement('u');
+                    u.appendChild(currentWrapper);
+                    currentWrapper = u;
+                }
+                if (isItalic) {
+                    const i = doc.createElement('i');
+                    i.appendChild(currentWrapper);
+                    currentWrapper = i;
+                }
+                if (isBold) {
+                    const b = doc.createElement('b');
+                    b.appendChild(currentWrapper);
+                    currentWrapper = b;
+                }
+
+                el.parentNode.replaceChild(currentWrapper, el);
+            } else if (!allowedFinalTags.has(tag)) {
+                // Srotola qualsiasi tag non consentito preservandone il testo interno
+                const parent = el.parentNode;
+                while (el.firstChild) {
+                    parent.insertBefore(el.firstChild, el);
+                }
+                el.remove();
+            } else {
+                // Pulisce qualsiasi attributo (style, class, id) rimasto sui tag ammessi
+                while (el.attributes.length > 0) {
+                    el.removeAttribute(el.attributes[0].name);
+                }
+            }
+        };
+
+        Array.from(container.children).forEach(cleanElement);
+
+        // 4. Eliminazione tag ammessi rimasti vuoti (es. <b></b> o <i>  </i>)
+        let changed = true;
+        while (changed) {
+            changed = false;
+            container.querySelectorAll('b, i, u').forEach(tagEl => {
+                while (tagEl.attributes.length > 0) tagEl.removeAttribute(tagEl.attributes[0].name);
+                const text = tagEl.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                const hasBr = tagEl.querySelector('br');
+                if (!text && !hasBr) {
+                    tagEl.remove();
+                    changed = true;
+                }
+            });
+        }
+
+        // 5. Compattazione interlinea e rimozione a capo iniziali/finali
+        let result = container.innerHTML;
+        result = result.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+        result = result.replace(/^(<br\s*\/?>|\s|&nbsp;)+/gi, '')
+                       .replace(/(<br\s*\/?>|\s|&nbsp;)+$/gi, '');
+
+        return result;
+    },
+
     // Funzione snella per auto-riparare ed eliminare gli span parassiti con font-size inline iniettati dal browser
     healFontArtifacts: (container) => {
         if (!container) return;
@@ -55,13 +209,27 @@ const Editor = {
     hydrateMedia: (container) => {
         container.querySelectorAll('img[data-image-ref]').forEach(img => {
             const ref = img.getAttribute('data-image-ref');
-            if (ref && Editor.imageCache[ref]) {
+            if (ref && Editor.imageCache && Editor.imageCache[ref]) {
                 img.setAttribute('src', Editor.imageCache[ref]);
+                img.classList.remove('broken-image');
+                img.removeAttribute('data-broken');
+                img.removeAttribute('title');
+            } else {
+                Editor.markImageBroken(img, ref);
             }
         });
+
+        // Controlla immagini esterne o senza data-image-ref con src mancante
+        container.querySelectorAll('img:not([data-image-ref])').forEach(img => {
+            const src = img.getAttribute('src');
+            if (!src || src.trim() === '') {
+                Editor.markImageBroken(img, img.getAttribute('alt') || 'Immagine esterna');
+            }
+        });
+
         container.querySelectorAll('audio[data-audio-ref]').forEach(aud => {
             const ref = aud.getAttribute('data-audio-ref');
-            if (ref && Editor.audioCache[ref]) {
+            if (ref && Editor.audioCache && Editor.audioCache[ref]) {
                 aud.setAttribute('src', Editor.audioCache[ref]);
             }
         });
@@ -93,9 +261,10 @@ const Editor = {
         
         if (fileName) {
             const blobUrl = Editor.imageCache[fileName];
+            const safeName = (file.name || fileName).replace(/"/g, '&quot;');
             
             Editor.restoreSelection();
-            document.execCommand('insertHTML', false, `<img src="${blobUrl}" data-image-ref="${fileName}"><p><br></p>`);
+            document.execCommand('insertHTML', false, `<img src="${blobUrl}" data-image-ref="${fileName}" alt="${safeName}" onerror="Editor.handleImageError(this)"><p><br></p>`);
             Store.triggerAutoSave();
         }
         
@@ -507,19 +676,14 @@ const Editor = {
         const temp = document.createElement('div');
         temp.innerHTML = htmlString;
 
-        // Normalizzazione retroattiva degli appunti inline salvati con tag a blocco
+        // Normalizzazione retroattiva rigorosa tramite la funzione centralizzata unica
         temp.querySelectorAll('.inline-note-data').forEach(dataSpan => {
-            let inner = dataSpan.innerHTML;
-            if (/<(div|p|ul|ol|li)[^>]*>/i.test(inner)) {
-                inner = inner.replace(/<div[^>]*>/gi, '<br>')
-                             .replace(/<\/div>/gi, '')
-                             .replace(/<p[^>]*>/gi, '<br>')
-                             .replace(/<\/p>/gi, '')
-                             .replace(/<li[^>]*>/gi, '<br>• ')
-                             .replace(/<\/li>/gi, '')
-                             .replace(/<\/?(ul|ol|h[1-6]|blockquote)[^>]*>/gi, '');
-                dataSpan.innerHTML = inner.replace(/^(<br\s*\/?>)+/i, '');
-            }
+            dataSpan.innerHTML = Editor.sanitizeMiniText(dataSpan.innerHTML);
+        });
+
+        // Normalizzazione retroattiva dei commenti dei segnalibri
+        temp.querySelectorAll('.bookmark-comment-data').forEach(dataSpan => {
+            dataSpan.innerHTML = Editor.sanitizeMiniText(dataSpan.innerHTML);
         });
 
         // Rimozione fonti dinamiche e iframes per prevenire Network Errors e CORS in background
@@ -531,7 +695,11 @@ const Editor = {
             }
         });
         
-        temp.querySelectorAll('img[data-image-ref]').forEach(img => img.removeAttribute('src'));
+        temp.querySelectorAll('img[data-image-ref]').forEach(img => {
+            img.removeAttribute('src');
+            img.classList.remove('broken-image');
+            img.removeAttribute('data-broken');
+        });
         temp.querySelectorAll('audio[data-audio-ref]').forEach(aud => aud.removeAttribute('src'));
 
         temp.querySelectorAll('.adv-widget-shell').forEach(shell => {
@@ -698,8 +866,6 @@ const Editor = {
                     }
                 }
             }
-            // distruzione delle sequenze di spazi non comprimibili (\u00A0).
-            //if (node.nodeValue.includes('\u00A0\u00A0')) node.nodeValue = node.nodeValue.replace(/\u00A0{2,}/g, ' ');
         }
         
         nodesToRemove.forEach(n => n.remove());

@@ -8,6 +8,8 @@
  * l'array state.selectOptions[colId] da A alla Z in memoria e a video.
  * FIX SEARCH INPUT RESET: Azzeramento sicuro di tutti gli elementi #advCreateSelectInput nel DOM.
  * LOCALIZZAZIONE MULTILINGUA: Integrazione completa del dizionario I18n.
+ * FIX ASYNC RACE-CONDITION: toggleSelectValue, createSelectOption e clearSelect rese asincrone
+ * con await updateData per consentire la corretta esecuzione e il re-render post-automazione.
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
@@ -145,7 +147,7 @@ Object.assign(AdvancedTable, {
         }
     },
 
-    createSelectOptionFromInput: (tableId, rowId, colId, value) => {
+    createSelectOptionFromInput: async (tableId, rowId, colId, value) => {
         const newOpt = value.trim();
         if (!newOpt) return;
 
@@ -158,9 +160,9 @@ Object.assign(AdvancedTable, {
         const options = state.selectOptions[colId] || [];
         
         if (!options.includes(newOpt)) {
-            AdvancedTable.createSelectOption(tableId, rowId, colId, newOpt);
+            await AdvancedTable.createSelectOption(tableId, rowId, colId, newOpt);
         } else {
-            AdvancedTable.toggleSelectValue(tableId, rowId, colId, newOpt);
+            await AdvancedTable.toggleSelectValue(tableId, rowId, colId, newOpt);
         }
     },
 
@@ -273,7 +275,7 @@ Object.assign(AdvancedTable, {
         }
     },
 
-    createSelectOption: (tableId, rowId, colId, newOpt) => {
+    createSelectOption: async (tableId, rowId, colId, newOpt) => {
         let state = AdvancedTable.getState(tableId);
         if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
         
@@ -291,7 +293,7 @@ Object.assign(AdvancedTable, {
         }
 
         AdvancedTable.setState(tableId, state);
-        AdvancedTable.toggleSelectValue(tableId, rowId, colId, newOpt);
+        await AdvancedTable.toggleSelectValue(tableId, rowId, colId, newOpt);
     },
 
     deleteSelectOption: (e, tableId, colId, optToDelete) => {
@@ -322,7 +324,7 @@ Object.assign(AdvancedTable, {
         UI.Menu.closeAll(true);
     },
 
-    toggleSelectValue: (tableId, rowId, colId, value) => {
+    toggleSelectValue: async (tableId, rowId, colId, value) => {
         let state = AdvancedTable.getState(tableId);
         const col = state.columns.find(c => c.id === colId);
         const row = state.rows.find(r => r.id === rowId);
@@ -343,7 +345,7 @@ Object.assign(AdvancedTable, {
             finalValue = current;
         }
 
-        AdvancedTable.updateData(tableId, rowId, colId, finalValue);
+        await AdvancedTable.updateData(tableId, rowId, colId, finalValue);
 
         const drawer = document.getElementById('advGlobalDrawer');
         if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
@@ -372,12 +374,12 @@ Object.assign(AdvancedTable, {
         }
     },
 
-    clearSelect: (tableId, rowId, colId) => {
+    clearSelect: async (tableId, rowId, colId) => {
         let state = AdvancedTable.getState(tableId);
         const col = state.columns.find(c => c.id === colId);
 
         const finalValue = col.type === 'multi-select' ? [] : '';
-        AdvancedTable.updateData(tableId, rowId, colId, finalValue);
+        await AdvancedTable.updateData(tableId, rowId, colId, finalValue);
         
         const drawer = document.getElementById('advGlobalDrawer');
         if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {

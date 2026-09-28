@@ -1,13 +1,15 @@
 /**
  * table-manager-ui.js
  * Trigger visivi e Context Menus (Tasti ingranaggio, righe e colonne).
- * FIX MOUSEMOVE: Corretto il riferimento alla variabile di stato (resizingTable) per
- * sbloccare il passaggio delle coordinate al motore di trascinamento.
- * FIX SELEZIONE: Aggiunta logica per forzare il grassetto programmatico su un array di celle.
+ * RISOLUZIONE CELLE UNITE: Algoritmo 2D basato su getGridMap per insertRow, insertCol, deleteRow, deleteCol.
+ * Se una linea di inserimento/cancellazione taglia una cella con colspan o rowspan, lo span viene 
+ * ricalcolato ed espanso/ridotto correttamente, preservando l'esatta simmetria della griglia.
+ * FIX SELEZIONE: Logica per forzare il grassetto programmatico su un array di celle.
  * FIX DRAWER CONFLICT: I controlli e i trigger ignorano completamente le tabelle incluse nel pannello laterale.
  * REFACTOR INTEGRATO: Il menu dell'ingranaggio (openMainMenu) gestisce sia la Cella Corrente 
  * (Allineamento Sinistra/Centro/Destra compatto, Sfondo Cella, Dividi se fusa) sia l'intera Tabella,
- * disattivandosi automaticamente durante la selezione multipla per dare priorità alla toolbar dedicata.
+ * con opzioni per la distribuzione uniforme delle colonne e l'intestazione fissa (Sticky Header).
+ * FIX ROW SCOPE: Dichiarazione esplicita di row = cell.parentElement in performAction per setRowType e colorRow.
  */
 
 Object.assign(TableManager, {
@@ -287,6 +289,7 @@ Object.assign(TableManager, {
             let mode = 'auto';
             if (currentLayout === 'fixed') mode = currentWidth === 'max-content' ? 'pixel' : 'percent';
             const isStriped = table.classList.contains('table-striped');
+            const isSticky = table.classList.contains('table-sticky-header');
 
             const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
@@ -346,12 +349,14 @@ Object.assign(TableManager, {
                 type: 'custom', 
                 html: `<div class="adv-dropdown-title" style="margin-bottom:4px;">${I18n.t('table_ui.table_entire')}</div>` 
             });
-
+            
             menuItems.push({
                 icon: Icons.layoutAuto, 
                 label: I18n.t('table_ui.layout_menu'), 
                 type: 'submenu',
                 items: [
+                    { icon: Icons.columns, label: I18n.t('table_ui.distribute_cols_evenly'), onClick: () => TableManager.distributeColumnsEvenly() },
+                    { type: 'divider' },
                     { icon: Icons.layoutAuto, label: I18n.t('table_ui.layout_auto') + (mode === 'auto' ? chk : ''), onClick: () => TableManager.setLayoutMode('auto') },
                     { icon: Icons.percent, label: I18n.t('table_ui.layout_percent') + (mode === 'percent' ? chk : ''), onClick: () => TableManager.setLayoutMode('percent') },
                     { icon: Icons.pixel, label: I18n.t('table_ui.layout_pixel') + (mode === 'pixel' ? chk : ''), onClick: () => TableManager.setLayoutMode('pixel') }
@@ -362,6 +367,12 @@ Object.assign(TableManager, {
                 icon: Icons.zebraTbl, 
                 label: I18n.t('table_ui.striped_rows') + (isStriped ? chk : ''), 
                 onClick: () => TableManager.toggleZebraCurrent() 
+            });
+
+            menuItems.push({ 
+                icon: Icons.up, 
+                label: I18n.t('table_ui.sticky_header') + (isSticky ? chk : ''), 
+                onClick: () => TableManager.toggleStickyHeaderCurrent() 
             });
 
             menuItems.push({ type: 'divider' });
@@ -399,6 +410,7 @@ Object.assign(TableManager, {
             const cell = TableManager.activeCell;
             if (!cell) return;
             const row = cell.parentElement;
+            if (!row) return;
             const isHeaderRow = Array.from(row.children).every(c => c.tagName.toLowerCase() === 'th');
             const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
@@ -426,11 +438,15 @@ Object.assign(TableManager, {
 
             const cell = TableManager.activeCell;
             if (!cell) return;
-            const row = cell.parentElement;
-            const table = row.parentElement.closest('table');
-            const colIndex = Array.from(row.children).indexOf(cell);
-            
-            const isHeaderCol = Array.from(table.rows).every(r => r.cells[colIndex] && r.cells[colIndex].tagName.toLowerCase() === 'th');
+            const table = cell.closest('table');
+            if (!table) return;
+
+            const { grid, cellData } = TableManager.getGridMap(table);
+            const cellPos = cellData.get(cell);
+            if (!cellPos) return;
+
+            // Verifica rigorosa tramite la matrice 2D su tutta la colonna geometrica
+            const isHeaderCol = grid.every(r => r[cellPos.x] && r[cellPos.x].tagName.toLowerCase() === 'th');
             const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
             const menuItems = [
@@ -468,33 +484,270 @@ Object.assign(TableManager, {
             if (['insertRow', 'deleteRow', 'setRowType', 'insertCol', 'deleteCol', 'setColType', 'deleteTable', 'colorRow', 'colorCol', 'setColAlign'].includes(actionType)) {
                 
                 const cell = TableManager.activeCell;
+                if (!cell) return;
                 const row = cell.parentElement;
-                const table = row.parentElement.closest('table');
-                const colIndex = Array.from(row.children).indexOf(cell);
-                const rowIndex = row.rowIndex;
+                if (!row) return;
+                const table = cell.closest('table');
+                if (!table) return;
 
+                // Calcolo 2D matematico della griglia per gestire correttamente qualsiasi cella fusa (colspan/rowspan)
+                const { grid, cellData } = TableManager.getGridMap(table);
+                const cellPos = cellData.get(cell);
+                if (!cellPos) return;
+
+                const totalRows = grid.length;
+                const totalCols = grid[0] ? grid[0].length : 0;
+
+                // =========================================================================
+                // INSERIMENTO RIGA (Sopra / Sotto) con gestione esatta di rowspan
+                // =========================================================================
                 if (actionType === 'insertRow') {
-                    const newIndex = rowIndex + (param === 1 ? 1 : 0);
-                    const newRow = table.insertRow(newIndex);
-                    for (let i = 0; i < row.children.length; i++) {
-                        const c = newRow.insertCell(i);
-                        c.innerHTML = "<br>";
-                        const refCell = row.children[i];
-                        if (refCell.className) c.className = refCell.className;
-                        if (refCell.style.textAlign) c.style.textAlign = refCell.style.textAlign;
-                        c.setAttribute('contenteditable', 'true'); 
-                        if (c.getAttribute('class') === '') c.removeAttribute('class');
+                    const insertY = param === -1 ? cellPos.y : cellPos.maxY + 1;
+                    const newTr = document.createElement('tr');
+                    const expandedCells = new Set();
+
+                    for (let x = 0; x < totalCols; x++) {
+                        let spanningCell = null;
+                        if (insertY > 0 && insertY <= totalRows) {
+                            const candidate = grid[insertY - 1][x];
+                            if (candidate) {
+                                const cInfo = cellData.get(candidate);
+                                if (cInfo && cInfo.y < insertY && cInfo.maxY >= insertY) {
+                                    spanningCell = candidate;
+                                }
+                            }
+                        }
+
+                        if (spanningCell) {
+                            // La cella attraversa la linea di taglio orizzontale: estendiamo il suo rowspan
+                            if (!expandedCells.has(spanningCell)) {
+                                expandedCells.add(spanningCell);
+                                const currentRs = parseInt(spanningCell.getAttribute('rowspan')) || 1;
+                                spanningCell.setAttribute('rowspan', currentRs + 1);
+                            }
+                            const cInfo = cellData.get(spanningCell);
+                            x = cInfo.maxX; // Salta le colonne coperte da questa cella
+                        } else {
+                            // Confine pulito: inseriamo una nuova cella nella riga newTr
+                            const refCell = (insertY < totalRows && grid[insertY][x]) ? grid[insertY][x] : (grid[Math.max(0, insertY - 1)][x] || cell);
+                            const isAllThRow = (insertY < totalRows && table.rows[insertY])
+                                ? Array.from(table.rows[insertY].children).every(c => c.tagName.toLowerCase() === 'th')
+                                : (insertY === 0);
+                            const tag = (isAllThRow || (refCell && refCell.tagName.toLowerCase() === 'th')) ? 'th' : 'td';
+
+                            const newCell = document.createElement(tag);
+                            newCell.innerHTML = '<br>';
+                            newCell.setAttribute('contenteditable', 'true');
+                            if (refCell && refCell.className) {
+                                const cleanClass = refCell.className.replace(/\badv-cell-selected\b/g, '').trim();
+                                if (cleanClass) newCell.className = cleanClass;
+                            }
+                            if (refCell && refCell.style.textAlign) {
+                                newCell.style.textAlign = refCell.style.textAlign;
+                            }
+                            newTr.appendChild(newCell);
+                        }
                     }
+
+                    const tbody = table.querySelector('tbody') || table;
+                    if (insertY < table.rows.length) {
+                        const targetRow = table.rows[insertY];
+                        targetRow.parentNode.insertBefore(newTr, targetRow);
+                    } else {
+                        tbody.appendChild(newTr);
+                    }
+
+                    TableManager.currentTable = table;
+                    TableManager.setLayoutMode('auto', true);
                 }
+
+                // =========================================================================
+                // ELIMINAZIONE RIGA con salvaguardia celle rowspan
+                // =========================================================================
                 else if (actionType === 'deleteRow') {
-                    if (table.rows.length > 1) table.deleteRow(rowIndex);
-                    else {
+                    const deleteY = cellPos.y;
+
+                    if (totalRows <= 1) {
                         const wrap = table.closest('.simple-table-wrapper');
                         if (wrap) wrap.remove(); else table.remove();
+                        TableManager.activeCell = null;
+                    } else {
+                        const processedCells = new Set();
+
+                        for (let x = 0; x < totalCols; x++) {
+                            const c = grid[deleteY][x];
+                            if (!c || processedCells.has(c)) continue;
+                            processedCells.add(c);
+
+                            const cInfo = cellData.get(c);
+                            if (!cInfo) continue;
+
+                            if (cInfo.h > 1) {
+                                if (cInfo.y === deleteY) {
+                                    // La cella comincia sulla riga cancellata: spostala sulla riga sottostante con rowspan - 1
+                                    const nextRow = table.rows[deleteY + 1];
+                                    if (nextRow) {
+                                        const newRs = cInfo.h - 1;
+                                        if (newRs > 1) c.setAttribute('rowspan', newRs);
+                                        else c.removeAttribute('rowspan');
+
+                                        let insertBeforeCell = null;
+                                        for (let nx = cInfo.maxX + 1; nx < totalCols; nx++) {
+                                            const nextCandidate = grid[deleteY + 1][nx];
+                                            if (nextCandidate && nextCandidate.parentNode === nextRow) {
+                                                insertBeforeCell = nextCandidate;
+                                                break;
+                                            }
+                                        }
+                                        if (insertBeforeCell) {
+                                            nextRow.insertBefore(c, insertBeforeCell);
+                                        } else {
+                                            nextRow.appendChild(c);
+                                        }
+                                    }
+                                } else {
+                                    // La cella cominciava sopra: riduci semplicemente il rowspan
+                                    const newRs = cInfo.h - 1;
+                                    if (newRs > 1) c.setAttribute('rowspan', newRs);
+                                    else c.removeAttribute('rowspan');
+                                }
+                            }
+                        }
+
+                        table.deleteRow(deleteY);
+                        TableManager.activeCell = null;
+                        TableManager.currentTable = table;
+                        TableManager.setLayoutMode('auto', true);
                     }
                 }
+
+                // =========================================================================
+                // INSERIMENTO COLONNA (Sinistra / Destra) con gestione esatta di colspan
+                // =========================================================================
+                else if (actionType === 'insertCol') {
+                    const insertX = param === -1 ? cellPos.x : cellPos.maxX + 1;
+                    const expandedCells = new Set();
+
+                    for (let y = 0; y < totalRows; y++) {
+                        const tr = table.rows[y];
+                        if (!tr) continue;
+
+                        let spanningCell = null;
+                        if (insertX > 0 && insertX <= totalCols) {
+                            const candidate = grid[y][insertX - 1];
+                            if (candidate) {
+                                const cInfo = cellData.get(candidate);
+                                if (cInfo && cInfo.x < insertX && cInfo.maxX >= insertX) {
+                                    spanningCell = candidate;
+                                }
+                            }
+                        }
+
+                        if (spanningCell) {
+                            // La cella attraversa la linea di taglio verticale: estendiamo il suo colspan
+                            if (!expandedCells.has(spanningCell)) {
+                                expandedCells.add(spanningCell);
+                                const currentCs = parseInt(spanningCell.getAttribute('colspan')) || 1;
+                                spanningCell.setAttribute('colspan', currentCs + 1);
+                            }
+                        } else {
+                            // Confine pulito: inseriamo una nuova cella nella riga tr
+                            const refCell = (insertX < totalCols && grid[y][insertX]) ? grid[y][insertX] : (grid[y][Math.max(0, insertX - 1)] || cell);
+                            const isAllThRow = Array.from(tr.children).every(c => c.tagName.toLowerCase() === 'th');
+                            const tag = (isAllThRow || (refCell && refCell.tagName.toLowerCase() === 'th')) ? 'th' : 'td';
+
+                            const newCell = document.createElement(tag);
+                            newCell.innerHTML = '<br>';
+                            newCell.setAttribute('contenteditable', 'true');
+                            if (refCell && refCell.className) {
+                                const cleanClass = refCell.className.replace(/\badv-cell-selected\b/g, '').trim();
+                                if (cleanClass) newCell.className = cleanClass;
+                            }
+                            if (refCell && refCell.style.textAlign) {
+                                newCell.style.textAlign = refCell.style.textAlign;
+                            }
+
+                            // Posizionamento esatto prima della cella successiva in questa riga
+                            let nextCellInRow = null;
+                            for (let x = insertX; x < totalCols; x++) {
+                                const cCandidate = grid[y][x];
+                                if (cCandidate && cCandidate.parentNode === tr) {
+                                    const cInfo = cellData.get(cCandidate);
+                                    if (cInfo && cInfo.y === y && cInfo.x >= insertX) {
+                                        nextCellInRow = cCandidate;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            if (nextCellInRow) {
+                                tr.insertBefore(newCell, nextCellInRow);
+                            } else {
+                                tr.appendChild(newCell);
+                            }
+                        }
+                    }
+
+                    TableManager.currentTable = table;
+                    TableManager.setLayoutMode('auto', true);
+                }
+
+                // =========================================================================
+                // ELIMINAZIONE COLONNA con salvaguardia celle colspan
+                // =========================================================================
+                else if (actionType === 'deleteCol') {
+                    const deleteX = cellPos.x;
+
+                    if (totalCols <= 1) {
+                        const wrap = table.closest('.simple-table-wrapper');
+                        if (wrap) wrap.remove(); else table.remove();
+                        TableManager.activeCell = null;
+                    } else {
+                        const processedCells = new Set();
+
+                        for (let y = 0; y < totalRows; y++) {
+                            const c = grid[y][deleteX];
+                            if (!c || processedCells.has(c)) continue;
+                            processedCells.add(c);
+
+                            const cInfo = cellData.get(c);
+                            if (!cInfo) continue;
+
+                            if (cInfo.w > 1) {
+                                // Cell spans across multiple columns!
+                                const newCs = cInfo.w - 1;
+                                if (newCs > 1) c.setAttribute('colspan', newCs);
+                                else c.removeAttribute('colspan');
+                            } else {
+                                c.remove();
+                            }
+                        }
+
+                        // Pulizia righe rimaste completamente prive di celle
+                        const remainingRows = Array.from(table.rows);
+                        for (let r of remainingRows) {
+                            if (r.cells.length === 0) {
+                                r.remove();
+                            }
+                        }
+
+                        if (table.rows.length === 0) {
+                            const wrap = table.closest('.simple-table-wrapper');
+                            if (wrap) wrap.remove(); else table.remove();
+                        }
+
+                        TableManager.activeCell = null;
+                        TableManager.currentTable = table;
+                        TableManager.setLayoutMode('auto', true);
+                    }
+                }
+
+                // =========================================================================
+                // ALTRE AZIONI DI RIGA E COLONNA (Preservazione span e matrici 2D)
+                // =========================================================================
                 else if (actionType === 'setRowType') {
                     const newTag = param.toLowerCase();
+                    const oldIndex = Array.from(row.children).indexOf(cell);
                     const cells = Array.from(row.children);
                     const newRow = document.createElement('tr');
                     cells.forEach(oldCell => {
@@ -503,82 +756,68 @@ Object.assign(TableManager, {
                         if (oldCell.className) newCell.className = oldCell.className;
                         newCell.setAttribute('contenteditable', 'true');
                         if (oldCell.style.textAlign) newCell.style.textAlign = oldCell.style.textAlign;
+                        if (oldCell.hasAttribute('colspan')) newCell.setAttribute('colspan', oldCell.getAttribute('colspan'));
+                        if (oldCell.hasAttribute('rowspan')) newCell.setAttribute('rowspan', oldCell.getAttribute('rowspan'));
                         if (newCell.getAttribute('class') === '') newCell.removeAttribute('class');
                         newRow.appendChild(newCell);
                     });
                     row.parentNode.replaceChild(newRow, row);
+                    if (oldIndex >= 0 && newRow.children[oldIndex]) {
+                        TableManager.activeCell = newRow.children[oldIndex];
+                    }
                 }
                 else if (actionType === 'colorRow') {
                     Array.from(row.children).forEach(c => {
-                        c.className = c.className.replace(/hl-c\d+/g, '');
+                        c.className = c.className.replace(/hl-c\d+/g, '').trim();
                         if (param) c.classList.add(param);
-                    });
-                }
-                else if (actionType === 'insertCol') {
-                    const index = colIndex + (param === 1 ? 1 : 0);
-                    for (let i = 0; i < table.rows.length; i++) {
-                        const tr = table.rows[i];
-                        const refCell = tr.cells[colIndex];
-                        const type = refCell ? refCell.tagName.toLowerCase() : 'td';
-                        
-                        const c = document.createElement(type);
-                        c.innerHTML = "<br>";
-                        
-                        if (refCell && refCell.className) c.className = refCell.className;
-                        if (refCell && refCell.style.textAlign) c.style.textAlign = refCell.style.textAlign;
-                        
-                        c.setAttribute('contenteditable', 'true');
                         if (c.getAttribute('class') === '') c.removeAttribute('class');
-                        
-                        if (index >= tr.cells.length) tr.appendChild(c);
-                        else tr.insertBefore(c, tr.cells[index]);
-                    }
-                    TableManager.currentTable = table;
-                    TableManager.setLayoutMode('auto');
-                }
-                else if (actionType === 'deleteCol') {
-                    if (row.children.length > 1) {
-                        for (let i = 0; i < table.rows.length; i++) {
-                            if (table.rows[i].cells[colIndex]) table.rows[i].deleteCell(colIndex);
-                        }
-                        TableManager.currentTable = table;
-                        TableManager.setLayoutMode('auto');
-                    } else {
-                        const wrap = table.closest('.simple-table-wrapper');
-                        if (wrap) wrap.remove(); else table.remove();
-                    }
+                    });
                 }
                 else if (actionType === 'setColType') {
                     const newTag = param.toLowerCase();
-                    for (let i = 0; i < table.rows.length; i++) {
-                        const tr = table.rows[i];
-                        const oldCell = tr.cells[colIndex];
-                        if (oldCell) {
+                    const processed = new Set();
+                    for (let y = 0; y < totalRows; y++) {
+                        const oldCell = grid[y][cellPos.x];
+                        if (oldCell && !processed.has(oldCell)) {
+                            processed.add(oldCell);
                             const newCell = document.createElement(newTag);
                             newCell.innerHTML = oldCell.innerHTML;
                             if (oldCell.className) newCell.className = oldCell.className;
                             newCell.setAttribute('contenteditable', 'true');
                             if (oldCell.style.textAlign) newCell.style.textAlign = oldCell.style.textAlign;
+                            if (oldCell.hasAttribute('colspan')) newCell.setAttribute('colspan', oldCell.getAttribute('colspan'));
+                            if (oldCell.hasAttribute('rowspan')) newCell.setAttribute('rowspan', oldCell.getAttribute('rowspan'));
                             if (newCell.getAttribute('class') === '') newCell.removeAttribute('class');
-                            tr.replaceChild(newCell, oldCell);
+                            
+                            const isOldActive = (oldCell === TableManager.activeCell);
+                            oldCell.parentNode.replaceChild(newCell, oldCell);
+                            if (isOldActive) {
+                                TableManager.activeCell = newCell;
+                            }
                         }
                     }
                 }
                 else if (actionType === 'colorCol') {
-                    for (let i = 0; i < table.rows.length; i++) {
-                        const c = table.rows[i].cells[colIndex];
-                        if (c) {
-                            c.className = c.className.replace(/hl-c\d+/g, '');
+                    const processed = new Set();
+                    for (let y = 0; y < totalRows; y++) {
+                        const c = grid[y][cellPos.x];
+                        if (c && !processed.has(c)) {
+                            processed.add(c);
+                            c.className = c.className.replace(/hl-c\d+/g, '').trim();
                             if (param) c.classList.add(param);
+                            if (c.getAttribute('class') === '') c.removeAttribute('class');
                         }
                     }
                 }
                 else if (actionType === 'setColAlign') {
-                    for (let i = 0; i < table.rows.length; i++) {
-                        const c = table.rows[i].cells[colIndex];
-                        if (c) {
+                    const processed = new Set();
+                    for (let y = 0; y < totalRows; y++) {
+                        const c = grid[y][cellPos.x];
+                        if (c && !processed.has(c)) {
+                            processed.add(c);
                             c.classList.remove('text-left', 'text-center', 'text-right');
                             if (param) c.classList.add(param);
+                            if (c.getAttribute('class') === '') c.removeAttribute('class');
                         }
                     }
                 }
@@ -592,7 +831,7 @@ Object.assign(TableManager, {
             } 
             else if (actionType === 'colorCell') {
                 cellsToProcess.forEach(c => {
-                    c.className = c.className.replace(/hl-c\d+/g, '');
+                    c.className = c.className.replace(/hl-c\d+/g, '').trim();
                     if (param) c.classList.add(param);
                 });
             }

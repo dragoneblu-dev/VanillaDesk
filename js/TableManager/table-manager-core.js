@@ -4,7 +4,8 @@
  * FIX LAYOUT W3C: Introdotto l'uso di <colgroup> e <col> per il dimensionamento. 
  * Questo scavalca il limite nativo dei browser che bloccava il ridimensionamento
  * se la prima riga della tabella conteneva celle unite (colspan).
- * RESTORE DRAG LISTENERS: Invocazione esplicita di TableManager.Drag.init() al caricamento.
+ * FEAT DISTRIBUTE COLS: Distribuzione uniforme della larghezza delle colonne al 100%.
+ * FEAT STICKY HEADER: Toggle per fissare l'intestazione allo scorrimento verticale.
  */
 
 window.TableManager = {
@@ -218,11 +219,49 @@ window.TableManager = {
     },
 
     toggleZebraCurrent: () => {
-        const table = TableManager.currentTable;
+        const table = TableManager.currentTable || TableManager.editingTable || (TableManager.activeCell ? TableManager.activeCell.closest('table') : null);
         if (table) {
             table.classList.toggle('table-striped');
             if (typeof Editor !== 'undefined') Editor.saveSnapshot();
             if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        }
+    },
+
+    toggleStickyHeaderCurrent: () => {
+        const table = TableManager.currentTable || TableManager.editingTable || (TableManager.activeCell ? TableManager.activeCell.closest('table') : null);
+        if (table) {
+            table.classList.toggle('table-sticky-header');
+            if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+            if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        }
+    },
+
+    distributeColumnsEvenly: () => {
+        const table = TableManager.currentTable || TableManager.editingTable || (TableManager.activeCell ? TableManager.activeCell.closest('table') : null);
+        if (!table) return;
+
+        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+
+        TableManager._stripLegacyWidths(table);
+
+        const { grid } = TableManager.getGridMap(table);
+        const colCount = grid[0] ? grid[0].length : 0;
+        if (colCount <= 0) return;
+
+        table.style.width = '100%';
+        table.style.tableLayout = 'fixed';
+
+        const colgroup = TableManager._ensureColgroup(table, colCount);
+        const equalPct = (100 / colCount).toFixed(2) + '%';
+
+        for (let x = 0; x < colCount; x++) {
+            colgroup.children[x].style.width = equalPct;
+        }
+
+        if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        if (typeof TableManager.UI.hideTriggers === 'function') TableManager.UI.hideTriggers();
+        if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+            UI.showToast(I18n.t('table_ui.distribute_cols_toast'), "info");
         }
     }
 };

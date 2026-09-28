@@ -2,8 +2,8 @@
  * editor-inline-notes.js
  * Sottomodulo di Editor.
  * Gestione degli appunti nascosti nel testo (Footnotes).
- * FIX INLINE DELETE: Aggiunto l'attributo contenteditable="false" nativo per proteggere il contenitore 
- * invisibile dalle cancellazioni accidentali quando si fondono i paragrafi tramite i tasti Canc/Backspace.
+ * Protezione atomica contenteditable="false" per salvaguardare il contenitore dalle fusioni accidentali.
+ * Salvataggio normalizzato tramite la funzione unica centralizzata Editor.sanitizeMiniText.
  */
 
 Object.assign(Editor, {
@@ -18,7 +18,7 @@ Object.assign(Editor, {
         const wrapper = document.createElement('span');
         wrapper.className = 'inline-note-wrapper adv-inline-shell';
         wrapper.setAttribute('data-widget-type', 'inline-note');
-        wrapper.setAttribute('contenteditable', 'false'); // FIX: Blocco atomico anti-merge del browser!
+        wrapper.setAttribute('contenteditable', 'false'); // Blocco atomico anti-merge del browser
 
         const marker = document.createElement('span');
         marker.className = 'inline-note-marker';
@@ -34,8 +34,7 @@ Object.assign(Editor, {
 
         range.deleteContents();
         
-        // FIX INLINE BLOCK NESTING E CURSORE: Aggiungiamo i cuscinetti Zero-Width Space
-        // per permettere alla freccia ArrowDown del browser di funzionare.
+        // Cuscinetti Zero-Width Space per consentire al cursore di oltrepassare l'inline block
         const zwsBefore = document.createTextNode('\u200B');
         const zwsAfter = document.createTextNode('\u200B');
         
@@ -63,7 +62,7 @@ Object.assign(Editor, {
             wrapper = document.createElement('span');
             wrapper.className = 'inline-note-wrapper adv-inline-shell';
             wrapper.setAttribute('data-widget-type', 'inline-note');
-            wrapper.setAttribute('contenteditable', 'false'); // Sicurezza retroattiva per vecchi gusci
+            wrapper.setAttribute('contenteditable', 'false');
             element.parentNode.insertBefore(wrapper, element);
             wrapper.appendChild(element);
         }
@@ -113,21 +112,10 @@ Object.assign(Editor, {
         const input = document.getElementById('inlineNoteInput');
         if (!input || !Editor.currentInlineNote) return;
 
-        let newHTML = input.innerHTML;
-
-        // FIX ASSOLUTO: Appiattisce ogni possibile elemento block per mantenere 
-        // 100% la legalità W3C all'interno del contenitore <span> del DOM principale.
-        // Questo sventa tutti i bug di Merge/Delete nativi del browser senza rompere la formattazione.
-        newHTML = newHTML.replace(/<div[^>]*>/gi, '<br>')
-                         .replace(/<\/div>/gi, '')
-                         .replace(/<p[^>]*>/gi, '<br>')
-                         .replace(/<\/p>/gi, '')
-                         .replace(/<li[^>]*>/gi, '<br>• ')
-                         .replace(/<\/li>/gi, '')
-                         .replace(/<\/?(ul|ol|h[1-6]|blockquote)[^>]*>/gi, '');
-                         
-        // Rimuove eventuali a capo ridondanti all'inizio
-        newHTML = newHTML.replace(/^(<br\s*\/?>)+/i, '');
+        // Pulizia tramite la procedura unica centralizzata in Editor.sanitizeMiniText
+        const newHTML = typeof Editor.sanitizeMiniText === 'function' 
+            ? Editor.sanitizeMiniText(input.innerHTML) 
+            : input.innerHTML.trim();
 
         Editor.saveSnapshot();
         

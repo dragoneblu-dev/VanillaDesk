@@ -121,23 +121,20 @@ Object.assign(AdvancedTable, {
         viewRows = AdvancedTable.filterRows(viewRows, state);
         viewRows = AdvancedTable.sortRows(viewRows, state);
 
-        let pageSize = state.pageSize || 'all';
+        let pageSize = state.pageSize ? parseInt(state.pageSize, 10) : 25;
+        if (isNaN(pageSize) || pageSize <= 0) pageSize = 25;
+        if (pageSize > 200) pageSize = 200;
         let currentPage = state.currentPage || 1;
         let totalRows = viewRows.length;
-        let totalPages = Math.ceil(totalRows / (pageSize === 'all' ? totalRows : pageSize)) || 1;
-        let pagedRows = viewRows;
+        let totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 
-        if (pageSize !== 'all') {
-            pageSize = parseInt(pageSize, 10);
-            totalPages = Math.ceil(totalRows / pageSize) || 1;
             if (currentPage > totalPages) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
 
             let startIdx = (currentPage - 1) * pageSize;
             let endIdx = startIdx + pageSize;
-            pagedRows = viewRows.slice(startIdx, endIdx);
+        let pagedRows = viewRows.slice(startIdx, endIdx);
             state.currentPage = currentPage;
-        }
 
         // --- GESTIONE LOGICA ICONE ATTIVE ---
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
@@ -342,7 +339,7 @@ Object.assign(AdvancedTable, {
         }
         html += `</tbody></table></div>`;
 
-        if (!state.hideFooterControls && (isEdit || pageSize !== 'all')) {
+        if (!state.hideFooterControls && (isEdit || totalPages > 1)) {
             html += `<div class="adv-table-footer-controls">`;
             html += `<div class="adv-footer-left">`;
             
@@ -363,15 +360,11 @@ Object.assign(AdvancedTable, {
 
             html += `</div><div class="adv-footer-right">`;
 
-            if (pageSize === 'all') {
-                if (isEdit) html += `<div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:pointer; margin:0; font-weight:normal;" onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')">${I18n.t('table.all_rows')}</div>`;
-            } else {
                 let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
                 let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
                 html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
                          <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>${I18n.t('table.page_info', { current: currentPage, total: totalPages })}</div>
                          <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
-            }
             html += `</div></div>`;
         }
 
@@ -390,14 +383,41 @@ Object.assign(AdvancedTable, {
     },
 
     attachCellEvents: (wrapper, tableId) => {
+        // Intercettazione Invio sul Titolo del Database
+        const parentShell = wrapper.closest('.adv-widget-shell, .adv-table-wrapper') || wrapper;
+        const titleEl = parentShell.querySelector('.adv-table-title');
+        if (titleEl) {
+            titleEl.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    titleEl.blur();
+                }
+            });
+        }
+
+        // Celle di Testo
         wrapper.querySelectorAll('.adv-cell-text[contenteditable="true"]').forEach(el => {
             el.addEventListener('dblclick', e => e.stopPropagation());
-            el.addEventListener('keydown', e => e.stopPropagation());
+            el.addEventListener('keydown', e => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                    if (e.ctrlKey || e.metaKey || e.shiftKey) {
+                        // Ritorno a capo manuale all'interno della cella senza uscire dall'editing
+                        e.preventDefault();
+                        document.execCommand('insertLineBreak');
+                    } else {
+                        // Invio semplice: conferma la modifica togliendo il focus dalla cella
+                        e.preventDefault();
+                        el.blur();
+                    }
+                }
+            });
             el.addEventListener('blur', (e) => {
                 AdvancedTable.updateData(tableId, e.target.getAttribute('data-row'), e.target.getAttribute('data-col'), e.target.innerText);
             });
         });
         
+        // Checkbox
         wrapper.querySelectorAll('.adv-cell-checkbox input:not([disabled])').forEach(el => {
             if (el.closest('.adv-action-cell')) return;
             el.addEventListener('dblclick', e => e.stopPropagation());
@@ -406,11 +426,18 @@ Object.assign(AdvancedTable, {
             });
         });
         
+        // Date e Campi Numerici
         wrapper.querySelectorAll('.adv-cell-date input:not([readonly]), .adv-number-input:not([readonly])').forEach(el => {
             el.addEventListener('dblclick', e => e.stopPropagation());
-            el.addEventListener('keydown', e => e.stopPropagation());
+            el.addEventListener('keydown', e => {
+                e.stopPropagation();
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    el.blur();
+                }
+            });
             el.addEventListener('blur', (e) => {
-                // TIMEOUT FIX: Permette al codice html inline di eseguire il salvataggio su 'data-raw-value' prima di trasmetterlo
+                // TIMEOUT: Permette al codice html inline di eseguire il salvataggio su 'data-raw-value' prima di trasmetterlo
                 setTimeout(() => {
                     if (!e.target.parentNode.closest('.adv-cell-date') || e.target.parentNode.children.length === 1) {
                         let valToSave = e.target.value;

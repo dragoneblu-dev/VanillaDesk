@@ -28,7 +28,7 @@ const AdvancedTable = {
                 isSystemDB: true,
                 columns: [
                     { id: 'sys_c_note', name: 'Pagina Collegata', type: 'record_note', width: 200, hidden: false },
-                    { id: 'sys_c_tags', name: 'Tag', type: 'multi-select', width: 250, hidden: false }
+                    { id: 'sys_c_tags', name: '#Tag', type: 'multi-select', width: 250, hidden: false }
                 ],
                 rows: [],
                 selectOptions: { 'sys_c_tags': [] },
@@ -125,6 +125,23 @@ const AdvancedTable = {
         if (!state.conditionalColors) state.conditionalColors = [];
         if (state.hideFooterControls === undefined) state.hideFooterControls = false;
         if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
+
+        // Normalizzazione di sicurezza della dimensione pagina (Per vecche versioni: No unpaged 'all', default 25, max 200)
+        if (state.pageSize === 'all') {
+            state.pageSize = 200;
+        } else if (typeof state.pageSize === 'string') {
+            state.pageSize = parseInt(state.pageSize, 10);
+        }
+        if (!state.pageSize || isNaN(state.pageSize) || state.pageSize <= 0) {
+            state.pageSize = 25;
+        } else if (state.pageSize > 200) {
+            state.pageSize = 200;
+        }
+
+        if (!state.currentPage || typeof state.currentPage !== 'number' || state.currentPage < 1) {
+            state.currentPage = 1;
+        }
+
         return state;
     },
 
@@ -291,8 +308,15 @@ const AdvancedTable = {
 
     setState: (tableId, state) => {
         if (!AppState.databases) AppState.databases = {};
+        if (!state) return; // Guardia difensiva contro stati nulli o cancellazioni
         
         const trueId = tableId.split('_cited_')[0];
+
+        let safePageSize = state.pageSize;
+        if (safePageSize === 'all') safePageSize = 200;
+        else if (typeof safePageSize === 'string') safePageSize = parseInt(safePageSize, 10);
+        if (!safePageSize || isNaN(safePageSize) || safePageSize <= 0) safePageSize = 25;
+        else if (safePageSize > 200) safePageSize = 200;
 
         const universalConfig = {
             title: state.title,
@@ -324,7 +348,7 @@ const AdvancedTable = {
             chartConfig: state.chartConfig,
             selectedRows: state.selectedRows || [],
             conditionalColors: state.conditionalColors || [],
-            pageSize: state.pageSize || 'all',
+            pageSize: safePageSize,
             currentPage: state.currentPage || 1,
             hideFooterControls: state.hideFooterControls || false
         };
@@ -456,17 +480,20 @@ const AdvancedTable = {
 
         const tableId = 'adv_tbl_' + Store.generateId();
         const now = Date.now();
+        const defaultNameComment = I18n.t('adv_cell.default_text_col_comment');
         const initialState = {
             title: 'Nuovo Database',
             viewType: 'table',
             freeWidth: false,
             striped: true,
             textClamp: 1,
+            pageSize: 25,
+            currentPage: 1,
             automations: [],
             conditionalColors: [],
             hideFooterControls: false,
             columns:[
-                { id: 'c_1', name: 'Nome', type: 'text', width: 200, hidden: false },
+                { id: 'c_1', name: 'Nome', type: 'text', width: 200, hidden: false, comment: defaultNameComment },
                 { id: 'c_2', name: 'Tag', type: 'multi-select', width: 180, hidden: false },
                 { id: 'c_3', name: 'Ultima Modifica', type: 'last_edited_time', width: 150, hidden: false }
             ],

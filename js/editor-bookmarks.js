@@ -320,17 +320,10 @@ Object.assign(Editor, {
         const marker = document.getElementById(markerId);
         if (!input || !marker) return;
 
-        let newHTML = input.innerHTML;
-
-        newHTML = newHTML.replace(/<div[^>]*>/gi, '<br>')
-                         .replace(/<\/div>/gi, '')
-                         .replace(/<p[^>]*>/gi, '<br>')
-                         .replace(/<\/p>/gi, '')
-                         .replace(/<li[^>]*>/gi, '<br>• ')
-                         .replace(/<\/li>/gi, '')
-                         .replace(/<\/?(ul|ol|h[1-6]|blockquote)[^>]*>/gi, '');
-
-        newHTML = newHTML.replace(/^(<br\s*\/?>)+/i, '');
+        // Pulizia tramite la procedura unica centralizzata in Editor.sanitizeMiniText
+        const newHTML = typeof Editor.sanitizeMiniText === 'function' 
+            ? Editor.sanitizeMiniText(input.innerHTML) 
+            : input.innerHTML.trim();
 
         Editor.saveSnapshot();
 

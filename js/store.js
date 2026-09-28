@@ -8,7 +8,8 @@
  * 4. Autorità index.json: In fase di caricamento, solo le note censite in noteOrder vengono importate.
  * 5. Verifica JIT su disco: Funzione syncNoteFromDisk per allineare le note all'apertura o rilevarne l'eliminazione remota.
  * 6. Media & Storage: Utility _base64ToBlob per retrocompatibilità.
- * 7. Live Sync: Ascolto e trasmissione su BroadcastChannel 'vanilladesk_sync' per eventi 'note_saved' e 'db_saved'.
+ * 7. Live Sync Isolato: Filtro rigoroso su BroadcastChannel 'vanilladesk_sync' tramite AppState.workspaceId.
+ *    Nessuna sincronizzazione, ricarica o toast scatta tra schede che gestiscono workspace differenti.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -159,6 +160,7 @@ const Store = {
             Editor.cleanOrphanedCaches();
         }
         return {
+            workspaceId: AppState.workspaceId || null,
             notes: AppState.notes.map(note => {
                 const cleanNote = { ...note };
                 Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
@@ -566,11 +568,11 @@ const Store = {
         let choice = 'reload';
 
         try {
-        if (typeof UI !== 'undefined' && typeof UI.promptNoteConflict === 'function') {
-            choice = await UI.promptNoteConflict(localNote, diskNote);
-        } else {
-            choice = 'reload';
-        }
+            if (typeof UI !== 'undefined' && typeof UI.promptNoteConflict === 'function') {
+                choice = await UI.promptNoteConflict(localNote, diskNote);
+            } else {
+                choice = 'reload';
+            }
         } finally {
             Store._isConflictResolving = false;
         }
@@ -597,26 +599,26 @@ const Store = {
             if (AppState.currentNoteId === localNote.id) {
                 AppState.isSwitchingNote = true; // Impedisce a eventi input spuri di ri-sporcare la nota
                 try {
-                const titleInput = document.getElementById('noteTitle');
-                const contentDiv = document.getElementById('noteContent');
-                if (titleInput) titleInput.value = localNote.title || "";
-                if (contentDiv) {
-                    contentDiv.innerHTML = localNote.content || "<p><br></p>";
-                    if (typeof Editor !== 'undefined') {
-                        if (Editor.hydrateMedia) Editor.hydrateMedia(contentDiv);
-                        if (Editor.saveSnapshot) Editor.saveSnapshot();
+                    const titleInput = document.getElementById('noteTitle');
+                    const contentDiv = document.getElementById('noteContent');
+                    if (titleInput) titleInput.value = localNote.title || "";
+                    if (contentDiv) {
+                        contentDiv.innerHTML = localNote.content || "<p><br></p>";
+                        if (typeof Editor !== 'undefined') {
+                            if (Editor.hydrateMedia) Editor.hydrateMedia(contentDiv);
+                            if (Editor.saveSnapshot) Editor.saveSnapshot();
+                        }
+                        if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll(contentDiv);
+                        if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
                     }
-                    if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll(contentDiv);
-                    if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
-                }
-                if (typeof UI !== 'undefined') {
-                    UI.updateBreadcrumb(localNote);
-                    UI.renderInlineFootnotes();
-                    if (typeof UI.renderTree === 'function') UI.renderTree();
-                    if (typeof UI.showToast === 'function') {
-                        UI.showToast(I18n.t('conflict.toast_reloaded'), "info");
+                    if (typeof UI !== 'undefined') {
+                        UI.updateBreadcrumb(localNote);
+                        UI.renderInlineFootnotes();
+                        if (typeof UI.renderTree === 'function') UI.renderTree();
+                        if (typeof UI.showToast === 'function') {
+                            UI.showToast(I18n.t('conflict.toast_reloaded'), "info");
+                        }
                     }
-                }
                 } finally {
                     setTimeout(() => { AppState.isSwitchingNote = false; }, 100);
                 }
@@ -667,8 +669,14 @@ const Store = {
 
             const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
 
+            // Assegna e garantisce l'ID univoco del workspace se mancante
+            if (!AppState.workspaceId) {
+                AppState.workspaceId = 'ws_' + Store.generateId();
+            }
+
             // 1. SALVATAGGIO INDEX
             const indexPayload = { 
+                workspaceId: AppState.workspaceId,
                 templates: AppState.templates || [], 
                 homeCitations: AppState.homeCitations || [], 
                 noteOrder: AppState.notes.map(n => n.id) 
@@ -741,9 +749,13 @@ const Store = {
                         Store._diskHashes.databases[dbId] = Store._hashObj(finalStateToWrite, cryptoPrefix);
                         Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(finalStateToWrite));
 
-                        // Notifica broadcast alle altre finestre connesse (es. Workflow Studio)
-                        if (Store._syncChannel) {
-                            Store._syncChannel.postMessage({ type: 'db_saved', tableId: dbId });
+                        // Notifica broadcast isolata dal workspaceId
+                        if (Store._syncChannel && AppState.workspaceId) {
+                            Store._syncChannel.postMessage({ 
+                                workspaceId: AppState.workspaceId,
+                                type: 'db_saved', 
+                                tableId: dbId 
+                            });
                         }
                     } catch (writeErr) {
                         console.error(`Errore scrittura DB ${dbId}.json:`, writeErr);
@@ -774,10 +786,10 @@ const Store = {
                                 // Rilevamento conflitto tramite divergenza del Revision Token
                                 if (diskNote.revId && note._baseRevId && diskNote.revId !== note._baseRevId) {
                                     if (AppState.currentNoteId === note.id) {
-                                    const resolution = await Store.handleNoteConflict(note, diskNote);
-                                    if (resolution === 'reload') {
-                                        continue; // Salta il salvataggio: ricaricata versione disco
-                                    }
+                                        const resolution = await Store.handleNoteConflict(note, diskNote);
+                                        if (resolution === 'reload') {
+                                            continue; // Salta il salvataggio: ricaricata versione disco
+                                        }
                                     } else {
                                         // Nota in background: allinea la base per prevenire blocchi fantasma
                                         note._baseRevId = diskNote.revId;
@@ -807,8 +819,13 @@ const Store = {
                         note._isDirty = false;
                         delete note._isDraft;
 
-                        if (Store._syncChannel) {
-                            Store._syncChannel.postMessage({ type: 'note_saved', noteId: note.id });
+                        // Notifica broadcast isolata dal workspaceId
+                        if (Store._syncChannel && AppState.workspaceId) {
+                            Store._syncChannel.postMessage({ 
+                                workspaceId: AppState.workspaceId,
+                                type: 'note_saved', 
+                                noteId: note.id 
+                            });
                         }
                     } catch (writeErr) {
                         console.error(`Errore scrittura nota ${note.id}.json:`, writeErr);
@@ -964,18 +981,18 @@ const Store = {
                             let dText = await dFile.text();
                             
                             if (!dText.startsWith('PRONOTES_ENC')) {
-                               let obj = JSON.parse(dText);
-                               obj._id_hack = dbId;
-                               dText = JSON.stringify(obj);
+                                let obj = JSON.parse(dText);
+                                obj._id_hack = dbId;
+                                dText = JSON.stringify(obj);
                             } else {
-                               if (!AppState.documentPassword) {
-                                   AppState.documentPassword = await UI.PasswordManager.promptForOpen("Sblocca il Workspace");
-                                   if (!AppState.documentPassword) return;
-                               }
-                               let decTxt = await CryptoUtils.decrypt(dText, AppState.documentPassword);
-                               let obj = JSON.parse(decTxt);
-                               obj._id_hack = dbId;
-                               dText = JSON.stringify(obj);
+                                if (!AppState.documentPassword) {
+                                    AppState.documentPassword = await UI.PasswordManager.promptForOpen("Sblocca il Workspace");
+                                    if (!AppState.documentPassword) return;
+                                }
+                                let decTxt = await CryptoUtils.decrypt(dText, AppState.documentPassword);
+                                let obj = JSON.parse(decTxt);
+                                obj._id_hack = dbId;
+                                dText = JSON.stringify(obj);
                             }
 
                             await Store._decryptAndProcessFragment(dText, 'database');
@@ -1074,6 +1091,7 @@ const Store = {
             }
 
             AppState.workspaceHandle = dirHandle;
+            AppState.workspaceId = 'ws_' + Store.generateId();
             AppState.fileName = dirHandle.name;
             AppState.documentPassword = null; 
             
@@ -1249,6 +1267,7 @@ const Store = {
         const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
 
         if (type === 'index') {
+            AppState.workspaceId = data.workspaceId || ('ws_' + Store.generateId());
             AppState.templates = data.templates || [];
             AppState.homeCitations = data.homeCitations || [];
             AppState._noteOrderCache = data.noteOrder || []; 
@@ -1277,6 +1296,7 @@ const Store = {
     },
 
     _processLoadedMonolith: (parsedData) => {
+        AppState.workspaceId = parsedData.workspaceId || ('ws_' + Store.generateId());
         AppState.databases = parsedData.databases || {};
         AppState.homeCitations = parsedData.homeCitations || [];
         AppState.templates = parsedData.templates || []; 
@@ -1538,13 +1558,17 @@ if (typeof BroadcastChannel !== 'undefined') {
             const data = event.data;
             if (!data) return;
 
+            // ISOLAMENTO RIGOROSO WORKSPACE: Se la scheda non ha un workspace aperto o il messaggio proviene da un workspace diverso, scarta subito
+            if (!AppState.workspaceHandle || !AppState.workspaceId || !data.workspaceId) return;
+            if (data.workspaceId !== AppState.workspaceId) return;
+
             if (data.type === 'db_saved' && data.tableId) {
                 if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.forceRecalculate === 'function') {
-                    AdvancedTable.forceRecalculate(data.tableId);
+                    // Sincronizzazione automatica silenziosa (nessun toast di disturbo se scatta da un'altra scheda)
+                    AdvancedTable.forceRecalculate(data.tableId, true);
                 }
             } 
             else if (data.type === 'note_saved' && data.noteId) {
-                if (!AppState.workspaceHandle) return;
                 const noteId = data.noteId;
                 const currentOpenId = AppState.currentNoteId;
 

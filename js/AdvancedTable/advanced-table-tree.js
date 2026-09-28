@@ -357,22 +357,19 @@ const AdvancedTree = {
         }
 
         // 9. Paginazione basata sulle sole Radici di Livello 0
-        let pageSize = state.pageSize || 'all';
+        let pageSize = state.pageSize ? parseInt(state.pageSize, 10) : 25;
+        if (isNaN(pageSize) || pageSize <= 0) pageSize = 25;
+        if (pageSize > 200) pageSize = 200;
         let currentPage = state.currentPage || 1;
         let totalRoots = rootRowIds.length;
-        let totalPages = 1;
-        let pagedRootIds = rootRowIds;
+        let totalPages = Math.max(1, Math.ceil(totalRoots / pageSize));
 
-        if (pageSize !== 'all') {
-            pageSize = parseInt(pageSize, 10);
-            totalPages = Math.max(1, Math.ceil(totalRoots / pageSize));
             if (currentPage > totalPages) currentPage = totalPages;
             if (currentPage < 1) currentPage = 1;
             state.currentPage = currentPage;
 
             const startIdx = (currentPage - 1) * pageSize;
             pagedRootIds = rootRowIds.slice(startIdx, startIdx + pageSize);
-        }
 
         // 10. Appiattimento Ricorsivo con Protezione da Cicli
         const flatTreeRows = [];
@@ -604,7 +601,7 @@ const AdvancedTree = {
         html += `</tbody></table></div>`;
 
         // 12. Footer Controls (Paginazione per sole Radici)
-        if (!state.hideFooterControls && (isEdit || pageSize !== 'all')) {
+        if (!state.hideFooterControls && (isEdit || totalPages > 1)) {
             html += `<div class="adv-table-footer-controls">`;
             html += `<div class="adv-footer-left">`;
 
@@ -623,15 +620,11 @@ const AdvancedTree = {
 
             html += `</div><div class="adv-footer-right">`;
 
-            if (pageSize === 'all') {
-                if (isEdit) html += `<div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:pointer; margin:0; font-weight:normal;" onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')">Tutte le Radici (${totalRoots})</div>`;
-            } else {
                 let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
                 let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
                 html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
                          <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>Radici: Pag. ${currentPage} di ${totalPages} (${totalRoots})</div>
                          <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
-            }
             html += `</div></div>`;
         }
 

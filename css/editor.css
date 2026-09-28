@@ -1,3 +1,7 @@
+/* =========================================================================
+   css/editor.css
+   ========================================================================= */
+
 :root {
     --font-editor: "Menlo", "Consolas", "Monaco", "Courier New", monospace;
     --reading-font-size: 16px;
@@ -85,6 +89,7 @@ main {
     box-sizing: border-box;
     position: relative;
     z-index: 1;
+    overflow-anchor: none; /* Disabilita lo scroll anchoring automatico del browser che sposta la visuale sui widget al caricamento */
 }
 
 .editor-scroll-content::-webkit-scrollbar,
@@ -341,4 +346,29 @@ hr { border: none; border-top: 1px dotted var(--text-primary); }
     background: var(--item-hover);
     border-color: var(--accent-color);
     color: var(--accent-color);
+}
+
+/* =========================================================================
+   STILE IMMAGINI ROTTE / NON TROVATE (PLACEHOLDER VISIBILE)
+   ========================================================================= */
+.editor-content img.broken-image,
+.editor-content img[data-broken="true"],
+img.broken-image,
+img[data-broken="true"] {
+    display: inline-block;
+    max-width: 100%;
+    min-width: 220px;
+    min-height: 80px;
+    background-color: rgba(239, 68, 68, 0.06) !important;
+    border-radius: 8px;
+    box-sizing: border-box;
+    cursor: pointer;
+    vertical-align: middle;
+    margin: 6px 0;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="dark"] img.broken-image,
+[data-theme="notion-dark"] img.broken-image {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
 }

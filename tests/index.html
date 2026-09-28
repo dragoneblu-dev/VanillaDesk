@@ -236,6 +236,7 @@
     <script src="../js/ui/ui-trash.js"></script>
     <script src="../js/ui/ui-document-browser.js"></script>
     <script src="../js/sidebar-manager.js"></script>
+    <script src="../js/events-global.js"></script>
 
     <!-- Script Editor Base -->
     <script src="../js/editor-core.js"></script>
@@ -317,7 +318,6 @@
     </script>
 
     <!-- Framework e Suite di Test Modulari -->
-    <!-- Moduli di Test Riorganizzati (1:1 con js/) -->
     <script src="test-framework.js"></script>
     <script src="test-fixtures.js"></script>
     <script src="test-advanced-table-actions.js"></script>
@@ -362,7 +362,6 @@
     <script src="test-logic-engine-core.js"></script>
     <script src="test-logic-engine-macro.js"></script>
     <script src="test-package-manager.js"></script>
-    <!--script src="test-regression-edge-cases.js"></script-->
     <script src="test-state.js"></script>
     <script src="test-store.js"></script>
     <script src="test-table-manager-core.js"></script>
@@ -378,6 +377,15 @@
     <script src="test-ui-notifications.js"></script>
     <script src="test-ui-preferences.js"></script>
     <script src="test-ui-security.js"></script>
+    <script src="test-ui-tree.js"></script>
+    <script src="test-sidebar-manager.js"></script>
+    <script src="test-ui-notes-lifecycle.js"></script>
+    <script src="test-ui-drawer.js"></script>
+    <script src="test-ui-menu.js"></script>
+    <script src="test-ui-notes-info.js"></script>
+    <script src="test-ui-trash.js"></script>
+    <script src="test-ui-minimap.js"></script>
+    <script src="test-ui-scrollspy.js"></script>
     <script src="test-widget-manager.js"></script>
     <script src="test-workflow.js"></script>
     <script src="test-altro.js"></script>
@@ -386,7 +394,10 @@
 
     <!-- Sandbox DOM isolato per consentire il collaudo headless dei moduli UI ed Editor -->
     <div id="testSandBox" style="position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; overflow: hidden; pointer-events: none;">
-        <div id="noteContent" class="editor-content" contenteditable="true"></div>
+        <div id="editorScrollContent">
+            <input id="noteTitle" value="">
+            <div id="noteContent" class="editor-content" contenteditable="true"></div>
+        </div>
         <div id="emptyNoteOverlay"></div>
         <div id="templateGrid"></div>
         <div id="advGlobalDrawer" class="adv-drawer">
