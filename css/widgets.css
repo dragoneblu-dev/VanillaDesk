@@ -12,6 +12,14 @@
     -webkit-user-select: none !important;
 }
 
+/* Sblocco selezione per tabelle semplici e griglie tabellari in selezione trasversale */
+.simple-table-wrapper,
+.simple-table-wrapper table,
+.adv-table {
+    user-select: text !important;
+    -webkit-user-select: text !important;
+}
+
 .adv-widget-shell {
     position: relative;
     margin: 15px 0;

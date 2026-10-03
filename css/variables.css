@@ -142,8 +142,8 @@
     --bg-color: #191919;
     --sidebar-bg: #202020;
     --editor-bg: #191919;
-    --text-primary: rgba(255, 255, 255, 0.81);
-    --text-secondary: rgba(255, 255, 255, 0.44);
+    --text-primary: #FFFFFF;
+    --text-secondary: rgba(255, 255, 255, 0.64);
     --accent-color: #2c8ef0;
     --accent-hover: #176dc8;
     --border-color: rgba(255, 255, 255, 0.09);

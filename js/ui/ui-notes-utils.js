@@ -3,6 +3,7 @@
  * Sottomodulo di UI.
  * Funzioni di supporto, formattazione, Breadcrumb e segnalibri della Nota (Utilities).
  * Integrazione del badge Cestino nel breadcrumb per le note eliminate e marcatura dirty su toggle preferiti.
+ * Aggiunta voce "Modifica Sorgente HTML..." nel menu contestuale della nota.
  */
 
 Object.assign(UI, {
@@ -84,6 +85,16 @@ Object.assign(UI, {
         } else {
             items.push({ icon: Icons.save, label: I18n.t('notes_utils.menu_save_template'), onClick: () => TemplateManager.saveCurrentNoteAsTemplate() });
             items.push({ icon: Icons.tableSimple, label: I18n.t('notes_utils.menu_manage_templates'), onClick: () => TemplateManager.openManager() });
+            items.push({ type: 'divider' });
+            items.push({
+                icon: typeof Icons !== 'undefined' ? Icons.code : '</>',
+                label: I18n.t('notes_utils.menu_raw_html') || 'Modifica Sorgente HTML...',
+                onClick: () => {
+                    if (typeof Editor !== 'undefined' && typeof Editor.openRawHtmlEditor === 'function') {
+                        Editor.openRawHtmlEditor();
+                    }
+                }
+            });
             items.push({ type: 'divider' });
             items.push({ icon: Icons.download, label: I18n.t('notes_utils.menu_export_modpack'), onClick: () => PackageManager.exportNoteAsModpack(AppState.currentNoteId) });
             items.push({ type: 'divider' });

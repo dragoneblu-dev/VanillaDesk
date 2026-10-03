@@ -9,6 +9,7 @@
  * FIX SYS_PROPERTIES SYNC: Risolto bug di sovrascrittura stato su mutazioni interne a SYS_PROPERTIES_DB.
  * FEAT TRIGGER FROM PROPERTY CHANGE: Propagazione bidirezionale automatica dei cambi tag/proprietà 
  * delle note verso qualsiasi database collegato tramite triggerFromPropertyChange.
+ * FIX GLOBAL WINDOW EXPORT: Esposizione esplicita dell'istanza su window.AdvancedAutomations per interoperabilità e test.
  */
 
 const AdvancedAutomations = {
@@ -923,3 +924,8 @@ const AdvancedAutomations = {
         }
     }
 };
+
+// Esposizione globale trasparente per garantire interoperabilità e test
+if (typeof window !== 'undefined') {
+    window.AdvancedAutomations = AdvancedAutomations;
+}

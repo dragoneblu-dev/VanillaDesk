@@ -14,6 +14,10 @@
  * CONTRACT RESTORATION: Ripristinato il contratto canonico di getFormatDisplayValue per date singole (stringa inalterata)
  * e range temporali (start ➔ end in formato ISO), garantendo la conformità con la suite di test e l'interscambio dati.
  * FEAT ROLLUP BIDIREZIONALE: Risoluzione di rollup sia su relazioni uscenti che su relazioni entranti/inverse da altri DB.
+ * FIX RECURSION GUARD: Introdotti presidi O(1) con Set su renderCache per arrestare matematicamente loop infiniti
+ * e stack overflow tra relazioni e rollup incrociati bidirezionali.
+ * FIX CROSS-DB FORMULA DEPENDENCY & RESOLUTION: _buildTabellaContext risolve in modo lazy e protetto
+ * le virtualCells dei campi calcolati esterni, intercettando cicli cross-tabella con guardie set 'renderCache._resolvingCrossDB'.
  */
 
 Object.assign(AdvancedTable, {
@@ -115,8 +119,22 @@ Object.assign(AdvancedTable, {
             
             let val;
             if (isCalculatedCol) {
-                const vRow = AdvancedTable.buildVirtualRow(targetDbId, tRow, targetState, renderCache);
-                val = vRow.virtualCells[displayColId];
+                // GUARDIA RICORSIVA: Intercetta cicli di risoluzione incrociata tra righe e colonne calcolate
+                if (!renderCache._resolvingRows) renderCache._resolvingRows = new Set();
+                const cycleKey = `${targetDbId}_${tRow.id}_${displayColId}`;
+
+                if (renderCache._resolvingRows.has(cycleKey)) {
+                    // Spezza immediatamente il loop ricorsivo usando il dato grezzo salvato senza richiamare buildVirtualRow
+                    val = (tRow.cells || {})[displayColId] || '...';
+                } else {
+                    renderCache._resolvingRows.add(cycleKey);
+                    try {
+                        const vRow = AdvancedTable.buildVirtualRow(targetDbId, tRow, targetState, renderCache);
+                        val = vRow.virtualCells[displayColId];
+                    } finally {
+                        renderCache._resolvingRows.delete(cycleKey);
+                    }
+                }
             } else {
                 val = tRow.cells[displayColId];
             }
@@ -225,6 +243,8 @@ Object.assign(AdvancedTable, {
             return renderCache.tabellaContext;
         }
 
+        const safeCache = renderCache || {};
+
         const proxy = new Proxy({}, {
             get: function(target, prop) {
                 if (prop in target) return target[prop];
@@ -259,12 +279,37 @@ Object.assign(AdvancedTable, {
                             } else if (c.type === 'last_edited_time') {
                                 val = AdvancedTable._getLocalISO(row.updatedAt);
                             } else if (c.type === 'relation' || c.type === 'relation_backlink') {
-                                const details = AdvancedTable.resolveRelationDetails(c, (row.cells || {})[c.id], renderCache || {});
+                                const details = AdvancedTable.resolveRelationDetails(c, (row.cells || {})[c.id], safeCache);
                                 val = details.map(d => d.name);
                             } else if (c.type === 'note_link') {
-                                val = AdvancedTable.getFormatDisplayValue(c, (row.cells || {})[c.id], renderCache || {});
+                                val = AdvancedTable.getFormatDisplayValue(c, (row.cells || {})[c.id], safeCache);
+                            } else if (c.type === 'formula' || c.type === 'rollup') {
+                                // RISOLUZIONE DINAMICA E PROTETTA DEI CAMPI CALCOLATI CROSS-DB
+                                if (!safeCache._resolvingCrossDB) safeCache._resolvingCrossDB = new Set();
+                                const crossCycleKey = `${foundId}.${row.id}.${c.id}`;
+
+                                if (safeCache._resolvingCrossDB.has(crossCycleKey)) {
+                                    val = '⚠️ Riferimento Circolare';
+                                } else {
+                                    safeCache._resolvingCrossDB.add(crossCycleKey);
+                                    try {
+                                        if (row.virtualCells && row.virtualCells[c.id] !== undefined) {
+                                            val = row.virtualCells[c.id];
+                                        } else {
+                                            const vRow = AdvancedTable.buildVirtualRow(foundId, row, foundState, safeCache);
+                                            val = vRow.virtualCells[c.id];
+                                        }
+                                    } finally {
+                                        safeCache._resolvingCrossDB.delete(crossCycleKey);
+                                    }
+                                }
                             } else {
                                 val = (row.cells || {})[c.id];
+                            }
+
+                            // Cast automatico numerico se colonna numerica
+                            if (c.type === 'number' && typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
+                                val = Number(val);
                             }
 
                             rowTarget[colName] = val;
@@ -354,120 +399,95 @@ Object.assign(AdvancedTable, {
     },
 
     buildVirtualRow: (tableId, row, state, renderCache = {}) => {
-        let vRow = { ...row, virtualCells: { ...(row.cells || {}) } };
+        // GUARDIA RICORSIVA: Intercetta rientri multipli sulla stessa riga durante il ciclo di calcolo virtuale
+        if (!renderCache._resolvingVRows) renderCache._resolvingVRows = new Set();
+        const vRowKey = `${tableId}_${row.id}`;
+        if (renderCache._resolvingVRows.has(vRowKey)) {
+            return { ...row, virtualCells: { ...(row.virtualCells || row.cells || {}) } };
+        }
+        renderCache._resolvingVRows.add(vRowKey);
 
-        // Inizializzazione protettiva per garantire che i record non abbiano timestamp indefiniti
-        const rowCreated = row.createdAt || (row.createdAt = Date.now());
-        const rowUpdated = row.updatedAt || (row.updatedAt = rowCreated);
+        let vRow;
+        try {
+            vRow = { ...row, virtualCells: { ...(row.cells || {}) } };
 
-        (state.columns ||[]).forEach(col => {
-            // Popolamento unificato e coerente dei timestamp di sistema
-            if (col.type === 'created_time') {
-                vRow.virtualCells[col.id] = rowCreated ? AdvancedTable.formatTime(rowCreated) : '';
-                return;
-            }
-            if (col.type === 'last_edited_time') {
-                vRow.virtualCells[col.id] = rowUpdated ? AdvancedTable.formatTime(rowUpdated) : '';
-                return;
-            }
+            // Inizializzazione protettiva per garantire che i record non abbiano timestamp indefiniti
+            const rowCreated = row.createdAt || (row.createdAt = Date.now());
+            const rowUpdated = row.updatedAt || (row.updatedAt = rowCreated);
 
-            if (col.type === 'relation_backlink' && col.linkedTableId && col.linkedColId) {
-                if (!renderCache.backlinks) renderCache.backlinks = {};
-                if (!renderCache.backlinks[col.id]) {
-                    renderCache.backlinks[col.id] = {};
-                    const sourceState = AdvancedTable.getTableState(col.linkedTableId);
-                    if (sourceState) {
-                        sourceState.rows.forEach(srcRow => {
-                            const vals = srcRow.cells[col.linkedColId];
-                            if (Array.isArray(vals)) {
-                                vals.forEach(v => {
-                                    if (!renderCache.backlinks[col.id][v]) renderCache.backlinks[col.id][v] = [];
-                                    renderCache.backlinks[col.id][v].push(srcRow);
-                                });
-                            }
-                        });
-                    }
+            (state.columns || []).forEach(col => {
+                // Popolamento unificato e coerente dei timestamp di sistema
+                if (col.type === 'created_time') {
+                    vRow.virtualCells[col.id] = rowCreated ? AdvancedTable.formatTime(rowCreated) : '';
+                    return;
+                }
+                if (col.type === 'last_edited_time') {
+                    vRow.virtualCells[col.id] = rowUpdated ? AdvancedTable.formatTime(rowUpdated) : '';
+                    return;
                 }
 
-                let backlinks = renderCache.backlinks[col.id][row.id] || [];
-
-                if (col.backlinkDisplay === 'property' && col.backlinkPropertyId) {
-                    let props = backlinks.map(r => r.cells[col.backlinkPropertyId]).filter(v => v !== '' && v !== null);
-                    props = props.flat(); 
-                    
-                    if (col.backlinkDistinct) {
-                        props = [...new Set(props.map(String))];
-                    }
-                    
-                    if (col.backlinkAggType === 'count') {
-                        vRow.virtualCells[col.id] = props.length;
-                    } else if (col.backlinkAggType === 'sum') {
-                        const nums = props.map(v => parseFloat(v)).filter(n => !isNaN(n));
-                        vRow.virtualCells[col.id] = nums.reduce((a, b) => a + b, 0);
-                    } else {
-                        vRow.virtualCells[col.id] = props.join(', ');
-                    }
-                } else if (col.backlinkDisplay === 'count') {
-                    vRow.virtualCells[col.id] = backlinks.length;
-                } else {
-                    vRow.virtualCells[col.id] = backlinks.map(r => r.id);
-                }
-                return;
-            }
-
-            // RISOLUZIONE ROLLUP (Sia uscenti che entranti/inversi da altri database)
-            if (col.type === 'rollup' && col.relationColId && col.targetColId) {
-                let targetTableId = col.targetTableId;
-                let targetRows = [];
-
-                const isIncoming = (col.rollupDirection === 'incoming') || String(col.relationColId).startsWith('INCOMING:');
-
-                if (isIncoming) {
-                    const parts = String(col.relationColId).startsWith('INCOMING:') ? col.relationColId.split(':') : [];
-                    targetTableId = targetTableId || parts[1];
-                    const foreignColId = col.foreignRelColId || parts[2];
-
-                    if (!targetTableId || !foreignColId) {
-                        vRow.virtualCells[col.id] = '';
-                        return;
-                    }
-
-                    // Utilizziamo la cache per lookup O(1) velocissimo
+                if (col.type === 'relation_backlink' && col.linkedTableId && col.linkedColId) {
                     if (!renderCache.backlinks) renderCache.backlinks = {};
-                    const cacheKey = `rollup_${targetTableId}_${foreignColId}`;
-                    if (!renderCache.backlinks[cacheKey]) {
-                        renderCache.backlinks[cacheKey] = {};
-                        const sourceDbState = AdvancedTable.getTableState(targetTableId);
-                        if (sourceDbState) {
-                            (sourceDbState.rows || []).forEach(srcRow => {
-                                let foreignVals = srcRow.cells[foreignColId];
-                                if (!Array.isArray(foreignVals)) foreignVals = foreignVals ? [foreignVals] : [];
-                                foreignVals.forEach(v => {
-                                    if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
-                                    renderCache.backlinks[cacheKey][v].push(srcRow);
-                                });
+                    if (!renderCache.backlinks[col.id]) {
+                        renderCache.backlinks[col.id] = {};
+                        const sourceState = AdvancedTable.getTableState(col.linkedTableId);
+                        if (sourceState) {
+                            sourceState.rows.forEach(srcRow => {
+                                const vals = srcRow.cells[col.linkedColId];
+                                if (Array.isArray(vals)) {
+                                    vals.forEach(v => {
+                                        if (!renderCache.backlinks[col.id][v]) renderCache.backlinks[col.id][v] = [];
+                                        renderCache.backlinks[col.id][v].push(srcRow);
+                                    });
+                                }
                             });
                         }
                     }
 
-                    targetRows = renderCache.backlinks[cacheKey][row.id] || [];
-                } else {
-                    const relColDef = (state.columns || []).find(c => c.id === col.relationColId);
-                    if (!relColDef) {
-                        vRow.virtualCells[col.id] = '';
-                        return;
-                    }
+                    let backlinks = renderCache.backlinks[col.id][row.id] || [];
 
-                    // Se è un backlink locale già presente nella tabella
-                    if (relColDef.type === 'relation_backlink') {
-                        targetTableId = relColDef.linkedTableId;
-                        const foreignColId = relColDef.linkedColId;
+                    if (col.backlinkDisplay === 'property' && col.backlinkPropertyId) {
+                        let props = backlinks.map(r => r.cells[col.backlinkPropertyId]).filter(v => v !== '' && v !== null);
+                        props = props.flat(); 
+                        
+                        if (col.backlinkDistinct) {
+                            props = [...new Set(props.map(String))];
+                        }
+                        
+                        if (col.backlinkAggType === 'count') {
+                            vRow.virtualCells[col.id] = props.length;
+                        } else if (col.backlinkAggType === 'sum') {
+                            const nums = props.map(v => parseFloat(v)).filter(n => !isNaN(n));
+                            vRow.virtualCells[col.id] = nums.reduce((a, b) => a + b, 0);
+                        } else {
+                            vRow.virtualCells[col.id] = props.join(', ');
+                        }
+                    } else if (col.backlinkDisplay === 'count') {
+                        vRow.virtualCells[col.id] = backlinks.length;
+                    } else {
+                        vRow.virtualCells[col.id] = backlinks.map(r => r.id);
+                    }
+                    return;
+                }
+
+                // RISOLUZIONE ROLLUP (Sia uscenti che entranti/inversi da altri database)
+                if (col.type === 'rollup' && col.relationColId && col.targetColId) {
+                    let targetTableId = col.targetTableId;
+                    let targetRows = [];
+
+                    const isIncoming = (col.rollupDirection === 'incoming') || String(col.relationColId).startsWith('INCOMING:');
+
+                    if (isIncoming) {
+                        const parts = String(col.relationColId).startsWith('INCOMING:') ? col.relationColId.split(':') : [];
+                        targetTableId = targetTableId || parts[1];
+                        const foreignColId = col.foreignRelColId || parts[2];
 
                         if (!targetTableId || !foreignColId) {
                             vRow.virtualCells[col.id] = '';
                             return;
                         }
 
+                        // Utilizziamo la cache per lookup O(1) velocissimo
                         if (!renderCache.backlinks) renderCache.backlinks = {};
                         const cacheKey = `rollup_${targetTableId}_${foreignColId}`;
                         if (!renderCache.backlinks[cacheKey]) {
@@ -484,126 +504,173 @@ Object.assign(AdvancedTable, {
                                 });
                             }
                         }
+
                         targetRows = renderCache.backlinks[cacheKey][row.id] || [];
                     } else {
-                        // Relazione uscente classica
-                        targetTableId = relColDef.targetTableId;
-                        const relationVals = (row.cells || {})[col.relationColId];
-                        if (!relationVals || !Array.isArray(relationVals) || relationVals.length === 0) {
+                        const relColDef = (state.columns || []).find(c => c.id === col.relationColId);
+                        if (!relColDef) {
                             vRow.virtualCells[col.id] = '';
                             return;
                         }
 
-                        if (!renderCache.rowIndexes) renderCache.rowIndexes = {};
-                        if (!renderCache.rowIndexes[targetTableId]) {
-                            renderCache.rowIndexes[targetTableId] = {};
-                            const ts = AdvancedTable.getTableState(targetTableId);
-                            if (ts) ts.rows.forEach(r => renderCache.rowIndexes[targetTableId][r.id] = { state: ts, row: r });
-                        }
+                        // Se è un backlink locale già presente nella tabella
+                        if (relColDef.type === 'relation_backlink') {
+                            targetTableId = relColDef.linkedTableId;
+                            const foreignColId = relColDef.linkedColId;
 
-                        relationVals.forEach(tId => {
-                            const cacheRef = renderCache.rowIndexes[targetTableId] ? renderCache.rowIndexes[targetTableId][tId] : null;
-                            if (cacheRef && cacheRef.row) {
-                                targetRows.push(cacheRef.row);
+                            if (!targetTableId || !foreignColId) {
+                                vRow.virtualCells[col.id] = '';
+                                return;
                             }
-                        });
-                    }
-                }
 
-                if (targetRows.length === 0 || !targetTableId) {
-                    vRow.virtualCells[col.id] = '';
-                    return;
-                }
+                            if (!renderCache.backlinks) renderCache.backlinks = {};
+                            const cacheKey = `rollup_${targetTableId}_${foreignColId}`;
+                            if (!renderCache.backlinks[cacheKey]) {
+                                renderCache.backlinks[cacheKey] = {};
+                                const sourceDbState = AdvancedTable.getTableState(targetTableId);
+                                if (sourceDbState) {
+                                    (sourceDbState.rows || []).forEach(srcRow => {
+                                        let foreignVals = srcRow.cells[foreignColId];
+                                        if (!Array.isArray(foreignVals)) foreignVals = foreignVals ? [foreignVals] : [];
+                                        foreignVals.forEach(v => {
+                                            if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
+                                            renderCache.backlinks[cacheKey][v].push(srcRow);
+                                        });
+                                    });
+                                }
+                            }
+                            targetRows = renderCache.backlinks[cacheKey][row.id] || [];
+                        } else {
+                            // Relazione uscente classica
+                            targetTableId = relColDef.targetTableId;
+                            const relationVals = (row.cells || {})[col.relationColId];
+                            if (!relationVals || !Array.isArray(relationVals) || relationVals.length === 0) {
+                                vRow.virtualCells[col.id] = '';
+                                return;
+                            }
 
-                const targetState = AdvancedTable.getTableState(targetTableId);
-                if (!targetState) {
-                    vRow.virtualCells[col.id] = '';
-                    return;
-                }
+                            if (!renderCache.rowIndexes) renderCache.rowIndexes = {};
+                            if (!renderCache.rowIndexes[targetTableId]) {
+                                renderCache.rowIndexes[targetTableId] = {};
+                                const ts = AdvancedTable.getTableState(targetTableId);
+                                if (ts) ts.rows.forEach(r => renderCache.rowIndexes[targetTableId][r.id] = { state: ts, row: r });
+                            }
 
-                const targetColDef = (targetState.columns || []).find(c => c.id === col.targetColId);
-                if (!targetColDef) {
-                    vRow.virtualCells[col.id] = '';
-                    return;
-                }
-
-                let rolled = [];
-                targetRows.forEach(tRow => {
-                    let val;
-                    if (targetColDef.type === 'created_time') val = AdvancedTable.formatTime(tRow.createdAt);
-                    else if (targetColDef.type === 'last_edited_time') val = AdvancedTable.formatTime(tRow.updatedAt);
-                    else if (targetColDef.type === 'formula' && typeof AdvancedTable.evaluateFormula === 'function') {
-                        let tVirtualCells = {};
-                        (targetState.columns || []).forEach(tc => {
-                            if (tc.type === 'created_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.createdAt);
-                            else if (tc.type === 'last_edited_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.updatedAt);
-                            else tVirtualCells[tc.id] = (tRow.cells || {})[tc.id];
-                        });
-                        try {
-                            val = AdvancedTable.evaluateFormula(targetColDef.formula, {cells: tVirtualCells, createdAt: tRow.createdAt, updatedAt: tRow.updatedAt}, targetState.columns, targetTableId, targetState.title, tVirtualCells, renderCache);
-                        } catch(e) { val = ''; }
-                    }
-                    else val = (tRow.cells || {})[col.targetColId];
-
-                    if (val !== undefined && val !== null && val !== '') {
-                        if (targetColDef.type === 'relation' || targetColDef.type === 'relation_backlink') {
-                            const details = AdvancedTable.resolveRelationDetails(targetColDef, val, renderCache);
-                            val = details.map(d => d.name).filter(n => n && n !== 'Orfano');
+                            relationVals.forEach(tId => {
+                                const cacheRef = renderCache.rowIndexes[targetTableId] ? renderCache.rowIndexes[targetTableId][tId] : null;
+                                if (cacheRef && cacheRef.row) {
+                                    targetRows.push(cacheRef.row);
+                                }
+                            });
                         }
-                        if (typeof val === 'object' && !Array.isArray(val)) {
-                            if (val.start && val.end) val = `${val.start} ➔ ${val.end}`;
-                            else if (val.start) val = val.start;
-                            else val = JSON.stringify(val);
-                        }
-                        if (Array.isArray(val)) rolled.push(...val);
-                        else rolled.push(val);
                     }
-                });
 
-                vRow.virtualCells[col.id] = [...new Set(rolled)].join(', ');
-            }
-        });
+                    if (targetRows.length === 0 || !targetTableId) {
+                        vRow.virtualCells[col.id] = '';
+                        return;
+                    }
 
-        // =========================================================
-        // ORDINAMENTO TOPOLOGICO FORMULE (Risoluzione Loop & Dipendenze)
-        // =========================================================
-        const formulaCols = (state.columns || []).filter(c => c.type === 'formula');
-        if (formulaCols.length > 0) {
-            const resolved = new Set();
-            const resolving = new Set();
+                    const targetState = AdvancedTable.getTableState(targetTableId);
+                    if (!targetState) {
+                        vRow.virtualCells[col.id] = '';
+                        return;
+                    }
 
-            const resolveFormula = (col) => {
-                if (resolved.has(col.id)) return;
-                
-                // Prevenzione Paradossi / Loop Infiniti
-                if (resolving.has(col.id)) {
-                    vRow.virtualCells[col.id] = '⚠️ Riferimento Circolare';
+                    const targetColDef = (targetState.columns || []).find(c => c.id === col.targetColId);
+                    if (!targetColDef) {
+                        vRow.virtualCells[col.id] = '';
+                        return;
+                    }
+
+                    let rolled = [];
+                    targetRows.forEach(tRow => {
+                        let val;
+                        if (targetColDef.type === 'created_time') val = AdvancedTable.formatTime(tRow.createdAt);
+                        else if (targetColDef.type === 'last_edited_time') val = AdvancedTable.formatTime(tRow.updatedAt);
+                        else if (targetColDef.type === 'formula' && typeof AdvancedTable.evaluateFormula === 'function') {
+                            let tVirtualCells = {};
+                            (targetState.columns || []).forEach(tc => {
+                                if (tc.type === 'created_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.createdAt);
+                                else if (tc.type === 'last_edited_time') tVirtualCells[tc.id] = AdvancedTable.formatTime(tRow.updatedAt);
+                                else tVirtualCells[tc.id] = (tRow.cells || {})[tc.id];
+                            });
+                            try {
+                                val = AdvancedTable.evaluateFormula(targetColDef.formula, {cells: tVirtualCells, createdAt: tRow.createdAt, updatedAt: tRow.updatedAt}, targetState.columns, targetTableId, targetState.title, tVirtualCells, renderCache);
+                            } catch(e) { val = ''; }
+                        }
+                        else if (targetColDef.type === 'rollup' || targetColDef.type === 'relation_backlink') {
+                            // Se la riga remota ha già calcolato virtualCells, estraiamo da lì, altrimenti deleghiamo con guardia
+                            if (tRow.virtualCells && tRow.virtualCells[col.targetColId] !== undefined) {
+                                val = tRow.virtualCells[col.targetColId];
+                            } else {
+                                const vTargetRow = AdvancedTable.buildVirtualRow(targetTableId, tRow, targetState, renderCache);
+                                val = vTargetRow.virtualCells[col.targetColId];
+                            }
+                        }
+                        else val = (tRow.cells || {})[col.targetColId];
+
+                        if (val !== undefined && val !== null && val !== '') {
+                            if (targetColDef.type === 'relation' || targetColDef.type === 'relation_backlink') {
+                                const details = AdvancedTable.resolveRelationDetails(targetColDef, val, renderCache);
+                                val = details.map(d => d.name).filter(n => n && n !== 'Orfano');
+                            }
+                            if (typeof val === 'object' && !Array.isArray(val)) {
+                                if (val.start && val.end) val = `${val.start} ➔ ${val.end}`;
+                                else if (val.start) val = val.start;
+                                else val = JSON.stringify(val);
+                            }
+                            if (Array.isArray(val)) rolled.push(...val);
+                            else rolled.push(val);
+                        }
+                    });
+
+                    vRow.virtualCells[col.id] = [...new Set(rolled)].join(', ');
+                }
+            });
+
+            // =========================================================
+            // ORDINAMENTO TOPOLOGICO FORMULE (Risoluzione Loop & Dipendenze)
+            // =========================================================
+            const formulaCols = (state.columns || []).filter(c => c.type === 'formula');
+            if (formulaCols.length > 0) {
+                const resolved = new Set();
+                const resolving = new Set();
+
+                const resolveFormula = (col) => {
+                    if (resolved.has(col.id)) return;
+                    
+                    // Prevenzione Paradossi / Loop Infiniti
+                    if (resolving.has(col.id)) {
+                        vRow.virtualCells[col.id] = '⚠️ Riferimento Circolare';
+                        resolved.add(col.id);
+                        return;
+                    }
+                    
+                    resolving.add(col.id);
+
+                    // Cerca dipendenze incrociate analizzando il codice sorgente della formula
+                    formulaCols.forEach(otherCol => {
+                        if (otherCol.id !== col.id && col.formula) {
+                            const escapedName = otherCol.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const regex = new RegExp(`riga\\s*\\[\\s*["']${escapedName}["']\\s*\\]|riga\\.${escapedName}\\b`);
+                            if (regex.test(col.formula)) {
+                                resolveFormula(otherCol);
+                            }
+                        }
+                    });
+
+                    // Valuta in sicurezza sapendo che le dipendenze a sinistra o destra sono già calcolate in vRow.virtualCells
+                    vRow.virtualCells[col.id] = (typeof AdvancedTable.evaluateFormula === 'function') ? 
+                        AdvancedTable.evaluateFormula(col.formula, vRow, state.columns, tableId, state.title, vRow.virtualCells, renderCache) : '';
+                    
+                    resolving.delete(col.id);
                     resolved.add(col.id);
-                    return;
-                }
-                
-                resolving.add(col.id);
+                };
 
-                // Cerca dipendenze incrociate analizzando il codice sorgente della formula
-                formulaCols.forEach(otherCol => {
-                    if (otherCol.id !== col.id && col.formula) {
-                        const escapedName = otherCol.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                        const regex = new RegExp(`riga\\s*\\[\\s*["']${escapedName}["']\\s*\\]|riga\\.${escapedName}\\b`);
-                        if (regex.test(col.formula)) {
-                            resolveFormula(otherCol);
-                        }
-                    }
-                });
-
-                // Valuta in sicurezza sapendo che le dipendenze a sinistra o destra sono già calcolate in vRow.virtualCells
-                vRow.virtualCells[col.id] = (typeof AdvancedTable.evaluateFormula === 'function') ? 
-                    AdvancedTable.evaluateFormula(col.formula, vRow, state.columns, tableId, state.title, vRow.virtualCells, renderCache) : '';
-                
-                resolving.delete(col.id);
-                resolved.add(col.id);
-            };
-
-            formulaCols.forEach(col => resolveFormula(col));
+                formulaCols.forEach(col => resolveFormula(col));
+            }
+        } finally {
+            renderCache._resolvingVRows.delete(vRowKey);
         }
 
         return vRow;

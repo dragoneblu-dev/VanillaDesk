@@ -8,7 +8,7 @@
  * blocchi codice (CodeManager) e button bar (ButtonManager), evitando che vengano ridisegnati come tabelle RDBMS.
  * FEAT DEFAULT COMMENT: Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
  * FEAT REACTIVE DEPENDENCIES: updateDependentViews rinfresca reattivamente qualsiasi tabella che possieda
- * relazioni, backlink o rollup dipendenti dal database modificato.
+ * relazioni, backlink, rollup o FORMULE CROSS-DATABASE (tabella["..."]) dipendenti dal database modificato, con protezione da ricorsione infinita.
  */
 
 const AdvancedTable = {
@@ -154,10 +154,19 @@ const AdvancedTable = {
         return (state && state.isLinkedView) ? state.sourceTableId : trueId;
     },
 
-    updateDependentViews: (sourceTableId) => {
+    updateDependentViews: (sourceTableId, visited = new Set()) => {
         if (!AppState.databases) return;
         const targetTrueId = sourceTableId.split('_cited_')[0];
-        
+        if (visited.has(targetTrueId)) return;
+        visited.add(targetTrueId);
+
+        const targetState = AppState.databases[targetTrueId];
+        const targetTitle = targetState ? targetState.title : null;
+        const escapeRegExp = (str) => str ? str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+        const tablePattern = targetTitle ? new RegExp(`tabella\\[\\s*["']${escapeRegExp(targetTitle)}["']\\s*\\]`) : null;
+
+        const dependentIds = [];
+
         Object.keys(AppState.databases).forEach(id => {
             const s = AppState.databases[id];
             if (!s) return;
@@ -167,40 +176,60 @@ const AdvancedTable = {
                 hasDependency = s.columns.some(col => 
                     (col.type === 'relation' && col.targetTableId === targetTrueId) ||
                     (col.type === 'relation_backlink' && col.linkedTableId === targetTrueId) ||
-                    (col.type === 'rollup' && (col.targetTableId === targetTrueId || (col.relationColId && String(col.relationColId).includes(targetTrueId))))
+                    (col.type === 'rollup' && (col.targetTableId === targetTrueId || (col.relationColId && String(col.relationColId).includes(targetTrueId)))) ||
+                    (col.type === 'formula' && col.formula && tablePattern && tablePattern.test(col.formula))
+                );
+            }
+
+            if (!hasDependency && s.automations && Array.isArray(s.automations) && tablePattern) {
+                hasDependency = s.automations.some(a => 
+                    (a.triggers && a.triggers.some(t => t.value && tablePattern.test(t.value))) ||
+                    (a.actions && a.actions.some(act => act.value && tablePattern.test(act.value)))
                 );
             }
 
             if (id === targetTrueId || s.sourceTableId === targetTrueId || hasDependency) {
-                const wrapper = document.getElementById(id);
-                if (wrapper) {
-                    if (s.isPivot && typeof AdvancedPivot !== 'undefined') {
-                        AdvancedPivot.render(id);
-                    } else if (id.startsWith('adv_journal_') && typeof JournalManager !== 'undefined') {
-                        JournalManager.render(id);
-                    } else if (id.startsWith('adv_btnbar_') && typeof ButtonManager !== 'undefined') {
-                        ButtonManager.render(id);
-                    } else if (id.startsWith('adv_code_') && typeof CodeManager !== 'undefined') {
-                        CodeManager.mountAll(wrapper);
-                    } else if (typeof AdvancedTable.renderTable === 'function') {
-                        AdvancedTable.renderTable(id);
-                    }
+                dependentIds.push(id);
+            }
+        });
+
+        dependentIds.forEach(id => {
+            const s = AppState.databases[id];
+            if (!s) return;
+
+            const wrapper = document.getElementById(id);
+            if (wrapper) {
+                if (s.isPivot && typeof AdvancedPivot !== 'undefined') {
+                    AdvancedPivot.render(id);
+                } else if (id.startsWith('adv_journal_') && typeof JournalManager !== 'undefined') {
+                    JournalManager.render(id);
+                } else if (id.startsWith('adv_btnbar_') && typeof ButtonManager !== 'undefined') {
+                    ButtonManager.render(id);
+                } else if (id.startsWith('adv_code_') && typeof CodeManager !== 'undefined') {
+                    CodeManager.mountAll(wrapper);
+                } else if (typeof AdvancedTable.renderTable === 'function') {
+                    AdvancedTable.renderTable(id);
                 }
-                
-                const citations = document.querySelectorAll(`[id^="${id}_cited_"]`);
-                citations.forEach(cit => {
-                    if (s.isPivot && typeof AdvancedPivot !== 'undefined') {
-                        AdvancedPivot.render(cit.id);
-                    } else if (id.startsWith('adv_journal_') && typeof JournalManager !== 'undefined') {
-                        JournalManager.render(cit.id);
-                    } else if (id.startsWith('adv_btnbar_') && typeof ButtonManager !== 'undefined') {
-                        ButtonManager.render(cit.id);
-                    } else if (id.startsWith('adv_code_') && typeof CodeManager !== 'undefined') {
-                        CodeManager.mountAll(cit);
-                    } else if (typeof AdvancedTable.renderTable === 'function') {
-                        AdvancedTable.renderTable(cit.id);
-                    }
-                });
+            }
+            
+            const citations = document.querySelectorAll(`[id^="${id}_cited_"]`);
+            citations.forEach(cit => {
+                if (s.isPivot && typeof AdvancedPivot !== 'undefined') {
+                    AdvancedPivot.render(cit.id);
+                } else if (id.startsWith('adv_journal_') && typeof JournalManager !== 'undefined') {
+                    JournalManager.render(cit.id);
+                } else if (id.startsWith('adv_btnbar_') && typeof ButtonManager !== 'undefined') {
+                    ButtonManager.render(cit.id);
+                } else if (id.startsWith('adv_code_') && typeof CodeManager !== 'undefined') {
+                    CodeManager.mountAll(cit);
+                } else if (typeof AdvancedTable.renderTable === 'function') {
+                    AdvancedTable.renderTable(cit.id);
+                }
+            });
+
+            // Propagazione reattiva a cascata per database con dipendenze concatenate (es. A -> B -> C)
+            if (id !== targetTrueId && !visited.has(id)) {
+                AdvancedTable.updateDependentViews(id, visited);
             }
         });
     },

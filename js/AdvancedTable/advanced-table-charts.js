@@ -8,6 +8,7 @@
  * FEAT DIMENSIONI: Supporto per 3 altezze configurabili (Piccola, Media, Grande) per Barre, Linee, Torta e Ciambella.
  * FIX CIAMBELLA COMPATTA: Calcolo matematico proporzionale e auto-scaling del numero centrale (centerText)
  * basato su innerRadius e dimensione del widget, eliminando il testo sovradimensionato nei grafici piccoli.
+ * FIX GUARDIA CANVAS: Spostato il controllo isPie in cima ad afterDatasetsDraw prima di ctx.save() per eliminare overhead.
  */
 
 const AdvancedTableCharts = {
@@ -39,11 +40,13 @@ const AdvancedTableCharts = {
             id: 'customDataLabels',
             afterDatasetsDraw(chart, args, pluginOptions) {
                 if (!pluginOptions || !pluginOptions.display) return;
+                
+                // GUARDIA PREVENTIVA: Se il tipo non è torta o ciambella, esci subito prima di alterare il canvas
+                const isPie = chart.config && (chart.config.type === 'doughnut' || chart.config.type === 'pie');
+                if (!isPie) return; 
+
                 const { ctx, data } = chart;
                 ctx.save();
-                
-                const isPie = chart.config.type === 'doughnut' || chart.config.type === 'pie';
-                if (!isPie) { ctx.restore(); return; } 
                 
                 const textColor = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || '#666';
                 const accentColor = getComputedStyle(document.body).getPropertyValue('--border-color').trim() || '#ccc';
@@ -116,7 +119,7 @@ const AdvancedTableCharts = {
         return {
             id: 'centerText',
             beforeDraw(chart, args, pluginOptions) {
-                if (chart.config.type !== 'doughnut' || !pluginOptions || !pluginOptions.display) return;
+                if (!chart.config || chart.config.type !== 'doughnut' || !pluginOptions || !pluginOptions.display) return;
                 
                 const { ctx, data, chartArea } = chart;
                 ctx.save();
@@ -272,10 +275,10 @@ const AdvancedTableCharts = {
             container.style.alignItems = 'center';
             container.style.overflowY = 'auto';
 
-            AdvancedTableCharts.instances[tableId] =[];
+            AdvancedTableCharts.instances[tableId] = [];
 
             let pieLabels = pivotRows.map(row => {
-                let parts =[];
+                let parts = [];
                 state.groupBy.forEach((g, idx) => {
                     let val = row.virtualCells['grp_' + idx] || 'Nessuno';
                     parts.push(val.replace(/<[^>]*>?/gm, ''));
@@ -315,7 +318,7 @@ const AdvancedTableCharts = {
                     type: chartType,
                     data: {
                         labels: pieLabels,
-                        datasets:[{
+                        datasets: [{
                             data: dataValues,
                             backgroundColor: multiColors,
                             borderColor: bgColor,
@@ -366,12 +369,12 @@ const AdvancedTableCharts = {
         container.style.display = 'block';
         container.style.height = standardBarHeight;
 
-        let labels =[];
-        let datasets =[];
+        let labels = [];
+        let datasets = [];
 
         if (isStackedEngine) {
             const xLabelsRaw = pivotRows.map(r => r.virtualCells['grp_0'] || 'Senza Stato');
-            labels =[...new Set(xLabelsRaw)].map(l => l.replace(/<[^>]*>?/gm, '')); 
+            labels = [...new Set(xLabelsRaw)].map(l => l.replace(/<[^>]*>?/gm, '')); 
             
             const seriesNamesRaw = pivotRows.map(r => r.virtualCells['grp_1'] || 'Nessuno');
             const seriesNames = [...new Set(seriesNamesRaw)].map(l => l.replace(/<[^>]*>?/gm, ''));
@@ -406,7 +409,7 @@ const AdvancedTableCharts = {
 
         } else {
             labels = pivotRows.map(row => {
-                let parts =[];
+                let parts = [];
                 state.groupBy.forEach((g, idx) => {
                     let val = row.virtualCells['grp_' + idx] || 'Nessuno';
                     parts.push(val.replace(/<[^>]*>?/gm, ''));

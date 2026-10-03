@@ -2,9 +2,10 @@
  * editor-format-text.js
  * Sottomodulo di Editor.
  * Gestione formattazioni inline, Menu Stile, Font e la "Gomma Draconiana" (Deep Sanitization).
- * Tutela dell'infrastruttura Widget e dell'attributo 'start' degli elenchi numerati (OL).
+ * Tutela dell'infrastruttura Widget, dell'attributo 'start' degli elenchi numerati (OL) e di colspan/rowspan per le celle.
  * Inclusione classi e attributi per segnalibri e note commentate.
  * FEAT: toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
+ * FEAT STATEFUL LIST ICON: Aggiornamento contestuale dinamico dell'icona, del tooltip e dello stato active-format su btnListMenu.
  */
 
 Object.assign(Editor, {
@@ -69,6 +70,7 @@ Object.assign(Editor, {
         toggleBtn('btnFormatS', document.queryCommandState('strikeThrough'));
 
         let isH1 = false, isH2 = false, isQuote = false, isCustomFont = false;
+        let activeListType = null;
 
         const sel = window.getSelection();
         if (sel.rangeCount > 0) {
@@ -78,8 +80,8 @@ Object.assign(Editor, {
             const block = node.closest('h1, h2, h3, h4, h5, h6, ul, ol');
             if (block) {
                 const tag = block.tagName.toLowerCase();
-                if (tag === 'h2') isH1 = true;
-                if (tag === 'h3') isH2 = true;
+                if (tag === 'h1') isH1 = true;
+                if (tag === 'h2') isH2 = true;
             }
 
             // Verifica se il cursore si trova dentro un blockquote di formattazione testuale
@@ -90,12 +92,40 @@ Object.assign(Editor, {
 
             const span = node.closest('span[class*="ff-"], span[class*="fs-"]');
             if (span) isCustomFont = true;
+
+            // Rilevamento contestuale del tipo di elenco attivo
+            const checklist = node ? node.closest('ul.adv-checklist') : null;
+            const ol = node ? node.closest('ol') : null;
+            const ul = node ? node.closest('ul:not(.adv-checklist)') : null;
+
+            if (checklist) activeListType = 'checklist';
+            else if (ol) activeListType = (ol.getAttribute('type') === 'A' ? 'ol-a' : 'ol');
+            else if (ul) activeListType = 'ul';
         }
 
         toggleBtn('btnFormatH1', isH1);
         toggleBtn('btnFormatH2', isH2);
         toggleBtn('btnFormatQuote', isQuote);
         toggleBtn('btnFormatTMenu', isCustomFont);
+
+        // Aggiornamento visivo dell'icona, del tooltip e dello stato per lo Split-Button degli elenchi
+        const btnList = document.getElementById('btnListMenu');
+        if (btnList) {
+            const defaultListSvg = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>`;
+
+            if (activeListType) {
+                btnList.classList.add('active-format');
+                btnList.title = "Disattiva elenco (Riconverti in testo normale)";
+                if (activeListType === 'checklist') btnList.innerHTML = `<span style="display:inline-flex; align-items:center;">${Icons.checkSquare}</span>`;
+                else if (activeListType === 'ol-a') btnList.innerHTML = `<span style="font-size:14px; font-weight:bold; font-family:sans-serif;">A.</span>`;
+                else if (activeListType === 'ol') btnList.innerHTML = `<span style="font-size:14px; font-weight:bold; font-family:sans-serif;">1.</span>`;
+                else if (activeListType === 'ul') btnList.innerHTML = `<span style="font-size:18px; font-weight:bold; line-height:1;">•</span>`;
+            } else {
+                btnList.classList.remove('active-format');
+                btnList.title = I18n.t('toolbar.lists') || "Elenchi e Diario";
+                btnList.innerHTML = defaultListSvg;
+            }
+        }
     },
 
     toggleHeader: (tag) => {
@@ -546,6 +576,8 @@ Object.assign(Editor, {
                 if (attr.name === 'type' && ['UL', 'OL', 'INPUT'].includes(tag)) return;
                 // Preserva l'attributo semantico start degli elenchi numerati
                 if (attr.name === 'start' && tag === 'OL') return;
+                // Preserva i modificatori di fusione celle per th e td
+                if ((attr.name === 'colspan' || attr.name === 'rowspan') && (tag === 'TD' || tag === 'TH')) return;
                 if (attr.name === 'contenteditable') return;
                 if (attr.name === 'id' && isInternalWidget) return;
 

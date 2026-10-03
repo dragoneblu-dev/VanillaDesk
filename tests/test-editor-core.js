@@ -2,11 +2,11 @@
  * tests/test-editor-core.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: editor-core
- * Conteggio test case: 20
+ * Conteggio test case: 25
  * Generato automaticamente il: 2026-09-25 11:19:11
  */
 
-describe("Editor Core: Minificazione HTML, AST Sanitization & Boundaries (20 Test)", () => {
+describe("Editor Core: Minificazione HTML, AST Sanitization & Boundaries (25 Test)", () => {
 
     test("Minify: estirpazione marcatore cronologia temporaneo (#history-undo-marker-temp)", () => {
             const dirty = '<p>Testo valido</p><span id="history-undo-marker-temp"></span><p>Coda</p>';
@@ -210,5 +210,165 @@ describe("Editor Core: Minificazione HTML, AST Sanitization & Boundaries (20 Tes
             Assert.isFalse(w2.classList.contains('adv-widget-selected'));
             w1.remove(); w2.remove();
         });
+
+    test("RawHTML: openRawHtmlEditor apre il Drawer e popola la textarea col codice minificato", () => {
+        const noteId = 'note_test_raw_open';
+        const initialHtml = '<p>Paragrafo di test</p><h2>Titolo Sezione</h2>';
+
+        AppState.currentNoteId = noteId;
+        AppState.notes = [{
+            id: noteId,
+            title: 'Nota per Test HTML',
+            content: initialHtml,
+            updatedAt: '2026-10-01T10:00:00.000Z'
+        }];
+
+        const editorEl = document.getElementById('noteContent');
+        if (editorEl) editorEl.innerHTML = initialHtml;
+
+        Editor.openRawHtmlEditor();
+
+        const drawer = document.getElementById('advGlobalDrawer');
+        Assert.isTrue(drawer && drawer.classList.contains('open'), "Il drawer deve risultare aperto");
+
+        const textarea = document.getElementById('advRawHtmlTextarea');
+        Assert.isNotNull(textarea, "La textarea del codice sorgente deve essere presente nel DOM");
+        Assert.isTrue(textarea.value.includes('Paragrafo di test'), "Il testo del paragrafo deve essere presente nella textarea");
+        Assert.isTrue(textarea.value.includes('Titolo Sezione'), "Il titolo deve essere presente nella textarea");
+
+        UI.closeDrawer();
+    });
+
+    test("RawHTML: applyRawHtml aggiorna il contenuto della nota, imposta _isDirty e sincronizza il DOM", () => {
+        const noteId = 'note_test_raw_apply';
+        AppState.currentNoteId = noteId;
+        AppState.notes = [{
+            id: noteId,
+            title: 'Nota Modifica Codice',
+            content: '<p>Contenuto Vecchio</p>',
+            updatedAt: '2026-10-01T10:00:00.000Z',
+            _isDirty: false
+        }];
+
+        const editorEl = document.getElementById('noteContent');
+        if (editorEl) editorEl.innerHTML = '<p>Contenuto Vecchio</p>';
+
+        Editor.openRawHtmlEditor();
+
+        const textarea = document.getElementById('advRawHtmlTextarea');
+        Assert.isNotNull(textarea);
+        textarea.value = '<p>Contenuto Nuovo Aggiornato</p><h3>Sotto-titolo</h3>';
+
+        Editor.applyRawHtml();
+
+        const currentNote = Store.getNote(noteId);
+        Assert.isTrue(currentNote._isDirty, "La nota deve essere contrassegnata come dirty dopo la modifica");
+        Assert.isTrue(currentNote.content.includes('Contenuto Nuovo Aggiornato'), "Il contenuto della nota deve riflettere il nuovo HTML");
+        Assert.isTrue(editorEl.innerHTML.includes('Contenuto Nuovo Aggiornato'), "Il DOM dell'editor attivo deve essere aggiornato");
+
+        const drawer = document.getElementById('advGlobalDrawer');
+        Assert.isFalse(drawer && drawer.classList.contains('open'), "Il drawer deve chiudersi dopo l'applicazione");
+    });
+
+    test("RawHTML: applyRawHtml registra uno snapshot nello storico consentendo l'Undo (Ctrl+Z)", () => {
+        const noteId = 'note_test_raw_undo';
+        AppState.currentNoteId = noteId;
+        AppState.notes = [{
+            id: noteId,
+            title: 'Nota Undo HTML',
+            content: '<p>Versione Iniziale Sicura</p>',
+            updatedAt: '2026-10-01T10:00:00.000Z'
+        }];
+
+        const editorEl = document.getElementById('noteContent');
+        if (editorEl) editorEl.innerHTML = '<p>Versione Iniziale Sicura</p>';
+
+        Editor.clearHistory();
+
+        Editor.openRawHtmlEditor();
+        const textarea = document.getElementById('advRawHtmlTextarea');
+        textarea.value = '<p>Modifica Errata da Annullare</p>';
+
+        Editor.applyRawHtml();
+
+        Assert.isTrue(editorEl.innerHTML.includes('Modifica Errata da Annullare'));
+
+        // Esegue l'Undo
+        Editor.undo();
+
+        Assert.isTrue(editorEl.innerHTML.includes('Versione Iniziale Sicura'), "L'Undo deve ripristinare il markup precedente all'applicazione del sorgente grezzo");
+    });
+
+    test("RawHTML: applyRawHtml applica la minificazione preventiva ripulendo iframe e marcatori temporanei", () => {
+        const noteId = 'note_test_raw_clean';
+        AppState.currentNoteId = noteId;
+        AppState.notes = [{
+            id: noteId,
+            title: 'Test Pulizia',
+            content: '<p>Base</p>',
+            updatedAt: '2026-10-01T10:00:00.000Z'
+        }];
+
+        const editorEl = document.getElementById('noteContent');
+        if (editorEl) editorEl.innerHTML = '<p>Base</p>';
+
+        Editor.openRawHtmlEditor();
+        const textarea = document.getElementById('advRawHtmlTextarea');
+        
+        // Iniezione di HTML con iframe esterno non sanitizzato
+        textarea.value = '<p>Testo con frame</p><iframe src="https://example.com/embed"></iframe>';
+
+        Editor.applyRawHtml();
+
+        const currentNote = Store.getNote(noteId);
+        // Utilizzo dello spazio delimitatore prima di src= per evitare collisioni di sottostringa con data-src=
+        Assert.isFalse(currentNote.content.includes(' src="https://example.com/embed"'), "Iframe src deve essere minificato in data-src per prevenire chiamate di rete in background");
+        Assert.isTrue(currentNote.content.includes('data-src="https://example.com/embed"'), "Deve preservare data-src");
+    });
+
+    test("RawHTML: copyRawHtmlToClipboard scrive sulla clipboard senza generare eccezioni", () => {
+        const noteId = 'note_test_raw_copy';
+        AppState.currentNoteId = noteId;
+        AppState.notes = [{
+            id: noteId,
+            title: 'Nota per Copia',
+            content: '<p>Testo per Clipboard</p>',
+            updatedAt: '2026-10-01T10:00:00.000Z'
+        }];
+
+        // Sincronizzazione preventiva del DOM dell'editor attivo
+        const editorEl = document.getElementById('noteContent');
+        if (editorEl) editorEl.innerHTML = '<p>Testo per Clipboard</p>';
+
+        Editor.openRawHtmlEditor();
+
+        let clipboardWrittenText = null;
+        const origClipboardDescriptor = Object.getOwnPropertyDescriptor(navigator, 'clipboard');
+
+        // Mock sicuro tramite Object.defineProperty per scavalcare il getter read-only di navigator.clipboard
+        Object.defineProperty(navigator, 'clipboard', {
+            value: {
+                writeText: (txt) => {
+                    clipboardWrittenText = txt;
+                    return Promise.resolve();
+                }
+            },
+            configurable: true,
+            writable: true
+        });
+
+        try {
+            Editor.copyRawHtmlToClipboard();
+            Assert.isNotNull(clipboardWrittenText);
+            Assert.isTrue(clipboardWrittenText.includes('Testo per Clipboard'));
+        } finally {
+            if (origClipboardDescriptor) {
+                Object.defineProperty(navigator, 'clipboard', origClipboardDescriptor);
+            } else {
+                delete navigator.clipboard;
+            }
+            UI.closeDrawer();
+        }
+    });
 
 });

@@ -10,6 +10,9 @@
  * FEAT TREE VIEW: Routing automatico verso AdvancedTree.render quando viewType === 'tree'.
  * RESTORE ATTACH CELL EVENTS: Ripristinata integralmente la funzione attachCellEvents e il mouseover globale.
  * FIX LIVE REFRESH: Il pulsante refresh ora ricarica e sincronizza fedelmente i dati dal disco.
+ * FEAT AUTO-DRAWER LONG-TEXT: Andare a capo su un campo di testo apre automaticamente il drawer a tutta altezza
+ * posizionando il cursore all'inizio della nuova riga per una scrittura fluida.
+ * FIX SYNC VIRTUALCELLS: Assegna esplicitamente le virtualCells calcolate sull'oggetto riga di state.rows per propagare i dati a tutti i listener.
  */
 
 Object.assign(AdvancedTable, {
@@ -115,7 +118,11 @@ Object.assign(AdvancedTable, {
 
         let viewRows = [];
         const renderCache = {};
-        state.rows.forEach(r => viewRows.push(AdvancedTable.buildVirtualRow(tableId, r, state, renderCache)));
+        state.rows.forEach(r => {
+            const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+            r.virtualCells = vRow.virtualCells;
+            viewRows.push(vRow);
+        });
 
         // CHIAMATE AL MOTORE CENTRALE IN DATA.JS
         viewRows = AdvancedTable.filterRows(viewRows, state);
@@ -128,19 +135,18 @@ Object.assign(AdvancedTable, {
         let totalRows = viewRows.length;
         let totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 
-            if (currentPage > totalPages) currentPage = totalPages;
-            if (currentPage < 1) currentPage = 1;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
 
-            let startIdx = (currentPage - 1) * pageSize;
-            let endIdx = startIdx + pageSize;
+        let startIdx = (currentPage - 1) * pageSize;
+        let endIdx = startIdx + pageSize;
         let pagedRows = viewRows.slice(startIdx, endIdx);
-            state.currentPage = currentPage;
+        state.currentPage = currentPage;
 
         // --- GESTIONE LOGICA ICONE ATTIVE ---
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
         const hasSavedFilters = state.savedFilters && state.savedFilters.length > 0;
         const hasSort = state.sorts.length > 0;
-        const hasCalculatedFields = state.columns.some(c => c.type === 'formula' || c.type === 'relation' || c.type === 'relation_backlink' || c.type === 'rollup');
         const hasActiveAuto = state.automations && state.automations.some(a => a.active);
 
         const realTableId = AdvancedTable._resolveSourceId(tableId);
@@ -402,9 +408,29 @@ Object.assign(AdvancedTable, {
                 e.stopPropagation();
                 if (e.key === 'Enter') {
                     if (e.ctrlKey || e.metaKey || e.shiftKey) {
-                        // Ritorno a capo manuale all'interno della cella senza uscire dall'editing
+                        // ANDARE A CAPO SU CAMPO TESTO: Apre automaticamente il drawer a tutta altezza
+                        // inserendo il ritorno a capo e posizionando il cursore all'inizio della nuova riga.
                         e.preventDefault();
-                        document.execCommand('insertLineBreak');
+                        const rowId = el.getAttribute('data-row');
+                        const colId = el.getAttribute('data-col');
+                        if (!rowId || !colId) return;
+
+                        // Calcolo matematico dell'offset del cursore nella cella prima dell'invio
+                        let caretPos = 0;
+                        const sel = window.getSelection();
+                        if (sel.rangeCount > 0) {
+                            const range = sel.getRangeAt(0);
+                            const preRange = range.cloneRange();
+                            preRange.selectNodeContents(el);
+                            preRange.setEnd(range.startContainer, range.startOffset);
+                            caretPos = preRange.toString().length;
+                        }
+
+                        const curText = el.innerText || '';
+                        const newText = curText.substring(0, caretPos) + '\n' + curText.substring(caretPos);
+
+                        AdvancedTable.updateData(tableId, rowId, colId, newText);
+                        AdvancedTable.openLongTextModal(tableId, rowId, colId, caretPos + 1);
                     } else {
                         // Invio semplice: conferma la modifica togliendo il focus dalla cella
                         e.preventDefault();

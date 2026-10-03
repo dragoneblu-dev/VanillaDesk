@@ -22,6 +22,8 @@ Manual.registerSection(
         
         <li><b>Temi Visivi e Interfaccia:</b> Dal menu principale (☰) sotto la voce "Aspetto", puoi adattare l'editor alle tue preferenze visive. Oltre ai font (Serif, Mono, EasyReading per dislessia), puoi scegliere tra 5 combinazioni cromatiche globali: <i>Bianco Puro, Carta Avorio (Light), Fresco Pastello, Blu Lavagna (Dark) e Notte Stellata (Notion-Dark)</i>. Tutti i colori delle tabelle e dei grafici si adatteranno magicamente per garantire sempre il massimo contrasto.</li>
 
+        <li><b>Personalizzazione con Stili Utente (custom.css):</b> Nella cartella <code>css/</code> dell'applicazione è presente il file <code>custom.css</code>. Questo file risiede sull'installazione locale del browser e non all'interno del Workspace condiviso: ti permette di ridefinire liberamente variabili CSS, font, colori di accento o stili delle tabelle per adattarli alla tua postazione di lavoro senza alterare i dati degli altri colleghi. Le modifiche inserite in questo file hanno la priorità su tutti gli altri stili e si attivano ricaricando la pagina (<kbd>F5</kbd> o <kbd>Ctrl+F5</kbd>).</li>
+
         <li><b>Modelli (Templates):</b> Scrivi spesso lo stesso tipo di documento (es. Verbali o Schede)? Crea la struttura una volta, apri il menu delle opzioni della nota (⋮) in alto a destra e scegli <b>"Salva come Template Locale"</b>. La prossima volta che creerai una nota vuota, ti verrà proposto di applicarlo con un solo click.</li>
         
         <li><b>Impostazioni di Editazione:</b> Dal menu principale (☰), puoi attivare l'<b>Edit Continuo</b> (navigando da una nota all'altra, l'editor resterà in modalità scrittura) o disabilitare l'andata a capo automatica (<b>No Word Wrap</b>).</li>

@@ -11,6 +11,8 @@
  * FEAT WBS AUTO-EXPAND: L'aggiunta di un figlio o genitore espande automaticamente il ramo nell'albero WBS.
  * FIX CHECK CIRCULAR MULTI-RELATION: checkCircularRelation riceve colId e circoscrive la ricerca di cicli
  * esclusivamente alla catena semantica del campo in modifica, consentendo relazioni multiple distinte sullo stesso DB.
+ * FIX SCHEMA CIRCULAR ROLLUP: saveRollupConfig valida che la colonna target non sia un rollup circolare speculare verso questo campo.
+ * FEAT AUTO-CARET LONGTEXT: openLongTextModal accetta la posizione del cursore iniziale per atterrare esattamente dopo l'invio.
  */
 
 Object.assign(AdvancedTable, {
@@ -323,7 +325,7 @@ Object.assign(AdvancedTable, {
         // Delega al gestore universale dei widget per garantire l'uniformità del salvataggio e della minificazione
         if (typeof WidgetManager !== 'undefined' && typeof WidgetManager.moveWidgetToNote === 'function') {
             WidgetManager.moveWidgetToNote(tableId, targetNoteId);
-        AdvancedTable.closeDropdowns(true);
+            AdvancedTable.closeDropdowns(true);
         }
     },
 
@@ -547,7 +549,7 @@ Object.assign(AdvancedTable, {
                 const targetName = targetDb ? targetDb.title : 'DB';
                 const kind = c.type === 'relation_backlink' ? 'Backlink' : 'Relazione';
                 relOptionsHTML += `<option value="${c.id}">[${c.name}] ➔ verso '${targetName}' (${kind})</option>`;
-        });
+            });
             relOptionsHTML += `</optgroup>`;
         }
 
@@ -648,6 +650,30 @@ Object.assign(AdvancedTable, {
         let state = AdvancedTable.getState(realTableId);
         const col = state.columns.find(c => c.id === colId);
         if (!col) return;
+
+        // CONTROLLO DI SICUREZZA ANTI-CIRCOLARITÀ DIRETTA SCHEMA
+        let prospectiveTargetDbId = null;
+        if (relColVal.startsWith('INCOMING:')) {
+            prospectiveTargetDbId = relColVal.split(':')[1];
+        } else {
+            const localRel = (state.columns || []).find(c => c.id === relColVal);
+            prospectiveTargetDbId = localRel ? (localRel.targetTableId || localRel.linkedTableId) : null;
+        }
+
+        if (prospectiveTargetDbId) {
+            const targetState = AdvancedTable.getTableState(prospectiveTargetDbId);
+            const targetCol = targetState ? (targetState.columns || []).find(c => c.id === targetColId) : null;
+
+            // Se la colonna selezionata nel database bersaglio è a sua volta un Rollup che punta inversamente a questo campo
+            if (targetCol && targetCol.type === 'rollup') {
+                const targetRelVal = String(targetCol.relationColId || '');
+                const targetPointsBackToThisDb = (targetCol.targetTableId === realTableId) || targetRelVal.includes(realTableId);
+                if (targetPointsBackToThisDb && targetCol.targetColId === colId) {
+                    alert(I18n.t('adv_actions.circular_rollup_blocked') || "Operazione bloccata: la colonna selezionata è a sua volta un Rollup che punta a questo campo (Dipendenza Circolare).");
+                    return;
+                }
+            }
+        }
 
         col.type = 'rollup';
         col.relationColId = relColVal;
@@ -987,7 +1013,7 @@ Object.assign(AdvancedTable, {
         }
     },
 
-    openLongTextModal: (tableId, rowId, colId) => {
+    openLongTextModal: (tableId, rowId, colId, initialCaretPos = null) => {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         const state = AdvancedTable.getState(realTableId);
         if (!state) return;
@@ -1026,7 +1052,13 @@ Object.assign(AdvancedTable, {
         
         setTimeout(() => {
             const input = document.getElementById('advLongTextInput');
-            if (input && !isComputed) input.focus();
+            if (input && !isComputed) {
+                input.focus();
+                if (initialCaretPos !== null) {
+                    const pos = Math.min(initialCaretPos, input.value.length);
+                    input.setSelectionRange(pos, pos);
+                }
+            }
         }, 50);
     },
 

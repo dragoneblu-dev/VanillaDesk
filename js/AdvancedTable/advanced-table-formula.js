@@ -44,9 +44,15 @@ Object.assign(AdvancedTable, {
         };
         
         const CERCA = (array, col_ric, val_ric, col_rit) => { 
-            if(!Array.isArray(array)) return ""; 
-            const res = array.find(r => typeof r === 'object' && r !== null ? r[col_ric] === val_ric : r === val_ric); 
-            return res ? (typeof res === 'object' ? res[col_rit] : res) : ""; 
+            if (!Array.isArray(array)) return ""; 
+            const match = (a, b) => {
+                if (Array.isArray(a) && Array.isArray(b)) return a.some(x => b.includes(x));
+                if (Array.isArray(a)) return a.includes(b);
+                if (Array.isArray(b)) return b.includes(a);
+                return a === b;
+            };
+            const res = array.find(r => typeof r === 'object' && r !== null ? match(r[col_ric], val_ric) : match(r, val_ric)); 
+            return res ? (typeof res === 'object' ? (res[col_rit] !== undefined ? res[col_rit] : "") : res) : ""; 
         };
         
         const CONTA = (array, colonna, valore) => { 

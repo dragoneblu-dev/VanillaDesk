@@ -173,7 +173,14 @@ dict: {
             confirm_hard_delete: "Eliminare DEFINITIVAMENTE questa nota e tutti i suoi dati? L'operazione non può essere annullata.",
             confirm_move_trash: "Spostare questa nota e tutte le sue sotto-note nel cestino?",
             toast_moved_trash: "Nota spostata nel cestino.",
-            breadcrumb_trash: "Cestino"
+            breadcrumb_trash: "Cestino",
+            menu_raw_html: "Modifica Sorgente HTML...",
+            raw_html_title: "Sorgente HTML Nota (Modalità Avanzata)",
+            raw_html_warning_title: "ATTENZIONE: Modifica Diretta Codice HTML",
+            raw_html_warning_desc: "Stai per modificare la struttura grezza della nota. Non alterare o eliminare gli attributi <code>id=\"adv_...\"</code> o <code>data-widget-type</code> dei componenti complessi (Database, Diari, Codice) per non corrompere i dati collegati.<br>In caso di errori, potrai comunque annullare l'operazione con Ctrl+Z.",
+            raw_html_copy_btn: "Copia Tutto per VS Code",
+            raw_html_apply_btn: "Applica e Reidrata Pagina",
+            raw_html_success_toast: "Codice HTML applicato e pagina reidratata con successo!"
         },
         format_blocks: {
             menu_insert_link: "Collegamento (Link)",
@@ -322,6 +329,15 @@ dict: {
             type_date: "Data (GG/MM/AAAA)",
             type_datetime: "Data e Ora",
             type_time: "Solo Ora",
+            date_format: "Formato Data",
+            date_format_eu: "Europeo (15/10/2026)",
+            date_format_iso: "ISO / Tecnico (2026-10-15)",
+            date_format_us: "Statunitense (10/15/2026)",
+            date_format_text: "Parlante Breve (15 Ott 2026)",
+            date_format_relative: "Relativo (Oggi, Ieri, Tra 3 gg)",
+            time_format: "Formato Orario",
+            time_format_24h: "24 Ore (14:30)",
+            time_format_12h: "12 Ore AM/PM (02:30 PM)",
             type_checkbox: "Checkbox",
             type_formula: "Formula (Javascript)",
             type_relation: "Relazione",
@@ -407,8 +423,8 @@ toolbar: {
     highlight_color: "Evidenziatore",
     text_color: "Colore Testo",
     typography: "Carattere e Dimensione",
-    h1: "Titolo Principale (H1)",
-    h2: "Titolo Secondario (H2)",
+    h1: "Titolo Principale (Ctrl+Shift+1 / Ctrl+Alt+1)",
+    h2: "Titolo Secondario (Ctrl+Shift+2 / Ctrl+Alt+2)",
     quote: "Citazione a Blocco / Riquadro (Quote)",
     lists: "Elenchi e Diario",
     insert: "Inserisci",
@@ -541,6 +557,7 @@ adv_actions: {
     btn_configure_title: "Configura Pulsante",
     btn_confirm_delete_block: "Eliminare questa azione?",
     table_already_in_note: "La tabella/dashboard è già in questa nota.",
+    circular_rollup_blocked: "Operazione bloccata: la colonna selezionata è a sua volta un Rollup che punta a questo campo (Dipendenza Circolare).",
     table_moved_success: "Spostamento in \"{noteTitle}\" completato con successo."
 },
 adv_automations: {
@@ -782,7 +799,8 @@ preferences: {
     drawer_dock_title: "Sposta il pannello a Destra/Sinistra",
     internal_note_badge: "Nota Interna (Workspace)",
     note_prefix: "Note:",
-    path_prefix: "Percorso:"
+    path_prefix: "Percorso:",
+    reload_prompt_lang: "Per completare il cambio della lingua è necessario ricaricare la pagina (F5).\n\nVuoi ricaricare la pagina adesso?"
 },
 adv_cond_colors: {
     panel_title: "🎨 Colorazione Condizionale",
@@ -1028,7 +1046,7 @@ audio: {
         onboarding: {
             title: "Il tuo Secondo Cervello.<br>Ora con i superpoteri.",
             author: "Realizzato da dragoneblu@gmail.com",
-            desc: "Non il solito blocco note. Scrivi liberamente, ed organizza con la mente di uno sviluppatore: trasforma le tue idee in <b>database relazionali</b>, <b>diagrammi di Gantt</b>, bacheche Kanban e grafici interattivi.<br><br>Imposta le tue automazioni e goditi un workspace che gira alla velocità della luce. Zero cloud, zero abbonamenti: <b>tutto resta al sicuro, solo sul tuo computer.</b>",
+            desc: "Non il solito blocco note. Scrivi liberamente, ed organizza con la mente di uno sviluppatore: trasforma le tue idee in <b>database relazionali</b>, <b>diagrammi di Gantt</b>, bacheche Kanban, grafici interattivi e molto altro.<br><br>Imposta le tue automazioni e goditi un workspace che gira alla velocità della luce. Zero cloud, zero abbonamenti: <b>tutto resta al sicuro, solo sul tuo computer.</b>",
             btn_recover: "Recupera Sessione Precedente"
         },
         home_dashboard: {
@@ -1285,7 +1303,14 @@ audio: {
             confirm_hard_delete: "PERMANENTLY delete this note and all its data? This operation cannot be undone.",
             confirm_move_trash: "Move this note and all its sub-notes to the trash?",
             toast_moved_trash: "Note moved to trash.",
-            breadcrumb_trash: "Trash"
+            breadcrumb_trash: "Trash",
+            menu_raw_html: "Edit HTML Source...",
+            raw_html_title: "Note HTML Source (Advanced Mode)",
+            raw_html_warning_title: "WARNING: Direct HTML Code Editing",
+            raw_html_warning_desc: "You are about to edit the raw structure of the note. Do not modify or delete the <code>id=\"adv_...\"</code> or <code>data-widget-type</code> attributes of complex components (Databases, Journals, Code) to avoid corrupting linked data.<br>In case of errors, you can always undo the action with Ctrl+Z.",
+            raw_html_copy_btn: "Copy All for VS Code",
+            raw_html_apply_btn: "Apply and Rehydrate Page",
+            raw_html_success_toast: "HTML code applied and page successfully rehydrated!"
         },
         format_blocks: {
             menu_insert_link: "Link / Hyperlink",
@@ -1434,6 +1459,15 @@ audio: {
             type_date: "Date (DD/MM/YYYY)",
             type_datetime: "Date & Time",
             type_time: "Time Only",
+            date_format: "Date Format",
+            date_format_eu: "European (15/10/2026)",
+            date_format_iso: "ISO / Technical (2026-10-15)",
+            date_format_us: "US (10/15/2026)",
+            date_format_text: "Short Text (15 Oct 2026)",
+            date_format_relative: "Relative (Today, Yesterday, In 3 days)",
+            time_format: "Time Format",
+            time_format_24h: "24-Hour (14:30)",
+            time_format_12h: "12-Hour AM/PM (02:30 PM)",
             type_checkbox: "Checkbox",
             type_formula: "Formula (Javascript)",
             type_relation: "Relation",
@@ -1519,8 +1553,8 @@ toolbar: {
     highlight_color: "Highlighter",
     text_color: "Text Color",
     typography: "Font & Size",
-    h1: "Heading 1 (H1)",
-    h2: "Heading 2 (H2)",
+    h1: "Heading 1 (Ctrl+Shift+1 / Ctrl+Alt+1)",
+    h2: "Heading 2 (Ctrl+Shift+2 / Ctrl+Alt+2)",
     quote: "Blockquote / Callout",
     lists: "Lists & Journal",
     insert: "Insert",
@@ -1653,6 +1687,7 @@ adv_actions: {
     btn_configure_title: "Configure Button",
     btn_confirm_delete_block: "Delete this action?",
     table_already_in_note: "The table/dashboard is already in this note.",
+    circular_rollup_blocked: "Operation blocked: the selected column is itself a Rollup that points to this field (Circular Dependency).",
     table_moved_success: "Moved to \"{noteTitle}\" successfully."
 },
 adv_automations: {
@@ -1895,7 +1930,8 @@ preferences: {
     drawer_dock_title: "Dock panel to Right/Left",
     internal_note_badge: "Internal Note (Workspace)",
     note_prefix: "Notes:",
-    path_prefix: "Path:"
+    path_prefix: "Path:",
+    reload_prompt_lang: "To complete the language change, the page needs to be reloaded (F5).\n\nDo you want to reload the page now?"
 },
 adv_cond_colors: {
     panel_title: "🎨 Conditional Coloring",
@@ -2397,7 +2433,14 @@ audio: {
             confirm_hard_delete: "¿Eliminar DEFINITIVAMENTE esta nota y todos sus datos? Esta acción no se puede deshacer.",
             confirm_move_trash: "¿Mover esta nota y todas sus subnotas a la papelera?",
             toast_moved_trash: "Nota movida a la papelera.",
-            breadcrumb_trash: "Papelera"
+            breadcrumb_trash: "Papelera",
+            menu_raw_html: "Editar código fuente HTML...",
+            raw_html_title: "Código fuente HTML de la nota (Modo avanzado)",
+            raw_html_warning_title: "ADVERTENCIA: Edición directa de código HTML",
+            raw_html_warning_desc: "Estás a punto de modificar la estructura sin procesar de la nota. No alteres ni elimines los atributos <code>id=\"adv_...\"</code> o <code>data-widget-type</code> de los componentes complejos (Bases de datos, Diarios, Código) para no corromper los datos vinculados.<br>En caso de error, siempre puedes deshacer la acción con Ctrl+Z.",
+            raw_html_copy_btn: "Copiar todo para VS Code",
+            raw_html_apply_btn: "Aplicar y rehidratar página",
+            raw_html_success_toast: "¡Código HTML aplicado y página rehidratada con éxito!"
         },
         format_blocks: {
             menu_insert_link: "Enlace (Link)",
@@ -2546,6 +2589,15 @@ audio: {
             type_date: "Fecha",
             type_datetime: "Fecha y Hora",
             type_time: "Solo Hora",
+            date_format: "Formato de fecha",
+            date_format_eu: "Europeo (15/10/2026)",
+            date_format_iso: "ISO / Técnico (2026-10-15)",
+            date_format_us: "Estadounidense (10/15/2026)",
+            date_format_text: "Texto breve (15 oct 2026)",
+            date_format_relative: "Relativo (Hoy, Ayer, En 3 días)",
+            time_format: "Formato de hora",
+            time_format_24h: "24 horas (14:30)",
+            time_format_12h: "12 horas a. m./p. m. (02:30 p. m.)",
             type_checkbox: "Checkbox",
             type_formula: "Fórmula",
             type_relation: "Relación",
@@ -2631,8 +2683,8 @@ toolbar: {
     highlight_color: "Resaltador",
     text_color: "Color del Texto",
     typography: "Tipografía y Tamaño",
-    h1: "Título Principal (H1)",
-    h2: "Título Secundario (H2)",
+    h1: "Título Principal (Ctrl+Shift+1 / Ctrl+Alt+1)",
+    h2: "Título Secundario (Ctrl+Shift+2 / Ctrl+Alt+2)",
     quote: "Cita en Bloque (Quote)",
     lists: "Listas y Registro",
     insert: "Insertar",
@@ -2765,6 +2817,7 @@ adv_actions: {
     btn_configure_title: "Configurar Botón",
     btn_confirm_delete_block: "¿Eliminar esta acción?",
     table_already_in_note: "La tabla/panel ya se encuentra en esta nota.",
+    circular_rollup_blocked: "Operación bloqueada: la columna seleccionada es a su vez un Rollup que apunta a este campo (Dependencia Circular).",
     table_moved_success: "Traslado a \"{noteTitle}\" completado con éxito."
 },
 adv_automations: {
@@ -3007,7 +3060,8 @@ preferences: {
     drawer_dock_title: "Mover panel a Derecha/Izquierda",
     internal_note_badge: "Nota Interna (Espacio de Trabajo)",
     note_prefix: "Notas:",
-    path_prefix: "Ruta:"
+    path_prefix: "Ruta:",
+    reload_prompt_lang: "Para completar el cambio de idioma es necesario recargar la página (F5).\n\n¿Quieres recargar la página ahora?"
 },
 adv_cond_colors: {
     panel_title: "🎨 Coloración Condicional",
@@ -3509,7 +3563,14 @@ audio: {
             confirm_hard_delete: "Diese Notiz und alle Daten DAUERHAFT löschen? Dies kann nicht rückgängig gemacht werden.",
             confirm_move_trash: "Diese Notiz und alle Unter-Notizen in den Papierkorb verschieben?",
             toast_moved_trash: "Notiz in den Papierkorb verschoben.",
-            breadcrumb_trash: "Papierkorb"
+            breadcrumb_trash: "Papierkorb",
+            menu_raw_html: "HTML-Quellcode bearbeiten...",
+            raw_html_title: "Notiz-HTML-Quellcode (Erweiterter Modus)",
+            raw_html_warning_title: "WARNUNG: Direkte Bearbeitung des HTML-Codes",
+            raw_html_warning_desc: "Sie sind dabei, die Rohstruktur der Notiz zu bearbeiten. Ändern oder löschen Sie nicht die Attribute <code>id=\"adv_...\"</code> oder <code>data-widget-type</code> komplexer Komponenten (Datenbanken, Tagebücher, Code), um eine Beschädigung der verknüpften Daten zu vermeiden.<br>Bei Fehlern können Sie den Vorgang jederzeit mit Strg+Z rückgängig machen.",
+            raw_html_copy_btn: "Alles für VS Code kopieren",
+            raw_html_apply_btn: "Anwenden und Seite rehydrieren",
+            raw_html_success_toast: "HTML-Code erfolgreich angewendet und Seite rehydriert!"
         },
         format_blocks: {
             menu_insert_link: "Link / Hyperlink",
@@ -3658,6 +3719,15 @@ audio: {
             type_date: "Datum",
             type_datetime: "Datum & Zeit",
             type_time: "Nur Zeit",
+            date_format: "Datumsformat",
+            date_format_eu: "Europäisch (15.10.2026)",
+            date_format_iso: "ISO / Technisch (2026-10-15)",
+            date_format_us: "US-Format (10/15/2026)",
+            date_format_text: "Kurztext (15. Okt. 2026)",
+            date_format_relative: "Relativ (Heute, Gestern, In 3 Tagen)",
+            time_format: "Zeitformat",
+            time_format_24h: "24-Stunden (14:30)",
+            time_format_12h: "12-Stunden AM/PM (02:30 PM)",
             type_checkbox: "Kontrollkästchen",
             type_formula: "Formel",
             type_relation: "Beziehung",
@@ -3743,8 +3813,8 @@ toolbar: {
     highlight_color: "Textmarker",
     text_color: "Textfarbe",
     typography: "Schriftart & Größe",
-    h1: "Hauptüberschrift (H1)",
-    h2: "Unterüberschrift (H2)",
+    h1: "Hauptüberschrift (Ctrl+Shift+1 / Ctrl+Alt+1)",
+    h2: "Unterüberschrift (Ctrl+Shift+2 / Ctrl+Alt+2)",
     quote: "Blockzitat / Infobox",
     lists: "Listen & Tagebuch",
     insert: "Einfügen",
@@ -3877,6 +3947,7 @@ adv_actions: {
     btn_configure_title: "Schaltfläche konfigurieren",
     btn_confirm_delete_block: "Diesen Aktionsblock löschen?",
     table_already_in_note: "Die Tabelle/das Dashboard befindet sich bereits in dieser Notiz.",
+    circular_rollup_blocked: "Vorgang blockiert: Die ausgewählte Spalte ist ihrerseits ein Rollup, das auf dieses Feld verweist (Zirkuläre Abhängigkeit).",
     table_moved_success: "Erfolgreich nach \"{noteTitle}\" verschoben."
 },
 adv_automations: {
@@ -4120,7 +4191,8 @@ preferences: {
     drawer_dock_title: "Panel nach Rechts/Links verschieben",
     internal_note_badge: "Interne Notiz (Arbeitsbereich)",
     note_prefix: "Notizen:",
-    path_prefix: "Pfad:"
+    path_prefix: "Pfad:",
+    reload_prompt_lang: "Um den Sprachwechsel abzuschließen, muss die Seite neu geladen werden (F5).\n\nMöchten Sie die Seite jetzt neu laden?"
 },
 adv_cond_colors: {
     panel_title: "🎨 Bedingte Farbformatierung",
@@ -4501,10 +4573,11 @@ audio: {
 
     setLanguage: (langCode) => {
         if (!I18n.supportedLangs.includes(langCode)) return;
+        const isChanged = I18n.currentLang !== langCode;
         I18n.currentLang = langCode;
         localStorage.setItem('pronotes_lang', langCode);
 
-        // Aggiorna l'interfaccia a video senza ricaricare la pagina
+        // Aggiorna lo stato dei componenti dinamici
         if (typeof UI !== 'undefined') {
             if (typeof UI.updateFileName === 'function' && AppState.fileName) {
                 UI.updateFileName(AppState.fileName);
@@ -4517,8 +4590,13 @@ audio: {
             } else if (typeof UI.showEditor === 'function') {
                 UI.showEditor(false);
             }
-            if (typeof UI.showToast === 'function') {
-                UI.showToast(I18n.t('common.success'), 'info');
+        }
+
+        // Avviso nativo del browser: informa dell'F5 e propone il ricaricamento immediato
+        if (isChanged) {
+            const reloadMsg = I18n.t('preferences.reload_prompt_lang') || "Per completare il cambio della lingua è necessario ricaricare la pagina (F5).\n\nVuoi ricaricare la pagina adesso?";
+            if (confirm(reloadMsg)) {
+                location.reload();
             }
         }
     },

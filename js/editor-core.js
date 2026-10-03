@@ -13,6 +13,7 @@
  * FEAT HEAL FONT ARTIFACTS: Rimozione chirurgica degli span parassiti con style="font-size: ..." generati da WebKit su unione blocchi.
  * PROCEDURA UNICA SANITIZZAZIONE: Motore centralizzato per note inline e segnalibri limitato alle sole 4 opzioni permesse (Bold, Italic, Underline, Bullet).
  * FEAT BROKEN IMAGES: Generazione di un segnaposto visivo vettoriale chiaro ed evidente per immagini rimosse dal disco o non trovate.
+ * FEAT RAW HTML SOURCE EDITOR: Editor a tutto schermo del codice sorgente liofilizzato per modifiche massive esterne (Ctrl+Shift+E).
  */
 
 const Editor = {
@@ -287,7 +288,7 @@ const Editor = {
     _ensureLastLineBreak: (editorEl) => {
         if (!editorEl) return;
         const lastChild = editorEl.lastElementChild;
-        if (lastChild && WidgetManager.isProtectedBlock(lastChild)) {
+        if (lastChild && (WidgetManager.isProtectedBlock(lastChild) || ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE'].includes(lastChild.tagName))) {
             const p = document.createElement('p');
             p.innerHTML = '<br>';
             editorEl.appendChild(p);
@@ -942,6 +943,116 @@ const Editor = {
                 }
             }
             editor.normalize();
+        }
+    },
+
+    // =========================================================================
+    // MODALITA' AVANZATA: MODIFICA DIRETTA CODICE SORGENTE HTML (LIOFILIZZATO)
+    // =========================================================================
+
+    openRawHtmlEditor: () => {
+        if (!AppState.currentNoteId) return;
+        const note = Store.getNote(AppState.currentNoteId);
+        if (!note || note.deletedAt) return;
+
+        if (typeof Editor.sanitizeContent === 'function') {
+            Editor.sanitizeContent();
+        }
+
+        const rawMinifiedHtml = Editor.getCleanHTML();
+
+        const safeTitle = (note.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
+
+        const bodyHTML = `
+            <div style="display:flex; flex-direction:column; gap:10px; height:100%;">
+                <div style="background: rgba(239, 68, 68, 0.08); border-left: 4px solid var(--danger-color); padding: 12px; border-radius: 4px; font-size: 0.85rem; line-height: 1.5;">
+                    <div style="color:var(--danger-color); font-weight:bold; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
+                        <span>${typeof Icons !== 'undefined' ? Icons.alertTriangle : '⚠️'}</span> ${I18n.t('notes_utils.raw_html_warning_title') || 'ATTENZIONE: Modifica Diretta Codice HTML'}
+                    </div>
+                    <div style="color:var(--text-secondary);">
+                        ${I18n.t('notes_utils.raw_html_warning_desc') || 'Stai modificando il markup sorgente liofilizzato della nota. Non alterare o cancellare gli attributi ID dei widget (es. adv_tbl_*, adv_code_*) per non corrompere i dati collegati.'}
+                    </div>
+                </div>
+
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:bold;">Sorgente HTML Minificato:</span>
+                    <button class="btn" style="padding:4px 8px; font-size:0.75rem;" onclick="Editor.copyRawHtmlToClipboard()">
+                        <span style="display:inline-flex; align-items:center; gap:4px;">${typeof Icons !== 'undefined' ? Icons.clipboard : '📋'} ${I18n.t('notes_utils.raw_html_copy_btn') || 'Copia per VS Code'}</span>
+                    </button>
+                </div>
+
+                <textarea id="advRawHtmlTextarea" class="modern-input" spellcheck="false" style="flex:1; width:100%; min-height:350px; font-family:'Menlo','Consolas','Monaco',monospace; font-size:0.85rem; line-height:1.5; padding:12px; background:var(--code-bg); color:var(--code-text); border:1px solid var(--border-color); border-radius:6px; resize:none; white-space:pre-wrap; box-sizing:border-box;">${UI.escapeHTML(rawMinifiedHtml)}</textarea>
+            </div>
+        `;
+
+        const footerHTML = `
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="Editor.applyRawHtml()">
+                <span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.checkCircle : '✓'} ${I18n.t('notes_utils.raw_html_apply_btn') || 'Applica e Reidrata Pagina'}</span>
+            </button>
+        `;
+
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.code : '</>'} ${I18n.t('notes_utils.raw_html_title') || 'Sorgente HTML: ' + safeTitle}</span>`, bodyHTML, footerHTML);
+
+        setTimeout(() => {
+            const ta = document.getElementById('advRawHtmlTextarea');
+            if (ta) ta.focus();
+        }, 50);
+    },
+
+    copyRawHtmlToClipboard: () => {
+        const ta = document.getElementById('advRawHtmlTextarea');
+        if (!ta) return;
+        navigator.clipboard.writeText(ta.value).then(() => {
+            if (typeof UI !== 'undefined' && UI.showToast) {
+                UI.showToast("Codice HTML copiato negli appunti! Incollalo in VS Code.", "success");
+            }
+        });
+    },
+
+    applyRawHtml: () => {
+        if (!AppState.currentNoteId) return;
+        const note = Store.getNote(AppState.currentNoteId);
+        if (!note || note.deletedAt) return;
+
+        const ta = document.getElementById('advRawHtmlTextarea');
+        if (!ta) return;
+
+        const newRawHtml = ta.value;
+
+        // Salva uno snapshot prima della mutazione: se l'utente sbaglia, potrà annullare con Ctrl+Z!
+        Editor.saveSnapshot();
+
+        const editorEl = document.getElementById('noteContent');
+        if (!editorEl) return;
+
+        // Minificazione preventiva per sicurezza
+        const minified = Editor.minifyHTMLForStorage(newRawHtml);
+        note.content = minified;
+        note.updatedAt = new Date().toISOString();
+        note._isDirty = true;
+
+        // Iniezione nel DOM dell'editor attivo
+        editorEl.innerHTML = minified;
+
+        // Reidratazione a catena di tutti i componenti e media
+        Editor.hydrateMedia(editorEl);
+        if (typeof WidgetManager !== 'undefined') {
+            WidgetManager.mountAll(editorEl);
+        }
+        if (typeof CitationManager !== 'undefined') {
+            CitationManager.renderLiveCitations();
+        }
+        UI.renderInlineFootnotes();
+        if (typeof TemplateManager !== 'undefined') {
+            TemplateManager.toggleEmptyOverlay();
+        }
+
+        Store.triggerAutoSave();
+        UI.closeDrawer();
+
+        if (typeof UI !== 'undefined' && UI.showToast) {
+            UI.showToast(I18n.t('notes_utils.raw_html_success_toast') || "Codice HTML applicato e pagina reidratata con successo!", "success");
         }
     }
 };

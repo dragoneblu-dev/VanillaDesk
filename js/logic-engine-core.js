@@ -8,6 +8,8 @@
  * FIX INSERT_SELECT: Supporto per la lettura corretta dei valori delle celle sorgente tramite _rawRow.
  * FIX ARRAY CONTAINS: Esteso l'operatore 'contains' e 'not_contains' sulle colonne multi-select e relation
  * per verificare la presenza di sottostringhe tra gli elementi dell'array.
+ * FIX UNIFIED ACCESSOR (CELLS VS VIRTUALCELLS): Accesso unificato ai dati della riga con risoluzione prioritaria
+ * da virtualCells per evitare dati undefined su formule, rollup e timestamp nelle valutazioni condizionali.
  */
 
 // UTILITY GLOBALE PER XSS (Scudo Iniezioni HTML)
@@ -19,6 +21,18 @@ if (typeof UI !== 'undefined' && !UI.escapeHTML) {
 }
 
 const LogicEngine = {
+    // Helper universale per estrarre il valore effettivo di una colonna dalla riga
+    getRecordValue: (rowObj, colId) => {
+        if (!rowObj) return undefined;
+        if (rowObj.virtualCells && rowObj.virtualCells[colId] !== undefined) {
+            return rowObj.virtualCells[colId];
+        }
+        if (rowObj.cells && rowObj.cells[colId] !== undefined) {
+            return rowObj.cells[colId];
+        }
+        return undefined;
+    },
+
     // ==========================================
     // 1. MOTORE VALUTAZIONE CONDIZIONI (WHERE)
     // ==========================================
@@ -44,16 +58,22 @@ const LogicEngine = {
 
         if (!colDef) return false;
 
-        let strVal = String(currentVal === undefined || currentVal === null ? '' : currentVal).trim().toLowerCase();
+        // Se currentVal è indefinito ma abbiamo il rowContext, risolviamo tramite l'accessor universale
+        let resolvedCurrentVal = currentVal;
+        if (resolvedCurrentVal === undefined && rowContext && colDef.id) {
+            resolvedCurrentVal = LogicEngine.getRecordValue(rowContext, colDef.id);
+        }
+
+        let strVal = String(resolvedCurrentVal === undefined || resolvedCurrentVal === null ? '' : resolvedCurrentVal).trim().toLowerCase();
         let oldStrVal = String(oldVal === undefined || oldVal === null ? '' : oldVal).trim().toLowerCase();
         let tgtValLower = String(targetVal === undefined || targetVal === null ? '' : targetVal).trim().toLowerCase();
 
         // Estrazione titolo pulito se stiamo valutando un collegamento a nota
         if (colDef.type === 'note_link') {
             let linkObj = null;
-            if (currentVal && typeof currentVal === 'object') linkObj = currentVal;
-            else if (currentVal && typeof currentVal === 'string') {
-                try { linkObj = JSON.parse(currentVal); } catch(e) { linkObj = { noteId: currentVal }; }
+            if (resolvedCurrentVal && typeof resolvedCurrentVal === 'object') linkObj = resolvedCurrentVal;
+            else if (resolvedCurrentVal && typeof resolvedCurrentVal === 'string') {
+                try { linkObj = JSON.parse(resolvedCurrentVal); } catch(e) { linkObj = { noteId: resolvedCurrentVal }; }
             }
             if (linkObj && linkObj.noteId) {
                 const note = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
@@ -76,7 +96,7 @@ const LogicEngine = {
         }
 
         if (['number', 'formula', 'rollup'].includes(colDef.type)) {
-            const cNum = parseFloat(currentVal);
+            const cNum = parseFloat(resolvedCurrentVal);
             const tNum = parseFloat(targetVal);
             const oNum = parseFloat(oldVal);
 
@@ -98,13 +118,13 @@ const LogicEngine = {
             let cellStart = null;
             let cellEnd = null;
 
-            if (colDef.type === 'created_time') cellStart = new Date(currentVal).getTime();
-            else if (colDef.type === 'last_edited_time') cellStart = new Date(currentVal).getTime();
-            else if (typeof currentVal === 'object' && currentVal !== null) {
-                cellStart = currentVal.start ? new Date(currentVal.start).getTime() : NaN;
-                cellEnd = currentVal.end ? new Date(currentVal.end).getTime() : NaN;
+            if (colDef.type === 'created_time') cellStart = new Date(resolvedCurrentVal).getTime();
+            else if (colDef.type === 'last_edited_time') cellStart = new Date(resolvedCurrentVal).getTime();
+            else if (typeof resolvedCurrentVal === 'object' && resolvedCurrentVal !== null) {
+                cellStart = resolvedCurrentVal.start ? new Date(resolvedCurrentVal.start).getTime() : NaN;
+                cellEnd = resolvedCurrentVal.end ? new Date(resolvedCurrentVal.end).getTime() : NaN;
             } else {
-                cellStart = new Date(currentVal).getTime();
+                cellStart = new Date(resolvedCurrentVal).getTime();
             }
 
             let oldStart = null;
@@ -162,7 +182,7 @@ const LogicEngine = {
         }
 
         if (['multi-select', 'relation'].includes(colDef.type)) {
-            let arr = Array.isArray(currentVal) ? currentVal : (currentVal ? [currentVal] : []);
+            let arr = Array.isArray(resolvedCurrentVal) ? resolvedCurrentVal : (resolvedCurrentVal ? [resolvedCurrentVal] : []);
             let oldArr = Array.isArray(oldVal) ? oldVal : (oldVal ? [oldVal] : []);
             
             let contains = arr.includes(targetVal) || arr.some(v => String(v).toLowerCase() === tgtValLower);
@@ -185,7 +205,7 @@ const LogicEngine = {
         }
 
         if (colDef.type === 'checkbox') {
-            let isChecked = currentVal === true || strVal === 'true' || strVal === 'sì';
+            let isChecked = resolvedCurrentVal === true || strVal === 'true' || strVal === 'sì';
             let wasChecked = oldVal === true || oldStrVal === 'true' || oldStrVal === 'sì';
             let targetBool = tgtValLower === 'true';
             
@@ -221,8 +241,9 @@ const LogicEngine = {
                 ? sourceRowOrOrigineContext._rawRow 
                 : sourceRowOrOrigineContext;
                 
-            if (rawSourceRow && rawSourceRow.cells && rawSourceRow.cells[val1] !== undefined) {
-                return rawSourceRow.cells[val1];
+            if (rawSourceRow) {
+                const resolvedVal = LogicEngine.getRecordValue(rawSourceRow, val1);
+                if (resolvedVal !== undefined) return resolvedVal;
             }
             if (sourceRowOrOrigineContext && sourceRowOrOrigineContext[val1] !== undefined) {
                 return sourceRowOrOrigineContext[val1];

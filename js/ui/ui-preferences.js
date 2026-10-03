@@ -348,8 +348,13 @@ Object.assign(UI, {
         const toolbar = document.getElementById('editorToolbar');
         const toggleBtn = document.getElementById('editToggleBtn');
         const editorWrapper = document.getElementById('editorWrapper');
+        const btnNoteOptions = document.getElementById('btnNoteOptions');
 
         if (!titleInput || !contentDiv || !toolbar || !toggleBtn) return;
+
+        if (btnNoteOptions) {
+            btnNoteOptions.style.display = AppState.isEditMode ? '' : 'none';
+        }
 
         if (typeof Editor !== 'undefined') Editor._ensureLastLineBreak(contentDiv);
 

@@ -8,6 +8,9 @@
  * con ripristino fedele del range, prevenendo il reset del cursore all'inizio della nota dopo Undo.
  * FIX DRAG & DROP UNDO: Parametro forcePush su saveSnapshot per bypassare il controllo di deduplicazione
  * durante le mutazioni asincrone da trascinamento testo, garantendo la creazione corretta del punto di ripristino.
+ * FIX UNDO RECORD NOTE RESURRECTION: Al ripristino di uno snapshot di Undo/Redo, le note collegate (record_note)
+ * che erano state messe nel cestino a seguito della cancellazione della riga vengono automaticamente de-archiviate
+ * (rimozione di deletedAt), eliminando il paradosso dei puntatori "Pagina Orfana".
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -344,6 +347,26 @@ Object.assign(Editor, {
                     const trueId = wrapper.id.split('_cited_')[0];
                     if (!AppState.databases) AppState.databases = {};
                     AppState.databases[trueId] = stateObj;
+
+                    // FIX TRANSAZIONALITÀ UNDO: Ri-attivazione automatica delle note collegate soft-deleted
+                    if (stateObj && Array.isArray(stateObj.columns) && Array.isArray(stateObj.rows)) {
+                        const recordNoteCols = stateObj.columns.filter(c => c.type === 'record_note');
+                        if (recordNoteCols.length > 0 && AppState.notes) {
+                            stateObj.rows.forEach(r => {
+                                if (!r.cells) return;
+                                recordNoteCols.forEach(c => {
+                                    const linkedNoteId = r.cells[c.id];
+                                    if (linkedNoteId) {
+                                        const noteObj = Store.getNote(linkedNoteId);
+                                        if (noteObj && noteObj.deletedAt) {
+                                            delete noteObj.deletedAt;
+                                            noteObj._isDirty = true;
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                    }
                 } catch(e) {}
                 wrapper.removeAttribute('data-b64-state');
             }

@@ -1,0 +1,83 @@
+/* =========================================================================
+   css/custom.css - Foglio di Stile Personalizzato Utente (Client-side)
+   =========================================================================
+   Questo file risiede sull'installazione locale dell'applicazione e NON
+   all'interno del Workspace (cartella condivisa/NAS). Permette a ogni utente
+   o postazione di personalizzare l'aspetto visivo senza toccare i dati comuni.
+
+   LINEE GUIDA PER SVILUPPATORI E INTELLIGENZE ARTIFICIALI:
+   1. Preferire SEMPRE la ridefinizione delle variabili CSS (:root o [data-theme])
+      rispetto a colori fissi con !important, per non rompere il contrasto
+      tra tema chiaro e scuro.
+   2. Le modifiche qui inserite hanno precedenza su tutti gli altri CSS.
+   3. Per visualizzare le modifiche salvate in questo file, ricaricare la pagina
+      con F5 o Ctrl+F5 per svuotare la cache degli stili del browser.
+   ========================================================================= */
+
+/* --- 1. PERSONALIZZAZIONE COLORI E VARIABILI DI SISTEMA --- */
+/*
+:root {
+    --accent-color: #2563eb;         /* Colore primario dell'applicazione * /
+    --accent-hover: #1d4ed8;         /* Hover sui pulsanti primari * /
+    --page-max-width: 900px;         /* Larghezza massima della pagina di lettura * /
+    --reading-font-size: 16px;       /* Dimensione base del testo dell'editor * /
+}
+*/
+
+/* --- 2. PERSONALIZZAZIONE INTESTAZIONI TABELLE SEMPLICI (HTML NATIVO) --- */
+/* Esempio: cambia stile e contrasto per i tag <th> delle tabelle standard */
+/*
+.editor-content table:not(.adv-table) th {
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    font-size: 0.8rem;
+}
+*/
+/*
+[data-theme="dark"] .editor-content p b {
+    color: #fcffa3;
+}
+
+[data-theme="dark"] .editor-content h1,
+[data-theme="dark"] .editor-content h2,
+[data-theme="dark"] .editor-content h3 {
+    color: #a3e0ff;
+}
+
+[data-theme="dark"] .editor-content th {
+    background-color: #122b12;
+}
+*/
+/* --- 3. PERSONALIZZAZIONE TABELLE DATABASE AVANZATE (RDBMS) --- */
+/* Esempio: personalizza l'aspetto dell'intestazione delle colonne dei database */
+/*
+.adv-table th {
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+*/
+
+/* --- 4. GESTIONE CONSAPEVOLE DEL TEMA SCURO (DARK MODE) --- */
+/*
+   Se si definiscono colori di sfondo personalizzati, specificare SEMPRE
+   anche la versione per i temi scuri per garantire la leggibilità del testo.
+*/
+/*
+[data-theme="dark"] .editor-content table:not(.adv-table) th,
+[data-theme="notion-dark"] .editor-content table:not(.adv-table) th {
+    color: var(--accent-color);
+}
+*/
+
+/* --- 5. PERSONALIZZAZIONE TITOLI E TIPOGRAFIA --- */
+/*
+.editor-content h1 {
+    letter-spacing: -0.02em;
+}
+
+.editor-content h2 {
+    border-bottom: 1px dashed var(--border-color);
+    padding-bottom: 4px;
+}
+*/

@@ -640,10 +640,11 @@ aside.collapsed {
     display: none !important;
 }
 
+/* --- SOMMARIO DINAMICO TOC NELL'ALBERO LATERALE (H1, H2, H3) --- */
 .toc-node {
     display: flex;
     align-items: center;
-    padding: 4px 8px;
+    padding: 3px 8px;
     cursor: pointer;
     color: var(--text-secondary);
     border-left: 1px solid transparent;
@@ -658,13 +659,21 @@ aside.collapsed {
 .toc-h1 {
     padding-left: 28px;
     font-size: 0.8rem;
-    font-weight: 500;
+    font-weight: 600;
 }
 
 .toc-h2 {
     padding-left: 40px;
     font-size: 0.75rem;
+    font-weight: 500;
     opacity: 0.85;
+}
+
+.toc-h3 {
+    padding-left: 52px;
+    font-size: 0.72rem;
+    font-weight: normal;
+    opacity: 0.75;
 }
 
 .toc-icon {

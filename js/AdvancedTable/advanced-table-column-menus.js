@@ -9,6 +9,18 @@
  * rollup o relazioni (uscenti o entranti) puntate a questa colonna prima di consentirne la cancellazione.
  * FIX CONVERSIONE RELAZIONE/ROLLUP: Richiesta di conferma preventiva su perdita dati prima dell'apertura
  * dei drawer di configurazione per evitare che le colonne rimangano in stato ibrido.
+ * FEAT SMART DATE PARSER: Conversione robusta da Testo a Data con rilevamento range (start/end),
+ * decodifica entità HTML (-&gt; ➔ ->), supporto separatori multipli, riconoscimento anno a 4 cifre (ISO vs EU/US),
+ * disambiguazione matematica giorno/mese (>12), risoluzione ambiguità basata sulla lingua (en vs it/es/de)
+ * e composizione deterministica indipendente dal fuso orario.
+ * FIX DATE RANGE TO TEXT WITH ARROWS: Conversione coerente da range a testo con freccia direzionale esplicita
+ * per entrambe le date (s ➔ e), solo inizio (s ➔) o solo fine (➔ e).
+ * FIX RANGE SPLIT ISO DATE: Eliminata la falsa segmentazione delle date singole ISO (YYYY-MM-DD)
+ * che provocava l'impostazione errata della data di fine al 1° Gennaio.
+ * FEAT CASCADE FORMULA REFACTOR ON RENAME: Rinomina colonna sincronizza automaticamente tutte le formule
+ * dello stesso database e di tabelle collegate esterne, prevenendo errori e rottura delle query.
+ * FIX TYPEERROR S.COLUMNS.SOME: Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare
+ * crash su widget non tabellari presenti in AppState.databases (diari, codice, bottoni).
  */
 
 const AdvancedTableColumnMenus = {
@@ -503,7 +515,19 @@ const AdvancedTableColumnMenus = {
         if (!newName) return;
 
         let state = AdvancedTable.getState(tableId);
-        state.columns.find(c => c.id === colId).name = newName;
+        const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
+        const oldName = col.name;
+
+        if (oldName === newName) {
+            AdvancedTable.closeDropdowns(true);
+            return;
+        }
+
+        col.name = newName;
+
+        // AGGIORNAMENTO A CASCATA FORMULE (Stesso DB e Cross-DB)
+        AdvancedTable._updateColumnReferencesInFormulas(tableId, oldName, newName);
 
         AdvancedTable.setState(tableId, state);
         
@@ -575,10 +599,207 @@ const AdvancedTableColumnMenus = {
             }
         }
 
+        // =========================================================================
+        // HELPER DI PARSING DATE DETERMINISTICO (Timezone Independent & Entity Safe)
+        // =========================================================================
+        const parseSingleDatePart = (partStr, isDateTime) => {
+            if (!partStr || typeof partStr !== 'string') return null;
+            let str = partStr.trim();
+            if (!str) return null;
+
+            // 1. Estrazione componente orario se presente (HH:mm oppure HH:mm:ss)
+            let timeStr = '';
+            const timeMatch = str.match(/(?:[T\s])(\d{1,2}:\d{2}(?::\d{2})?)\s*$/i);
+            if (timeMatch) {
+                timeStr = timeMatch[1];
+                str = str.substring(0, timeMatch.index).trim();
+            }
+
+            // 2. Rilevamento timestamp numerico puro (millisecondi)
+            if (/^\d{11,}$/.test(str)) {
+                const tsNum = Number(str);
+                if (!isNaN(tsNum)) {
+                    const d = new Date(tsNum);
+                    if (!isNaN(d.getTime())) {
+                        const yyyy = String(d.getFullYear()).padStart(4, '0');
+                        const mm = String(d.getMonth() + 1).padStart(2, '0');
+                        const dd = String(d.getDate()).padStart(2, '0');
+                        const hh = String(d.getHours()).padStart(2, '0');
+                        const min = String(d.getMinutes()).padStart(2, '0');
+                        return isDateTime ? `${yyyy}-${mm}-${dd}T${hh}:${min}` : `${yyyy}-${mm}-${dd}`;
+                    }
+                }
+            }
+
+            // 3. Suddivisione componenti data tramite separatori standard (/, -, .)
+            const parts = str.split(/[\/\-\.]/).map(s => s.trim()).filter(Boolean);
+            if (parts.length === 3) {
+                let year = null, month = null, day = null;
+
+                // 3.2: Riconoscimento Anno a 4 cifre
+                if (parts[0].length === 4) {
+                    // Formato ISO: YYYY-MM-DD oppure YYYY/MM/DD oppure YYYY.MM.DD
+                    year = parseInt(parts[0], 10);
+                    month = parseInt(parts[1], 10);
+                    day = parseInt(parts[2], 10);
+                } else {
+                    // Anno in ultima posizione: DD/MM/YYYY oppure MM/DD/YYYY (supporto anche anno a 2 cifre)
+                    let yPart = parts[2];
+                    if (yPart.length === 2) {
+                        year = 2000 + parseInt(yPart, 10);
+                    } else if (yPart.length === 4) {
+                        year = parseInt(yPart, 10);
+                    }
+
+                    if (year !== null) {
+                        let valA = parseInt(parts[0], 10);
+                        let valB = parseInt(parts[1], 10);
+
+                        // 3.3: Disambiguazione Matematica Giorno/Mese (> 12)
+                        if (valA > 12 && valB <= 12) {
+                            day = valA;
+                            month = valB;
+                        } else if (valB > 12 && valA <= 12) {
+                            month = valA;
+                            day = valB;
+                        } else {
+                            // 3.4: Risoluzione Ambiguità quando entrambi sono <= 12 tramite lingua attiva (I18n)
+                            const isEn = typeof I18n !== 'undefined' && I18n.currentLang === 'en';
+                            if (isEn) {
+                                month = valA;
+                                day = valB;
+                            } else {
+                                day = valA;
+                                month = valB;
+                            }
+                        }
+                    }
+                }
+
+                if (year !== null && month !== null && day !== null && !isNaN(year) && !isNaN(month) && !isNaN(day)) {
+                    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+                        let hours = 0, minutes = 0;
+                        if (isDateTime && timeStr) {
+                            const tParts = timeStr.split(':');
+                            hours = parseInt(tParts[0], 10) || 0;
+                            minutes = parseInt(tParts[1], 10) || 0;
+                        }
+
+                        // Validazione del giorno effettivo per evitare date impossibili (es. 31 Febbraio)
+                        const testD = new Date(year, month - 1, day);
+                        if (!isNaN(testD.getTime()) && testD.getFullYear() === year && (testD.getMonth() + 1) === month && testD.getDate() === day) {
+                            const yyyy = String(year).padStart(4, '0');
+                            const mm = String(month).padStart(2, '0');
+                            const dd = String(day).padStart(2, '0');
+                            if (isDateTime) {
+                                const hh = String(hours).padStart(2, '0');
+                                const min = String(minutes).padStart(2, '0');
+                                return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+                            }
+                            return `${yyyy}-${mm}-${dd}`;
+                        }
+                    }
+                }
+            }
+
+            // Fallback con Date parser nativo per stringhe già conformi allo standard
+            const fallbackD = new Date(str + (timeStr ? (' ' + timeStr) : ''));
+            if (!isNaN(fallbackD.getTime())) {
+                const yyyy = String(fallbackD.getFullYear()).padStart(4, '0');
+                const mm = String(fallbackD.getMonth() + 1).padStart(2, '0');
+                const dd = String(fallbackD.getDate()).padStart(2, '0');
+                if (isDateTime) {
+                    const hh = String(fallbackD.getHours()).padStart(2, '0');
+                    const min = String(fallbackD.getMinutes()).padStart(2, '0');
+                    return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+                }
+                return `${yyyy}-${mm}-${dd}`;
+            }
+
+            return null;
+        };
+
+        const parseDateRangeString = (rawString, isDateTime) => {
+            if (!rawString || typeof rawString !== 'string') return null;
+            
+            // Decodifica preventiva delle entità HTML per evitare che '->' venga letto come '-&gt;'
+            let clean = rawString
+                .replace(/&gt;/gi, '>')
+                .replace(/&lt;/gi, '<')
+                .replace(/&amp;/gi, '&')
+                .replace(/^(?:dal|from|vom|del)\s+/i, '')
+                .trim();
+                
+            if (!clean) return null;
+
+            // Riconoscimento frecce esplicite (con supporto a freccia isolata a inizio/fine stringa)
+            const hasArrow = /➔|→|->|=>/.test(clean);
+            if (hasArrow) {
+                const parts = clean.split(/\s*(?:➔|→|->|=>)\s*/);
+                const rawStart = parts[0] ? parts[0].trim() : '';
+                const rawEnd = parts[1] ? parts[1].trim() : '';
+
+                const parsedStart = rawStart ? parseSingleDatePart(rawStart, isDateTime) : '';
+                const parsedEnd = rawEnd ? parseSingleDatePart(rawEnd, isDateTime) : '';
+
+                if (parsedStart && parsedEnd) {
+                    if (parsedStart > parsedEnd) {
+                        return { start: parsedEnd, end: parsedStart };
+                    }
+                    return { start: parsedStart, end: parsedEnd };
+                } else if (parsedStart) {
+                    return { start: parsedStart, end: '' }; // Freccia presente, termine fine aperto
+                } else if (parsedEnd) {
+                    return { start: '', end: parsedEnd }; // Freccia presente, inizio aperto
+                }
+                return null;
+            }
+
+            // Riconoscimento parole chiave per intervalli con spazi
+            const wordRangeRegex = /\s+(?:to|al|bis)\s+/i;
+            if (wordRangeRegex.test(clean)) {
+                const parts = clean.split(wordRangeRegex);
+                const parsedStart = parseSingleDatePart(parts[0], isDateTime);
+                const parsedEnd = parseSingleDatePart(parts[1], isDateTime);
+                if (parsedStart && parsedEnd) {
+                    if (parsedStart > parsedEnd) return { start: parsedEnd, end: parsedStart };
+                    return { start: parsedStart, end: parsedEnd };
+                } else if (parsedStart) {
+                    return { start: parsedStart, end: '' };
+                } else if (parsedEnd) {
+                    return { start: '', end: parsedEnd };
+                }
+            }
+
+            // Riconoscimento trattino come separatore di range SOLO se circondato da spazi (es: "01/01/2026 - 10/01/2026")
+            // oppure tra due date complete separate da slash/punto (es: "01/01/2026-10/01/2026")
+            const isRangeHyphen = /\s+-\s+/.test(clean) || /(?:[\/\.]\d{4})\-(?:\d{1,2}[\/\.])/.test(clean);
+            if (isRangeHyphen) {
+                const parts = clean.split(/\s+-\s+|(?<=[\/\.]\d{4})\-(?=\d{1,2}[\/\.])/);
+                if (parts.length >= 2) {
+                    const parsedStart = parseSingleDatePart(parts[0], isDateTime);
+                    const parsedEnd = parseSingleDatePart(parts[1], isDateTime);
+                    if (parsedStart && parsedEnd) {
+                        if (parsedStart > parsedEnd) return { start: parsedEnd, end: parsedStart };
+                        return { start: parsedStart, end: parsedEnd };
+                    } else if (parsedStart) {
+                        return { start: parsedStart, end: '' };
+                    } else if (parsedEnd) {
+                        return { start: '', end: parsedEnd };
+                    }
+                }
+            }
+
+            // Data singola pura (nessun range, preserva ISO senza spezzare anno-mese)
+            const single = parseSingleDatePart(clean, isDateTime);
+            return single ? single : null;
+        };
+
         // Pre-valutazione calcolo mappa valori in memoria
         const newSelectOptions = new Set();
         const pendingRowValues = new Map();
         const recordNoteIdsToDelete = [];
+        let hasAnyRange = false;
 
         state.rows.forEach(r => {
             let oldVal;
@@ -587,6 +808,10 @@ const AdvancedTableColumnMenus = {
             else oldVal = r.cells[colId];
 
             let newVal = '';
+
+            // Riconoscimento immediato di valori nulli, vuoti o oggetti range vuoti per prevenire [object Object]
+            const isNullOrEmpty = oldVal === undefined || oldVal === null || oldVal === '' || 
+                                  (typeof oldVal === 'object' && oldVal !== null && !oldVal.start && !oldVal.end);
 
             if (oldType === 'record_note') {
                 if (r.cells[colId]) {
@@ -597,19 +822,35 @@ const AdvancedTableColumnMenus = {
             }
             else if (newType === 'created_time' || newType === 'last_edited_time' || newType === 'formula' || newType === 'rollup' || newType === 'record_note' || newType === 'button' || newType === 'note_link') {
                 newVal = '';
-                if (oldVal !== undefined && oldVal !== null && oldVal !== '' && !(Array.isArray(oldVal) && oldVal.length === 0)) {
+                if (!isNullOrEmpty && !(Array.isArray(oldVal) && oldVal.length === 0)) {
                     hasDataLoss = true;
                 }
             }
-            else if (oldVal === undefined || oldVal === null || oldVal === '') {
-                newVal = newType === 'checkbox' ? false : (newType === 'multi-select' ?[] : '');
+            else if (isNullOrEmpty) {
+                newVal = newType === 'checkbox' ? false : (newType === 'multi-select' ? [] : '');
             }
             else {
                 let strVal = '';
-                if (Array.isArray(oldVal)) strVal = oldVal.join(', ');
-                else if (oldType === 'checkbox') strVal = oldVal ? "Sì" : "No";
-                else if (typeof oldVal === 'object' && oldVal.start) strVal = String(oldVal.start).trim();
-                else strVal = String(oldVal).trim();
+                if (Array.isArray(oldVal)) {
+                    strVal = oldVal.join(', ');
+                } else if (oldType === 'checkbox') {
+                    strVal = oldVal ? "Sì" : "No";
+                } else if (typeof oldVal === 'object') {
+                    // Conversione da Range a Testo: la freccia viene sempre inclusa per indicare inizio, fine o entrambi
+                    const s = oldVal.start ? String(oldVal.start).trim() : '';
+                    const e = oldVal.end ? String(oldVal.end).trim() : '';
+                    if (s && e) {
+                        strVal = `${s} ➔ ${e}`;
+                    } else if (s) {
+                        strVal = `${s} ➔`; // Solo inizio (termine aperto)
+                    } else if (e) {
+                        strVal = `➔ ${e}`; // Solo fine (termine iniziale aperto)
+                    } else {
+                        strVal = '';
+                    }
+                } else {
+                    strVal = String(oldVal).trim();
+                }
 
                 switch (newType) {
                     case 'text':
@@ -636,20 +877,26 @@ const AdvancedTableColumnMenus = {
                         break;
                     case 'date':
                     case 'datetime':
-                        let parsedDateStr = strVal;
-                        if (strVal.includes('/')) {
-                            const p = strVal.split(' ')[0].split('/');
-                            if (p.length === 3) {
-                                parsedDateStr = `${p[2]}-${p[1]}-${p[0]}`;
-                                if (strVal.includes(':')) {
-                                    parsedDateStr += 'T' + strVal.split(' ')[1];
-                                }
+                        const isDateTime = newType === 'datetime';
+                        let parsedDateResult = null;
+
+                        if (typeof oldVal === 'object' && oldVal !== null) {
+                            const pStart = parseSingleDatePart(String(oldVal.start || ''), isDateTime);
+                            const pEnd = parseSingleDatePart(String(oldVal.end || ''), isDateTime);
+                            if (pStart || pEnd) {
+                                parsedDateResult = { start: pStart || '', end: pEnd || '' };
                             }
+                        } else {
+                            parsedDateResult = parseDateRangeString(strVal, isDateTime);
                         }
 
-                        const d = new Date(parsedDateStr);
-                        if (!isNaN(d.getTime())) {
-                            newVal = newType === 'date' ? d.toISOString().split('T')[0] : d.toISOString().slice(0, 16);
+                        if (parsedDateResult) {
+                            if (typeof parsedDateResult === 'object') {
+                                hasAnyRange = true;
+                                newVal = parsedDateResult;
+                            } else {
+                                newVal = parsedDateResult;
+                            }
                         } else {
                             newVal = '';
                             if (strVal !== '') hasDataLoss = true;
@@ -690,6 +937,26 @@ const AdvancedTableColumnMenus = {
             });
         }
 
+        // Normalizzazione coerente di tutti i record se la colonna risultante supporta o meno la Data di Fine (hasEndDate)
+        if (newType === 'date' || newType === 'datetime') {
+            state.rows.forEach(r => {
+                let v = pendingRowValues.get(r.id);
+                if (hasAnyRange) {
+                    if (typeof v === 'object' && v !== null) {
+                        pendingRowValues.set(r.id, { start: v.start || '', end: v.end || '' });
+                    } else if (v) {
+                        pendingRowValues.set(r.id, { start: v, end: '' }); // Data singola in colonna range: end rimane rigorosamente vuota
+                    } else {
+                        pendingRowValues.set(r.id, { start: '', end: '' });
+                    }
+                } else {
+                    if (typeof v === 'object' && v !== null) {
+                        pendingRowValues.set(r.id, v.start || '');
+                    }
+                }
+            });
+        }
+
         // Applica i nuovi valori a tutte le righe
         state.rows.forEach(r => {
             if (pendingRowValues.has(r.id)) {
@@ -698,7 +965,13 @@ const AdvancedTableColumnMenus = {
         });
 
         col.type = newType;
-        if (col.hasEndDate) delete col.hasEndDate;
+
+        // Gestione coerente dell'attributo hasEndDate per date e intervalli
+        if (hasAnyRange && (newType === 'date' || newType === 'datetime')) {
+            col.hasEndDate = true;
+        } else if (col.hasEndDate) {
+            delete col.hasEndDate;
+        }
 
         if (oldType === 'relation' && newType !== 'relation') {
             if (col.showBacklink && col.backlinkColId) {
@@ -972,7 +1245,7 @@ const AdvancedTableColumnMenus = {
         } else {
             AdvancedTable.updateDependentViews(realTableId);
             if (AdvancedTable.activeRecordId) {
-                const activeTId = AdvancedTable.activeTableId || tableId;
+                const activeTId = AdvancedTable.activeTableId || realTableId;
                 AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
             }
         }
@@ -981,3 +1254,122 @@ const AdvancedTableColumnMenus = {
         AdvancedTable.closeDropdowns(true);
     }
 };
+
+// =========================================================================
+// MOTORE AGGIORNAMENTO FORMULE SU RINOMINA COLONNA (STESSO DB E CROSS-DB)
+// =========================================================================
+Object.assign(AdvancedTable, {
+    _updateColumnReferencesInFormulas: (tableId, oldName, newName) => {
+        if (!oldName || !newName || oldName === newName || !AppState.databases) return;
+
+        const escapeRegExp = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const escapedOld = escapeRegExp(oldName);
+        const escapedNew = newName.replace(/"/g, '\\"');
+
+        // Regex 1: Accesso alla proprietà tramite parentesi quadre (compatibilità cross-browser senza lookbehind variabile)
+        const bracketRegex = new RegExp(`\\b(riga|r|origine|row|item)\\s*\\[\\s*(["'])${escapedOld}\\2\\s*\\]`, 'g');
+        const bracketReplace = `$1["${escapedNew}"]`;
+
+        // Regex 2: Argomento testuale nelle funzioni helper: SOMMA(righe, "Col"), MEDIA(..., "Col"), CERCA(..., "Col", ...)
+        const helperRegex = new RegExp(`(\\b(?:SOMMA|MEDIA|CONTA|CERCA|UNISCI)\\s*\\([^)]*?)(["'])${escapedOld}\\2`, 'gi');
+
+        const updateStringFormula = (formulaStr) => {
+            if (!formulaStr || typeof formulaStr !== 'string') return formulaStr;
+            let updated = formulaStr.replace(bracketRegex, bracketReplace);
+            updated = updated.replace(helperRegex, `$1"${escapedNew}"`);
+            return updated;
+        };
+
+        const targetRealId = AdvancedTable._resolveSourceId(tableId);
+        const targetState = AppState.databases[targetRealId];
+        const targetTitle = targetState ? targetState.title : null;
+
+        Object.keys(AppState.databases).forEach(dbId => {
+            const s = AppState.databases[dbId];
+            if (!s) return;
+            let changed = false;
+
+            const isCurrentDb = (dbId === targetRealId);
+            
+            // Guardia difensiva rigorosa su Array.isArray(s.columns) per isolare widget non-tabellari (codice, diari, bottoni)
+            const referencesThisDb = Boolean(
+                targetTitle && 
+                Array.isArray(s.columns) && 
+                s.columns.some(c => 
+                    c.type === 'formula' && c.formula && 
+                    (c.formula.includes(`tabella["${targetTitle}"]`) || c.formula.includes(`tabella['${targetTitle}']`))
+                )
+            );
+
+            if (isCurrentDb || referencesThisDb) {
+                // 1. Colonne Formula
+                if (Array.isArray(s.columns)) {
+                    s.columns.forEach(c => {
+                        if (c.type === 'formula' && c.formula) {
+                            const newFormula = updateStringFormula(c.formula);
+                            if (newFormula !== c.formula) {
+                                c.formula = newFormula;
+                                changed = true;
+                            }
+                        }
+                    });
+                }
+
+                // 2. Automazioni
+                if (Array.isArray(s.automations)) {
+                    s.automations.forEach(auto => {
+                        if (Array.isArray(auto.triggers)) {
+                            auto.triggers.forEach(t => {
+                                if (t.colId === 'SYS_JS_FORMULA' && t.value) {
+                                    const newF = updateStringFormula(t.value);
+                                    if (newF !== t.value) { t.value = newF; changed = true; }
+                                }
+                            });
+                        }
+                        if (Array.isArray(auto.actions)) {
+                            auto.actions.forEach(a => {
+                                if (a.type && a.type.includes('formula') && a.value) {
+                                    const newF = updateStringFormula(a.value);
+                                    if (newF !== a.value) { a.value = newF; changed = true; }
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // 3. Colonne Pulsante Macro
+                if (Array.isArray(s.columns)) {
+                    s.columns.forEach(c => {
+                        if (c.type === 'button' && Array.isArray(c.actionBlocks)) {
+                            c.actionBlocks.forEach(blk => {
+                                if (Array.isArray(blk.filters)) {
+                                    blk.filters.forEach(f => {
+                                        if (f.colId === 'SYS_JS_FORMULA' && f.value) {
+                                            const newF = updateStringFormula(f.value);
+                                            if (newF !== f.value) { f.value = newF; changed = true; }
+                                        }
+                                    });
+                                }
+                                if (Array.isArray(blk.actions)) {
+                                    blk.actions.forEach(act => {
+                                        if (act.type && act.type.includes('formula') && act.value) {
+                                            const newF = updateStringFormula(act.value);
+                                            if (newF !== act.value) { act.value = newF; changed = true; }
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+
+                if (changed) {
+                    AdvancedTable.setState(dbId, s);
+                    if (dbId !== targetRealId) {
+                        AdvancedTable.updateDependentViews(dbId);
+                    }
+                }
+            }
+        });
+    }
+});

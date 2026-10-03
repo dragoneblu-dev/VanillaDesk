@@ -11,7 +11,7 @@ Object.assign(UI, {
         const scrollArea = document.querySelector('.editor-scroll-content');
         if (!editor || !scrollArea) return;
 
-        const headers = Array.from(editor.querySelectorAll('h2, h3'));
+        const headers = Array.from(editor.querySelectorAll('h1, h2, h3'));
         const tocNodes = document.querySelectorAll('.dynamic-toc-container .toc-node');
         
         if (headers.length === 0 || tocNodes.length === 0) return;

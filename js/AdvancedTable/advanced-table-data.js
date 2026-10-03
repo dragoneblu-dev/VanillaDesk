@@ -8,6 +8,8 @@
  * evitando fallimenti causati da parole chiave descrittive composite.
  * PERF & DOM SHIELD: Uscita immediata (early-exit) in updateData se il valore non è cambiato,
  * prevenendo la distruzione accidentale del DOM e consentendo il click singolo sui campi interattivi.
+ * PERF & DOM SHIELD UPDATE DATE RANGE: Estesa l'uscita immediata (early-exit) a updateDateRange per
+ * campi data con intervallo (hasEndDate), prevenendo ricalcoli, autosave e re-render inutili al semplice blur.
  * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano in modo intelligente su tutti i tipi:
  * - Numeri: confronto matematico.
  * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
@@ -16,6 +18,11 @@
  * FEAT INTERVAL ALGEBRA: Supporto completo e unificato per filtri su intervalli temporali e range con delimitatore ➔.
  * FEAT PAGINAZIONE: Opzioni scala bilanciata [10, 25, 50, 100, 200], default a 25 e clamp massimo a 200.
  * FEAT SYS_PROPERTIES PROPAGATION: Invocazione automatica di triggerFromPropertyChange quando viene mutato SYS_PROPERTIES_DB.
+ * FEAT CASCADE CLEANUP RELAZIONI: Eliminazione chirurgica dei puntatori orfani (Dangling Foreign Keys)
+ * in tutti i database collegati quando un record viene cancellato (deleteRecord o deleteSelectedRows).
+ * FIX SOFT-DELETE RECORD NOTE (UNDO-SAFE): deleteRecord e deleteSelectedRows eseguono Soft-Delete (deletedAt)
+ * sulle note collegate invece di Hard-Delete immediato, consentendo all'Undo (Ctrl+Z) di ripristinare la pagina senza orfani.
+ * FIX ATOMIC VIRTUALCELLS SYNC: updateData assegna esplicitamente row.virtualCells dal valore restituito da buildVirtualRow.
  */
 
 Object.assign(AdvancedTable, {
@@ -117,7 +124,6 @@ Object.assign(AdvancedTable, {
         if (!row) return;
 
         // Se il dato non è cambiato, non tocchiamo il DOM
-        // Questo impedisce la distruzione del nodo durante il mousedown/mouseup, consentendo il click singolo
         const isChanged = JSON.stringify(row.cells[colId]) !== JSON.stringify(value);
         if (!isChanged) {
             return;
@@ -127,6 +133,14 @@ Object.assign(AdvancedTable, {
         const oldValue = oldRowContext.cells[colId];
         row.cells[colId] = value;
         row.updatedAt = Date.now();
+
+        // Sincronizzazione atomica immediata su virtualCells tramite ricalcolo della riga virtuale
+        if (typeof AdvancedTable.buildVirtualRow === 'function') {
+            const freshVRow = AdvancedTable.buildVirtualRow(realTableId, row, state);
+            row.virtualCells = freshVRow.virtualCells;
+        } else if (row.virtualCells) {
+            row.virtualCells[colId] = value;
+        }
 
         AdvancedTable.setState(realTableId, state);
 
@@ -171,59 +185,74 @@ Object.assign(AdvancedTable, {
         if (!state || state.isPivot) return;
 
         const row = state.rows.find(r => r.id === rowId);
-        if (row) {
-            let current = row.cells[colId];
+        if (!row) return;
 
-            if (typeof current !== 'object' || current === null) {
-                current = { start: current || '', end: '' };
-            }
+        let current = row.cells[colId];
+        let dateObj = (typeof current === 'object' && current !== null)
+            ? { start: current.start || '', end: current.end || '' }
+            : { start: current || '', end: '' };
 
-            if (value) {
-                const newValMs = new Date(value).getTime();
-                if (!isNaN(newValMs)) {
-                    if (part === 'start' && current.end) {
-                        const endMs = new Date(current.end).getTime();
-                        if (!isNaN(endMs) && newValMs > endMs) {
-                            // Se l'utente avanza la data di inizio oltre la fine,
-                            // spingiamo silenziosamente la fine in avanti per mantenere la coerenza
-                            current.end = value; 
-                        }
-                    } else if (part === 'end' && current.start) {
-                        const startMs = new Date(current.start).getTime();
-                        if (!isNaN(startMs) && newValMs < startMs) {
-                            alert("⚠️ ATTENZIONE:\nLa Data di Fine non può essere antecedente alla Data di Inizio.\n\nIl valore è stato reimpostato automaticamente per coincidere con la data di Inizio.");
-                            
-                            // Sovrascriviamo l'input errato dell'utente con la data di inizio
-                            value = current.start; 
-                        }
+        let normalizedValue = value ? String(value).trim() : '';
+        let wasAdjusted = false;
+
+        if (normalizedValue) {
+            const newValMs = new Date(normalizedValue).getTime();
+            if (!isNaN(newValMs)) {
+                if (part === 'start' && dateObj.end) {
+                    const endMs = new Date(dateObj.end).getTime();
+                    if (!isNaN(endMs) && newValMs > endMs) {
+                        dateObj.end = normalizedValue;
+                        wasAdjusted = true;
                     }
-                }
-            }
-
-            let oldRowContext = JSON.parse(JSON.stringify(row));
-            const oldPartValue = current[part];
-            current[part] = value;
-
-            if (JSON.stringify(row.cells[colId]) !== JSON.stringify(current)) {
-                row.cells[colId] = current;
-                row.updatedAt = Date.now();
-
-                AdvancedTable.setState(realTableId, state);
-
-                if (typeof AdvancedAutomations !== 'undefined') {
-                    await AdvancedAutomations.evaluate(realTableId, rowId, false, oldRowContext);
-                    await AdvancedAutomations.triggerCrossDB(realTableId);
-
-                    if (realTableId === 'SYS_PROPERTIES_DB') {
-                        const noteId = row.cells['sys_c_note'];
-                        if (noteId && typeof AdvancedAutomations.triggerFromPropertyChange === 'function') {
-                            await AdvancedAutomations.triggerFromPropertyChange(noteId, colId, oldRowContext.cells[colId], current);
-                        }
+                } else if (part === 'end' && dateObj.start) {
+                    const startMs = new Date(dateObj.start).getTime();
+                    if (!isNaN(startMs) && newValMs < startMs) {
+                        alert("⚠️ ATTENZIONE:\nLa Data di Fine non può essere antecedente alla Data di Inizio.\n\nIl valore è stato reimpostato automaticamente per coincidere con la data di Inizio.");
+                        normalizedValue = dateObj.start;
+                        wasAdjusted = true;
                     }
                 }
             }
         }
-        
+
+        dateObj[part] = normalizedValue;
+
+        const isCurrentlyEmpty = !dateObj.start && !dateObj.end;
+        const wasPreviouslyEmpty = !current || (typeof current === 'object' ? (!current.start && !current.end) : !String(current).trim());
+        if (isCurrentlyEmpty && wasPreviouslyEmpty) {
+            return;
+        }
+
+        const isChanged = wasAdjusted || JSON.stringify(row.cells[colId]) !== JSON.stringify(dateObj);
+        if (!isChanged) {
+            return;
+        }
+
+        let oldRowContext = JSON.parse(JSON.stringify(row));
+        row.cells[colId] = dateObj;
+        row.updatedAt = Date.now();
+
+        if (typeof AdvancedTable.buildVirtualRow === 'function') {
+            const freshVRow = AdvancedTable.buildVirtualRow(realTableId, row, state);
+            row.virtualCells = freshVRow.virtualCells;
+        } else if (row.virtualCells) {
+            row.virtualCells[colId] = dateObj;
+        }
+
+        AdvancedTable.setState(realTableId, state);
+
+        if (typeof AdvancedAutomations !== 'undefined') {
+            await AdvancedAutomations.evaluate(realTableId, rowId, false, oldRowContext);
+            await AdvancedAutomations.triggerCrossDB(realTableId);
+
+            if (realTableId === 'SYS_PROPERTIES_DB') {
+                const noteId = row.cells['sys_c_note'];
+                if (noteId && typeof AdvancedAutomations.triggerFromPropertyChange === 'function') {
+                    await AdvancedAutomations.triggerFromPropertyChange(noteId, colId, oldRowContext.cells[colId], dateObj);
+                }
+            }
+        }
+
         state = AdvancedTable.getState(realTableId);
         AdvancedTable.setState(realTableId, state);
         AdvancedTable.updateDependentViews(realTableId);
@@ -234,8 +263,6 @@ Object.assign(AdvancedTable, {
         const drawer = document.getElementById('advGlobalDrawer');
         const drawerTitle = document.getElementById('advDrawerTitle');
         if (drawer && drawer.classList.contains('open') && drawerTitle && (drawerTitle.innerText.includes('Dettaglio Record') || drawerTitle.innerText.includes('Tag e Proprietà')) && AdvancedTable.activeRecordId === rowId) {
-            // Riapriamo la vista record per far sì che l'interfaccia si aggiorni
-            // forzatamente col valore corretto se l'utente aveva inserito quello sbagliato
             AdvancedTable.openRecordView(tableId, rowId);
         }
 
@@ -263,6 +290,8 @@ Object.assign(AdvancedTable, {
         });
         state.rows.push(newRow);
 
+        const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, state);
+        newRow.virtualCells = freshVRow.virtualCells;
         AdvancedTable.setState(realTableId, state);
 
         if (typeof AdvancedAutomations !== 'undefined') {
@@ -276,6 +305,50 @@ Object.assign(AdvancedTable, {
         Store.triggerAutoSave();
     },
 
+    _cascadeDeleteRecordReferences: (sourceDbId, deletedRowIdsSet) => {
+        if (!sourceDbId || !deletedRowIdsSet || deletedRowIdsSet.size === 0 || !AppState.databases) return;
+
+        Object.keys(AppState.databases).forEach(otherDbId => {
+            const otherState = AppState.databases[otherDbId];
+            if (!otherState || !Array.isArray(otherState.columns) || !Array.isArray(otherState.rows)) return;
+
+            const relCols = otherState.columns.filter(c => c.type === 'relation' && c.targetTableId === sourceDbId);
+            if (relCols.length === 0) return;
+
+            let dbChanged = false;
+
+            otherState.rows.forEach(r => {
+                if (!r || !r.cells) return;
+
+                relCols.forEach(col => {
+                    let val = r.cells[col.id];
+                    if (val === undefined || val === null || val === '') return;
+
+                    if (Array.isArray(val)) {
+                        const originalLen = val.length;
+                        const filtered = val.filter(id => !deletedRowIdsSet.has(id));
+                        if (filtered.length !== originalLen) {
+                            r.cells[col.id] = filtered;
+                            r.updatedAt = Date.now();
+                            dbChanged = true;
+                        }
+                    } else if (deletedRowIdsSet.has(val)) {
+                        r.cells[col.id] = '';
+                        r.updatedAt = Date.now();
+                        dbChanged = true;
+                    }
+                });
+            });
+
+            if (dbChanged) {
+                AdvancedTable.setState(otherDbId, otherState);
+                if (otherDbId !== sourceDbId) {
+                    AdvancedTable.updateDependentViews(otherDbId);
+                }
+            }
+        });
+    },
+
     deleteRecord: (tableId, rowId) => {
         if (!confirm("Sei sicuro di voler eliminare definitivamente questo record dal database? L'operazione non può essere annullata.")) return;
         
@@ -285,10 +358,17 @@ Object.assign(AdvancedTable, {
 
         const row = state.rows.find(r => r.id === rowId);
         if (row) {
-            // Pulizia ricorsiva delle Pagine Record collegate per non lasciare file orfani
+            // FIX TRANSAZIONALITÀ RECORD NOTE: Soft-Delete (Cestino) invece di Hard-Delete irreversibile.
+            const nowTime = Date.now();
             state.columns.filter(c => c.type === 'record_note').forEach(c => {
                 const noteId = row.cells[c.id];
-                if (noteId && typeof UI !== 'undefined' && UI.Trash) UI.Trash.forceHardDeleteRecursive(noteId);
+                if (noteId && typeof Store !== 'undefined') {
+                    const linkedNote = Store.getNote(noteId);
+                    if (linkedNote) {
+                        linkedNote.deletedAt = nowTime;
+                        linkedNote._isDirty = true;
+                    }
+                }
             });
         }
 
@@ -296,6 +376,9 @@ Object.assign(AdvancedTable, {
         if (state.selectedRows) {
             state.selectedRows = state.selectedRows.filter(id => id !== rowId);
         }
+
+        // Pulizia referenziale delle relazioni orfane in tutti i database
+        AdvancedTable._cascadeDeleteRecordReferences(realTableId, new Set([rowId]));
 
         AdvancedTable.setState(realTableId, state);
         AdvancedTable.updateDependentViews(realTableId);
@@ -379,6 +462,8 @@ Object.assign(AdvancedTable, {
         });
         
         sourceState.rows.push(newRow);
+        const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, sourceState);
+        newRow.virtualCells = freshVRow.virtualCells;
         AdvancedTable.setState(realTableId, sourceState);
 
         if (typeof AdvancedAutomations !== 'undefined') {
@@ -447,16 +532,28 @@ Object.assign(AdvancedTable, {
 
         if (!force && !confirm(confirmMessage)) return;
 
-        // Pulizia ricorsiva delle eventuali note collegate
+        // FIX TRANSAZIONALITÀ: Soft-Delete (Cestino) delle pagine collegate per consentire a Ctrl+Z di ripristinarle
+        const nowTime = Date.now();
         state.columns.filter(c => c.type === 'record_note').forEach(c => {
             viewState.selectedRows.forEach(rowId => {
                 const row = state.rows.find(r => r.id === rowId);
-                if (row && row.cells[c.id]) UI.Trash.forceHardDeleteRecursive(row.cells[c.id]);
+                if (row && row.cells[c.id] && typeof Store !== 'undefined') {
+                    const noteId = row.cells[c.id];
+                    const linkedNote = Store.getNote(noteId);
+                    if (linkedNote) {
+                        linkedNote.deletedAt = nowTime;
+                        linkedNote._isDirty = true;
+                    }
+                }
             });
         });
 
-        state.rows = state.rows.filter(r => !viewState.selectedRows.includes(r.id));
+        const deletedIdsSet = new Set(viewState.selectedRows);
+        state.rows = state.rows.filter(r => !deletedIdsSet.has(r.id));
         viewState.selectedRows = [];
+
+        // Pulizia referenziale delle relazioni orfane in tutti i database
+        AdvancedTable._cascadeDeleteRecordReferences(realTableId, deletedIdsSet);
 
         // Reset del selettore fluttuante globale
         const globalSelector = document.getElementById('adv-global-row-selector');
@@ -518,6 +615,7 @@ Object.assign(AdvancedTable, {
                 if (type === 'checkbox') r.cells[newColId] = false;
                 else if (type === 'multi-select' || type === 'relation') r.cells[newColId] = [];
                 else r.cells[newColId] = '';
+                if (r.virtualCells) r.virtualCells[newColId] = r.cells[newColId];
             });
         }
 
@@ -559,7 +657,6 @@ Object.assign(AdvancedTable, {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
 
-        // Ricarica reale e sicura dal disco locale se è presente un Workspace
         if (AppState.workspaceHandle && typeof Store.readDatabaseFromDisk === 'function') {
             const freshState = await Store.readDatabaseFromDisk(realTableId);
             if (freshState) {
@@ -569,7 +666,6 @@ Object.assign(AdvancedTable, {
             }
         }
 
-        // Ricalcola le dipendenze e ridisegna tutte le viste collegate senza forzare sovrascritture sporche
         AdvancedTable.updateDependentViews(realTableId);
         if (typeof AdvancedPivot !== 'undefined') AdvancedPivot.updateDependent(realTableId);
 
@@ -654,7 +750,6 @@ Object.assign(AdvancedTable, {
                 let vb = b.virtualCells[sortRule.colId];
                 let diff = 0;
 
-                // Riconoscimento logico del vero tipo di dato per i raggruppamenti (grp_X)
                 let isDateCol = false;
                 let isRecordNote = false;
 
@@ -669,7 +764,6 @@ Object.assign(AdvancedTable, {
                     isRecordNote = colDef.type === 'record_note';
                 }
 
-                // Gestione Speciale Date di Sistema (Per le tabelle normali)
                 if (colDef.type === 'created_time' || colDef.type === 'last_edited_time') {
                     const valA = colDef.type === 'created_time' ? a.createdAt : a.updatedAt;
                     const valB = colDef.type === 'created_time' ? b.createdAt : b.updatedAt;
@@ -677,7 +771,6 @@ Object.assign(AdvancedTable, {
                     const tB = typeof valB === 'number' ? valB : AdvancedTable._parseDateStringToMs(valB) || 0;
                     diff = tA - tB;
                 }
-                // Gestione Speciale Pagine Record Note
                 else if (isRecordNote) {
                     const noteA = typeof Store !== 'undefined' ? Store.getNote(va) : null;
                     const noteB = typeof Store !== 'undefined' ? Store.getNote(vb) : null;
@@ -690,7 +783,6 @@ Object.assign(AdvancedTable, {
                     const strB = AdvancedTable.getFormatDisplayValue(colDef, vb).toLowerCase();
                     diff = strA.localeCompare(strB, undefined, {numeric: true, sensitivity: 'base'});
                 }
-                // Gestione Date Standard e Datetime (Supporto italiano DD/MM/YYYY e Intervalli)
                 else if (isDateCol) {
                     const intA = AdvancedTable._extractIntervalFromValue(va);
                     const intB = AdvancedTable._extractIntervalFromValue(vb);
@@ -698,11 +790,9 @@ Object.assign(AdvancedTable, {
                     const tB = intB ? intB.startMs : 0;
                     diff = tA - tB;
                 }
-                // Numeri e Formule Matematiche
                 else if (!isNaN(parseFloat(va)) && !isNaN(parseFloat(vb)) && va !== '' && vb !== '') {
                     diff = parseFloat(va) - parseFloat(vb);
                 } 
-                // Testo generico
                 else {
                     diff = String(va || '').localeCompare(String(vb || ''), undefined, {numeric: true, sensitivity: 'base'});
                 }
@@ -738,7 +828,6 @@ Object.assign(AdvancedTable, {
             const colDef = state.columns.find(c => c.id === cId);
             if (!colDef) return;
             
-            // Risoluzione tipo Data nativa o derivata da sorgente Pivot
             let isDateType = ['date', 'datetime', 'created_time', 'last_edited_time'].includes(colDef.type);
             if (isPivotContext && cId.startsWith('grp_')) {
                 const srcColDef = sourceStateForPivot.columns.find(c => c.id === colDef.sourceColId);
@@ -778,7 +867,6 @@ Object.assign(AdvancedTable, {
                         const operator = matchOp[1];
                         let targetVal = matchOp[2].trim();
 
-                        // 1. Checkbox (Booleani)
                         if (colDef.type === 'checkbox') {
                             const isChecked = cellVal === true;
                             const lowerTarget = targetVal.toLowerCase();
@@ -793,7 +881,6 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
-                        // 2. Date e Datetime (Algebra degli Intervalli Temporali)
                         if (isDateType) {
                             const cellInterval = AdvancedTable._extractIntervalFromValue(cellVal, colDef, r, isPivotContext);
                             const targetInterval = AdvancedTable._extractIntervalFromValue(targetVal);
@@ -802,7 +889,6 @@ Object.assign(AdvancedTable, {
                                 const isTargetRange = targetInterval.startMs !== targetInterval.endMs;
                                 
                                 if (isTargetRange) {
-                                    // Se il filtro è un Range (F_start ➔ F_end):
                                     const overlaps = (cellInterval.startMs <= targetInterval.endMs) && (cellInterval.endMs >= targetInterval.startMs);
 
                                     if (operator === '=') return overlaps;
@@ -812,8 +898,6 @@ Object.assign(AdvancedTable, {
                                     if (operator === '>=') return cellInterval.endMs >= targetInterval.startMs;
                                     if (operator === '<=') return cellInterval.startMs <= targetInterval.endMs;
                                 } else {
-                                    // Se il filtro è una data singola:
-                                    // Se non ha orario esplicito nel testo target, consideriamo l'intera giornata di 24h
                                     const hasExplicitTime = targetVal.includes(':');
                                     let dayStart = targetInterval.startMs;
                                     let dayEnd = targetInterval.endMs;
@@ -838,7 +922,6 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
-                        // 3. Numeri Puri (Matematico)
                         const isColNumeric = ['number', 'formula', 'rollup'].includes(colDef.type);
                         const isBothNumeric = isStrictNumeric(cellVal) && isStrictNumeric(targetVal);
 
@@ -856,7 +939,6 @@ Object.assign(AdvancedTable, {
                             }
                         }
                         
-                        // 4. Testo, Alfanumerici, Liste e Select
                         let resolvedArrayForExactMatch = null;
                         if (!isPivotContext) {
                             if (colDef.type === 'relation' || colDef.type === 'relation_backlink') {
@@ -869,7 +951,6 @@ Object.assign(AdvancedTable, {
                         const strA = String(displayStr || '').toLowerCase();
                         const strB = String(targetVal || '').toLowerCase();
 
-                        // Uguaglianza esatta su stringhe/tag
                         if (operator === '=') {
                             if (resolvedArrayForExactMatch) {
                                 return resolvedArrayForExactMatch.some(v => String(v).toLowerCase() === strB);
@@ -877,7 +958,6 @@ Object.assign(AdvancedTable, {
                             return strA === strB;
                         }
 
-                        // Disuguaglianza: esclude se coincide o se contiene la parola (es. != rosso)
                         if (operator === '!=') {
                             if (resolvedArrayForExactMatch) {
                                 return !resolvedArrayForExactMatch.some(v => {
@@ -888,7 +968,6 @@ Object.assign(AdvancedTable, {
                             return !strA.includes(strB);
                         }
 
-                        // Confronto lessicografico naturale (<, >, <=, >=) su testo
                         const cmp = strA.localeCompare(strB, undefined, { numeric: true, sensitivity: 'base' });
                         if (operator === '>') return cmp > 0;
                         if (operator === '<') return cmp < 0;

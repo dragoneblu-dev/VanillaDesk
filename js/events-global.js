@@ -15,6 +15,13 @@
  * FIX TEXTNODE TARGET CLOSEST: Normalizzazione difensiva di e.target nei listener dragstart, dblclick e wheel.
  * FIX ISOLAMENTO INPUT WIDGET: Impedisce all'evento input scatenato dentro celle di database o diari
  * di risalire verso l'editor principale, azzerando le false sporcature di note.updatedAt e i falsi conflitti concorrenti.
+ * FEAT HEADING SHORTCUTS: 
+ * - H1 nativo (<h1>): Ctrl+Alt+1 o Ctrl+Shift+1
+ * - H2 nativo (<h2>): Ctrl+Alt+2 o Ctrl+Shift+2
+ * - H3 nativo (<h3>): Ctrl+Alt+3 o Ctrl+Shift+3 (esclusiva da tastiera)
+ * - Paragrafo normale (<p>): Ctrl+Alt+0
+ * FEAT GUTTER/PADDING CLICK & DBLCLICK STANDARD: Click nel padding di editorScrollContent posiziona il cursore
+ * all'inizio della riga corrispondente; doppio click seleziona l'intero paragrafo/blocco.
  */
 
 const EventsGlobal = {
@@ -229,31 +236,114 @@ const EventsGlobal = {
             if (ind) ind.style.display = 'none';
         };
 
+        // =========================================================================
+        // HELPER GEOMETRICO GUTTER/PADDING: Individua il blocco di testo corrispondente a clientY
+        // =========================================================================
+        const findBlockAtY = (editorEl, clientY) => {
+            const children = Array.from(editorEl.children);
+            if (children.length === 0) return null;
+
+            for (const block of children) {
+                const rect = block.getBoundingClientRect();
+                if (clientY >= rect.top && clientY <= rect.bottom) {
+                    // Se è una lista (ul/ol), individua il singolo <li> all'altezza specificata
+                    if (block.tagName === 'UL' || block.tagName === 'OL') {
+                        const lis = Array.from(block.querySelectorAll('li'));
+                        for (const li of lis) {
+                            const liRect = li.getBoundingClientRect();
+                            if (clientY >= liRect.top && clientY <= liRect.bottom) {
+                                return li;
+                            }
+                        }
+                        return block.lastElementChild || block;
+                    }
+                    return block;
+                }
+            }
+
+            // Se clientY si trova al di sopra del primo blocco
+            const firstRect = children[0].getBoundingClientRect();
+            if (clientY < firstRect.top) {
+                return children[0];
+            }
+
+            // Se clientY si trova nello spazio vuoto sotto tutti i blocchi
+            return null;
+        };
+
         const scrollArea = document.getElementById('editorScrollContent');
         if (scrollArea) {
+            // CLICK SINGOLO NEL PADDING / MARGINE: Colloca il cursore all'inizio della riga corrispondente
             scrollArea.addEventListener('click', (e) => {
                 if (e.target === scrollArea && AppState.isEditMode) {
-                    // 1. Controllo di sicurezza per la normale selezione nel DOM (contenteditable)
                     const sel = window.getSelection();
                     if (!sel.isCollapsed) return;
 
-                    // 2. FIX SELEZIONE TITOLO: Controllo di sicurezza per i campi Input/Textarea nativi
                     const activeEl = document.activeElement;
                     if (activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')) {
-                        // Se c'è del testo evidenziato dentro l'input (es. Titolo), ci fermiamo!
                         if (activeEl.selectionStart !== activeEl.selectionEnd) return;
                     }
 
-                    // Se non c'è nulla di selezionato, possiamo procedere a forzare il focus nell'editor
                     const editorEl = document.getElementById('noteContent');
-                    if (editorEl && activeEl !== document.getElementById('noteTitle')) {
+                    if (!editorEl || activeEl === document.getElementById('noteTitle')) return;
+
+                    const targetBlock = findBlockAtY(editorEl, e.clientY);
+
+                    if (targetBlock) {
+                        // Se il blocco è un widget protetto non editabile come testo puro, non forzare la selezione
+                        if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(targetBlock) && !WidgetManager.isInsideEditableWidgetArea(targetBlock)) {
+                            return;
+                        }
+
+                        let targetNodeToFocus = targetBlock;
+                        if (targetBlock.classList && targetBlock.classList.contains('adv-checklist-item')) {
+                            const textSpan = targetBlock.querySelector('.checklist-text');
+                            if (textSpan) targetNodeToFocus = textSpan;
+                        }
+
+                        editorEl.focus();
+                        const range = document.createRange();
+                        range.selectNodeContents(targetNodeToFocus);
+                        range.collapse(true); // Posiziona il cursore all'inizio del blocco / riga
+                        sel.removeAllRanges();
+                        sel.addRange(range);
+                    } else {
+                        // Click nello spazio vuoto oltre l'ultimo blocco: colloca il cursore a fine documento
                         editorEl.focus();
                         const range = document.createRange();
                         range.selectNodeContents(editorEl);
-                        range.collapse(false); 
+                        range.collapse(false);
                         sel.removeAllRanges();
                         sel.addRange(range);
                     }
+                }
+            });
+
+            // DOPPIO CLICK NEL PADDING / MARGINE: Seleziona l'intero paragrafo o punto elenco corrispondente
+            scrollArea.addEventListener('dblclick', (e) => {
+                if (e.target === scrollArea && AppState.isEditMode) {
+                    const editorEl = document.getElementById('noteContent');
+                    if (!editorEl) return;
+
+                    const targetBlock = findBlockAtY(editorEl, e.clientY);
+                    if (!targetBlock) return;
+
+                    if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(targetBlock) && !WidgetManager.isInsideEditableWidgetArea(targetBlock)) {
+                        return;
+                    }
+
+                    let targetNodeToSelect = targetBlock;
+                    if (targetBlock.classList && targetBlock.classList.contains('adv-checklist-item')) {
+                        const textSpan = targetBlock.querySelector('.checklist-text');
+                        if (textSpan) targetNodeToSelect = textSpan;
+                    }
+
+                    editorEl.focus();
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(targetNodeToSelect);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
                 }
             });
         }
@@ -436,6 +526,43 @@ const EventsGlobal = {
                 }
             }
 
+            // =========================================================================
+            // SCORCIATOIE RAPIDE PER TITOLI H1, H2, H3 E PARAGRAFO CORPO
+            // - H1 nativo (<h1>): Ctrl+Alt+1 oppure Ctrl+Shift+1
+            // - H2 nativo (<h2>): Ctrl+Alt+2 oppure Ctrl+Shift+2
+            // - H3 nativo (<h3>): Ctrl+Alt+3 oppure Ctrl+Shift+3 (esclusiva da tastiera)
+            // - Paragrafo normale (<p>): Ctrl+Alt+0
+            // =========================================================================
+            
+            // 1. SCORCIATOIE H1, H2 E RESET PARAGRAFO: CTRL+ALT+1/2/0 oppure CTRL+SHIFT+1/2/0
+            if (isCtrlOrCmd && (e.altKey || e.shiftKey) && AppState.isEditMode) {
+                const isDigit1 = e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1' || e.key === '!';
+                const isDigit2 = e.code === 'Digit2' || e.code === 'Numpad2' || e.key === '2';
+                const isDigit3 = e.code === 'Digit3' || e.code === 'Numpad3' || e.key === '3' || e.key === '£' || e.key === '#';
+                const isDigit0 = e.code === 'Digit0' || e.code === 'Numpad0' || e.key === '0';
+
+                if (isDigit1) {
+                    e.preventDefault();
+                    Editor.toggleHeader('h1'); // H1 Titolo Principale
+                    return;
+                }
+                if (isDigit2) {
+                    e.preventDefault();
+                    Editor.toggleHeader('h2'); // H2 Titolo Secondario
+                    return;
+                }
+                if (isDigit3) {
+                    e.preventDefault();
+                    Editor.toggleHeader('h3'); // H3 Titolo Terzo Livello
+                    return;
+                }
+                if (isDigit0) {
+                    e.preventDefault();
+                    Editor.toggleHeader('p');  // Paragrafo Normale (Reset Titoli)
+                    return;
+                }
+            }
+
             if (typeof Editor !== 'undefined') {
                 if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
                     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
@@ -460,11 +587,13 @@ const EventsGlobal = {
             }
 
             if (isCtrlOrCmd && AppState.isEditMode) {
+                // FORMATTAZIONI STANDARD DI TESTO
                 if (key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
                 if (key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
                 if (key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
                 if (key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
                 
+                // MULTI-CURSORE
                 if (key === 'd') { 
                     e.preventDefault(); 
                     Editor.triggerMultiCursor(); 
@@ -755,6 +884,7 @@ const EventsGlobal = {
                     protectedParent = null; 
                 }
 
+                // RIPRISTINO ESATTO DEL BLOCCO ORIGINALE TESTATO
                 if (protectedParent && protectedParent !== sourceBlock) {
                     if (AppState.draggedBlockType === 'image') {
                         hideDropIndicator();

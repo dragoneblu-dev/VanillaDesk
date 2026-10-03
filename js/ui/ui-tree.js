@@ -4,6 +4,7 @@
  * Rendering reattivo e isolato dei tempi residui per i segnalibri temporizzati.
  * Integrazione visiva della nuvoletta per i segnalibri provvisti di note/commenti.
  * Tracciamento dello stato dirty su spostamento e riordino delle note nell'albero.
+ * Allineamento gerarchico completo del TOC laterale per supportare h1, h2 e h3.
  */
 
 Object.assign(UI, {
@@ -580,7 +581,7 @@ Object.assign(UI, {
         if (node.id === AppState.currentNoteId && node.content) {
             const temp = document.createElement('div');
             temp.innerHTML = node.content;
-            tocHeaders = temp.querySelectorAll('h2, h3');
+            tocHeaders = temp.querySelectorAll('h1, h2, h3');
         }
 
         if (!isDefaultView) {
@@ -624,7 +625,7 @@ Object.assign(UI, {
             e.preventDefault();
             
             // Apertura con flag scrollToTop = true per posizionarsi direttamente in cima alla nota
-            if (typeof UI.selectNote !== 'undefined') UI.selectNote(node.id);
+            if (typeof UI.selectNote !== 'undefined') UI.selectNote(node.id, null, null, true);
             
             if (!AppState.isEditMode) {
                 UI.toggleEditMode(true);
@@ -739,9 +740,18 @@ Object.assign(UI, {
                     const hText = h.innerText.trim();
                     if (!hText) return;
 
-                    const isH1 = h.tagName.toLowerCase() === 'h2'; 
+                    const tagLower = h.tagName.toLowerCase();
+                    let tocClass = 'toc-h1';
+                    if (tagLower === 'h1') {
+                        tocClass = 'toc-h1';
+                    } else if (tagLower === 'h2') {
+                        tocClass = 'toc-h2';
+                    } else if (tagLower === 'h3') {
+                        tocClass = 'toc-h3';
+                    }
+
                     const tocEl = document.createElement('div');
-                    tocEl.className = `toc-node ${isH1 ? 'toc-h1' : 'toc-h2'}`;
+                    tocEl.className = `toc-node ${tocClass}`;
                     tocEl.innerHTML = `<span class="toc-icon">#</span> <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;" title="${hText.replace(/"/g, '&quot;')}">${hText}</span>`;
 
                     tocEl.onclick = (e) => {
@@ -767,7 +777,7 @@ Object.assign(UI, {
     scrollToHeader: (anchorText) => {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
-        const headers = editor.querySelectorAll('h2, h3');
+        const headers = editor.querySelectorAll('h1, h2, h3');
         for (let h of headers) {
             if (h.innerText.trim() === anchorText) {
                 h.scrollIntoView({ behavior: 'smooth', block: 'center' });

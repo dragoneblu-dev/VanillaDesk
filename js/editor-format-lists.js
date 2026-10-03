@@ -4,9 +4,74 @@
  * Gestione strutturale delle Liste e delle Checklist (Indent/Outdent).
  * Gestione avanzata degli Elenchi Numerati: valore di partenza (start),
  * continuazione della numerazione e unione fisica tra elenchi separati.
+ * FEAT STATEFUL SPLIT-BUTTON: Memorizzazione ultimo tipo elenco e toggle attivo con un click (toggleActiveList).
+ * BINDING DI SICUREZZA: Assegnazione esplicita e certa dell'handler onclick al pulsante btnListMenu all'avvio.
  */
 
 Object.assign(Editor, {
+    lastListType: 'ul',
+
+    toggleActiveList: (e) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        Editor.saveSnapshot();
+        Editor.restoreSelection();
+
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+
+        let node = sel.anchorNode;
+        if (node && node.nodeType === 3) node = node.parentNode;
+        if (!node) return;
+
+        const checklistLi = node.closest('li.adv-checklist-item');
+        const ol = node.closest('ol');
+        const ul = node.closest('ul:not(.adv-checklist)');
+
+        // 1. Se siamo in una Checklist attiva: disattiva e converti la riga in normale paragrafo
+        if (checklistLi) {
+            const checklistUl = checklistLi.closest('ul.adv-checklist');
+            const spanText = checklistLi.querySelector('.checklist-text');
+            const textHtml = spanText ? spanText.innerHTML : '<br>';
+            const p = document.createElement('p');
+            p.innerHTML = textHtml || '<br>';
+
+            if (checklistUl) {
+                checklistUl.parentNode.insertBefore(p, checklistUl.nextSibling);
+                checklistLi.remove();
+                if (checklistUl.children.length === 0) checklistUl.remove();
+            }
+
+            const range = document.createRange();
+            range.selectNodeContents(p);
+            range.collapse(false);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            Store.triggerAutoSave();
+        } 
+        // 2. Se siamo in un elenco numerato (ol): comando nativo per disattivare e tornare a paragrafo
+        else if (ol) {
+            document.execCommand('insertOrderedList', false, null);
+            Store.triggerAutoSave();
+        } 
+        // 3. Se siamo in un elenco puntato (ul): comando nativo per disattivare e tornare a paragrafo
+        else if (ul) {
+            document.execCommand('insertUnorderedList', false, null);
+            Store.triggerAutoSave();
+        } 
+        // 4. Se siamo su testo normale: attiva istantaneamente l'ultimo tipo di elenco utilizzato
+        else {
+            const lastType = Editor.lastListType || 'ul';
+            if (lastType === 'checklist') Editor.insertChecklist();
+            else if (lastType === 'ol-a') Editor.insertList('ol', 'A');
+            else if (lastType === 'ol') Editor.insertList('ol', '1');
+            else Editor.insertList('ul');
+        }
+
+        Editor.updateToolbarFormatting();
+    },
 
     _getCurrentOrderedList: () => {
         let node = null;
@@ -217,6 +282,10 @@ Object.assign(Editor, {
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
 
+        if (style === 'A') Editor.lastListType = 'ol-a';
+        else if (type === 'ol') Editor.lastListType = 'ol';
+        else Editor.lastListType = 'ul';
+
         let node = sel.anchorNode;
         if (node.nodeType === 3) node = node.parentNode;
         let block = node.closest('p, div');
@@ -238,6 +307,7 @@ Object.assign(Editor, {
             sel.addRange(newRange);
             
             Store.triggerAutoSave();
+            Editor.updateToolbarFormatting();
             return;
         }
 
@@ -270,6 +340,7 @@ Object.assign(Editor, {
         }
         
         Store.triggerAutoSave();
+        Editor.updateToolbarFormatting();
     },
 
     insertChecklist: () => {
@@ -279,6 +350,8 @@ Object.assign(Editor, {
 
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
+
+        Editor.lastListType = 'checklist';
 
         const ul = document.createElement('ul');
         ul.className = 'adv-checklist';
@@ -326,6 +399,8 @@ Object.assign(Editor, {
         newRange.collapse(false);
         sel.removeAllRanges();
         sel.addRange(newRange);
+
+        Editor.updateToolbarFormatting();
     },
 
     indentChecklistLine: (liNode) => {
@@ -358,5 +433,19 @@ Object.assign(Editor, {
         sel.addRange(rng);
         
         document.execCommand('outdent', false, null);
+    }
+});
+
+// BINDING DI SICUREZZA: Assegna programmaticamente l'evento al pulsante principale all'avvio
+document.addEventListener('DOMContentLoaded', () => {
+    const btnList = document.getElementById('btnListMenu');
+    if (btnList) {
+        btnList.onclick = (e) => {
+            if (e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+            Editor.toggleActiveList(e);
+        };
     }
 });
