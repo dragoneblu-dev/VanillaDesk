@@ -5,6 +5,8 @@
  * Integrazione visiva della nuvoletta per i segnalibri provvisti di note/commenti.
  * Tracciamento dello stato dirty su spostamento e riordino delle note nell'albero.
  * Allineamento gerarchico completo del TOC laterale per supportare h1, h2 e h3.
+ * FIX DATASET ID: Aggiunti attributi dataset.id a database, viste e pulsanti per abilitare la selezione attiva.
+ * FIX GHOST NODE: Nella vista dedicata ai Database (isExplicitDbMode), i database vengono mostrati come nodi primari standard al 100% di opacità.
  */
 
 Object.assign(UI, {
@@ -196,8 +198,6 @@ Object.assign(UI, {
         if (!htmlContent) return "";
 
         // SANIFICAZIONE PREVENTIVA: Rimozione selettiva di frame, script e stili prima del parsing DOM.
-        // Impedisce a Chromium di eseguire il check della Permissions Policy (eliminando il warning 'attribution-reporting')
-        // e velocizza significativamente l'indicizzazione delle note.
         const cleanMarkup = htmlContent
             .replace(/<iframe\b[^>]*>([\s\S]*?<\/iframe>)?/gi, '')
             .replace(/<script\b[^>]*>([\s\S]*?<\/script>)?/gi, '')
@@ -344,8 +344,14 @@ Object.assign(UI, {
                         else viewIcon = Icons.link;
                     }
 
-                    const viewEl = document.createElement('div'); viewEl.className = 'node-wrapper';
-                    const viewContent = document.createElement('div'); viewContent.className = 'node-content db-view-node';
+                    const viewEl = document.createElement('div'); 
+                    viewEl.className = 'node-wrapper';
+                    viewEl.dataset.id = depId;
+
+                    const viewContent = document.createElement('div'); 
+                    viewContent.className = 'node-content db-view-node';
+                    if (AppState.currentNoteId === depId) viewContent.classList.add('active');
+
                     viewContent.innerHTML = `<div class="toggle-btn" style="width:20px; display:flex; justify-content:center; align-items:center; cursor:default;"><span style="opacity:0.3; font-size:18px;">•</span></div><span class="node-title"><span style="color:var(--view-color); opacity:0.8;">${viewIcon}</span> <span>${depState.title || 'Vista'}</span></span>`;
                     viewContent.onclick = (e) => { e.stopPropagation(); UI.jumpToWidget(depId); };
                     viewEl.appendChild(viewContent);
@@ -362,8 +368,14 @@ Object.assign(UI, {
                     });
 
                     if (operatesOnThis) {
-                        const btnEl = document.createElement('div'); btnEl.className = 'node-wrapper';
-                        const btnContent = document.createElement('div'); btnContent.className = 'node-content db-view-node';
+                        const btnEl = document.createElement('div'); 
+                        btnEl.className = 'node-wrapper';
+                        btnEl.dataset.id = depId;
+
+                        const btnContent = document.createElement('div'); 
+                        btnContent.className = 'node-content db-view-node';
+                        if (AppState.currentNoteId === depId) btnContent.classList.add('active');
+
                         btnContent.innerHTML = `<div class="toggle-btn" style="width:20px; display:flex; justify-content:center; align-items:center; cursor:default;"><span style="opacity:0.3; font-size:18px;">•</span></div><span class="node-title" title="Contiene: ${btnNames.join(', ')}"><span style="color:var(--tx-c4); opacity:0.8;">${Icons.lightning}</span> <span>Barra Pulsanti</span></span></span>`;
                         btnContent.onclick = (e) => { e.stopPropagation(); UI.jumpToWidget(depId); };
                         btnEl.appendChild(btnContent);
@@ -440,9 +452,19 @@ Object.assign(UI, {
 
         const wrapper = document.createElement('div'); 
         wrapper.className = 'node-wrapper';
+        wrapper.dataset.id = dbId;
         
         const content = document.createElement('div'); 
-        content.className = 'node-content tree-ghost-node'; 
+        content.className = 'node-content';
+
+        // GHOST DETERMINATION: Nella visualizzazione dedicata ai Database, il DB è un elemento primario solido (non fantasma).
+        // Diventa fantasma solo se ci troviamo nella vista Note standard o se si filtra per testo e il DB compare unicamente come contenitore di note figlie.
+        const isGhost = isExplicitDbMode 
+            ? (isFiltering && !dbTitleMatch && hasMatchChild)
+            : true;
+
+        if (isGhost) content.classList.add('tree-ghost-node');
+        if (AppState.currentNoteId === dbId) content.classList.add('active');
 
         const toggle = document.createElement('div');
         toggle.className = 'toggle-btn';
@@ -463,10 +485,15 @@ Object.assign(UI, {
         const isJournal = dbState.title === 'Diario/Log' || dbState.title === 'Diario / Log' || dbId.includes('adv_journal_');
         const defaultTitle = isJournal ? 'Diario / Log' : 'Database';
         const iconHtml = isJournal ? Icons.journal : Icons.tableDatabase;
+        
+        // Icona solida con colore d'accento nella vista Database
+        const iconStyle = (isExplicitDbMode && !isGhost) 
+            ? 'color:var(--accent-color);' 
+            : 'opacity:0.6; color:var(--text-secondary);';
 
         const title = document.createElement('span');
         title.className = 'node-title';
-        title.innerHTML = `<span style="opacity:0.6; color:var(--text-secondary);">${iconHtml}</span> <span>${dbState.title || defaultTitle}</span>`;
+        title.innerHTML = `<span style="${iconStyle}">${iconHtml}</span> <span>${dbState.title || defaultTitle}</span>`;
 
         content.onclick = (e) => {
             if (!e.target.closest('.toggle-btn')) {

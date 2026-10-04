@@ -9,6 +9,7 @@
  * RISOLUZIONE ACCESSO FANTASMA: Azzerata la mutazione parassita di updatedAt e l'autosave incondizionato al cambio nota.
  * JIT COMPONENT RECONCILIATION: Esecuzione di Store.syncWidgetsForNote prima del montaggio del DOM.
  * SINCRONISMO STATO ATTIVO: Assegnazione immediata di AppState.currentNoteId e disattivazione del banner di pericolo al ripristino.
+ * FIX JUMP TO WIDGET & SCROLL POSITION: jumpToWidget trasmette il refId del widget a selectNote impedendo la sovrascrittura di _lastScroll e atterrando direttamente sull'elemento target.
  */
 
 Object.assign(UI, {
@@ -501,7 +502,7 @@ Object.assign(UI, {
 
         if (refId) {
             setTimeout(() => {
-                const targetEl = document.getElementById(refId);
+                const targetEl = document.getElementById(refId) || document.querySelector(`[id^="${refId}_cited_"]`);
                 if (targetEl) {
                     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     targetEl.style.transition = 'box-shadow 0.6s ease';
@@ -812,15 +813,22 @@ Object.assign(UI, {
 
         let targetNoteId = null;
         let targetNoteInstance = null;
-        
-        for (let i = 0; i < AppState.notes.length; i++) {
-            const note = AppState.notes[i];
-            if (!note.content) continue;
-            
-            if (note.content.includes(`id="${widgetId}"`) || note.content.includes(`id='${widgetId}'`) || note.content.includes(`id="${widgetId}_cited_`)) {
-                targetNoteId = note.id;
-                targetNoteInstance = note;
-                break;
+
+        // Se l'elemento è già presente nel DOM dell'editor attivo, targetNoteId è la nota corrente
+        const editorContent = document.getElementById('noteContent');
+        if (editorContent && (editorContent.querySelector(`#${widgetId}`) || editorContent.querySelector(`[id^="${widgetId}_cited_"]`))) {
+            targetNoteId = AppState.currentNoteId;
+            targetNoteInstance = Store.getNote(AppState.currentNoteId);
+        } else {
+            const widgetRegex = new RegExp(`id=["']${widgetId}(_cited_[^"']*)?["']`);
+            for (let i = 0; i < AppState.notes.length; i++) {
+                const note = AppState.notes[i];
+                if (!note.content) continue;
+                if (widgetRegex.test(note.content)) {
+                    targetNoteId = note.id;
+                    targetNoteInstance = note;
+                    break;
+                }
             }
         }
 
@@ -926,8 +934,14 @@ Object.assign(UI, {
             }
         };
 
+        // Sincronizza l'albero laterale evidenziando l'elemento cliccato
+        if (typeof UI.highlightTreeNode === 'function') {
+            UI.highlightTreeNode(widgetId);
+        }
+
         if (targetNoteId && AppState.currentNoteId !== targetNoteId) {
-            UI.selectNote(targetNoteId);
+            // Trasmette widgetId come refId: selectNote atterra direttamente sull'elemento senza resettare lo scroll su _lastScroll
+            UI.selectNote(targetNoteId, null, widgetId);
             setTimeout(handleResolution, 250); 
         } else if (targetNoteId) {
             handleResolution();

@@ -605,6 +605,7 @@ const JournalManager = {
         if (!state) return;
         state.title = newTitle.trim() || I18n.t('journal.default_title');
         JournalManager.setState(journalId, state);
+        UI.renderTree();
     },
 
     render: (journalId) => {

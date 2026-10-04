@@ -93,6 +93,7 @@ Object.assign(AdvancedTable, {
         if (titleEl && titleEl.innerText !== finalTitle) titleEl.innerText = finalTitle;
 
         Store.triggerAutoSave();
+        UI.renderTree();
     },
 
     onColDragStart: (e, tableId, colId) => {
