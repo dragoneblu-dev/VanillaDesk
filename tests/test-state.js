@@ -1,12 +1,11 @@
 /**
  * tests/test-state.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
- * Modulo testato: state
- * Conteggio test case: 21
- * Generato automaticamente il: 2026-09-25 11:19:11
+ * Modulo testato: state.js & navigazione note
+ * Conteggio test case: 28
  */
 
-describe("AppState: Gestione Stato Globale, Ricerca & Navigazione Note (21 Test)", () => {
+describe("AppState: Gestione Stato Globale, Ricerca & Navigazione Note (28 Test)", () => {
 
     const ensureEditorDOM = () => {
         let editor = document.getElementById('noteContent');
@@ -179,7 +178,7 @@ describe("AppState: Gestione Stato Globale, Ricerca & Navigazione Note (21 Test)
         Assert.deepEqual(selfRels.map(r => r.id), ['c_parent', 'c_child', 'c_dep']);
     });
 
-    test("Store: getAllDescendants estrae ricorsivamente l'intero sottoalbero di note", () => {
+    test("Store: estrazione gerarchica ricorsiva del sottoalbero tramite getChildren", () => {
         AppState.notes = [
             { id: 'r', parentId: null },
             { id: 'c1', parentId: 'r' },
@@ -188,11 +187,21 @@ describe("AppState: Gestione Stato Globale, Ricerca & Navigazione Note (21 Test)
             { id: 'unrelated', parentId: null }
         ];
 
-        const desc = Store.getAllDescendants('r');
-        Assert.strictEqual(desc.length, 3);
-        Assert.isTrue(desc.some(n => n.id === 'c1'));
-        Assert.isTrue(desc.some(n => n.id === 'c2'));
-        Assert.isTrue(desc.some(n => n.id === 'gc1'));
+        const collectSubtree = (parentId) => {
+            const list = [];
+            const children = Store.getChildren(parentId, false);
+            children.forEach(c => {
+                list.push(c);
+                list.push(...collectSubtree(c.id));
+            });
+            return list;
+        };
+
+        const subtree = collectSubtree('r');
+        Assert.strictEqual(subtree.length, 3);
+        Assert.isTrue(subtree.some(n => n.id === 'c1'));
+        Assert.isTrue(subtree.some(n => n.id === 'c2'));
+        Assert.isTrue(subtree.some(n => n.id === 'gc1'));
     });
 
     test("Store: getChildren ignora note eliminate (deletedAt) a meno che specificato", () => {
@@ -363,6 +372,134 @@ describe("AppState: Gestione Stato Globale, Ricerca & Navigazione Note (21 Test)
         ];
         const res = Store.getChildren(null, true);
         Assert.strictEqual(res.length, 2);
+    });
+
+    // =========================================================================
+    // NUOVI TEST INTEGRATIVI: RICERCA, FILTRI E NAVIGAZIONE IN APPSTATE
+    // =========================================================================
+
+    test("AppState: _findNextNoteWithMatches trova note per corrispondenza nel titolo", () => {
+        AppState.notes = [
+            { id: 'n1', parentId: null, title: 'Architettura Progetto', content: '<p>testo</p>' },
+            { id: 'n2', parentId: null, title: 'Note Riunione', content: '<p>varie</p>' },
+            { id: 'n3', parentId: null, title: 'Architettura Database', content: '<p>schema</p>' }
+        ];
+        AppState.showDbNotesInTree = false;
+        AppState.currentNoteId = 'n1';
+        AppState.searchFilter = 'architettura';
+        AppState.activePropertyFilters = [];
+
+        const nextId = AppState._findNextNoteWithMatches(1);
+        Assert.strictEqual(nextId, 'n3');
+    });
+
+    test("AppState: _findNextNoteWithMatches trova note per corrispondenza nel contenuto", () => {
+        AppState.notes = [
+            { id: 'n1', parentId: null, title: 'Titolo 1', content: '<p>Contiene la parola segreta Alfa</p>' },
+            { id: 'n2', parentId: null, title: 'Titolo 2', content: '<p>Nessuna parola chiave</p>' }
+        ];
+        AppState.showDbNotesInTree = false;
+        AppState.currentNoteId = 'n2';
+        AppState.searchFilter = 'segreta';
+        AppState.activePropertyFilters = [];
+
+        const foundId = AppState._findNextNoteWithMatches(1);
+        Assert.strictEqual(foundId, 'n1');
+    });
+
+    test("AppState: _findNextNoteWithMatches esclude note nel cestino anche se corrispondenti", () => {
+        AppState.notes = [
+            { id: 'n_live', parentId: null, title: 'Documento Attivo', content: '<p>Alfa</p>' },
+            { id: 'n_trash', parentId: null, title: 'Documento Cestinato', content: '<p>Alfa</p>', deletedAt: Date.now() }
+        ];
+        AppState.showDbNotesInTree = false;
+        AppState.currentNoteId = 'n_live';
+        AppState.searchFilter = 'alfa';
+        AppState.activePropertyFilters = [];
+
+        const nextId = AppState._findNextNoteWithMatches(1);
+        Assert.strictEqual(nextId, 'n_live');
+    });
+
+    test("AppState: _findNextNoteWithMatches supporta navigazione ciclica all'indietro (direction = -1)", () => {
+        AppState.notes = [
+            { id: 'n1', parentId: null, title: 'Nota Alfa', content: '<p></p>' },
+            { id: 'n2', parentId: null, title: 'Nota Beta', content: '<p></p>' },
+            { id: 'n3', parentId: null, title: 'Nota Gamma Alfa', content: '<p></p>' }
+        ];
+        AppState.showDbNotesInTree = false;
+        AppState.currentNoteId = 'n1';
+        AppState.searchFilter = 'alfa';
+        AppState.activePropertyFilters = [];
+
+        const prevId = AppState._findNextNoteWithMatches(-1);
+        Assert.strictEqual(prevId, 'n3', "Navigando indietro dalla prima nota deve ciclare sull'ultima corrispondente");
+    });
+
+    test("AppState: _findNextNoteWithMatches filtra per activePropertyFilters (*EXISTS*)", () => {
+        AppState.notes = [
+            { id: 'n_prop', parentId: null, title: 'Nota con Tag', content: '<p></p>' },
+            { id: 'n_empty', parentId: null, title: 'Nota senza Tag', content: '<p></p>' }
+        ];
+        AppState.showDbNotesInTree = false;
+        AppState.currentNoteId = 'n_empty';
+        AppState.searchFilter = '';
+        AppState.databases['SYS_PROPERTIES_DB'] = {
+            columns: [{ id: 'sys_c_tags', name: 'Tags', type: 'multi-select' }],
+            rows: [
+                { cells: { sys_c_note: 'n_prop', sys_c_tags: ['Importante'] } },
+                { cells: { sys_c_note: 'n_empty', sys_c_tags: [] } }
+            ]
+        };
+        AppState.activePropertyFilters = [
+            { colId: 'sys_c_tags', realValue: '*EXISTS*', colName: 'Tags' }
+        ];
+
+        const matchId = AppState._findNextNoteWithMatches(1);
+        Assert.strictEqual(matchId, 'n_prop');
+    });
+
+    test("AppState: _findNextNoteWithMatches filtra per activePropertyFilters (valore esatto)", () => {
+        AppState.notes = [
+            { id: 'n_urg', parentId: null, title: 'Task Urgente', content: '<p></p>' },
+            { id: 'n_norm', parentId: null, title: 'Task Normale', content: '<p></p>' }
+        ];
+        AppState.showDbNotesInTree = false;
+        AppState.currentNoteId = 'n_norm';
+        AppState.searchFilter = '';
+        AppState.databases['SYS_PROPERTIES_DB'] = {
+            columns: [{ id: 'col_prio', name: 'Priorità', type: 'select' }],
+            rows: [
+                { cells: { sys_c_note: 'n_urg', col_prio: 'Urgente' } },
+                { cells: { sys_c_note: 'n_norm', col_prio: 'Bassa' } }
+            ]
+        };
+        AppState.activePropertyFilters = [
+            { colId: 'col_prio', realValue: 'Urgente', colName: 'Priorità' }
+        ];
+
+        const matchId = AppState._findNextNoteWithMatches(1);
+        Assert.strictEqual(matchId, 'n_urg');
+    });
+
+    test("AppState: findNext e findPrevious ciclano _currentHighlightIndex con wrap-around", () => {
+        AppState._globalHighlights = 3;
+        AppState._totalHighlights = 3;
+        AppState._currentHighlightIndex = 0;
+        AppState.currentNoteId = 'n_static';
+        AppState.notes = [{ id: 'n_static', parentId: null, title: 'Test', content: '<p></p>' }];
+
+        // Incremento
+        AppState.findNext();
+        Assert.strictEqual(AppState._currentHighlightIndex, 1);
+        AppState.findNext();
+        Assert.strictEqual(AppState._currentHighlightIndex, 2);
+        AppState.findNext();
+        Assert.strictEqual(AppState._currentHighlightIndex, 0, "Al superamento del totale deve ripartire da 0");
+
+        // Decremento
+        AppState.findPrevious();
+        Assert.strictEqual(AppState._currentHighlightIndex, 2, "Sotto lo 0 deve ciclare sull'ultimo indice");
     });
 
 });

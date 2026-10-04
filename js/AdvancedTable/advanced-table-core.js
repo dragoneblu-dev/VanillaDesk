@@ -7,8 +7,8 @@
  * FIX MULTI-WIDGET ROUTING: updateDependentViews ora riconosce esplicitamente i diari (JournalManager),
  * blocchi codice (CodeManager) e button bar (ButtonManager), evitando che vengano ridisegnati come tabelle RDBMS.
  * FEAT DEFAULT COMMENT: Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
- * FEAT REACTIVE DEPENDENCIES: updateDependentViews rinfresca reattivamente qualsiasi tabella che possieda
- * relazioni, backlink, rollup o FORMULE CROSS-DATABASE (tabella["..."]) dipendenti dal database modificato, con protezione da ricorsione infinita.
+ * FEAT REACTIVE DEPENDENCIES (2-PASS CONVERGENCE): updateDependentViews supporta formule cross-database (tabella["..."])
+ * e convergenza ciclica stabilizzata a 2 passaggi massimi, risolvendo allineamenti incrociati senza rischio di loop infiniti.
  */
 
 const AdvancedTable = {
@@ -154,11 +154,14 @@ const AdvancedTable = {
         return (state && state.isLinkedView) ? state.sourceTableId : trueId;
     },
 
-    updateDependentViews: (sourceTableId, visited = new Set()) => {
+    updateDependentViews: (sourceTableId, visitedCounts = new Map()) => {
         if (!AppState.databases) return;
         const targetTrueId = sourceTableId.split('_cited_')[0];
-        if (visited.has(targetTrueId)) return;
-        visited.add(targetTrueId);
+
+        // Massima profondità di convergenza stabilizzata a 2 passaggi per impedire loop infiniti
+        const currentCount = visitedCounts.get(targetTrueId) || 0;
+        if (currentCount >= 2) return;
+        visitedCounts.set(targetTrueId, currentCount + 1);
 
         const targetState = AppState.databases[targetTrueId];
         const targetTitle = targetState ? targetState.title : null;
@@ -177,14 +180,14 @@ const AdvancedTable = {
                     (col.type === 'relation' && col.targetTableId === targetTrueId) ||
                     (col.type === 'relation_backlink' && col.linkedTableId === targetTrueId) ||
                     (col.type === 'rollup' && (col.targetTableId === targetTrueId || (col.relationColId && String(col.relationColId).includes(targetTrueId)))) ||
-                    (col.type === 'formula' && col.formula && tablePattern && tablePattern.test(col.formula))
+                    (col.type === 'formula' && col.formula && targetTitle && col.formula.includes(targetTitle) && tablePattern && tablePattern.test(col.formula))
                 );
             }
 
-            if (!hasDependency && s.automations && Array.isArray(s.automations) && tablePattern) {
+            if (!hasDependency && s.automations && Array.isArray(s.automations) && targetTitle && tablePattern) {
                 hasDependency = s.automations.some(a => 
-                    (a.triggers && a.triggers.some(t => t.value && tablePattern.test(t.value))) ||
-                    (a.actions && a.actions.some(act => act.value && tablePattern.test(act.value)))
+                    (a.triggers && a.triggers.some(t => t.value && t.value.includes(targetTitle) && tablePattern.test(t.value))) ||
+                    (a.actions && a.actions.some(act => act.value && act.value.includes(targetTitle) && tablePattern.test(act.value)))
                 );
             }
 
@@ -227,9 +230,9 @@ const AdvancedTable = {
                 }
             });
 
-            // Propagazione reattiva a cascata per database con dipendenze concatenate (es. A -> B -> C)
-            if (id !== targetTrueId && !visited.has(id)) {
-                AdvancedTable.updateDependentViews(id, visited);
+            // Se la tabella dipendente non ha ancora esaurito i 2 passaggi di convergenza, propaga
+            if (id !== targetTrueId && (visitedCounts.get(id) || 0) < 2) {
+                AdvancedTable.updateDependentViews(id, visitedCounts);
             }
         });
     },

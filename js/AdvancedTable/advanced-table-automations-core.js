@@ -727,6 +727,7 @@ const AdvancedAutomations = {
                                 if (!isSysPropertiesContext) {
                                     const newNoteId = Store.generateId();
                                     const nowStr = new Date().toISOString();
+                                    const initialRevId = Store.generateId();
                                     const newNote = {
                                         id: newNoteId,
                                         parentId: AppState.currentNoteId || null,
@@ -736,11 +737,18 @@ const AdvancedAutomations = {
                                         expanded: true,
                                         createdAt: nowStr,
                                         updatedAt: nowStr,
+                                        revId: initialRevId,
+                                        _baseRevId: initialRevId,
+                                        _isDraft: true,
+                                        _isDirty: true,
                                         isRecordNote: true,
                                         linkedTableId: AdvancedTable._resolveSourceId(tableId),
                                         linkedRowId: row.id
                                     };
                                     AppState.notes.push(newNote);
+                                    if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
+                                        AdvancedTable.syncSystemPropertiesRow(newNoteId);
+                                    }
                                     row.cells[baseColId] = newNoteId;
                                     vRow.virtualCells[baseColId] = newNoteId;
                                     noteId = newNoteId;
@@ -843,6 +851,7 @@ const AdvancedAutomations = {
                                 } else {
                                     const newNoteId = Store.generateId();
                                     const nowStr = new Date().toISOString();
+                                    const initialRevId = Store.generateId();
                                     
                                     const newNote = {
                                         id: newNoteId,
@@ -853,11 +862,18 @@ const AdvancedAutomations = {
                                         expanded: true,
                                         createdAt: nowStr,
                                         updatedAt: nowStr,
+                                        revId: initialRevId,
+                                        _baseRevId: initialRevId,
+                                        _isDraft: true,
+                                        _isDirty: true,
                                         isRecordNote: true, 
                                         linkedTableId: AdvancedTable._resolveSourceId(tableId),
                                         linkedRowId: row.id
                                     };
                                     AppState.notes.push(newNote);
+                                    if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
+                                        AdvancedTable.syncSystemPropertiesRow(newNoteId);
+                                    }
                                     newVal = newNoteId;
                                     
                                     if (typeof UI !== 'undefined' && UI.renderTree) {

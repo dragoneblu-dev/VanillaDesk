@@ -2,6 +2,8 @@
  * editor-format-blocks.js
  * Sottomodulo di Editor.
  * Inserimento e movimento di Blocchi complessi, esecuzione di execCommand nativi e gestione del Contesto (Widget).
+ * FIX SYNC BLOCCHI CODICE: All'inserimento del blocco codice, sincronizza immediatamente
+ * il markup e il flag _isDirty sulla nota corrente per garantire la reattività dell'autosave.
  */
 
 Object.assign(Editor, {
@@ -106,6 +108,18 @@ Object.assign(Editor, {
         Editor._ensureLastLineBreak(document.getElementById('noteContent'));
 
         if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll();
+
+        // Sincronizza immediatamente il DOM della nota corrente affinché il nuovo widget sia registrato nel content
+        if (AppState.currentNoteId) {
+            const curNote = Store.getNote(AppState.currentNoteId);
+            const editor = document.getElementById('noteContent');
+            if (curNote && editor) {
+                curNote.content = Editor.getCleanHTML();
+                curNote._isDirty = true;
+                curNote.updatedAt = new Date().toISOString();
+            }
+        }
+
         Store.triggerAutoSave();
 
         setTimeout(() => {

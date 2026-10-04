@@ -1,7 +1,7 @@
 /**
  * editor-core.js
  * Inizializzazione editor e core engine (Caret, Boundaries, RawText e Sanificazione JSON).
- * Scansione transitiva nel Garbage Collector per tutelare database relazionali, template e asset.
+ * Scansione transitiva centralizzata delegata a Store.cleanOrphanedRAMCaches per tutelare database relazionali, template e asset.
  * Re-idratazione immediata post-salvataggio con rilevamento immagini non trovate e placeholder SVG.
  * Estirpazione degli Zero-Width Space (\u200B) orfani dal DOM.
  * Inseriti .adv-board-card e gli eventi calendario nella Whitelist di handleSmartClickEscape.
@@ -515,160 +515,10 @@ const Editor = {
         }
     },
 
+    // Pulizia delle cache in RAM delegata al motore unico e centralizzato di Store
     cleanOrphanedCaches: () => {
-        const activeDbIds = new Set();
-        const activeImageIds = new Set();
-        const activeAudioIds = new Set(); 
-
-        const extractIds = (htmlString) => {
-            if (!htmlString) return;
-            const dbRegex = /id=["'](adv_tbl_[^"']+|adv_journal_[^"']+|adv_code_[^"']+|adv_btnbar_[^"']+|adv_pivot_[^"']+|adv_link_[^"']+|adv_cols_[^"']+|adv_audio_[^"']+|adv_vid_[^"']+)["']/g;
-            let match;
-            while ((match = dbRegex.exec(htmlString)) !== null) activeDbIds.add(match[1].split('_cited_')[0]);
-
-            const imgRegex = /data-image-ref=["']([^"']+)["']/g;
-            while ((match = imgRegex.exec(htmlString)) !== null) activeImageIds.add(match[1]);
-
-            const audRegex = /data-audio-ref=["']([^"']+)["']/g;
-            while ((match = audRegex.exec(htmlString)) !== null) activeAudioIds.add(match[1]);
-        };
-
-        // 1. Scansiona Editor Visibile e Note
-        const editor = document.getElementById('noteContent');
-        if (editor) extractIds(editor.innerHTML);
-        AppState.notes.forEach(note => extractIds(note.content));
-        
-        // 2. Scansiona Stack di Undo/Redo
-        if (Editor.undoStack) Editor.undoStack.forEach(extractIds);
-        if (Editor.redoStack) Editor.redoStack.forEach(extractIds);
-
-        // 3. Scansiona Template (Anche i Widget nidificati internamente)
-        if (AppState.templates) {
-            AppState.templates.forEach(tpl => {
-                extractIds(tpl.content);
-                if (tpl.widgets) {
-                    Object.values(tpl.widgets).forEach(state => {
-                        if (state.rows) {
-                            state.rows.forEach(row => {
-                                if (row.cells) {
-                                    Object.values(row.cells).forEach(cellVal => {
-                                        if (typeof cellVal === 'string' && (cellVal.includes('data-image-ref') || cellVal.includes('data-audio-ref'))) {
-                                            extractIds(cellVal); 
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        }
-
-        // 4. Scansione Transitiva delle Dipendenze Relazionali e di Sistema
-        if (AppState.databases) {
-            let dependenciesAdded = true;
-            while (dependenciesAdded) {
-                dependenciesAdded = false;
-                for (const dbId of Array.from(activeDbIds)) {
-                    const dbState = AppState.databases[dbId];
-                    if (!dbState) continue;
-
-                    // Sorgente di Viste Collegate o Tabelle Pivot
-                    if (dbState.sourceTableId && !activeDbIds.has(dbState.sourceTableId)) {
-                        activeDbIds.add(dbState.sourceTableId);
-                        dependenciesAdded = true;
-                    }
-
-                    // Relazioni, Rollup e Backlink tra tabelle
-                    if (Array.isArray(dbState.columns)) {
-                        dbState.columns.forEach(col => {
-                            if (col.targetTableId && !activeDbIds.has(col.targetTableId)) {
-                                activeDbIds.add(col.targetTableId);
-                                dependenciesAdded = true;
-                            }
-                            if (col.linkedTableId && !activeDbIds.has(col.linkedTableId)) {
-                                activeDbIds.add(col.linkedTableId);
-                                dependenciesAdded = true;
-                            }
-                        });
-                    }
-
-                    // Database bersaglio di pulsanti Macro
-                    if (Array.isArray(dbState.buttons)) {
-                        dbState.buttons.forEach(btn => {
-                            if (Array.isArray(btn.actionBlocks)) {
-                                btn.actionBlocks.forEach(blk => {
-                                    if (blk.targetDbId && blk.targetDbId !== 'THIS_ROW' && !activeDbIds.has(blk.targetDbId)) {
-                                        activeDbIds.add(blk.targetDbId);
-                                        dependenciesAdded = true;
-                                    }
-                                    if (blk.sourceDbId && !activeDbIds.has(blk.sourceDbId)) {
-                                        activeDbIds.add(blk.sourceDbId);
-                                        dependenciesAdded = true;
-                                    }
-                                });
-                            }
-                        });
-                    }
-
-                    // Database bersaglio di automazioni
-                    if (Array.isArray(dbState.automations)) {
-                        dbState.automations.forEach(auto => {
-                            if (Array.isArray(auto.actions)) {
-                                auto.actions.forEach(act => {
-                                    if (act.colId === 'SYS_ACTION' && act.type === 'insert_row' && act.value && !activeDbIds.has(act.value)) {
-                                        activeDbIds.add(act.value);
-                                        dependenciesAdded = true;
-                                    }
-                                });
-                            }
-                        });
-                    }
-                }
-            }
-
-            // Scansiona il contenuto nativo dei Database in RAM per immagini o tracce audio
-            Object.values(AppState.databases).forEach(state => {
-                if (state.rows) {
-                    state.rows.forEach(row => {
-                        if (row.cells) {
-                            Object.values(row.cells).forEach(cellVal => {
-                                if (typeof cellVal === 'string' && (cellVal.includes('data-image-ref') || cellVal.includes('data-audio-ref'))) {
-                                    extractIds(cellVal); 
-                                }
-                            });
-                        }
-                    });
-                }
-            });
-        }
-
-        // 5. Purga DB Orfani autentici (preservando SYS_PROPERTIES_DB e le dipendenze transitive)
-        if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(id => {
-                if (id === 'SYS_PROPERTIES_DB') return; 
-                if (!activeDbIds.has(id)) delete AppState.databases[id];
-            });
-        }
-        
-        // 6. Purga Immagini Orfane in RAM
-        if (Editor.imageCache) {
-            Object.keys(Editor.imageCache).forEach(id => {
-                if (!activeImageIds.has(id)) {
-                    URL.revokeObjectURL(Editor.imageCache[id]);
-                    delete Editor.imageCache[id];
-                }
-            });
-        }
-        
-        // 7. Purga Audio Orfani in RAM
-        if (Editor.audioCache) {
-            Object.keys(Editor.audioCache).forEach(id => {
-                if (!activeAudioIds.has(id)) {
-                    URL.revokeObjectURL(Editor.audioCache[id]);
-                    delete Editor.audioCache[id];
-                }
-            });
+        if (typeof Store !== 'undefined' && typeof Store.cleanOrphanedRAMCaches === 'function') {
+            Store.cleanOrphanedRAMCaches();
         }
     },
 

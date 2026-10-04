@@ -56,11 +56,14 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
             sandbox.appendChild(treeContainer);
         }
 
+        // Isolamento rigoroso dello stato per prevenire contaminazioni da altre suite di test
         AppState.notes = [];
         AppState.currentNoteId = null;
         AppState.isEditMode = false;
         AppState.isSwitchingNote = false;
         AppState.databases = {};
+        AppState.workspaceHandle = null;
+
         AdvancedTable.ensureSystemPropertiesDB();
     };
 

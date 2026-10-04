@@ -5,13 +5,9 @@
  * Ottimizzazione rendering relazioni e paginazione incrementale.
  * Mappatura ID garantita per la generazione dei Prompt AI.
  * Integrazione selettore per colonna 'note_link' (Collegamento a Nota).
- * FIX MODAL READONLY: openLongTextModal mostra sola lettura senza tasto Salva per campi calcolati (Rollup/Formula).
- * FIX SELEZIONE RELAZIONI: Clonazione difensiva degli array in openRelationSelector e toggleRelationValue
  * per impedire mutazioni in-place che bloccavano il re-render automatico della vista WBS / Albero.
  * FEAT WBS AUTO-EXPAND: L'aggiunta di un figlio o genitore espande automaticamente il ramo nell'albero WBS.
- * FIX CHECK CIRCULAR MULTI-RELATION: checkCircularRelation riceve colId e circoscrive la ricerca di cicli
  * esclusivamente alla catena semantica del campo in modifica, consentendo relazioni multiple distinte sullo stesso DB.
- * FIX SCHEMA CIRCULAR ROLLUP: saveRollupConfig valida che la colonna target non sia un rollup circolare speculare verso questo campo.
  * FEAT AUTO-CARET LONGTEXT: openLongTextModal accetta la posizione del cursore iniziale per atterrare esattamente dopo l'invio.
  */
 
@@ -1084,6 +1080,7 @@ Object.assign(AdvancedTable, {
         if (!noteId || !Store.getNote(noteId) || Store.getNote(noteId).deletedAt) {
             noteId = Store.generateId();
             const now = new Date().toISOString();
+            const initialRevId = Store.generateId();
             
             const newNote = {
                 id: noteId,
@@ -1094,6 +1091,10 @@ Object.assign(AdvancedTable, {
                 expanded: true,
                 createdAt: now,
                 updatedAt: now,
+                revId: initialRevId,
+                _baseRevId: initialRevId,
+                _isDraft: true,
+                _isDirty: true,
                 isRecordNote: true, 
                 linkedTableId: realTableId,
                 linkedRowId: rowId
@@ -1102,6 +1103,9 @@ Object.assign(AdvancedTable, {
             AppState.notes.push(newNote);
             row.cells[colId] = noteId;
             AdvancedTable.setState(realTableId, state);
+            if (typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
+                AdvancedTable.syncSystemPropertiesRow(noteId);
+            }
             Store.triggerAutoSave();
             newlyCreated = true;
         }

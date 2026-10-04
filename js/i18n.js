@@ -1004,7 +1004,7 @@ audio: {
         columns_widget: {
             opt_title: "Configura Colonne",
             col_count_group: "Numero di Colonne",
-            col_1: "Testo Normale (1 Colonna)",
+            col_1: "Testo Normale (Elimina colonne)",
             col_2: "2 Colonne",
             col_3: "3 Colonne",
             behavior_group: "Comportamento Testo",
@@ -2134,7 +2134,7 @@ audio: {
         columns_widget: {
             opt_title: "Configure Columns",
             col_count_group: "Number of Columns",
-            col_1: "Normal Text (1 Column)",
+            col_1: "Normal Text (Delete columns)",
             col_2: "2 Columns",
             col_3: "3 Columns",
             behavior_group: "Text Flow Behavior",
@@ -3264,7 +3264,7 @@ audio: {
         columns_widget: {
             opt_title: "Configurar Columnas",
             col_count_group: "Número de Columnas",
-            col_1: "Texto Normal (1 Columna)",
+            col_1: "Texto Normal (Eliminar columnas)",
             col_2: "2 Columnas",
             col_3: "3 Columnas",
             behavior_group: "Comportamiento del Texto",
@@ -4395,7 +4395,7 @@ audio: {
         columns_widget: {
             opt_title: "Spalten konfigurieren",
             col_count_group: "Anzahl der Spalten",
-            col_1: "Normaler Text (1 Spalte)",
+            col_1: "Normaler Text (Spalten löschen)",
             col_2: "2 Spalten",
             col_3: "3 Spalten",
             behavior_group: "Textfluss-Verhalten",

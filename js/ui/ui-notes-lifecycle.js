@@ -6,6 +6,9 @@
  * Tracciamento del dirty state volatile (_isDirty, _isDraft) su modifiche al corpo testo e titolo.
  * Gestione conflitti di concorrenza tramite Revision Token (Modal di risoluzione, isolamento eventi e Undo Stash).
  * Supporto al parametro scrollToTop in selectNote per aprire e centrare immediatamente l'intestazione su doppio click.
+ * RISOLUZIONE ACCESSO FANTASMA: Azzerata la mutazione parassita di updatedAt e l'autosave incondizionato al cambio nota.
+ * JIT COMPONENT RECONCILIATION: Esecuzione di Store.syncWidgetsForNote prima del montaggio del DOM.
+ * SINCRONISMO STATO ATTIVO: Assegnazione immediata di AppState.currentNoteId e disattivazione del banner di pericolo al ripristino.
  */
 
 Object.assign(UI, {
@@ -92,6 +95,11 @@ Object.assign(UI, {
         if (typeof UI.Trash !== 'undefined' && typeof UI.Trash.restore === 'function') {
             UI.Trash.restore(noteId);
             UI.closeDrawer();
+            const note = Store.getNote(noteId);
+            if (note) {
+                // Sincronizza immediatamente il banner e l'interfaccia di modifica prima di avviare il reload della pagina
+                UI._updateTrashedNoteUI(note);
+            }
             UI.selectNote(noteId);
         }
     },
@@ -176,17 +184,17 @@ Object.assign(UI, {
                 if (scrollArea) currentNote._lastScroll = scrollArea.scrollTop;
                 
                 const editorEl = document.getElementById('noteContent');
-                if (editorEl && typeof Editor !== 'undefined') {
+                if (editorEl && typeof Editor !== 'undefined' && AppState.isEditMode) {
                     const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
-                    if (currentNote.content !== cleanHtml) {
+                    if (cleanHtml && cleanHtml !== currentNote.content) {
                         currentNote.content = cleanHtml;
                         currentNote._isDirty = true;
+                        currentNote.updatedAt = new Date().toISOString();
                     }
-                    currentNote.updatedAt = new Date().toISOString();
                 }
             }
             if (typeof Editor !== 'undefined') Editor.clearHistory();
-            if (typeof Store !== 'undefined') {
+            if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
                 Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(false);
             }
@@ -234,6 +242,9 @@ Object.assign(UI, {
             AdvancedTable.syncSystemPropertiesRow(newNoteId);
         }
 
+        // Impostazione sincrona immediata dello stato attivo
+        AppState.currentNoteId = newNoteId;
+
         if (typeof UI.renderTree !== 'undefined') UI.renderTree();
         
         UI.selectNote(newNote.id, null, null, true);
@@ -265,20 +276,21 @@ Object.assign(UI, {
             if (currentNote) {
                 if (scrollArea) currentNote._lastScroll = scrollArea.scrollTop;
                 
+                // Salva il contenuto della nota precedente SOLO se siamo in modalità modifica e vi è stata reale mutazione
                 const editorEl = document.getElementById('noteContent');
-                if (editorEl && typeof Editor !== 'undefined') {
+                if (editorEl && typeof Editor !== 'undefined' && AppState.isEditMode) {
                     const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
-                    if (currentNote.content !== cleanHtml) {
+                    if (cleanHtml && cleanHtml !== currentNote.content) {
                         currentNote.content = cleanHtml;
                         currentNote._isDirty = true;
+                        currentNote.updatedAt = new Date().toISOString();
                     }
-                    currentNote.updatedAt = new Date().toISOString();
                 }
             }
             
-            // GARBAGE COLLECTION: Azzera la memoria RAM e scansiona il disco
+            // Salvataggio della nota precedente SOLO SE vi sono modifiche reali in sospeso
             if (typeof Editor !== 'undefined') Editor.clearHistory();
-            if (typeof Store !== 'undefined') {
+            if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
                 Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(false);
             }
@@ -309,12 +321,15 @@ Object.assign(UI, {
         let note = Store.getNote(id);
         if (!note) { AppState.isSwitchingNote = false; return; }
 
+        // Assegnazione sincrona immediata dell'ID della nota selezionata per garantire la coerenza dello stato
+        AppState.currentNoteId = id;
+
         // Se è stata richiesta l'apertura forzata all'inizio (es. doppio click per editare il titolo), azzera la posizione di scroll
         if (scrollToTop) {
             note._lastScroll = 0;
         }
 
-        // VERIFICA JIT SU DISCO
+        // 1. VERIFICA JIT DELLA NOTA SU DISCO
         if (AppState.workspaceHandle !== null) {
             if (!note._isDraft) {
                 const syncRes = await Store.syncNoteFromDisk(id);
@@ -341,6 +356,11 @@ Object.assign(UI, {
                     }
                 }
             }
+
+            // 2. JIT COMPONENT RECONCILIATION: Allinea i database e widget referenziati all'accesso della nota
+            if (typeof Store.syncWidgetsForNote === 'function' && note.content) {
+                await Store.syncWidgetsForNote(note.content);
+            }
         }
 
         const isTrashed = !!note.deletedAt;
@@ -349,9 +369,7 @@ Object.assign(UI, {
             AppState.isEditMode = false;
         }
 
-        AppState.currentNoteId = id;
-
-        // NAVIGAZIONE LINK: Apriamo forzatamente l'albero per rivelare la nota di destinazione se non cestinata
+        // Rivelazione nota nell'albero gerarchico se non cestinata
         if (!isTrashed) {
             let currParentId = note.parentId;
             while(currParentId) {
@@ -368,7 +386,6 @@ Object.assign(UI, {
         note._oldTitle = note.title;
         note._oldContent = note.content;
 
-        // Renderizza l'albero PRIMA di applicare l'highlight visivo
         if (typeof UI.renderTree !== 'undefined') UI.renderTree();
         UI.showEditor(true);
 
@@ -476,7 +493,6 @@ Object.assign(UI, {
 
         // Aggiornamento interfaccia per note cestinate o attive
         UI._updateTrashedNoteUI(note);
-
         UI.renderInlineFootnotes();
         UI.updateBreadcrumb(note);
         UI.updateMarkBtn(note.isMarked);
@@ -580,25 +596,23 @@ Object.assign(UI, {
 
         if (AppState.currentNoteId) {
             const scrollArea = document.querySelector('.editor-scroll-content');
-            if (scrollArea) {
-                const currentNote = Store.getNote(AppState.currentNoteId);
-                if (currentNote) currentNote._lastScroll = scrollArea.scrollTop;
-            }
+            const currentNote = Store.getNote(AppState.currentNoteId);
             
-            const editorEl = document.getElementById('noteContent');
-            if (editorEl && typeof Editor !== 'undefined') {
-                const currentNote = Store.getNote(AppState.currentNoteId);
-                if (currentNote) {
+            if (currentNote) {
+                if (scrollArea) currentNote._lastScroll = scrollArea.scrollTop;
+                
+                const editorEl = document.getElementById('noteContent');
+                if (editorEl && typeof Editor !== 'undefined' && AppState.isEditMode) {
                     const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
-                    if (currentNote.content !== cleanHtml) {
+                    if (cleanHtml && cleanHtml !== currentNote.content) {
                         currentNote.content = cleanHtml;
                         currentNote._isDirty = true;
+                        currentNote.updatedAt = new Date().toISOString();
                     }
-                    currentNote.updatedAt = new Date().toISOString();
                 }
                 Editor.clearHistory();
             }
-            if (typeof Store !== 'undefined') {
+            if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
                 Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(true);
             }
@@ -629,7 +643,7 @@ Object.assign(UI, {
         if (!AppState.currentNoteId) return;
 
         const note = Store.getNote(AppState.currentNoteId);
-        if (!note || note.deletedAt) return; // Blocco modifiche su note cestinate
+        if (!note || note.deletedAt) return; 
 
         const titleInput = document.getElementById('noteTitle');
         if (titleInput && note.title !== titleInput.value) {
@@ -740,7 +754,7 @@ Object.assign(UI, {
     handleEditorInput: () => {
         if (!AppState.currentNoteId) return;
         const note = Store.getNote(AppState.currentNoteId);
-        if (!note || note.deletedAt) return; // Blocco modifiche su note cestinate
+        if (!note || note.deletedAt) return; 
 
         const contentEl = document.getElementById('noteContent');
         

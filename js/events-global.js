@@ -13,8 +13,9 @@
  * RESTORE SMART CLICK ESCAPE: Ripristinato il listener mousedown su editorEl.
  * FEAT HORIZONTAL WHEEL SCROLL: Scorrimento orizzontale continuo su Kanban e Timeline tramite mouse wheel.
  * FIX TEXTNODE TARGET CLOSEST: Normalizzazione difensiva di e.target nei listener dragstart, dblclick e wheel.
- * FIX ISOLAMENTO INPUT WIDGET: Impedisce all'evento input scatenato dentro celle di database o diari
- * di risalire verso l'editor principale, azzerando le false sporcature di note.updatedAt e i falsi conflitti concorrenti.
+ * FIX ISOLAMENTO INPUT WIDGET: Impedisce all'evento input scatenato dentro componenti autonomi (Database, Diari, Codice)
+ * di sporcare la nota principale, ma garantisce che le Tabelle Semplici (.simple-table-wrapper) e gli Snippet
+ * scatenino regolarmente UI.handleEditorInput() e il salvataggio automatico.
  * FEAT HEADING SHORTCUTS: 
  * - H1 nativo (<h1>): Ctrl+Alt+1 o Ctrl+Shift+1
  * - H2 nativo (<h2>): Ctrl+Alt+2 o Ctrl+Shift+2
@@ -533,7 +534,6 @@ const EventsGlobal = {
             // - H3 nativo (<h3>): Ctrl+Alt+3 oppure Ctrl+Shift+3 (esclusiva da tastiera)
             // - Paragrafo normale (<p>): Ctrl+Alt+0
             // =========================================================================
-            
             // 1. SCORCIATOIE H1, H2 E RESET PARAGRAFO: CTRL+ALT+1/2/0 oppure CTRL+SHIFT+1/2/0
             if (isCtrlOrCmd && (e.altKey || e.shiftKey) && AppState.isEditMode) {
                 const isDigit1 = e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1' || e.key === '!';
@@ -543,22 +543,22 @@ const EventsGlobal = {
 
                 if (isDigit1) {
                     e.preventDefault();
-                    Editor.toggleHeader('h1'); // H1 Titolo Principale
+                    Editor.toggleHeader('h1');
                     return;
                 }
                 if (isDigit2) {
                     e.preventDefault();
-                    Editor.toggleHeader('h2'); // H2 Titolo Secondario
+                    Editor.toggleHeader('h2');
                     return;
                 }
                 if (isDigit3) {
                     e.preventDefault();
-                    Editor.toggleHeader('h3'); // H3 Titolo Terzo Livello
+                    Editor.toggleHeader('h3');
                     return;
                 }
                 if (isDigit0) {
                     e.preventDefault();
-                    Editor.toggleHeader('p');  // Paragrafo Normale (Reset Titoli)
+                    Editor.toggleHeader('p');
                     return;
                 }
             }
@@ -703,9 +703,7 @@ const EventsGlobal = {
             }
         }, true);
 
-        // =========================================================================
         // MOTORE DI GESTIONE TRASCINAMENTO BLOCCHI NELL'EDITOR (DRAG & DROP WIDGETS)
-        // =========================================================================
         editorEl.addEventListener('dragstart', (e) => {
             if (!AppState.isEditMode) return;
 
@@ -1154,9 +1152,7 @@ const EventsGlobal = {
             }, 10);
         });
 
-        // -------------------------------------------------------------
         // AUXCLICK (MIDDLE CLICK SUI LINK)
-        // -------------------------------------------------------------
         document.addEventListener('auxclick', (e) => {
             if (e.button === 1 || e.which === 2) {
                 let target = e.target;
@@ -1226,11 +1222,15 @@ const EventsGlobal = {
 
         editorEl.addEventListener('input', (e) => {
             if (!AppState.isSwitchingNote) {
-                // Se l'evento input proviene dall'interno di un widget (database, diario, codice, ecc.)
-                // non aggiornare il testo della nota principale: il widget gestisce la propria persistenza!
+                // Se l'evento input proviene da un widget a persistenza autonoma (Database, Diari, Codice, Bottoni),
+                // non aggiornare il testo della nota principale.
+                // Le tabelle semplici (.simple-table-wrapper) e gli snippet invece SONO parte del testo della nota!
                 const target = e.target;
-                const isInsideWidget = target && target.closest && !!target.closest(WidgetManager.blockSelector);
-                if (isInsideWidget) {
+                const isInsideAutonomousWidget = target && target.closest && (
+                    target.closest('.adv-table-wrapper, .adv-journal-wrapper, .code-wrapper, .adv-action-button-wrapper, .widget-type-database, .widget-type-pivot, .widget-type-journal, .widget-type-buttonbar')
+                ) && !target.closest('.simple-table-wrapper, [data-widget-type="simple-table"]');
+
+                if (isInsideAutonomousWidget) {
                     return;
                 }
 

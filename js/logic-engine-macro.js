@@ -12,7 +12,7 @@
  * FIX INSERT_SELECT: Associazione di _rawRow al contesto di origine per la risoluzione corretta di set_from_source_col.
  * FIX UNIFIED CELLS/VIRTUALCELLS RESOLUTION: Pre-idratazione con assegnazione esplicita di r.virtualCells
  * su tutte le condizioni WHERE e azioni SET prima dell'elaborazione delle macro.
- * FIX DOM APPEND MAILTO: I link mailto vengono provvisti di fallback click pulito per consentire l'intercettazione sicura.
+ * FIX MAILTO URL ENCODING: Preservazione del carattere '@' negli indirizzi email per garantire la conformità RFC 6068 e la corretta intercettazione dei destinatari.
  */
 
 Object.assign(LogicEngine, {
@@ -141,8 +141,9 @@ Object.assign(LogicEngine, {
                             continue;
                         }
 
+                        // Preservazione del carattere '@' negli indirizzi di posta secondo RFC 6068
                         let mailto = `mailto:${toVal}?subject=${encodeURIComponent(subVal)}&body=${encodeURIComponent(bodyVal)}`;
-                        if (ccVal) mailto += `&cc=${encodeURIComponent(ccVal)}`;
+                        if (ccVal) mailto += `&cc=${encodeURIComponent(ccVal).replace(/%40/g, '@')}`;
                         
                         pendingEmails.push(mailto);
                     } catch (err) {
