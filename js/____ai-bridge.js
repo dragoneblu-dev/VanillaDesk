@@ -1,5 +1,5 @@
 /**
- * js/ai-bridge.js
+ * js/____ai-bridge.js
  * Modulo Bridge per Integrazione AI e Agenti Intelligenti.
  * Consente l'interscambio di dati tra l'ambiente nativo VanillaDesk
  * e rappresentazioni semantiche in linguaggio naturale / Markdown per LLM.
@@ -30,8 +30,8 @@ const AIBridge = {
 
         manifest.notesTree = buildNoteBranch(null);
 
-        if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(id => {
+        if (AppState.databases && typeof AppState.getRelationalDatabaseIds === 'function') {
+            AppState.getRelationalDatabaseIds().forEach(id => {
                 const db = AppState.databases[id];
                 if (!db || db.isPivot || db.isLinkedView || id === 'SYS_PROPERTIES_DB') return;
 
@@ -144,11 +144,14 @@ data_aggiornamento: "${note.updatedAt}"
         let targetDbId = null;
         let dbState = null;
 
-        for (const [id, s] of Object.entries(AppState.databases || {})) {
-            if (s && s.title && s.title.trim().toLowerCase() === dbTitle.trim().toLowerCase()) {
-                targetDbId = id;
-                dbState = s;
-                break;
+        if (typeof AppState.getRelationalDatabaseIds === 'function') {
+            for (const id of AppState.getRelationalDatabaseIds()) {
+                const s = AppState.databases[id];
+                if (s && s.title && s.title.trim().toLowerCase() === dbTitle.trim().toLowerCase()) {
+                    targetDbId = id;
+                    dbState = s;
+                    break;
+                }
             }
         }
 

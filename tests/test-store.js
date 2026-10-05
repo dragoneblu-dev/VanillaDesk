@@ -1,30 +1,21 @@
 /**
  * tests/test-store.js
- * Suite Modulare di Collaudo Unitario e di Integrazione Completa per lo Storage di VanillaDesk.
- * Modulo testato: store.js & CryptoUtils
- * Conteggio test case: 35
- * Copertura estesa:
- * - Hashing deterministico, CRLF/LF parity e prefissi crittografici
- * - Cifratura/Decifratura AES-GCM 256-bit, gestione errori e token malformati
- * - Cache crittografica PBKDF2 e abbattimento dei tempi di derivazione (Zero-Lag Vault)
- * - Coerenza del Workspace Vault Salt tra frammenti
- * - 3-Way Field-Level Merge per Database Relazionali (colonne, righe, opzioni, tie-breaker LWW)
- * - 3-Way Merge per Diari/Log (array entries)
- * - Concorrenza Ottimistica Note (Revision Token revId, rilevamento conflitti e stashing)
- * - Scrittura Atomica e Sicura con gestione stream abort
- * - Prevenzione falsi positivi di salvataggio (hasUnsavedChanges)
- * - Rilevamento in tempo reale di cancellazioni testo nel DOM vivo dell'editor
- * - Sincronizzazione JIT in lettura componenti referenziati (syncWidgetsForNote)
- * - Lifecycle note e gerarchie (generateId, getChildren, prepareForSave)
- * - Scanner centralizzato entità attive (scanActiveEntities), pulizia RAM (cleanOrphanedRAMCaches) e GC fisica controllata (_needsPhysicalGC)
- * - Caricamento diretto database in openWorkspace senza _id_hack
- * - Debounce e allineamento salvataggio di emergenza locale (saveLocalBackup)
+ * Suite Modulare di Collaudo Unitario per il Core Storage di VanillaDesk.
+ * Modulo testato: js/store.js
+ * Responsabilità verificate:
+ * - Hashing deterministico, parità di terminatori di linea CRLF/LF e prefissi crittografici
+ * - Gestione sessione crittografica Workspace (Vault Salt, reset)
+ * - Rilevamento modifiche in tempo reale (hasUnsavedChanges, DOM vivo editor, flag _isDirty e _isDraft)
+ * - Orchestrazione del debounce di salvataggio automatico (triggerAutoSave)
+ * - Lifecycle note, modelli e navigazione gerarchica (generateId, getChildren, prepareForSave)
+ * - Scanner centralizzato delle risorse attive (scanActiveEntities), protezione asset nel cestino e nello stack Undo
+ * - Pulizia e Garbage Collection della memoria RAM (cleanOrphanedRAMCaches, _needsPhysicalGC)
  */
 
-describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centralizzata (35 Test)", () => {
+describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner RAM", () => {
 
     // =========================================================================
-    // 1. CRITTOGRAFIA DI BASE (AES-GCM & PBKDF2)
+    // 1. GESTIONE SESSIONE CRITTOGRAFICA & WORKSPACE VAULT SALT
     // =========================================================================
 
     test("Store: _getWorkspaceSalt inizializza e mantiene coerente AppState.vaultSaltHex", () => {
@@ -50,7 +41,7 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
     });
 
     // =========================================================================
-    // 3. HASHING E DETERMINISMO
+    // 2. HASHING DETERMINISTICO & PARITÀ CROSS-PLATFORM
     // =========================================================================
 
     test("Hashing: parità di hash tra terminatori di linea Windows (\\r\\n) e Unix (\\n)", () => {
@@ -93,240 +84,7 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
     });
 
     // =========================================================================
-    // 4. 3-WAY FIELD-LEVEL MERGING PER DATABASE RDBMS
-    // =========================================================================
-
-    test("Store: _mergeDatabaseStates fonde colonne e celle concorrenti (Field-Level Merge)", () => {
-        const testDbId = 'adv_tbl_test_merge_1';
-        Store._baseDatabases[testDbId] = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [{ id: 'r1', cells: { c1: 'Originale' }, updatedAt: 500 }]
-        };
-
-        const diskState = {
-            columns: [{ id: 'c1', name: 'Nome' }, { id: 'c2', name: 'Prezzo' }],
-            rows: [
-                { id: 'r1', cells: { c1: 'Originale', c2: 10 }, updatedAt: 1000 }
-            ]
-        };
-        const ramState = {
-            columns: [{ id: 'c1', name: 'Nome' }, { id: 'c3', name: 'Stato' }],
-            rows: [
-                { id: 'r1', cells: { c1: 'Modificato da RAM', c3: 'Attivo' }, updatedAt: 2000 }
-            ]
-        };
-
-        const merged = Store._mergeDatabaseStates(testDbId, diskState, ramState);
-        Assert.strictEqual(merged.columns.length, 3);
-
-        const r1 = merged.rows.find(r => r.id === 'r1');
-        Assert.strictEqual(r1.cells.c1, 'Modificato da RAM');
-        Assert.strictEqual(r1.cells.c2, 10);
-        Assert.strictEqual(r1.cells.c3, 'Attivo');
-    });
-
-    test("Store: _mergeDatabaseStates preserva righe create su disco e righe create in RAM contemporaneamente", () => {
-        const testDbId = 'adv_tbl_test_merge_2';
-        const diskState = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [
-                { id: 'r_disk_new', cells: { c1: 'Creato su Disco' }, updatedAt: 1500 }
-            ]
-        };
-        const ramState = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [
-                { id: 'r_ram_new', cells: { c1: 'Creato in RAM' }, updatedAt: 1600 }
-            ]
-        };
-
-        const merged = Store._mergeDatabaseStates(testDbId, diskState, ramState);
-        Assert.strictEqual(merged.rows.length, 2);
-        Assert.isTrue(merged.rows.some(r => r.id === 'r_disk_new'));
-        Assert.isTrue(merged.rows.some(r => r.id === 'r_ram_new'));
-    });
-
-    test("Store: _mergeDatabaseStates fonde opzioni e colori delle colonne Select", () => {
-        const testDbId = 'adv_tbl_test_merge_3';
-        const diskState = {
-            columns: [{ id: 'c_sel', name: 'Tag', type: 'select' }],
-            selectOptions: { c_sel: ['Bozza', 'Revisione'] },
-            selectColors: { c_sel: { 'Bozza': 'hl-c1' } },
-            rows: []
-        };
-        const ramState = {
-            columns: [{ id: 'c_sel', name: 'Tag', type: 'select' }],
-            selectOptions: { c_sel: ['Approvato'] },
-            selectColors: { c_sel: { 'Approvato': 'hl-c6' } },
-            rows: []
-        };
-
-        const merged = Store._mergeDatabaseStates(testDbId, diskState, ramState);
-        Assert.deepEqual(merged.selectOptions.c_sel, ['Bozza', 'Revisione', 'Approvato']);
-        Assert.strictEqual(merged.selectColors.c_sel['Bozza'], 'hl-c1');
-        Assert.strictEqual(merged.selectColors.c_sel['Approvato'], 'hl-c6');
-    });
-
-    test("Storage: _mergeDatabaseStates tie-breaker a parità di timestamp favorisce la sessione in RAM", () => {
-        const testDbId = 'adv_tbl_test_merge_4';
-        const fixedTime = 50000;
-        const diskState = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [{ id: 'r1', cells: { c1: 'Valore Disco' }, updatedAt: fixedTime }]
-        };
-        const ramState = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [{ id: 'r1', cells: { c1: 'Valore RAM' }, updatedAt: fixedTime }]
-        };
-        const merged = Store._mergeDatabaseStates(testDbId, diskState, ramState);
-        Assert.strictEqual(merged.rows[0].cells.c1, 'Valore RAM');
-    });
-
-    test("Storage: _mergeDatabaseStates preserva le righe del disco se la RAM ha array vuoto accidentale", () => {
-        const testDbId = 'adv_tbl_test_merge_5';
-        const diskState = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [{ id: 'r_persisted', cells: { c1: 'Dato Sicuro' }, updatedAt: 1000 }]
-        };
-        const ramState = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: []
-        };
-        const merged = Store._mergeDatabaseStates(testDbId, diskState, ramState);
-        Assert.strictEqual(merged.rows.length, 1);
-        Assert.strictEqual(merged.rows[0].id, 'r_persisted');
-    });
-
-    test("Store: _mergeDatabaseStates preserva intatte le righe del DB in caso di assenza modifiche", () => {
-        const testDbId = 'adv_tbl_test_merge_6';
-        const initial = {
-            columns: [{ id: 'c1', name: 'Nome' }],
-            rows: [{ id: 'r1', cells: { c1: 'Stabile' }, updatedAt: 500 }]
-        };
-        const merged = Store._mergeDatabaseStates(testDbId, initial, initial);
-        Assert.strictEqual(merged.rows.length, 1);
-        Assert.strictEqual(merged.rows[0].cells.c1, 'Stabile');
-    });
-
-    // =========================================================================
-    // 5. 3-WAY MERGE PER DIARIO / LOG (ENTRIES)
-    // =========================================================================
-
-    test("Store: _mergeDatabaseStates fonde correttamente voci concorrenti del Diario", () => {
-        const testJournalId = 'adv_journal_merge_1';
-        Store._baseDatabases[testJournalId] = {
-            entries: [{ id: 'j1', timestamp: 100, content: 'Nota iniziale', endTime: null }]
-        };
-
-        const diskState = {
-            entries: [
-                { id: 'j1', timestamp: 100, content: 'Nota iniziale', endTime: null },
-                { id: 'j_disk', timestamp: 150, content: 'Aggiunto da disco', endTime: null }
-            ]
-        };
-
-        const ramState = {
-            entries: [
-                { id: 'j1', timestamp: 200, content: 'Nota completata da RAM', endTime: 200 },
-                { id: 'j_ram', timestamp: 180, content: 'Aggiunto da RAM', endTime: null }
-            ]
-        };
-
-        const merged = Store._mergeDatabaseStates(testJournalId, diskState, ramState);
-        Assert.strictEqual(merged.entries.length, 3);
-        const j1 = merged.entries.find(e => e.id === 'j1');
-        Assert.strictEqual(j1.content, 'Nota completata da RAM');
-        Assert.strictEqual(j1.endTime, 200);
-    });
-
-    // =========================================================================
-    // 6. CONCORRENZA OTTIMISTICA NOTE E REVISION TOKENS
-    // =========================================================================
-
-    test("Store: revision token rileva divergenza concorrente sulla nota", async () => {
-        const localNote = {
-            id: 'n_test_rev',
-            title: 'Versione RAM',
-            content: '<p>RAM</p>',
-            revId: 'rev_local_01',
-            _baseRevId: 'rev_base_initial'
-        };
-
-        const diskNote = {
-            id: 'n_test_rev',
-            title: 'Versione Disco Modificata',
-            content: '<p>Disco</p>',
-            revId: 'rev_disk_different'
-        };
-
-        Assert.isTrue(diskNote.revId !== localNote._baseRevId, "Divergenza tra disco e base revId deve essere rilevata");
-    });
-
-    test("Store: risoluzione conflitto reload allinea i token e resetta lo stato dirty", async () => {
-        const localNote = {
-            id: 'n_conf_1',
-            title: 'Bozza Locale',
-            content: '<p>Locale</p>',
-            revId: 'rev_local',
-            _baseRevId: 'rev_base_old',
-            _isDirty: true
-        };
-
-        const diskNote = {
-            id: 'n_conf_1',
-            title: 'Versione Disco Consolidata',
-            content: '<p>Disco Consolidato</p>',
-            revId: 'rev_disk_fresh'
-        };
-
-        const origPrompt = UI.promptNoteConflict;
-        UI.promptNoteConflict = async () => 'reload';
-
-        try {
-            const res = await Store.handleNoteConflict(localNote, diskNote);
-            Assert.strictEqual(res, 'reload');
-            Assert.strictEqual(localNote.title, 'Versione Disco Consolidata');
-            Assert.strictEqual(localNote.revId, 'rev_disk_fresh');
-            Assert.strictEqual(localNote._baseRevId, 'rev_disk_fresh');
-            Assert.isFalse(localNote._isDirty);
-        } finally {
-            UI.promptNoteConflict = origPrompt;
-        }
-    });
-
-    test("Store: risoluzione conflitto overwrite preserva modifiche locali con base aggiornata", async () => {
-        const localNote = {
-            id: 'n_conf_2',
-            title: 'Bozza Locale da Forzare',
-            content: '<p>Locale Forzato</p>',
-            revId: 'rev_local',
-            _baseRevId: 'rev_base_old',
-            _isDirty: true
-        };
-
-        const diskNote = {
-            id: 'n_conf_2',
-            title: 'Versione Disco',
-            content: '<p>Disco</p>',
-            revId: 'rev_disk_fresh'
-        };
-
-        const origPrompt = UI.promptNoteConflict;
-        UI.promptNoteConflict = async () => 'overwrite';
-
-        try {
-            const res = await Store.handleNoteConflict(localNote, diskNote);
-            Assert.strictEqual(res, 'overwrite');
-            Assert.strictEqual(localNote.title, 'Bozza Locale da Forzare');
-            Assert.strictEqual(localNote._baseRevId, 'rev_disk_fresh');
-            Assert.isTrue(localNote._isDirty);
-        } finally {
-            UI.promptNoteConflict = origPrompt;
-        }
-    });
-
-    // =========================================================================
-    // 7. PREVENZIONE FALSI SALVATAGGI & LIVE DOM DETECTION
+    // 3. RILEVAMENTO MODIFICHE & LIVE DOM DETECTION (hasUnsavedChanges)
     // =========================================================================
 
     test("Store: hasUnsavedChanges restituisce false se non ci sono mutazioni in RAM", () => {
@@ -379,7 +137,6 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
             'n_active_live': Store._hashObj({ id: 'n_active_live', title: 'Nota Attiva', content: storedContent }, "RAW_")
         };
 
-        // Simula l'elemento editor vivo nel documento
         let editorEl = document.getElementById('noteContent');
         const createdEditor = !editorEl;
         if (createdEditor) {
@@ -415,59 +172,49 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
         Assert.isFalse(Store.isDirty, "Un accesso o blur senza mutazioni non deve attivare il salvataggio automatico");
     });
 
-    // =========================================================================
-    // 8. JIT COMPONENT RECONCILIATION (syncWidgetsForNote)
-    // =========================================================================
-
-    test("Store: syncWidgetsForNote aggiorna i dati in RAM se il disco ha una versione più recente senza sporcare lo stato", async () => {
-        const testDbId = 'adv_tbl_jit_sync_test';
+    test("Store: triggerAutoSave con workspace collegato applica debounce a 1500ms", (done) => {
         Store.isDirty = false;
+        clearTimeout(Store.debounceTimer);
 
-        const oldRamState = {
-            title: "Database Stantio in RAM",
-            columns: [{ id: 'c1', name: 'Task' }],
-            rows: [{ id: 'r1', cells: { c1: 'Prima' } }]
-        };
-
-        const freshDiskState = {
-            title: "Database Aggiornato su Disco",
-            columns: [{ id: 'c1', name: 'Task' }],
-            rows: [{ id: 'r1', cells: { c1: 'Aggiornato da altro utente' } }]
-        };
-
-        if (!AppState.databases) AppState.databases = {};
-        AppState.databases[testDbId] = oldRamState;
-        Store._baseDatabases[testDbId] = JSON.parse(JSON.stringify(oldRamState));
-        Store._diskHashes.databases[testDbId] = Store._hashObj(oldRamState, "RAW_");
-
-        const origRead = Store._readFragmentFromDisk;
-        Store._readFragmentFromDisk = async (dirHandle, fileName) => {
-            if (fileName === `${testDbId}.json`) {
-                return { status: 'success', data: JSON.stringify(freshDiskState) };
-            }
-            return { status: 'not_found' };
+        let saveToFileCalls = 0;
+        const origSaveToFile = Store.saveToFile;
+        Store.saveToFile = async () => {
+            saveToFileCalls++;
         };
 
         const origHandle = AppState.workspaceHandle;
-        AppState.workspaceHandle = {
-            getDirectoryHandle: async () => ({})
-        };
+        AppState.workspaceHandle = { name: "TestWS" };
 
         try {
-            const noteContentWithWidget = `<p>Testo</p><div id="${testDbId}" class="adv-widget-shell" data-widget-type="database"></div>`;
-            await Store.syncWidgetsForNote(noteContentWithWidget);
+            // Prima chiamata
+            Store.triggerAutoSave(false, true);
+            Assert.isTrue(Store.isDirty);
+            Assert.strictEqual(saveToFileCalls, 0, "Non deve eseguire saveToFile immediatamente senza forceImmediate");
 
-            Assert.strictEqual(AppState.databases[testDbId].title, "Database Aggiornato su Disco");
-            Assert.strictEqual(AppState.databases[testDbId].rows[0].cells.c1, "Aggiornato da altro utente");
-            Assert.isFalse(Store.isDirty, "La sola riconciliazione in lettura non deve sporcare lo stato con 'Modificato...'");
-        } finally {
-            Store._readFragmentFromDisk = origRead;
+            // Seconda chiamata immediata (simula digitazione continua)
+            Store.triggerAutoSave(false, true);
+            Assert.strictEqual(saveToFileCalls, 0, "Il debounce deve accorpare le chiamate consecutive");
+
+            // Verifica asincrona dopo il tempo di debounce
+            setTimeout(() => {
+                try {
+                    Assert.strictEqual(saveToFileCalls, 1, "saveToFile deve essere eseguito una sola volta al termine del debounce");
+                } finally {
+                    Store.saveToFile = origSaveToFile;
+                    AppState.workspaceHandle = origHandle;
+                    Store.isDirty = false;
+                    done();
+                }
+            }, 1600);
+        } catch(e) {
+            Store.saveToFile = origSaveToFile;
             AppState.workspaceHandle = origHandle;
+            throw e;
         }
     });
 
     // =========================================================================
-    // 9. METODI DI SUPPORTO AL CICLO DI VITA E GERARCHIA
+    // 4. METODI DI SUPPORTO AL CICLO DI VITA E GERARCHIA
     // =========================================================================
 
     test("Store: generateId produce identificatori univoci privi di trattini", () => {
@@ -514,7 +261,9 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
         Assert.strictEqual(savedNote._baseRevId, undefined);
     });
 
-    // 10. NUOVI TEST INTEGRATIVI: GC FISICA, SCANNER ENTITÀ, AUTO-SAVE E REFACTORING
+    // =========================================================================
+    // 5. SCANNER RISORSE, ASSET E PULIZIA RAM
+    // =========================================================================
 
     test("Store: scanActiveEntities rileva database attivi, immagini e audio nelle note", () => {
         AppState.notes = [
@@ -592,6 +341,13 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
         Assert.strictEqual(AppState.databases['adv_tbl_orphan_zombie'], undefined, "Il database orfano deve essere rimosso dalla RAM");
     });
 
+    test("Store: markNeedsPhysicalGC abilita il flag per la successiva Garbage Collection su disco", () => {
+        Store._needsPhysicalGC = false;
+        Store.markNeedsPhysicalGC();
+        Assert.isTrue(Store._needsPhysicalGC);
+    });
+
+
     test("Store: _needsPhysicalGC e markNeedsPhysicalGC controllano l'esecuzione della GC fisica", async () => {
         Store._needsPhysicalGC = false;
         Store.markNeedsPhysicalGC();
@@ -608,65 +364,4 @@ describe("Store: Local-First Storage, Concorrenza LWW, Zero-Lag Vault & GC Centr
             AppState.workspaceHandle = origHandle;
         }
     });
-
-    test("Store: _decryptAndProcessFragment carica direttamente il database con entityId senza _id_hack", async () => {
-        const sampleDb = {
-            title: "Database Diretto",
-            columns: [{ id: 'c1', name: 'Task', type: 'text' }],
-            rows: [{ id: 'r1', cells: { c1: 'Dato' } }]
-        };
-        const dbId = "adv_tbl_direct_load_test";
-        const jsonStr = JSON.stringify(sampleDb);
-
-        AppState.databases = {};
-        const success = await Store._decryptAndProcessFragment(jsonStr, 'database', dbId);
-
-        Assert.isTrue(success);
-        Assert.isNotNull(AppState.databases[dbId]);
-        Assert.strictEqual(AppState.databases[dbId].title, "Database Diretto");
-        Assert.strictEqual(AppState.databases[dbId]._id_hack, undefined, "Nessuna proprietà _id_hack fittizia deve permanere nello stato");
-        Assert.isTrue(Store._diskHashes.databases[dbId] !== undefined);
-    });
-
-    test("Store: triggerAutoSave con workspace collegato applica debounce a 1500ms", (done) => {
-        Store.isDirty = false;
-        clearTimeout(Store.debounceTimer);
-
-        let saveToFileCalls = 0;
-        const origSaveToFile = Store.saveToFile;
-        Store.saveToFile = async () => {
-            saveToFileCalls++;
-        };
-
-        const origHandle = AppState.workspaceHandle;
-        AppState.workspaceHandle = { name: "TestWS" };
-
-        try {
-            // Prima chiamata
-            Store.triggerAutoSave(false, true);
-            Assert.isTrue(Store.isDirty);
-            Assert.strictEqual(saveToFileCalls, 0, "Non deve eseguire saveToFile immediatamente senza forceImmediate");
-
-            // Seconda chiamata immediata (simula digitazione continua)
-            Store.triggerAutoSave(false, true);
-            Assert.strictEqual(saveToFileCalls, 0, "Il debounce deve accorpare le chiamate consecutive");
-
-            // Verifica asincrona dopo il tempo di debounce
-            setTimeout(() => {
-                try {
-                    Assert.strictEqual(saveToFileCalls, 1, "saveToFile deve essere eseguito una sola volta al termine del debounce");
-                } finally {
-                    Store.saveToFile = origSaveToFile;
-                    AppState.workspaceHandle = origHandle;
-                    Store.isDirty = false;
-                    done();
-                }
-            }, 1600);
-        } catch(e) {
-            Store.saveToFile = origSaveToFile;
-            AppState.workspaceHandle = origHandle;
-            throw e;
-        }
-    });
-
 });

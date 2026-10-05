@@ -23,6 +23,9 @@
  * FIX SOFT-DELETE RECORD NOTE (UNDO-SAFE): deleteRecord e deleteSelectedRows eseguono Soft-Delete (deletedAt)
  * sulle note collegate invece di Hard-Delete immediato, consentendo all'Undo (Ctrl+Z) di ripristinare la pagina senza orfani.
  * FIX ATOMIC VIRTUALCELLS SYNC: updateData assegna esplicitamente row.virtualCells dal valore restituito da buildVirtualRow.
+ * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() per la pulizia delle relazioni orfane.
+ * FEAT DUPLICATE RECORD UX: Clonazione fedele al 100% (senza suffissi arbitrari 'Copia') con transizione
+ * immediata del Drawer sulla nuova riga duplicata e visualizzazione del banner informativo.
  */
 
 Object.assign(AdvancedTable, {
@@ -305,10 +308,103 @@ Object.assign(AdvancedTable, {
         Store.triggerAutoSave();
     },
 
+    // =========================================================================
+    // DUPLICAZIONE RECORD CON UN CLICK (CLONE ROW)
+    // =========================================================================
+    duplicateRecord: async (tableId, rowId) => {
+        if (!tableId || !rowId) return;
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        let state = AdvancedTable.getState(realTableId);
+        if (!state || !Array.isArray(state.rows)) return;
+
+        const srcIdx = state.rows.findIndex(r => r.id === rowId);
+        if (srcIdx === -1) return;
+        const sourceRow = state.rows[srcIdx];
+
+        const now = Date.now();
+        const newRowId = 'r' + Store.generateId();
+
+        // Clonazione atomica e fedele delle celle senza suffissi arbitrari
+        const clonedCells = JSON.parse(JSON.stringify(sourceRow.cells || {}));
+
+        // Gestione sicura delle pagine dedicate (record_note) per non condividere lo stesso puntatore ID
+        state.columns.filter(c => c.type === 'record_note').forEach(c => {
+            const oldNoteId = clonedCells[c.id];
+            if (oldNoteId && typeof Store !== 'undefined') {
+                const oldNote = Store.getNote(oldNoteId);
+                const freshNoteId = Store.generateId();
+                const nowStr = new Date().toISOString();
+                const initialRevId = Store.generateId();
+
+                const newTitle = oldNote ? (oldNote.title || '') : '';
+                const newContent = oldNote ? oldNote.content : '<p><br></p>';
+
+                const clonedNote = {
+                    id: freshNoteId,
+                    parentId: AppState.currentNoteId || null,
+                    title: newTitle,
+                    content: newContent,
+                    isMarked: false,
+                    expanded: true,
+                    createdAt: nowStr,
+                    updatedAt: nowStr,
+                    revId: initialRevId,
+                    _baseRevId: initialRevId,
+                    _isDraft: true,
+                    _isDirty: true,
+                    isRecordNote: true,
+                    linkedTableId: realTableId,
+                    linkedRowId: newRowId
+                };
+                AppState.notes.push(clonedNote);
+                if (typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
+                    AdvancedTable.syncSystemPropertiesRow(freshNoteId);
+                }
+                clonedCells[c.id] = freshNoteId;
+            } else {
+                clonedCells[c.id] = '';
+            }
+        });
+
+        const newRow = {
+            id: newRowId,
+            createdAt: now,
+            updatedAt: now,
+            cells: clonedCells,
+            color: sourceRow.color || 'none',
+            opacity: sourceRow.opacity !== undefined ? sourceRow.opacity : '100'
+        };
+
+        // Inserimento della riga duplicata subito sotto quella di partenza
+        state.rows.splice(srcIdx + 1, 0, newRow);
+
+        const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, state);
+        newRow.virtualCells = freshVRow.virtualCells;
+        AdvancedTable.setState(realTableId, state);
+
+        if (typeof AdvancedAutomations !== 'undefined') {
+            await AdvancedAutomations.evaluate(realTableId, newRow.id, true);
+            await AdvancedAutomations.triggerCrossDB(realTableId);
+        }
+
+        state = AdvancedTable.getState(realTableId);
+        AdvancedTable.setState(realTableId, state);
+        AdvancedTable.updateDependentViews(realTableId);
+        Store.triggerAutoSave();
+
+        // APERTURA REATTIVA: Il Drawer naviga istantaneamente sul nuovo record duplicato
+        // mostrando il banner informativo di conferma
+        AdvancedTable.openRecordView(tableId, newRowId, null, true);
+
+        if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+            UI.showToast("Record duplicato con successo.", "success");
+        }
+    },
+
     _cascadeDeleteRecordReferences: (sourceDbId, deletedRowIdsSet) => {
         if (!sourceDbId || !deletedRowIdsSet || deletedRowIdsSet.size === 0 || !AppState.databases) return;
 
-        Object.keys(AppState.databases).forEach(otherDbId => {
+        AppState.getRelationalDatabaseIds().forEach(otherDbId => {
             const otherState = AppState.databases[otherDbId];
             if (!otherState || !Array.isArray(otherState.columns) || !Array.isArray(otherState.rows)) return;
 

@@ -155,14 +155,14 @@ Object.assign(WorkflowApp, {
     // =========================================================================
     startLinkDrag: (e, rowId, side = 'right') => {
         if (WorkflowApp.layout.locked) {
-            UI.showToast("Layout Bloccato: sblocca per creare nuovi collegamenti.", "warning");
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
             return;
         }
 
         // Verifica vincolo esclusività: la porta non può emettere se è già usata come ingresso
         const portEl = document.querySelector(`#wf_node_${rowId} .wf-port.${side}`);
         if (portEl && portEl.classList.contains('is-in')) {
-            UI.showToast("Questo punto di aggancio è già utilizzato come ingresso e non può essere usato come uscita.", "warning");
+            UI.showToast(I18n.t('workflow.toast_port_is_in'), "warning");
             e.stopPropagation();
             e.preventDefault();
             return;
@@ -286,7 +286,7 @@ Object.assign(WorkflowApp, {
         if (!targetRowId || targetRowId === fromRowId) return;
 
         if (targetPort && targetPort.classList.contains('is-out')) {
-            UI.showToast("Il punto selezionato è già utilizzato come uscita e non può fungere da ingresso.", "warning");
+            UI.showToast(I18n.t('workflow.toast_port_is_out'), "warning");
             return;
         }
 
@@ -324,14 +324,14 @@ Object.assign(WorkflowApp, {
 
     connectNodes: async (fromId, toId) => {
         if (WorkflowApp.layout.locked) {
-            UI.showToast("Layout Bloccato: impossibile modificare i collegamenti.", "warning");
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
             return;
         }
 
         const db = WorkflowApp.currentDbState;
         const relCol = WorkflowApp.selfRelCol;
         if (!db || !relCol) {
-            alert("Questo database non possiede una colonna Relazione configurata.");
+            alert(I18n.t('workflow.alert_no_rel_col'));
             return;
         }
 
@@ -340,7 +340,7 @@ Object.assign(WorkflowApp, {
         const targetRecordId = isPredecessor ? fromId : toId;
 
         if (WorkflowApp.checkCycle(sourceRecordId, targetRecordId)) {
-            alert("⚠️ Collegamento bloccato: creerebbe un Riferimento Circolare (Loop infinito).");
+            alert(I18n.t('workflow.alert_circular_blocked'));
             return;
         }
 
@@ -351,7 +351,7 @@ Object.assign(WorkflowApp, {
         if (!Array.isArray(currentTargets)) currentTargets = currentTargets ? [currentTargets] : [];
 
         if (currentTargets.includes(targetRecordId)) {
-            UI.showToast("Le due schede sono già collegate.");
+            UI.showToast(I18n.t('workflow.toast_already_connected'));
             return;
         }
 
@@ -368,12 +368,12 @@ Object.assign(WorkflowApp, {
 
         WorkflowApp.renderConnections();
         WorkflowApp.saveWorkflowAuto();
-        UI.showToast("Collegamento creato e salvato!", "success");
+        UI.showToast(I18n.t('workflow.toast_connected_saved'), "success");
     },
 
     disconnectNodes: async (fromId, toId) => {
         if (WorkflowApp.layout.locked) {
-            UI.showToast("Layout Bloccato: impossibile eliminare i collegamenti.", "warning");
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
             return;
         }
 
@@ -398,7 +398,7 @@ Object.assign(WorkflowApp, {
 
         WorkflowApp.renderConnections();
         WorkflowApp.saveWorkflowAuto();
-        UI.showToast("Collegamento rimosso!", "info");
+        UI.showToast(I18n.t('workflow.toast_disconnected'), "info");
     },
 
     persistDatabaseToDisk: async () => {
@@ -794,13 +794,13 @@ Object.assign(WorkflowApp, {
                     portEl.classList.remove('is-in', 'is-out', 'is-idle');
                     if (roles[s] === 'in') {
                         portEl.classList.add('is-in');
-                        portEl.title = "Punto di Ingresso (Esclusivo)";
+                        portEl.title = I18n.t('workflow.port_input_exclusive');
                     } else if (roles[s] === 'out') {
                         portEl.classList.add('is-out');
-                        portEl.title = "Punto di Uscita";
+                        portEl.title = I18n.t('workflow.port_output');
                     } else {
                         portEl.classList.add('is-idle');
-                        portEl.title = "Punto di connessione libero";
+                        portEl.title = I18n.t('workflow.port_free');
                     }
                 }
             });
@@ -875,7 +875,7 @@ Object.assign(WorkflowApp, {
                 const fromName = fromRow?.cells ? (fromRow.cells[db.columns[0]?.id] || 'Elemento') : 'Elemento';
                 const toName = toRow?.cells ? (toRow.cells[db.columns[0]?.id] || 'Elemento') : 'Elemento';
 
-                if (confirm(`Rimuovere il collegamento tra "${fromName}" e "${toName}"?`)) {
+                if (confirm(I18n.t('workflow.confirm_disconnect', { from: fromName, to: toName }))) {
                     WorkflowApp.disconnectNodes(edge.fromId, edge.toId);
                 }
             };
@@ -884,7 +884,7 @@ Object.assign(WorkflowApp, {
         });
 
         if (typeof WorkflowApp.updateMinimap === 'function') {
-        WorkflowApp.updateMinimap();
+            WorkflowApp.updateMinimap();
         }
     }
 });

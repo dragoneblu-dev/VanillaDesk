@@ -141,7 +141,7 @@ Object.assign(WorkflowApp, {
             const groups = new Map();
             rows.forEach(r => {
                 const rawVal = r.cells ? r.cells[cCol.id] : null;
-                const key = (rawVal === undefined || rawVal === null || rawVal === '') ? 'Senza Valore' : (Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal));
+                const key = (rawVal === undefined || rawVal === null || rawVal === '') ? I18n.t('workflow.cluster_no_value') : (Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal));
                 if (!groups.has(key)) groups.set(key, []);
                 groups.get(key).push(r.id);
             });
@@ -274,25 +274,25 @@ Object.assign(WorkflowApp, {
 
         let html = `
             <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:15px;">
-                Avvolgi automaticamente i blocchi correlati all'interno di riquadri sul canvas in base a una proprietà:
+                ${I18n.t('workflow.cluster_drawer_desc')}
             </div>
             <select id="clusterColSelect" class="modern-input" style="width:100%; margin-bottom:20px; font-weight:bold;">
-                <option value="">-- Nessun Raggruppamento (Canvas Libero) --</option>
+                <option value="">${I18n.t('workflow.cluster_no_group')}</option>
         `;
 
         db.columns.forEach(c => {
             const isSel = WorkflowApp.layout.clusterColId === c.id ? 'selected' : '';
-            html += `<option value="${c.id}" ${isSel}>➔ Raggruppa per "${UI.escapeHTML(c.name)}" (${c.type})</option>`;
+            html += `<option value="${c.id}" ${isSel}>${I18n.t('workflow.cluster_group_by', { name: UI.escapeHTML(c.name), type: c.type })}</option>`;
         });
 
         html += `</select>`;
         
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">Annulla</button>
-            <button class="btn btn-primary" onclick="WorkflowApp.applyClusterGroup(document.getElementById('clusterColSelect').value)">Applica Raggruppamento</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="WorkflowApp.applyClusterGroup(document.getElementById('clusterColSelect').value)">${I18n.t('workflow.cluster_btn_apply')}</button>
         `;
         
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.group || Icons.folder} Raggruppamento in Cluster</span>`, html, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.group || Icons.folder} ${I18n.t('workflow.cluster_drawer_title')}</span>`, html, footerHTML);
     },
 
     applyClusterGroup: (colId) => {
@@ -318,7 +318,7 @@ Object.assign(WorkflowApp, {
         const groups = new Map();
         db.rows.forEach(r => {
             const rawVal = r.cells ? r.cells[clusterColId] : null;
-            let key = 'Senza Valore';
+            let key = I18n.t('workflow.cluster_no_value');
             if (rawVal !== undefined && rawVal !== null && rawVal !== '') {
                 key = Array.isArray(rawVal) ? rawVal.join(', ') : String(rawVal);
             }
@@ -408,7 +408,7 @@ Object.assign(WorkflowApp, {
 
     alignSelectedNodes: (mode) => {
         if (WorkflowApp.layout.locked) {
-            UI.showToast("Layout Bloccato: sblocca per allineare i blocchi.", "warning");
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
             return;
         }
 
@@ -422,7 +422,7 @@ Object.assign(WorkflowApp, {
                 WorkflowApp.layout.nodes[n.id].x = snappedX;
                 n.el.style.left = `${snappedX}px`;
             });
-            UI.showToast(`Allineati ${nodes.length} blocchi a sinistra`, "info");
+            UI.showToast(I18n.t('workflow.toast_aligned_left', { count: nodes.length }), "info");
         } else if (mode === 'centerH') {
             const minX = Math.min(...nodes.map(n => n.x));
             const maxX = Math.max(...nodes.map(n => n.x + n.w));
@@ -432,7 +432,7 @@ Object.assign(WorkflowApp, {
                 WorkflowApp.layout.nodes[n.id].x = targetX;
                 n.el.style.left = `${targetX}px`;
             });
-            UI.showToast(`Centrati orizzontalmente ${nodes.length} blocchi`, "info");
+            UI.showToast(I18n.t('workflow.toast_centered_h', { count: nodes.length }), "info");
         } else if (mode === 'right') {
             const maxX = Math.max(...nodes.map(n => n.x + n.w));
             nodes.forEach(n => {
@@ -440,7 +440,7 @@ Object.assign(WorkflowApp, {
                 WorkflowApp.layout.nodes[n.id].x = targetX;
                 n.el.style.left = `${targetX}px`;
             });
-            UI.showToast(`Allineati ${nodes.length} blocchi a destra`, "info");
+            UI.showToast(I18n.t('workflow.toast_aligned_right', { count: nodes.length }), "info");
         } else if (mode === 'top') {
             const minY = Math.min(...nodes.map(n => n.y));
             const snappedY = WorkflowApp.snapToGrid(minY);
@@ -448,7 +448,7 @@ Object.assign(WorkflowApp, {
                 WorkflowApp.layout.nodes[n.id].y = snappedY;
                 n.el.style.top = `${snappedY}px`;
             });
-            UI.showToast(`Allineati ${nodes.length} blocchi in alto`, "info");
+            UI.showToast(I18n.t('workflow.toast_aligned_top', { count: nodes.length }), "info");
         } else if (mode === 'centerV') {
             const minY = Math.min(...nodes.map(n => n.y));
             const maxY = Math.max(...nodes.map(n => n.y + n.h));
@@ -458,7 +458,7 @@ Object.assign(WorkflowApp, {
                 WorkflowApp.layout.nodes[n.id].y = targetY;
                 n.el.style.top = `${targetY}px`;
             });
-            UI.showToast(`Centrati verticalmente ${nodes.length} blocchi`, "info");
+            UI.showToast(I18n.t('workflow.toast_centered_v', { count: nodes.length }), "info");
         } else if (mode === 'bottom') {
             const maxY = Math.max(...nodes.map(n => n.y + n.h));
             nodes.forEach(n => {
@@ -466,7 +466,7 @@ Object.assign(WorkflowApp, {
                 WorkflowApp.layout.nodes[n.id].y = targetY;
                 n.el.style.top = `${targetY}px`;
             });
-            UI.showToast(`Allineati ${nodes.length} blocchi in basso`, "info");
+            UI.showToast(I18n.t('workflow.toast_aligned_bottom', { count: nodes.length }), "info");
         }
 
         WorkflowApp.renderConnections();
@@ -477,13 +477,13 @@ Object.assign(WorkflowApp, {
 
     distributeSelectedNodes: (axis) => {
         if (WorkflowApp.layout.locked) {
-            UI.showToast("Layout Bloccato: sblocca per distribuire i blocchi.", "warning");
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
             return;
         }
 
         const nodes = WorkflowApp._getSelectedNodesGeometry();
         if (nodes.length < 3) {
-            UI.showToast("Seleziona almeno 3 blocchi per distribuirli equamente.", "warning");
+            UI.showToast(I18n.t('workflow.toast_distribute_min3'), "warning");
             return;
         }
 
@@ -505,7 +505,7 @@ Object.assign(WorkflowApp, {
                 n.el.style.left = `${snappedX}px`;
                 currentX += n.w + gap;
             }
-            UI.showToast(`Distribuiti orizzontalmente ${nodes.length} blocchi`, "info");
+            UI.showToast(I18n.t('workflow.toast_distributed_h', { count: nodes.length }), "info");
         } else if (axis === 'vertical') {
             nodes.sort((a, b) => a.y - b.y);
             const first = nodes[0];
@@ -524,7 +524,7 @@ Object.assign(WorkflowApp, {
                 n.el.style.top = `${snappedY}px`;
                 currentY += n.h + gap;
             }
-            UI.showToast(`Distribuiti verticalmente ${nodes.length} blocchi`, "info");
+            UI.showToast(I18n.t('workflow.toast_distributed_v', { count: nodes.length }), "info");
         }
 
         WorkflowApp.renderConnections();
@@ -535,7 +535,7 @@ Object.assign(WorkflowApp, {
 
     snapSelectedNodesToGrid: () => {
         if (WorkflowApp.layout.locked) {
-            UI.showToast("Layout Bloccato: impossibile modificare le posizioni.", "warning");
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
             return;
         }
 
@@ -555,7 +555,7 @@ Object.assign(WorkflowApp, {
         WorkflowApp.renderClusters();
         WorkflowApp.updateMinimap();
         WorkflowApp.saveWorkflowAuto();
-        UI.showToast(`Agganciati a griglia ${nodes.length} blocchi`, "info");
+        UI.showToast(I18n.t('workflow.toast_snapped_grid', { count: nodes.length }), "info");
     },
 
     updateSelectionToolbar: () => {
@@ -573,24 +573,24 @@ Object.assign(WorkflowApp, {
         const disabledAttr = isLocked ? 'disabled' : '';
 
         toolbar.innerHTML = `
-            <span class="wf-toolbar-badge">${count} selezionati</span>
+            <span class="wf-toolbar-badge">${I18n.t('workflow.toolbar_selected', { count })}</span>
 
             <!-- ALLINEAMENTO ORIZZONTALE -->
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('left')" title="Allinea a Sinistra">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('left')" title="${I18n.t('workflow.align_left')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="1" y="1" width="2" height="14" rx="0.5"/>
                     <rect x="5" y="3" width="9" height="4" rx="1" fill-opacity="0.8"/>
                     <rect x="5" y="9" width="6" height="4" rx="1" fill-opacity="0.8"/>
                 </svg>
             </button>
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('centerH')" title="Allinea al Centro Orizzontale">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('centerH')" title="${I18n.t('workflow.align_center_h')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <line x1="8" y1="1" x2="8" y2="15" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 1"/>
                     <rect x="3" y="3" width="10" height="4" rx="1" fill-opacity="0.8"/>
                     <rect x="4.5" y="9" width="7" height="4" rx="1" fill-opacity="0.8"/>
                 </svg>
             </button>
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('right')" title="Allinea a Destra">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('right')" title="${I18n.t('workflow.align_right')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="13" y="1" width="2" height="14" rx="0.5"/>
                     <rect x="2" y="3" width="9" height="4" rx="1" fill-opacity="0.8"/>
@@ -601,21 +601,21 @@ Object.assign(WorkflowApp, {
             <div class="wf-toolbar-sep"></div>
 
             <!-- ALLINEAMENTO VERTICALE -->
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('top')" title="Allinea in Alto">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('top')" title="${I18n.t('workflow.align_top')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="1" y="1" width="14" height="2" rx="0.5"/>
                     <rect x="3" y="5" width="4" height="9" rx="1" fill-opacity="0.8"/>
                     <rect x="9" y="5" width="4" height="6" rx="1" fill-opacity="0.8"/>
                 </svg>
             </button>
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('centerV')" title="Allinea al Centro Verticale">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('centerV')" title="${I18n.t('workflow.align_center_v')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <line x1="1" y1="8" x2="15" y2="8" stroke="currentColor" stroke-width="1.5" stroke-dasharray="2 1"/>
                     <rect x="3" y="3" width="4" height="10" rx="1" fill-opacity="0.8"/>
                     <rect x="9" y="4.5" width="4" height="7" rx="1" fill-opacity="0.8"/>
                 </svg>
             </button>
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('bottom')" title="Allinea in Basso">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.alignSelectedNodes('bottom')" title="${I18n.t('workflow.align_bottom')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="1" y="13" width="14" height="2" rx="0.5"/>
                     <rect x="3" y="2" width="4" height="9" rx="1" fill-opacity="0.8"/>
@@ -626,14 +626,14 @@ Object.assign(WorkflowApp, {
             <div class="wf-toolbar-sep"></div>
 
             <!-- DISTRIBUZIONE EQUIDISTANTE -->
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.distributeSelectedNodes('horizontal')" title="Distribuisci Equamente in Orizzontale">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.distributeSelectedNodes('horizontal')" title="${I18n.t('workflow.distribute_h')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="1" y="3" width="2" height="10" rx="0.5"/>
                     <rect x="7" y="5" width="2" height="6" rx="0.5"/>
                     <rect x="13" y="3" width="2" height="10" rx="0.5"/>
                 </svg>
             </button>
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.distributeSelectedNodes('vertical')" title="Distribuisci Equamente in Verticale">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.distributeSelectedNodes('vertical')" title="${I18n.t('workflow.distribute_v')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <rect x="3" y="1" width="10" height="2" rx="0.5"/>
                     <rect x="5" y="7" width="6" height="2" rx="0.5"/>
@@ -644,7 +644,7 @@ Object.assign(WorkflowApp, {
             <div class="wf-toolbar-sep"></div>
 
             <!-- SNAP TO GRID RAPIDO -->
-            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.snapSelectedNodesToGrid()" title="Aggancia Nodi Selezionati alla Griglia">
+            <button class="wf-toolbar-btn" ${disabledAttr} onclick="WorkflowApp.snapSelectedNodesToGrid()" title="${I18n.t('workflow.snap_to_grid')}">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
                     <circle cx="4" cy="4" r="1.5"/>
                     <circle cx="12" cy="4" r="1.5"/>
@@ -653,7 +653,7 @@ Object.assign(WorkflowApp, {
                 </svg>
             </button>
 
-            <button class="wf-toolbar-btn" onclick="WorkflowApp.clearSelection()" title="Deseleziona Tutto">✕</button>
+            <button class="wf-toolbar-btn" onclick="WorkflowApp.clearSelection()" title="${I18n.t('workflow.deselect_all')}">✕</button>
         `;
 
         toolbar.classList.add('active');

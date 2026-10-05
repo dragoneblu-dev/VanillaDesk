@@ -77,12 +77,12 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
 
-        for (let i = 1; i <= 205; i++) {
+        for (let i = 1; i <= 60; i++) {
             editorEl.innerHTML = `<p>Test ${i}</p>`;
             Editor.saveSnapshot(true);
         }
 
-        Assert.strictEqual(Editor.undoStack.length, 200, "Lo stack deve eliminare gli elementi più vecchi e non superare 200");
+        Assert.strictEqual(Editor.undoStack.length, 50, "Lo stack deve eliminare gli elementi più vecchi e non superare 50");
     });
 
     test("History: tokenizzazione e conservazione di immagini data-image-ref negli snapshot", () => {
@@ -338,20 +338,113 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Assert.strictEqual(restored.automations[0].id, 'auto_1');
     });
 
-    test("History: registerTypingStart su spazio o invio forza snapshot immediato senza attendere il timer", () => {
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    
+
+    beforeEach(() => {
+        TestFramework.resetAppState();
+        Editor.clearHistory();
+    });
+
+    test("History: Inizializzazione corretta dello stack vuoto", () => {
+        Assert.strictEqual(Editor.undoStack.length, 0);
+        Assert.strictEqual(Editor.redoStack.length, 0);
+        Assert.isFalse(Editor.isTyping);
+    });
+
+    test("History: saveSnapshot salva lo stato dell'editor e pulisce il redoStack", () => {
+        let editorEl = document.getElementById('noteContent');
+        editorEl.innerHTML = '<p>Testo Iniziale</p>';
+        
+        Editor.saveSnapshot();
+        Assert.strictEqual(Editor.undoStack.length, 1);
+
+        // Simuliamo un elemento nel redoStack
+        Editor.redoStack.push('<p>Redo</p>');
+        Assert.strictEqual(Editor.redoStack.length, 1);
+
+        editorEl.innerHTML = '<p>Testo Modificato</p>';
+        Editor.saveSnapshot();
+        
+        Assert.strictEqual(Editor.undoStack.length, 2);
+        Assert.strictEqual(Editor.redoStack.length, 0, "Il redoStack deve essere azzerato dopo una nuova azione");
+    });
+
+    test("History: registerTypingStart su spazio conclude la parola senza duplicare lo snapshot", () => {
         let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
 
+        // 1. Inizio della prima parola 'ciao' (salva snapshot dello stato 'Parola' prima della modifica)
         editorEl.innerHTML = '<p>Parola</p>';
-        Editor.registerTypingStart('a'); // Carattere normale -> attiva timer e flag isTyping
+        Editor.registerTypingStart('a'); 
         Assert.isTrue(Editor.isTyping);
         Assert.strictEqual(Editor.undoStack.length, 1);
 
-        // Digitazione di delimitatore ' ' -> deve salvare subito e azzerare isTyping
+        // 2. Termine della parola con spazio: resetta isTyping ma NON inserisce uno snapshot duplicato
         editorEl.innerHTML = '<p>Parola </p>';
         Editor.registerTypingStart(' ');
-        Assert.isFalse(Editor.isTyping);
-        Assert.strictEqual(Editor.undoStack.length, 2);
+        Assert.isFalse(Editor.isTyping, "isTyping deve essere spento alla fine della parola");
+        Assert.strictEqual(Editor.undoStack.length, 1, "Lo spazio non deve raddoppiare lo snapshot nello stack");
+
+        // 3. Inizio della seconda parola: scatta il secondo snapshot pulito (1 Parola = 1 Undo)
+        editorEl.innerHTML = '<p>Parola nuova</p>';
+        Editor.registerTypingStart('n');
+        Assert.isTrue(Editor.isTyping);
+        Assert.strictEqual(Editor.undoStack.length, 2, "La nuova parola deve creare esattamente il secondo snapshot");
     });
 
+    test("History: Undo e Redo ripristinano fedelmente il contenuto", () => {
+        let editorEl = document.getElementById('noteContent');
+        Editor.clearHistory();
+
+        editorEl.innerHTML = '<p>Stato 1</p>';
+        Editor.saveSnapshot();
+
+        editorEl.innerHTML = '<p>Stato 2</p>';
+        Editor.saveSnapshot();
+
+        editorEl.innerHTML = '<p>Stato 3</p>';
+
+        // Eseguiamo Undo: torna a Stato 2
+        Editor.undo();
+        Assert.isTrue(editorEl.innerHTML.includes('Stato 2'));
+        Assert.strictEqual(Editor.redoStack.length, 1);
+
+        // Eseguiamo Redo: torna a Stato 3
+        Editor.redo();
+        Assert.isTrue(editorEl.innerHTML.includes('Stato 3'));
+        Assert.strictEqual(Editor.redoStack.length, 0);
+    });
+
+    test("History: Deduplicazione evita di salvare snapshot con contenuto identico", () => {
+        let editorEl = document.getElementById('noteContent');
+        Editor.clearHistory();
+
+        editorEl.innerHTML = '<p>Identico</p>';
+        Editor.saveSnapshot();
+        Assert.strictEqual(Editor.undoStack.length, 1);
+
+        // Tentativo di salvare lo stesso identico stato senza forcePush
+        Editor.saveSnapshot(false);
+        Assert.strictEqual(Editor.undoStack.length, 1, "Non deve aggiungere duplicati con lo stesso markup");
+
+        // Con forcePush = true (es. drag and drop) deve consentire il salvataggio
+        Editor.saveSnapshot(true);
+        Assert.strictEqual(Editor.undoStack.length, 2, "forcePush deve forzare l'inserimento");
+    });
 });

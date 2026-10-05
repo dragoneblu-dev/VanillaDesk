@@ -11,12 +11,16 @@
  * FIX UNDO RECORD NOTE RESURRECTION: Al ripristino di uno snapshot di Undo/Redo, le note collegate (record_note)
  * che erano state messe nel cestino a seguito della cancellazione della riga vengono automaticamente de-archiviate
  * (rimozione di deletedAt), eliminando il paradosso dei puntatori "Pagina Orfana".
+ * PERF B64 CACHING: Caching delle stringhe Base64 dei widget per evitare serializzazioni JSON e btoa() ridondanti
+ * durante la digitazione di testo ordinario, eliminando il micro-stuttering da Garbage Collector.
  */
 Object.assign(Editor, {
     undoStack: [],
     redoStack: [],
     isTyping: false,
     typingTimer: null,
+
+    _b64Cache: new Map(),
 
     imageCache: {},
     audioCache: {}, 
@@ -55,6 +59,7 @@ Object.assign(Editor, {
         Editor.redoStack = [];
         Editor.isTyping = false;
         clearTimeout(Editor.typingTimer);
+        if (Editor._b64Cache) Editor._b64Cache.clear();
         Editor.updateUndoRedoUI();
     },
 
@@ -62,18 +67,29 @@ Object.assign(Editor, {
         const wordBoundaries = [' ', '.', ',', ';', ':', '!', '?', 'Enter', 'Tab'];
 
         if (wordBoundaries.includes(key)) {
-            Editor.saveSnapshot();
-            Editor.isTyping = false;
+            // Un delimitatore di parola (spazio o punteggiatura) conclude la parola corrente.
+            // Reset di isTyping senza forzare uno snapshot anticipato prima dell'inserimento del tasto nel DOM.
+            clearTimeout(Editor.typingTimer);
+            if (Editor.isTyping) {
+                Editor.isTyping = false;
+            }
+
+            // Per Invio e Tab (cambio riga o blocco) consolidiamo immediatamente lo snapshot
+            if (key === 'Enter' || key === 'Tab') {
+                Editor.saveSnapshot();
+            }
         } else {
+            // Primo carattere della nuova parola: scatta UN SOLO snapshot dello stato di partenza
             if (!Editor.isTyping) {
                 Editor.saveSnapshot();
                 Editor.isTyping = true;
             }
+            // Digitazione continua della parola: rinnova il timer di inattività
             clearTimeout(Editor.typingTimer);
             Editor.typingTimer = setTimeout(() => {
                 Editor.saveSnapshot();
                 Editor.isTyping = false;
-            }, 600); 
+            }, 750); 
         }
     },
 
@@ -175,10 +191,7 @@ Object.assign(Editor, {
             const trueId = liveWidget.id.split('_cited_')[0];
             if (!trueId) continue;
 
-            let stateObj = null;
-            if (AppState.databases && AppState.databases[trueId]) {
-                stateObj = JSON.parse(JSON.stringify(AppState.databases[trueId]));
-            }
+            let serializedJson = '';
 
             // Per i blocchi codice, allinea preventivamente il testo esatto digitato
             const livePre = liveWidget.querySelector('pre.code-content');
@@ -186,13 +199,27 @@ Object.assign(Editor, {
                 let currentText = livePre.innerText;
                 if (currentText.endsWith('\n\n')) currentText = currentText.slice(0, -1);
                 else if (currentText.endsWith('\n') && currentText !== '\n') currentText = currentText.slice(0, -1);
-                if (!stateObj) stateObj = { title: 'Codice', language: 'none', content: '' };
-                stateObj.content = currentText;
+                const codeState = { ...(AppState.databases && AppState.databases[trueId] ? AppState.databases[trueId] : { title: 'Codice', language: 'none' }), content: currentText };
+                serializedJson = JSON.stringify(codeState);
+            } else if (AppState.databases && AppState.databases[trueId]) {
+                // Serializzazione diretta senza clonazione profonda ridondante
+                serializedJson = JSON.stringify(AppState.databases[trueId]);
             }
 
-            if (stateObj) {
+            if (serializedJson) {
                 try {
-                    const b64State = btoa(unescape(encodeURIComponent(JSON.stringify(stateObj))));
+                    let b64State = '';
+                    const cached = Editor._b64Cache ? Editor._b64Cache.get(trueId) : null;
+                    
+                    // Riutilizzo istantaneo della stringa Base64 cached se il JSON del widget non è mutato
+                    if (cached && cached.json === serializedJson) {
+                        b64State = cached.b64;
+                    } else {
+                        b64State = btoa(unescape(encodeURIComponent(serializedJson)));
+                        if (!Editor._b64Cache) Editor._b64Cache = new Map();
+                        Editor._b64Cache.set(trueId, { json: serializedJson, b64: b64State });
+                    }
+                    
                     cloneWidget.setAttribute('data-b64-state', b64State);
                 } catch (e) {}
             }
@@ -218,39 +245,39 @@ Object.assign(Editor, {
             // SICUREZZA DOM: Il marcatore temporaneo viene inserito SOLO su cursore collassato
             // per evitare di spezzare nodi di testo o corrompere le selezioni estese
             if (sel.isCollapsed) {
-	            const node = sel.anchorNode;
-	            const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-	            
-	            if (preNode) {
-	                const range = sel.getRangeAt(0);
-	                const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-	                activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-	                if (activeCodeBlockWrapper) {
-	                    activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-	                    codeBlockCaret = true;
-	                }
-	            } else {
-	                try {
-	                    const range = sel.getRangeAt(0);
-	                        origContainer = range.startContainer;
-	                        origOffset = range.startOffset;
-	
-	                    const markerRange = range.cloneRange();
-	                    markerRange.collapse(true);
-	
-	                    const marker = document.createElement('span');
-	                    marker.id = 'history-undo-marker-temp';
-	                    marker.style.display = 'none';
-	
-	                    markerRange.insertNode(marker);
-	                    markerInserted = true;
-	
-	                        if (origContainer.nodeType === Node.TEXT_NODE) {
-	                        secondPart = marker.nextSibling;
-	                    }
-	                } catch (e) { 
-	                    console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
-	                }
+                const node = sel.anchorNode;
+                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                
+                if (preNode) {
+                    const range = sel.getRangeAt(0);
+                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                    if (activeCodeBlockWrapper) {
+                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                        codeBlockCaret = true;
+                    }
+                } else {
+                    try {
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
+                        const marker = document.createElement('span');
+                        marker.id = 'history-undo-marker-temp';
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
+                        markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
+                    } catch (e) { 
+                        console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
+                    }
                 }
             }
         }
@@ -272,7 +299,7 @@ Object.assign(Editor, {
                     const restoreRange = document.createRange();
                     const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
                     restoreRange.setStart(origContainer, safeOffset);
-                        restoreRange.collapse(true);
+                    restoreRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(restoreRange);
                 }
@@ -296,7 +323,7 @@ Object.assign(Editor, {
         }
 
         Editor.undoStack.push(htmlToSave);
-        if (Editor.undoStack.length > 200) Editor.undoStack.shift();
+        if (Editor.undoStack.length > 50) Editor.undoStack.shift();
         Editor.redoStack = [];
         
         Editor.updateUndoRedoUI();
@@ -481,39 +508,39 @@ Object.assign(Editor, {
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
                 if (sel.isCollapsed) {
-                const node = sel.anchorNode;
-                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-                
-                if (preNode) {
-                    const range = sel.getRangeAt(0);
-                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                    if (activeCodeBlockWrapper) {
-                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                        codeBlockCaret = true;
-                    }
-                } else {
-                    try {
+                    const node = sel.anchorNode;
+                    const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                    
+                    if (preNode) {
                         const range = sel.getRangeAt(0);
+                        const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                        activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                        if (activeCodeBlockWrapper) {
+                            activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                            codeBlockCaret = true;
+                        }
+                    } else {
+                        try {
+                            const range = sel.getRangeAt(0);
                             origContainer = range.startContainer;
                             origOffset = range.startOffset;
 
-                        const markerRange = range.cloneRange();
-                        markerRange.collapse(true);
+                            const markerRange = range.cloneRange();
+                            markerRange.collapse(true);
 
-                        const marker = document.createElement('span');
-                        marker.id = 'history-undo-marker-temp';
-                        marker.style.display = 'none';
+                            const marker = document.createElement('span');
+                            marker.id = 'history-undo-marker-temp';
+                            marker.style.display = 'none';
 
-                        markerRange.insertNode(marker);
-                        markerInserted = true;
+                            markerRange.insertNode(marker);
+                            markerInserted = true;
 
                             if (origContainer.nodeType === Node.TEXT_NODE) {
-                            secondPart = marker.nextSibling;
-                        }
-                    } catch (e) { }
+                                secondPart = marker.nextSibling;
+                            }
+                        } catch (e) { }
+                    }
                 }
-            }
             }
 
             const htmlToSaveForRedo = Editor._buildHistorySnapshot(editor);
@@ -533,7 +560,7 @@ Object.assign(Editor, {
                         const restoreRange = document.createRange();
                         const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
                         restoreRange.setStart(origContainer, safeOffset);
-                            restoreRange.collapse(true);
+                        restoreRange.collapse(true);
                         sel.removeAllRanges();
                         sel.addRange(restoreRange);
                     }
@@ -587,39 +614,39 @@ Object.assign(Editor, {
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
                 if (sel.isCollapsed) {
-                const node = sel.anchorNode;
-                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-                
-                if (preNode) {
-                    const range = sel.getRangeAt(0);
-                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                    if (activeCodeBlockWrapper) {
-                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                        codeBlockCaret = true;
-                    }
-                } else {
-                    try {
+                    const node = sel.anchorNode;
+                    const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                    
+                    if (preNode) {
                         const range = sel.getRangeAt(0);
+                        const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                        activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                        if (activeCodeBlockWrapper) {
+                            activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                            codeBlockCaret = true;
+                        }
+                    } else {
+                        try {
+                            const range = sel.getRangeAt(0);
                             origContainer = range.startContainer;
                             origOffset = range.startOffset;
 
-                        const markerRange = range.cloneRange();
-                        markerRange.collapse(true);
+                            const markerRange = range.cloneRange();
+                            markerRange.collapse(true);
 
-                        const marker = document.createElement('span');
-                        marker.id = 'history-undo-marker-temp';
-                        marker.style.display = 'none';
+                            const marker = document.createElement('span');
+                            marker.id = 'history-undo-marker-temp';
+                            marker.style.display = 'none';
 
-                        markerRange.insertNode(marker);
-                        markerInserted = true;
+                            markerRange.insertNode(marker);
+                            markerInserted = true;
 
                             if (origContainer.nodeType === Node.TEXT_NODE) {
-                            secondPart = marker.nextSibling;
-                        }
-                    } catch (e) { }
+                                secondPart = marker.nextSibling;
+                            }
+                        } catch (e) { }
+                    }
                 }
-            }
             }
 
             const htmlToSaveForUndo = Editor._buildHistorySnapshot(editor);
@@ -639,7 +666,7 @@ Object.assign(Editor, {
                         const restoreRange = document.createRange();
                         const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
                         restoreRange.setStart(origContainer, safeOffset);
-                            restoreRange.collapse(true);
+                        restoreRange.collapse(true);
                         sel.removeAllRanges();
                         sel.addRange(restoreRange);
                     }

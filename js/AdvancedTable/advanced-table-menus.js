@@ -79,7 +79,7 @@ const AdvancedTableMenus = {
 
         const linkedViews = [];
         if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(k => {
+            AppState.getRelationalDatabaseIds().forEach(k => {
                 const db = AppState.databases[k];
                 const originalSource = state.isLinkedView || state.isPivot ? state.sourceTableId : tableId;
                 if (db && (db.isLinkedView || db.isPivot) && db.sourceTableId === originalSource && k !== tableId) {

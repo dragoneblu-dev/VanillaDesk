@@ -9,12 +9,11 @@ const AutomationUIBuilder = {
 
     getAvailableDatabases: () => {
         const dbList = [];
-        if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(id => {
+        if (AppState.databases && typeof AppState.getRelationalDatabaseIds === 'function') {
+            AppState.getRelationalDatabaseIds().forEach(id => {
                 const s = AppState.databases[id];
-                // Filtro rigoroso: Deve avere colonne, NON deve essere una pivot/vista collegata, 
-                // NON deve avere entries (Diari) o buttons (Macro), e ID specifici sono bannati.
-                if (s && s.columns && Array.isArray(s.columns) && !s.isPivot && !s.isLinkedView && !s.entries && !s.buttons) {
+                // Esclude pivot, viste collegate, shadow DB di sistema e ID speciali di servizio
+                if (!s.isPivot && !s.isLinkedView && id !== 'SYS_PROPERTIES_DB') {
                     if (s.title !== 'Diario/Log' && !id.includes('adv_journal_') && !id.includes('adv_code_') && !id.includes('adv_btnbar_') && !id.includes('adv_cols_') && !id.includes('adv_audio_') && !id.includes('cit_')) {
                         dbList.push({ id: id, title: s.title || 'Database Sconosciuto' });
                     }

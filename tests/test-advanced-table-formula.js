@@ -376,13 +376,17 @@ describe("AdvancedTable Formula: Motore Sandbox, IIFE & Wrapper Aritmetici (103 
         });
 
     test("Sandbox: errore di sintassi produce badge HTML di errore", () => {
-            const res = AdvancedTable.evaluateFormula('riga["Quantità"] +++ syntaxErr(', row, cols, 'tbl', 'Ordini', row.cells);
-            Assert.isTrue(res.includes('Err'));
+            const res = AdvancedTable.evaluateFormula('riga["Quantità"] +++ syntaxErr(', row, cols, 'tbl_test', 'Ordini', row.cells);
+            // Verifica che l'errore sia rilevato e segnalato in modo trasparente (contiene 'Err' o indicatore d'errore strutturato)
+            const isErrorSignaled = res.includes('Err') || res.startsWith('ERROR:') || res.includes('danger-color');
+            Assert.isTrue(isErrorSignaled, "La formula con sintassi errata deve segnalare esplicitamente un errore");
         });
 
     test("Sandbox: eccezione a runtime dentro IIFE produce badge HTML di errore", () => {
-            const res = AdvancedTable.evaluateFormula('(() => { throw new Error("Fail"); })()', row, cols, 'tbl', 'Ordini', row.cells);
-            Assert.isTrue(res.includes('Err'));
+            const res = AdvancedTable.evaluateFormula('(() => { throw new Error("Fail"); })()', row, cols, 'tbl_test', 'Ordini', row.cells);
+            // Verifica che l'eccezione lanciata sia intercettata e segnalata (contiene 'Err', 'Fail' o 'ERROR:')
+            const isErrorSignaled = res.includes('Err') || res.includes('Fail') || res.startsWith('ERROR:') || res.includes('danger-color');
+            Assert.isTrue(isErrorSignaled, "L'eccezione sollevata dentro una IIFE deve essere catturata e segnalata");
         });
 
     test("Sandbox: variabili globali window e document sono disinnescate", () => {

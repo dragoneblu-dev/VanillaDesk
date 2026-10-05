@@ -15,6 +15,7 @@
     <link rel="stylesheet" href="workflow.css">
 
     <!-- Script Core di VanillaDesk -->
+    <script src="../js/i18n.js"></script>
     <script src="../js/icons.js"></script>
     <script src="../js/state.js"></script>
     <script src="../js/store.js"></script>
@@ -47,17 +48,17 @@
         <div class="header-left">
             <button class="btn btn-primary" onclick="WorkflowApp.selectWorkspace()">
                 <script>document.write(Icons.folderOpen)</script>
-                <span id="wsBtnLabel">Apri Cartella Workspace...</span>
+                <span id="wsBtnLabel"><script>document.write(I18n.t('workflow.btn_open_workspace'))</script></span>
             </button>
 
             <div class="separator"></div>
 
             <button id="btnSwitchDb" class="btn" style="display:none;" onclick="WorkflowApp.showDbPicker()">
-                <script>document.write(Icons.tableDatabase)</script> Cambia Database
+                <script>document.write(Icons.tableDatabase)</script> <span id="btnSwitchDbLabel"><script>document.write(I18n.t('workflow.btn_switch_db'))</script></span>
             </button>
 
-            <button id="btnReloadDb" class="btn" style="display:none;" onclick="WorkflowApp.reloadCurrentDatabase(false)" title="Ricarica i dati aggiornati dal database mantenendo il layout">
-                <script>document.write(Icons.refresh)</script> Ricarica
+            <button id="btnReloadDb" class="btn" style="display:none;" onclick="WorkflowApp.reloadCurrentDatabase(false)" title="">
+                <script>document.write(Icons.refresh); document.getElementById('btnReloadDb').title = I18n.t('workflow.toast_data_reloaded');</script> <span id="btnReloadDbLabel"><script>document.write(I18n.t('workflow.btn_reload'))</script></span>
             </button>
 
             <span id="activeDbTitle" style="font-weight: bold; font-size: 0.95rem; color: var(--text-primary); display:none;"></span>
@@ -67,17 +68,18 @@
             <!-- RICERCA RAPIDA NODO CON AUTOCOMPLETE E CENTRATURA -->
             <div class="search-box-header">
                 <span class="search-icon-inside"><script>document.write(Icons.search)</script></span>
-                <input type="text" id="workflowSearchInput" placeholder="Cerca nodo (like)..." autocomplete="off"
+                <input type="text" id="workflowSearchInput" placeholder="" autocomplete="off"
                        oninput="WorkflowApp.handleSearchInput(this.value)"
                        onkeydown="WorkflowApp.handleSearchKeydown(event, this.value)">
+                <script>document.getElementById('workflowSearchInput').placeholder = I18n.t('workflow.search_placeholder');</script>
                 
                 <div id="workflowSearchDropdown" class="search-autocomplete-portal"></div>
             </div>
 
             <!-- TOGGLE LOCK LAYOUT -->
-            <button id="btnLockLayout" class="btn" onclick="WorkflowApp.toggleLayoutLock()" title="Blocca/Sblocca spostamento schede e collegamenti">
-                <script>document.write(Icons.lock)</script>
-                <span id="lockBtnLabel">Blocca</span>
+            <button id="btnLockLayout" class="btn" onclick="WorkflowApp.toggleLayoutLock()" title="">
+                <script>document.write(Icons.lock); document.getElementById('btnLockLayout').title = I18n.t('workflow.menu_lock');</script>
+                <span id="lockBtnLabel"><script>document.write(I18n.t('workflow.lock'))</script></span>
             </button>
 
             <div class="separator"></div>
@@ -90,8 +92,8 @@
             </div>
 
             <!-- MENU AD HAMBURGER CON SOTTOMENÙ COMPATTI -->
-            <button id="btnHamburgerMenu" class="btn" onclick="WorkflowApp.openMainMenu(event)" title="Menu Opzioni">
-                <script>document.write(Icons.menu)</script>
+            <button id="btnHamburgerMenu" class="btn" onclick="WorkflowApp.openMainMenu(event)" title="">
+                <script>document.write(Icons.menu); document.getElementById('btnHamburgerMenu').title = I18n.t('workflow.menu_options');</script>
             </button>
         </div>
     </header>
@@ -99,13 +101,10 @@
     <!-- 1. SCREEN: WELCOME -->
     <div id="welcomeScreen" class="app-screen active">
         <div class="welcome-card">
-            <h1>Workflow Graph Studio</h1>
-            <p>
-                Visualizzatore a grafo avanzato con snap millimetrico a griglia, minimappa radar interattiva e selezione elastica.<br><br>
-                <b>Integrità Dati Garantita:</b> Il workflow memorizza la disposizione spaziale all'interno della cartella <code>assets/workflow/</code> del workspace selezionato senza alterare la struttura del database.
-            </p>
+            <h1><script>document.write(I18n.t('workflow.welcome_title'))</script></h1>
+            <p><script>document.write(I18n.t('workflow.welcome_desc'))</script></p>
             <button class="btn btn-primary" style="padding: 12px 24px; font-size: 1rem; width: 100%; justify-content: center;" onclick="WorkflowApp.selectWorkspace()">
-                Seleziona Cartella Workspace
+                <script>document.write(I18n.t('workflow.welcome_btn'))</script>
             </button>
         </div>
     </div>
@@ -113,10 +112,8 @@
     <!-- 2. SCREEN: SCELTA DATABASE (FILTRO AUTO-RELAZIONI) -->
     <div id="dbPickerScreen" class="app-screen">
         <div class="db-picker-header">
-            <h2 style="font-size: 1.5rem; margin-bottom: 6px;">Seleziona il Database da visualizzare:</h2>
-            <p style="color: var(--text-secondary); font-size: 0.9rem;">
-                Vengono mostrati esclusivamente i database provvisti di auto-relazione interna.
-            </p>
+            <h2 style="font-size: 1.5rem; margin-bottom: 6px;"><script>document.write(I18n.t('workflow.picker_title'))</script></h2>
+            <p style="color: var(--text-secondary); font-size: 0.9rem;"><script>document.write(I18n.t('workflow.picker_desc'))</script></p>
         </div>
         <div id="dbGridList" class="db-grid"></div>
     </div>
@@ -154,7 +151,8 @@
             </div>
 
             <!-- RADAR MINIMAP INTERATTIVA -->
-            <div id="workflowMinimap" title="Clicca o trascina per spostare la vista">
+            <div id="workflowMinimap" title="">
+                <script>document.getElementById('workflowMinimap').title = I18n.t('workflow.minimap_title');</script>
                 <svg id="minimapSvg"></svg>
             </div>
 
@@ -166,7 +164,7 @@
     <!-- DRAWER LATERALE UNIVERSALE -->
     <div id="advGlobalDrawer" class="adv-drawer">
         <div class="adv-drawer-header">
-            <div class="adv-drawer-title" id="advDrawerTitle">Pannello</div>
+            <div class="adv-drawer-title" id="advDrawerTitle"><script>document.write(I18n.t('workflow.drawer_default_title'))</script></div>
             <button class="close-modal-btn" onclick="UI.closeDrawer()">✕</button>
         </div>
         <div id="advDrawerBody" class="adv-drawer-body"></div>

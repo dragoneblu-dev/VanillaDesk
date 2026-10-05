@@ -7,8 +7,8 @@
  * FIX MULTI-WIDGET ROUTING: updateDependentViews ora riconosce esplicitamente i diari (JournalManager),
  * blocchi codice (CodeManager) e button bar (ButtonManager), evitando che vengano ridisegnati come tabelle RDBMS.
  * FEAT DEFAULT COMMENT: Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
- * FEAT REACTIVE DEPENDENCIES (2-PASS CONVERGENCE): updateDependentViews supporta formule cross-database (tabella["..."])
- * e convergenza ciclica stabilizzata a 2 passaggi massimi, risolvendo allineamenti incrociati senza rischio di loop infiniti.
+ * FEAT REACTIVE DEPENDENCIES (2-PASS CONVERGENCE): updateDependentViews supporta formule cross-database sia per
+ * Titolo (tabella["..."]) che per ID Immutabile (tabella["adv_tbl_..."]) e convergenza ciclica stabilizzata a 2 passaggi.
  */
 
 const AdvancedTable = {
@@ -129,7 +129,7 @@ const AdvancedTable = {
         if (state.hideFooterControls === undefined) state.hideFooterControls = false;
         if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
 
-        // Normalizzazione di sicurezza della dimensione pagina (Per vecche versioni: No unpaged 'all', default 25, max 200)
+        // Normalizzazione di sicurezza della dimensione pagina (Per vecchie versioni: No unpaged 'all', default 25, max 200)
         if (state.pageSize === 'all') {
             state.pageSize = 200;
         } else if (typeof state.pageSize === 'string') {
@@ -166,7 +166,10 @@ const AdvancedTable = {
         const targetState = AppState.databases[targetTrueId];
         const targetTitle = targetState ? targetState.title : null;
         const escapeRegExp = (str) => str ? str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') : '';
+        
+        // Riconoscimento dipendenza sia tramite Titolo human-readable che tramite ID Immutabile
         const tablePattern = targetTitle ? new RegExp(`tabella\\[\\s*["']${escapeRegExp(targetTitle)}["']\\s*\\]`) : null;
+        const tableIdPattern = new RegExp(`tabella\\[\\s*["']${escapeRegExp(targetTrueId)}["']\\s*\\]`);
 
         const dependentIds = [];
 
@@ -180,14 +183,23 @@ const AdvancedTable = {
                     (col.type === 'relation' && col.targetTableId === targetTrueId) ||
                     (col.type === 'relation_backlink' && col.linkedTableId === targetTrueId) ||
                     (col.type === 'rollup' && (col.targetTableId === targetTrueId || (col.relationColId && String(col.relationColId).includes(targetTrueId)))) ||
-                    (col.type === 'formula' && col.formula && targetTitle && col.formula.includes(targetTitle) && tablePattern && tablePattern.test(col.formula))
+                    (col.type === 'formula' && col.formula && (
+                        (targetTitle && col.formula.includes(targetTitle) && tablePattern && tablePattern.test(col.formula)) ||
+                        (col.formula.includes(targetTrueId) && tableIdPattern.test(col.formula))
+                    ))
                 );
             }
 
-            if (!hasDependency && s.automations && Array.isArray(s.automations) && targetTitle && tablePattern) {
+            if (!hasDependency && s.automations && Array.isArray(s.automations)) {
                 hasDependency = s.automations.some(a => 
-                    (a.triggers && a.triggers.some(t => t.value && t.value.includes(targetTitle) && tablePattern.test(t.value))) ||
-                    (a.actions && a.actions.some(act => act.value && act.value.includes(targetTitle) && tablePattern.test(act.value)))
+                    (a.triggers && a.triggers.some(t => t.value && (
+                        (targetTitle && t.value.includes(targetTitle) && tablePattern && tablePattern.test(t.value)) ||
+                        (t.value.includes(targetTrueId) && tableIdPattern.test(t.value))
+                    ))) ||
+                    (a.actions && a.actions.some(act => act.value && (
+                        (targetTitle && act.value.includes(targetTitle) && tablePattern && tablePattern.test(act.value)) ||
+                        (act.value.includes(targetTrueId) && tableIdPattern.test(act.value))
+                    )))
                 );
             }
 

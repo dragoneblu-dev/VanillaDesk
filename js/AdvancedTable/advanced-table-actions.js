@@ -1,19 +1,14 @@
 /**
  * AdvancedTableActions.js
- * Modifiche strutturali complesse, Drag&Drop, Resize, Modali e Controlli Relazioni / Rollup.
- * Esecuzione macro con LogicEngine centralizzato.
- * Ottimizzazione rendering relazioni e paginazione incrementale.
- * Mappatura ID garantita per la generazione dei Prompt AI.
- * Integrazione selettore per colonna 'note_link' (Collegamento a Nota).
- * per impedire mutazioni in-place che bloccavano il re-render automatico della vista WBS / Albero.
- * FEAT WBS AUTO-EXPAND: L'aggiunta di un figlio o genitore espande automaticamente il ramo nell'albero WBS.
- * esclusivamente alla catena semantica del campo in modifica, consentendo relazioni multiple distinte sullo stesso DB.
- * FEAT AUTO-CARET LONGTEXT: openLongTextModal accetta la posizione del cursore iniziale per atterrare esattamente dopo l'invio.
+ * Modifiche strutturali, Geometria della griglia, Drag&Drop, Resize, Modali e Navigazione Record Note.
+ * NOTA ARCHITETTURALE: Le Relazioni/Rollup sono state isolate in 'advanced-table-relations.js'
+ * e i Pulsanti Macro di colonna in 'advanced-table-column-buttons.js'.
+ * FIX RENAME PROPAGATION: updateTitle propaga la rinomina del titolo anche ad automazioni e macro buttons,
+ * garantendo che le formule continuino a funzionare anche se non avevano ancora migrato all'ID immutabile.
+ * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() per isolare le scansioni dei database.
  */
 
 Object.assign(AdvancedTable, {
-
-    _relSearchTimer: null,
 
     onTableDragStart: (e, tableId) => {
         if (!AppState.isEditMode) return;
@@ -50,8 +45,8 @@ Object.assign(AdvancedTable, {
         let cleanTitle = newTitle.trim() || I18n.t('editor.untitled');
 
         let allNames = [];
-        Object.keys(AppState.databases).forEach(id => {
-            if (id !== tableId && AppState.databases[id].title) {
+        AppState.getRelationalDatabaseIds().forEach(id => {
+            if (id !== tableId && AppState.databases[id] && AppState.databases[id].title) {
                 allNames.push(AppState.databases[id].title);
             }
         });
@@ -71,11 +66,13 @@ Object.assign(AdvancedTable, {
             const regex1 = new RegExp(`tabella\\[['"]${escapeRegExp(oldTitle)}['"]\\]`, 'g');
             const replace1 = `tabella["${finalTitle.replace(/"/g, '\\"')}"]`;
 
-            Object.keys(AppState.databases).forEach(id => {
+            AppState.getRelationalDatabaseIds().forEach(id => {
                 let s = AppState.databases[id];
+                if (!s) return;
                 let sChanged = false;
                 
-                if (s && Array.isArray(s.columns)) {
+                // 1. Aggiorna colonne Formula
+                if (Array.isArray(s.columns)) {
                     s.columns.forEach(c => {
                         if (c.type === 'formula' && c.formula && c.formula.match(regex1)) {
                             c.formula = c.formula.replace(regex1, replace1);
@@ -83,6 +80,55 @@ Object.assign(AdvancedTable, {
                         }
                     });
                 }
+
+                // 2. Aggiorna Formule nelle Automazioni
+                if (Array.isArray(s.automations)) {
+                    s.automations.forEach(auto => {
+                        if (Array.isArray(auto.triggers)) {
+                            auto.triggers.forEach(t => {
+                                if (t.colId === 'SYS_JS_FORMULA' && t.value && t.value.match(regex1)) {
+                                    t.value = t.value.replace(regex1, replace1);
+                                    sChanged = true;
+                                }
+                            });
+                        }
+                        if (Array.isArray(auto.actions)) {
+                            auto.actions.forEach(a => {
+                                if (a.type && a.type.includes('formula') && a.value && a.value.match(regex1)) {
+                                    a.value = a.value.replace(regex1, replace1);
+                                    sChanged = true;
+                                }
+                            });
+                        }
+                    });
+                }
+
+                // 3. Aggiorna Formule nei Pulsanti Macro
+                if (Array.isArray(s.columns)) {
+                    s.columns.forEach(c => {
+                        if (c.type === 'button' && Array.isArray(c.actionBlocks)) {
+                            c.actionBlocks.forEach(blk => {
+                                if (Array.isArray(blk.filters)) {
+                                    blk.filters.forEach(f => {
+                                        if (f.colId === 'SYS_JS_FORMULA' && f.value && f.value.match(regex1)) {
+                                            f.value = f.value.replace(regex1, replace1);
+                                            sChanged = true;
+                                        }
+                                    });
+                                }
+                                if (Array.isArray(blk.actions)) {
+                                    blk.actions.forEach(act => {
+                                        if (act.type && act.type.includes('formula') && act.value && act.value.match(regex1)) {
+                                            act.value = act.value.replace(regex1, replace1);
+                                            sChanged = true;
+                                        }
+                                    });
+                                }
+                            });
+                        }
+                    });
+                }
+
                 if (sChanged) {
                     AdvancedTable.setState(id, s);
                 }
@@ -93,6 +139,8 @@ Object.assign(AdvancedTable, {
         if (titleEl && titleEl.innerText !== finalTitle) titleEl.innerText = finalTitle;
 
         Store.triggerAutoSave();
+
+        // Sincronizza reattivamente la colonna/albero laterale con il nuovo titolo del database o della vista
         UI.renderTree();
     },
 
@@ -293,7 +341,6 @@ Object.assign(AdvancedTable, {
         if (maxWidth > 600) maxWidth = 600;
 
         col.width = Math.round(maxWidth);
-        
         if (!state.freeWidth) state.freeWidth = true;
 
         AdvancedTable.setState(realTableId, state);
@@ -323,690 +370,6 @@ Object.assign(AdvancedTable, {
         if (typeof WidgetManager !== 'undefined' && typeof WidgetManager.moveWidgetToNote === 'function') {
             WidgetManager.moveWidgetToNote(tableId, targetNoteId);
             AdvancedTable.closeDropdowns(true);
-        }
-    },
-
-    unlinkRelation: (srcTableId, srcRowId, srcColId, targetIdToUnlink, isBacklink) => {
-        const realSrcTable = AdvancedTable._resolveSourceId(srcTableId);
-        const srcState = AdvancedTable.getState(realSrcTable);
-        const srcCol = srcState.columns.find(c => c.id === srcColId);
-
-        if (isBacklink) {
-            const targetDbId = srcCol.linkedTableId;
-            const targetColId = srcCol.linkedColId;
-            const targetState = AdvancedTable.getState(targetDbId);
-            const targetRow = targetState.rows.find(r => r.id === targetIdToUnlink);
-            
-            if (targetRow) {
-                let vals = targetRow.cells[targetColId];
-                vals = Array.isArray(vals) ? [...vals] : (vals ? [vals] : []);
-                vals = vals.filter(id => id !== srcRowId);
-                AdvancedTable.updateData(targetDbId, targetIdToUnlink, targetColId, vals);
-            }
-        } else {
-            const srcRow = srcState.rows.find(r => r.id === srcRowId);
-            if (srcRow) {
-                let vals = srcRow.cells[srcColId];
-                vals = Array.isArray(vals) ? [...vals] : (vals ? [vals] : []);
-                vals = vals.filter(id => id !== targetIdToUnlink);
-                AdvancedTable.updateData(realSrcTable, srcRowId, srcColId, vals);
-            }
-        }
-
-        if (typeof UI !== 'undefined') {
-            UI.closeDrawer();
-            UI.showToast(I18n.t('adv_actions.unlink_success'), "info");
-        }
-    },
-
-    openRelationConfig: (tableId, colId) => {
-        const realTableId = AdvancedTable._resolveSourceId(tableId);
-        AdvancedTable.closeDropdowns(true);
-        AdvancedTable._pendingRelConfig = { realTableId, colId };
-
-        let optionsHTML = `<option value="">${I18n.t('adv_actions.select_db_placeholder')}</option>`;
-
-        if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(tId => {
-                const s = AppState.databases[tId];
-                if (s && !s.isPivot && !s.isLinkedView && s.columns && !tId.includes('adv_code_') && !tId.includes('adv_btnbar_') && !tId.includes('adv_cols_') && !tId.includes('adv_journal_')) {
-                    const parentName = AdvancedTable.getParentNoteName(tId);
-                    optionsHTML += `<option value="${tId}">➔ [${parentName}] ${s.title || I18n.t('editor.database')}</option>`;
-                }
-            });
-        }
-
-        const bodyHTML = `
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rel_target_db_label')}</label>
-            <select id="relConfigTable" class="modern-input" style="margin-bottom: 15px; width: 100%;" onchange="AdvancedTable.updateRelationColOptions()">${optionsHTML}</select>
-
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rel_target_col_label')}</label>
-            <select id="relConfigCol" class="modern-input" style="margin-bottom: 25px; width: 100%;"></select>
-        `;
-        const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveRelationConfig()">${I18n.t('adv_actions.save_relation')}</button>
-        `;
-
-        if (typeof UI !== 'undefined') {
-            UI.openDrawer(`${Icons.relation} ${I18n.t('adv_col_menu.configure_relation')}`, bodyHTML, footerHTML);
-        }
-
-        // Cerchiamo e pre-impostiamo i valori vecchi
-        const state = AdvancedTable.getState(realTableId);
-        const colDef = state.columns.find(c => c.id === colId);
-
-        if (colDef && colDef.targetTableId) {
-            setTimeout(() => {
-                const tableSelect = document.getElementById('relConfigTable');
-                if (tableSelect && tableSelect.querySelector(`option[value="${colDef.targetTableId}"]`)) {
-                    tableSelect.value = colDef.targetTableId;
-                    AdvancedTable.updateRelationColOptions();
-                    
-                    setTimeout(() => {
-                        const colSelect = document.getElementById('relConfigCol');
-                        if (colDef.targetColId && colSelect && colSelect.querySelector(`option[value="${colDef.targetColId}"]`)) {
-                            colSelect.value = colDef.targetColId;
-                        }
-                    }, 50);
-                }
-            }, 50);
-        }
-    },
-
-    updateRelationColOptions: () => {
-        const tId = document.getElementById('relConfigTable').value;
-        const colSelect = document.getElementById('relConfigCol');
-        colSelect.innerHTML = `<option value="">${I18n.t('adv_actions.select_col_placeholder')}</option>`;
-
-        if (!tId) return;
-        const state = AdvancedTable.getTableState(tId);
-        if (state && state.columns) {
-            state.columns.forEach(c => {
-                colSelect.innerHTML += `<option value="${c.id}">${c.name}</option>`;
-            });
-        }
-    },
-
-    saveRelationConfig: () => {
-        const tId = document.getElementById('relConfigTable').value;
-        const cTargetId = document.getElementById('relConfigCol').value;
-        if (!tId || !cTargetId) { alert(I18n.t('adv_actions.alert_select_db_and_col')); return; }
-
-        const { realTableId, colId } = AdvancedTable._pendingRelConfig;
-        let state = AdvancedTable.getState(realTableId);
-        const col = state.columns.find(c => c.id === colId);
-
-        const oldTargetTableId = col.targetTableId;
-        const hasTargetChanged = oldTargetTableId !== tId;
-
-        if (hasTargetChanged && oldTargetTableId && col.showBacklink && col.backlinkColId) {
-            let oldTargetState = AdvancedTable.getTableState(oldTargetTableId);
-            if (oldTargetState) {
-                oldTargetState.columns = oldTargetState.columns.filter(c => c.id !== col.backlinkColId);
-                AdvancedTable.setState(oldTargetTableId, oldTargetState);
-                AdvancedTable.updateDependentViews(oldTargetTableId);
-            }
-            delete col.showBacklink;
-            delete col.backlinkColId;
-            delete col.singleRecord;
-        }
-
-        col.type = 'relation';
-        col.targetTableId = tId;
-        col.targetColId = cTargetId;
-
-        // Pulizia attributi residui di altri tipi di dato per non lasciare lo stato ibrido
-        delete col.hasEndDate;
-        delete col.formula;
-        delete col.decimals;
-        delete col.relationColId;
-        delete col.rollupDirection;
-        delete col.foreignRelColId;
-        delete col.buttonLabel;
-        delete col.buttonColor;
-        delete col.buttonIcon;
-        delete col.requireConfirm;
-        delete col.actionBlocks;
-        if (state.selectOptions && state.selectOptions[colId]) delete state.selectOptions[colId];
-        if (state.selectColors && state.selectColors[colId]) delete state.selectColors[colId];
-
-        // Se il target è cambiato o se la colonna prima non era una relazione, azzera le celle
-        if (hasTargetChanged) {
-            state.rows.forEach(r => r.cells[colId] = []);
-        }
-
-        AdvancedTable.setState(realTableId, state);
-        
-        if (realTableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
-            AdvancedTable.openRecordView(realTableId, AdvancedTable.activeRecordId);
-        } else {
-            AdvancedTable.updateDependentViews(realTableId);
-            if (typeof UI !== 'undefined') UI.closeDrawer();
-        }
-
-        Store.triggerAutoSave();
-    },
-
-    openRollupConfig: (tableId, colId) => {
-        const realTableId = AdvancedTable._resolveSourceId(tableId);
-        AdvancedTable.closeDropdowns(true);
-        AdvancedTable._pendingRollupConfig = { realTableId, colId };
-
-        const state = AdvancedTable.getState(realTableId);
-        
-        // 1. Relazioni uscenti locali (relation e relation_backlink)
-        const outgoingRelationCols = (state.columns || []).filter(c => 
-            (c.type === 'relation' && c.targetTableId) || 
-            (c.type === 'relation_backlink' && c.linkedTableId)
-        );
-
-        // 2. Relazioni da altri database verso questo database (Entranti / Inverse)
-        const incomingRelations = [];
-        if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(dbId => {
-                const otherDb = AppState.databases[dbId];
-                if (!otherDb || otherDb.isPivot || otherDb.isLinkedView || !Array.isArray(otherDb.columns)) return;
-                if (dbId.includes('adv_code_') || dbId.includes('adv_btnbar_') || dbId.includes('adv_cols_') || dbId.includes('adv_journal_')) return;
-
-                otherDb.columns.forEach(otherCol => {
-                    if (otherCol.type === 'relation' && otherCol.targetTableId === realTableId) {
-                        // DEDUPLICAZIONE ELEGANTE:
-                        // Se questa tabella possiede già una colonna fisica di tipo relation_backlink
-                        // associata esattamente a questa tabella remota e a questa colonna remota,
-                        // scartiamo la voce virtuale per evitare duplicati identici nella tendina.
-                        const alreadyHasLocalBacklink = (state.columns || []).some(localCol => 
-                            localCol.type === 'relation_backlink' && 
-                            localCol.linkedTableId === dbId && 
-                            localCol.linkedColId === otherCol.id
-                        );
-                        if (alreadyHasLocalBacklink) return;
-
-                        const parentName = AdvancedTable.getParentNoteName(dbId);
-                        incomingRelations.push({
-                            val: `INCOMING:${dbId}:${otherCol.id}`,
-                            label: `➔ Da [${otherDb.title || 'DB'}] campo '${otherCol.name}' (in: ${parentName})`,
-                            dbId: dbId,
-                            colId: otherCol.id
-                        });
-                    }
-                });
-            });
-        }
-
-        let relOptionsHTML = `<option value="">${I18n.t('adv_actions.select_rel_col_placeholder')}</option>`;
-
-        if (outgoingRelationCols.length > 0) {
-            const outgoingLabel = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
-                ? I18n.t('adv_actions.rollup_outgoing_relations')
-                : "Relazioni di questa tabella (Uscenti)";
-            relOptionsHTML += `<optgroup label="${outgoingLabel}">`;
-            outgoingRelationCols.forEach(c => {
-                const targetDb = AdvancedTable.getTableState(c.targetTableId || c.linkedTableId);
-                const targetName = targetDb ? targetDb.title : 'DB';
-                const kind = c.type === 'relation_backlink' ? 'Backlink' : 'Relazione';
-                relOptionsHTML += `<option value="${c.id}">[${c.name}] ➔ verso '${targetName}' (${kind})</option>`;
-            });
-            relOptionsHTML += `</optgroup>`;
-        }
-
-        if (incomingRelations.length > 0) {
-            const incomingLabel = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
-                ? I18n.t('adv_actions.rollup_incoming_relations')
-                : "Relazioni da altri database verso questa tabella (Entranti / Inverse)";
-            relOptionsHTML += `<optgroup label="${incomingLabel}">`;
-            incomingRelations.forEach(inc => {
-                relOptionsHTML += `<option value="${inc.val}">${inc.label}</option>`;
-            });
-            relOptionsHTML += `</optgroup>`;
-        }
-
-        if (outgoingRelationCols.length === 0 && incomingRelations.length === 0) {
-            relOptionsHTML = `<option value="" disabled>${I18n.t('adv_actions.no_relation_found')}</option>`;
-        }
-
-        const bodyHTML = `
-            <div style="background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; border: 1px solid rgba(37, 99, 235, 0.2);">
-                ${I18n.t('adv_actions.rollup_banner_info')}
-            </div>
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rollup_rel_col_label')}</label>
-            <select id="rollupConfigRel" class="modern-input" style="margin-bottom: 15px; width: 100%;" onchange="AdvancedTable.updateRollupTargetOptions()">
-                ${relOptionsHTML}
-            </select>
-
-            <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; display:block; margin-bottom:5px;">${I18n.t('adv_actions.rollup_target_prop_label')}</label>
-            <select id="rollupConfigTarget" class="modern-input" style="margin-bottom: 25px; width: 100%;">
-                <option value="">${I18n.t('adv_actions.rollup_select_rel_first')}</option>
-            </select>
-        `;
-        const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveRollupConfig()">${I18n.t('adv_actions.save_rollup')}</button>
-        `;
-
-        if (typeof UI !== 'undefined') 
-            UI.openDrawer(`${Icons.rollup} ${I18n.t('adv_col_menu.configure_rollup')}`, bodyHTML, footerHTML);
-
-        const col = state.columns.find(c => c.id === colId);
-        setTimeout(() => {
-            if (col.relationColId) {
-                const relSelect = document.getElementById('rollupConfigRel');
-                if (relSelect) {
-                    relSelect.value = col.relationColId;
-                    AdvancedTable.updateRollupTargetOptions();
-                    setTimeout(() => {
-                        const tgtSelect = document.getElementById('rollupConfigTarget');
-                        if (tgtSelect && col.targetColId) tgtSelect.value = col.targetColId;
-                    }, 50);
-                }
-            }
-        }, 50);
-    },
-
-    updateRollupTargetOptions: () => {
-        const relColVal = document.getElementById('rollupConfigRel').value;
-        const tgtSelect = document.getElementById('rollupConfigTarget');
-        tgtSelect.innerHTML = `<option value="">${I18n.t('adv_actions.select_col_placeholder')}</option>`;
-
-        if (!relColVal) return;
-
-        const { realTableId } = AdvancedTable._pendingRollupConfig;
-        const state = AdvancedTable.getState(realTableId);
-
-        let targetDbId = null;
-
-        if (relColVal.startsWith('INCOMING:')) {
-            const parts = relColVal.split(':');
-            targetDbId = parts[1];
-        } else {
-            const relCol = (state.columns || []).find(c => c.id === relColVal);
-            if (!relCol) return;
-            targetDbId = relCol.targetTableId || relCol.linkedTableId;
-        }
-
-        if (!targetDbId) return;
-
-        const targetState = AdvancedTable.getTableState(targetDbId);
-        if (targetState && targetState.columns) {
-            targetState.columns.forEach(c => {
-                tgtSelect.innerHTML += `<option value="${c.id}">${c.name} (${c.type})</option>`;
-            });
-        }
-    },
-
-    saveRollupConfig: () => {
-        const relColVal = document.getElementById('rollupConfigRel').value;
-        const targetColId = document.getElementById('rollupConfigTarget').value;
-
-        if (!relColVal || !targetColId) {
-            alert(I18n.t('adv_actions.alert_select_rel_and_col'));
-            return;
-        }
-
-        const { realTableId, colId } = AdvancedTable._pendingRollupConfig;
-        let state = AdvancedTable.getState(realTableId);
-        const col = state.columns.find(c => c.id === colId);
-        if (!col) return;
-
-        // CONTROLLO DI SICUREZZA ANTI-CIRCOLARITÀ DIRETTA SCHEMA
-        let prospectiveTargetDbId = null;
-        if (relColVal.startsWith('INCOMING:')) {
-            prospectiveTargetDbId = relColVal.split(':')[1];
-        } else {
-            const localRel = (state.columns || []).find(c => c.id === relColVal);
-            prospectiveTargetDbId = localRel ? (localRel.targetTableId || localRel.linkedTableId) : null;
-        }
-
-        if (prospectiveTargetDbId) {
-            const targetState = AdvancedTable.getTableState(prospectiveTargetDbId);
-            const targetCol = targetState ? (targetState.columns || []).find(c => c.id === targetColId) : null;
-
-            // Se la colonna selezionata nel database bersaglio è a sua volta un Rollup che punta inversamente a questo campo
-            if (targetCol && targetCol.type === 'rollup') {
-                const targetRelVal = String(targetCol.relationColId || '');
-                const targetPointsBackToThisDb = (targetCol.targetTableId === realTableId) || targetRelVal.includes(realTableId);
-                if (targetPointsBackToThisDb && targetCol.targetColId === colId) {
-                    alert(I18n.t('adv_actions.circular_rollup_blocked') || "Operazione bloccata: la colonna selezionata è a sua volta un Rollup che punta a questo campo (Dipendenza Circolare).");
-                    return;
-                }
-            }
-        }
-
-        col.type = 'rollup';
-        col.relationColId = relColVal;
-        col.targetColId = targetColId;
-
-        // Pulizia attributi residui di altri tipi di dato per non lasciare lo stato ibrido
-        delete col.hasEndDate;
-        delete col.formula;
-        delete col.singleRecord;
-        delete col.showBacklink;
-        delete col.backlinkColId;
-        delete col.buttonLabel;
-        delete col.buttonColor;
-        delete col.buttonIcon;
-        delete col.requireConfirm;
-        delete col.actionBlocks;
-        if (state.selectOptions && state.selectOptions[colId]) delete state.selectOptions[colId];
-        if (state.selectColors && state.selectColors[colId]) delete state.selectColors[colId];
-
-        // Svuota le vecchie celle fisiche di testo/numeri poiché il rollup è calcolato dinamicamente a runtime
-        state.rows.forEach(r => r.cells[colId] = '');
-
-        if (relColVal.startsWith('INCOMING:')) {
-            const parts = relColVal.split(':');
-            col.rollupDirection = 'incoming';
-            col.targetTableId = parts[1];
-            col.foreignRelColId = parts[2];
-        } else {
-            col.rollupDirection = 'outgoing';
-            const localRel = (state.columns || []).find(c => c.id === relColVal);
-            col.targetTableId = localRel ? (localRel.targetTableId || localRel.linkedTableId) : null;
-            if (localRel && localRel.type === 'relation_backlink') {
-                col.foreignRelColId = localRel.linkedColId;
-            } else {
-                delete col.foreignRelColId;
-            }
-        }
-
-        AdvancedTable.setState(realTableId, state);
-
-        if (realTableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
-            AdvancedTable.openRecordView(realTableId, AdvancedTable.activeRecordId);
-        } else {
-            AdvancedTable.updateDependentViews(realTableId);
-            if (typeof UI !== 'undefined') UI.closeDrawer();
-        }
-        
-        Store.triggerAutoSave();
-    },
-
-    openRelationSelector: (e, tableId, rowId, colId) => {
-        if (e) e.stopPropagation();
-        
-        const realTableId = AdvancedTable._resolveSourceId(tableId);
-        const state = AdvancedTable.getState(realTableId);
-        const col = state.columns.find(c => c.id === colId);
-        
-        if (col.type === 'relation_backlink') {
-            alert(I18n.t('adv_actions.backlink_readonly_alert'));
-            return;
-        }
-        
-        const row = state.rows.find(r => r.id === rowId);
-
-        const targetDbId = col.targetTableId;
-        const targetColId = col.targetColId;
-
-        const targetState = AdvancedTable.getTableState(targetDbId);
-        if (!targetState) { alert(I18n.t('adv_col_menu.target_db_missing')); return; }
-
-        const targetColDef = targetState.columns.find(c => c.id === targetColId);
-        const targetColName = targetColDef ? targetColDef.name : I18n.t('adv_actions.unknown');
-        const targetTabName = targetState.title || I18n.t('adv_actions.unknown_source');
-
-        let currentVals = Array.isArray(row.cells[colId]) ? [...row.cells[colId]] : (row.cells[colId] ? [row.cells[colId]] : []);
-
-        // Il parametro currentLimit definisce lo scaglione di rendering inziale per proteggere la CPU
-        AdvancedTable._pendingRelSelect = { 
-            realTableId, tableId, rowId, colId, 
-            targetState, targetDbId, targetColId, isBacklink: false,
-            currentVals: currentVals,
-            currentLimit: 50 
-        };
-
-        const bodyHTML = `
-            <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px; padding: 10px; background: rgba(0,0,0,0.02); border-radius: 4px; border: 1px solid var(--border-color);">
-                ${Icons.link} ${I18n.t('adv_actions.connected_to')} <b style="color:var(--accent-color); cursor:pointer;" onclick="UI.closeDrawer(); setTimeout(() => UI.jumpToWidget('${targetDbId}'), 150)" title="${I18n.t('adv_actions.go_to_source_db')}">${targetTabName}</b> ➔ ${I18n.t('adv_actions.field_label')} <b>${targetColName}</b>
-            </div>
-            <input type="text" id="relSelectSearch" class="modern-input" placeholder="${I18n.t('adv_actions.search_value_placeholder')}" oninput="AdvancedTable.filterRelationOptions(this.value)">
-            <div id="relSelectList" class="link-modal-list" style="padding:10px 0; margin-top:10px; flex:1; overflow-y:auto; display: flex; flex-direction: column; gap: 4px;"></div>
-        `;
-
-        if (typeof UI !== 'undefined') 
-            UI.openDrawer(I18n.t('adv_actions.select_record_title'), bodyHTML, null);
-
-        setTimeout(() => {
-            AdvancedTable.renderRelationOptions('');
-            const searchInput = document.getElementById('relSelectSearch');
-            if (searchInput) searchInput.focus();
-        }, 50);
-    },
-
-    filterRelationOptions: (val) => {
-        clearTimeout(AdvancedTable._relSearchTimer);
-        AdvancedTable._relSearchTimer = setTimeout(() => {
-            // Se l'utente digita una nuova stringa di ricerca, resettiamo il limitatore a 50 
-            // per evitare di calcolare a vuoto migliaia di DOM nodes con il nuovo filtro
-            if (AdvancedTable._pendingRelSelect) AdvancedTable._pendingRelSelect.currentLimit = 50;
-            AdvancedTable.renderRelationOptions(val);
-        }, 250); 
-    },
-
-    renderRelationOptions: (filter, newLimit = null) => {
-        const pending = AdvancedTable._pendingRelSelect;
-        if (!pending) return;
-
-        if (newLimit !== null) pending.currentLimit = newLimit;
-        const currentLimit = pending.currentLimit || 50;
-
-        const { targetState, currentVals, isBacklink, targetColId, targetDbId } = pending;
-        const listEl = document.getElementById('relSelectList');
-        if (!listEl) return;
-        
-        const displayColId = isBacklink ? targetState.columns[0].id : targetColId;
-        const targetColDef = targetState.columns.find(c => c.id === displayColId);
-        const lowerFilter = filter.toLowerCase();
-
-        let itemsToRender = [];
-        const renderCache = {};
-        
-        const isCalculatedCol = targetColDef && ['formula', 'rollup', 'relation_backlink'].includes(targetColDef.type);
-        
-        let matchCount = 0;
-        let totalCount = 0;
-
-        for (let i = 0; i < targetState.rows.length; i++) {
-            const tRow = targetState.rows[i];
-            const isSelected = currentVals.includes(tRow.id);
-
-            // EARLY BREAK / LAZY EVALUATION (Ottimizzazione CPU)
-            // Se NON c'è filtro attivo, analizziamo solo fino a `currentLimit`. 
-            // Ciononostante, permettiamo sempre il transito agli elementi GIA' SELEZIONATI 
-            // affinché appaiano in cima alla lista a prescindere dal limite della pagina.
-            if (!filter && matchCount >= currentLimit && !isSelected) {
-                totalCount++; // Ma li contiamo, per mostrare il numerino "Rimanenti: X" sul pulsante
-                continue;
-            }
-
-            let rawVal;
-            if (isCalculatedCol) {
-                // Calcola la riga virtuale per far girare le formule e avere il vero nome
-                const vRow = AdvancedTable.buildVirtualRow(targetDbId, tRow, targetState, renderCache);
-                rawVal = vRow.virtualCells[displayColId];
-            } else {
-                rawVal = tRow.cells[displayColId];
-            }
-
-            // Usa l'estrattore per gestire Date e Record Note
-            let displayVal = AdvancedTable.getFormatDisplayValue(targetColDef, rawVal, renderCache);
-            if (!displayVal) displayVal = I18n.t('editor.untitled');
-
-            if (filter && !displayVal.toLowerCase().includes(lowerFilter)) {
-                continue; 
-            }
-
-            matchCount++;
-            totalCount++;
-
-            itemsToRender.push({
-                id: tRow.id,
-                displayVal: displayVal,
-                isSelected: isSelected
-            });
-        }
-
-        if (!filter) {
-            totalCount = targetState.rows.length;
-        }
-
-        // Mettiamo in testa i valori già selezionati, poi ordine alfabetico
-        itemsToRender.sort((a, b) => {
-            if (a.isSelected && !b.isSelected) return -1;
-            if (!a.isSelected && b.isSelected) return 1;
-            return a.displayVal.localeCompare(b.displayVal, undefined, { numeric: true, sensitivity: 'base' });
-        });
-
-        // Applichiamo la sforbiciata all'array finale per sicurezza (In caso di Filtri che restituiscono 10,000 risultati)
-        const itemsToShow = itemsToRender.slice(0, currentLimit);
-
-        let html = '';
-        itemsToShow.forEach(item => {
-            html += `
-                <div class="link-modal-item ${item.isSelected ? 'active' : ''}" style="justify-content:space-between; border: 1px solid var(--border-color);" onclick="AdvancedTable.toggleRelationValue('${item.id}')">
-                    <span>${UI.escapeHTML(item.displayVal)}</span>
-                    <span style="color:var(--accent-color); font-weight:bold;">${item.isSelected ? '✓' : ''}</span>
-                </div>
-            `;
-        });
-
-        if (totalCount > itemsToShow.length) {
-            const diff = totalCount - itemsToShow.length;
-            const nextBatch = Math.min(50, diff);
-            const nextLimit = currentLimit + 50;
-            const safeFilter = filter.replace(/'/g, "\\'");
-            
-            html += `<button class="btn" style="width:100%; margin-top:10px; justify-content:center; border-style:dashed;" onclick="AdvancedTable.renderRelationOptions('${safeFilter}', ${nextLimit})">${I18n.t('adv_actions.show_more_values', { nextBatch, diff })}</button>`;
-        }
-
-        listEl.innerHTML = html;
-    },
-
-    checkCircularRelation: (sourceTableId, sourceRowId, targetTableId, targetRowId, colId = null, visited = new Set()) => {
-        // Auto-riferimento riflessivo diretto (un record non può essere padre o dipendente di se stesso)
-        if (sourceTableId === targetTableId && sourceRowId === targetRowId) return true;
-
-        const visitKey = `${targetTableId}_${targetRowId}`;
-        if (visited.has(visitKey)) return false;
-        visited.add(visitKey);
-
-        const targetState = AdvancedTable.getTableState(targetTableId);
-        if (!targetState) return false;
-
-        const targetRow = targetState.rows.find(r => r.id === targetRowId);
-        if (!targetRow) return false;
-
-        // Se è specificata la colonna lungo la quale si sta navigando il grafo all'interno dello stesso database,
-        // circoscrive la ricerca di cicli esclusivamente a quel campo, consentendo relazioni distinte ortogonali o inverse
-        if (colId && sourceTableId === targetTableId) {
-            const targetCol = targetState.columns.find(c => c.id === colId);
-            if (targetCol && targetCol.type === 'relation') {
-                let vals = targetRow.cells[colId];
-                if (!Array.isArray(vals)) vals = vals ? [vals] : [];
-
-                for (let relatedRowId of vals) {
-                    if (relatedRowId === sourceRowId) {
-                        return true;
-                    }
-                    if (AdvancedTable.checkCircularRelation(sourceTableId, sourceRowId, targetTableId, relatedRowId, colId, new Set(visited))) {
-                        return true;
-                    }
-                }
-            }
-            return false;
-        }
-
-        // Fallback protettivo per chiamate non vincolate a colId specifico
-        for (let col of targetState.columns) {
-            if (col.type === 'relation' && col.targetTableId === sourceTableId) {
-                if (colId && col.id !== colId) continue;
-
-                let vals = targetRow.cells[col.id];
-                if (!Array.isArray(vals)) vals = vals ? [vals] : [];
-
-                for (let relatedRowId of vals) {
-                    if (relatedRowId === sourceRowId) {
-                        return true;
-                    }
-                    if (AdvancedTable.checkCircularRelation(sourceTableId, sourceRowId, col.targetTableId, relatedRowId, colId, new Set(visited))) {
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    },
-
-    toggleRelationValue: (targetRowId) => {
-        let { realTableId, tableId, rowId, colId, currentVals, targetDbId, targetColId, isBacklink } = AdvancedTable._pendingRelSelect;
-
-        const state = AdvancedTable.getState(realTableId);
-        const col = state.columns.find(c => c.id === colId);
-
-        // CLONAZIONE DIFENSIVA PER EVITARE MUTAZIONI IN-PLACE
-        currentVals = Array.isArray(currentVals) ? [...currentVals] : [];
-        let isAdding = false;
-
-        if (currentVals.includes(targetRowId)) {
-            currentVals = currentVals.filter(id => id !== targetRowId);
-        } else {
-            isAdding = true;
-            const isCircular = AdvancedTable.checkCircularRelation(realTableId, rowId, targetDbId, targetRowId, colId);
-            if (isCircular) {
-                alert(I18n.t('adv_actions.circular_relation_blocked'));
-                return;
-            }
-            
-            if (col.singleRecord && !isBacklink) {
-                currentVals = [targetRowId];
-            } else {
-                currentVals = [...currentVals, targetRowId];
-            }
-
-            // AUTO-EXPAND WBS: Se siamo in vista ad albero WBS e abbiamo appena collegato un figlio/genitore,
-            // espandi automaticamente il nodo affinché l'utente veda subito l'aggiornamento a schermo
-            const viewState = AdvancedTable.getState(tableId);
-            if (viewState && viewState.viewType === 'tree' && viewState.treeRelationColId === colId) {
-                const parentNodeId = (viewState.treeRelationDirection === 'parent') ? targetRowId : rowId;
-                if (viewState.treeCollapsedNodes && viewState.treeCollapsedNodes.includes(parentNodeId)) {
-                    viewState.treeCollapsedNodes = viewState.treeCollapsedNodes.filter(id => id !== parentNodeId);
-                    AdvancedTable.setState(tableId, viewState);
-                }
-            }
-        }
-
-        AdvancedTable._pendingRelSelect.currentVals = currentVals;
-
-        if (isBacklink) {
-            let remoteState = AdvancedTable.getState(targetDbId);
-            let remoteRow = remoteState.rows.find(r => r.id === targetRowId);
-            if (remoteRow) {
-                let remoteArr = remoteRow.cells[targetColId];
-                remoteArr = Array.isArray(remoteArr) ? [...remoteArr] : (remoteArr ? [remoteArr] : []);
-                
-                if (remoteArr.includes(rowId)) {
-                    remoteArr = remoteArr.filter(id => id !== rowId);
-                } else {
-                    const remoteColDef = remoteState.columns.find(c => c.id === targetColId);
-                    if (remoteColDef && remoteColDef.singleRecord) {
-                        remoteArr = [rowId];
-                    } else {
-                        remoteArr = [...remoteArr, rowId];
-                    }
-                }
-                AdvancedTable.updateData(targetDbId, targetRowId, targetColId, remoteArr);
-            }
-        } else {
-            AdvancedTable.updateData(tableId, rowId, colId, currentVals);
-        }
-
-        const drawer = document.getElementById('advGlobalDrawer');
-        if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
-            AdvancedTable.openRecordView(tableId, rowId);
-        } else {
-            // Continuiamo a ri-renderizzare sfruttando il Current Limit salvato in memoria per non rovinare lo scroll
-            const currentSearch = document.getElementById('relSelectSearch') ? document.getElementById('relSelectSearch').value : '';
-            AdvancedTable.renderRelationOptions(currentSearch);
         }
     },
 
@@ -1161,20 +524,17 @@ Object.assign(AdvancedTable, {
             let isTargetOfRelation = false;
             let pointingTableName = "";
 
-            if (AppState.databases) {
-                Object.keys(AppState.databases).forEach(id => {
-                    const s = AppState.databases[id];
-                    // Controllo rigoroso Array.isArray(s.columns)
-                    if (id === tableId || !s || !Array.isArray(s.columns)) return;
-                    
-                    s.columns.forEach(c => {
-                        if ((c.type === 'relation' || c.type === 'relation_backlink') && (c.targetTableId === tableId || c.linkedTableId === tableId)) {
-                            isTargetOfRelation = true;
-                            pointingTableName = s.title;
-                        }
-                    });
+            AppState.getRelationalDatabaseIds().forEach(id => {
+                const s = AppState.databases[id];
+                if (id === tableId || !s || !Array.isArray(s.columns)) return;
+                
+                s.columns.forEach(c => {
+                    if ((c.type === 'relation' || c.type === 'relation_backlink') && (c.targetTableId === tableId || c.linkedTableId === tableId)) {
+                        isTargetOfRelation = true;
+                        pointingTableName = s.title;
+                    }
                 });
-            }
+            });
 
             if (isTargetOfRelation) {
                 alert(I18n.t('adv_actions.cannot_delete_target_of_relation', { tableName: pointingTableName }));
@@ -1209,321 +569,6 @@ Object.assign(AdvancedTable, {
         AdvancedTable.closeDropdowns(true);
         if (typeof Editor !== 'undefined') Editor.sanitizeContent();
         if (typeof Store !== 'undefined') Store.triggerAutoSave();
-    },
-
-    // ESECUZIONE PULSANTE DI COLONNA E UI RELATIVA
-    runCellMacro: async (tableId, rowId, colId) => {
-        const realTableId = AdvancedTable._resolveSourceId(tableId);
-        const state = AdvancedTable.getState(realTableId);
-        const col = state.columns.find(c => c.id === colId);
-        const sourceRow = state.rows.find(r => r.id === rowId);
-
-        if (!col || !sourceRow) return;
-
-        if (!col.actionBlocks || col.actionBlocks.length === 0) {
-            if (typeof UI !== 'undefined') UI.showToast(I18n.t('adv_actions.btn_no_actions_configured'), "warning");
-            return;
-        }
-
-        if (col.requireConfirm) {
-            const btnLabel = col.buttonLabel || col.name;
-            if (!confirm(I18n.t('adv_actions.btn_confirm_execution', { label: btnLabel }))) return;
-        }
-
-        const response = await LogicEngine.executeMacroBlocks(col.actionBlocks, realTableId, sourceRow, false);
-        
-        if (response.updatedDbIds.size > 0 || response.emailsSent > 0) {
-            response.updatedDbIds.forEach(dbId => {
-                AdvancedTable.setState(dbId, AppState.databases[dbId]);
-                AdvancedTable.updateDependentViews(dbId);
-                const targetDOM = document.getElementById(dbId);
-                if (targetDOM) AdvancedTable.renderTable(dbId);
-            });
-            
-            Store.triggerAutoSave(true);
-            
-            if (response.errorsLog.length > 0) {
-                const errorHtml = `<div style="color:var(--danger-color); font-family:monospace;">${response.errorsLog.join('<br>')}</div>`;
-                UI.openDrawer(`${Icons.listFilter} ${I18n.t('adv_actions.macro_execution_log')}`, errorHtml, `<button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>`);
-            } else {
-                let msg = I18n.t('adv_actions.macro_completed_msg', { rows: response.totalRowsAffected, dbs: response.updatedDbIds.size });
-                if (response.emailsSent > 0) msg += I18n.t('adv_actions.macro_emails_sent', { count: response.emailsSent });
-                if (typeof UI !== 'undefined') UI.showToast(msg, "success");
-            }
-        } else {
-            if (response.errorsLog.length > 0) {
-                UI.openDrawer(`${Icons.listFilter} ${I18n.t('adv_actions.macro_execution_log')}`, `<div style="color:var(--danger-color); font-family:monospace;">${response.errorsLog.join('<br>')}</div>`, null);
-            } else {
-                if (typeof UI !== 'undefined') UI.showToast(I18n.t('adv_actions.macro_no_rows_affected'), "info");
-            }
-        }
-    },
-
-    _captureOpenStates: () => {
-        const fullArea = document.getElementById('btnConfigFullArea') || document.querySelector('.adv-drawer-body');
-        if (fullArea) {
-            window._openActionBlocks = Array.from(fullArea.querySelectorAll('.action-block-card[open]')).map(el => el.dataset.blockId);
-            const aesthetic = document.getElementById('btnAestheticOptions');
-            if (aesthetic) window._openAesthetic = aesthetic.hasAttribute('open');
-        }
-    },
-
-    _triggerRefresh: () => {
-        AdvancedTable._captureOpenStates();
-        const labelEl = document.getElementById('btnConfigLabel');
-        if (labelEl && AdvancedTable._tempColButtonConfig) {
-             AdvancedTable._tempColButtonConfig.config.buttonLabel = labelEl.value.trim();
-        }
-        AdvancedTable._renderButtonColBuilder();
-    },
-
-    openButtonColConfig: (tableId, colId) => {
-        AdvancedTable.closeDropdowns(true);
-        const state = AdvancedTable.getState(tableId);
-        const col = state.columns.find(c => c.id === colId);
-        if (!col) return;
-
-        AdvancedTable._tempColButtonConfig = {
-            tableId: tableId,
-            colId: colId,
-            config: JSON.parse(JSON.stringify(col))
-        };
-        
-        if (!AdvancedTable._tempColButtonConfig.config.actionBlocks) {
-            AdvancedTable._tempColButtonConfig.config.actionBlocks = [];
-        }
-
-        window._openActionBlocks = undefined;
-        window._openAesthetic = undefined;
-
-        AdvancedTable._renderButtonColBuilder();
-    },
-
-    _renderButtonColBuilder: () => {
-        const { tableId, config } = AdvancedTable._tempColButtonConfig;
-        const hostState = AdvancedTable.getState(tableId); 
-        if (hostState) hostState.id = tableId;
-
-        const dbList = AutomationUIBuilder.getAvailableDatabases();
-        const isAestheticOpen = window._openAesthetic !== undefined ? window._openAesthetic : true;
-
-        const buttonColors = [
-            { val: '#2563eb', name: I18n.t('adv_actions.btn_color_blue') },
-            { val: '#22c55e', name: I18n.t('adv_actions.btn_color_green') },
-            { val: '#ef4444', name: I18n.t('adv_actions.btn_color_red') },
-            { val: '#eab308', name: I18n.t('adv_actions.btn_color_yellow') },
-            { val: '#8b5cf6', name: I18n.t('adv_actions.btn_color_purple') },
-            { val: '#333333', name: I18n.t('adv_actions.btn_color_black') }
-        ];
-
-        let colorSwatchesHtml = `<div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">`;
-        buttonColors.forEach(c => {
-            const isSelected = (config.buttonColor || 'var(--accent-color)') === c.val;
-            const borderStyle = isSelected ? 'border: 2px solid var(--text-primary); transform: scale(1.1);' : 'border: 2px solid transparent;';
-            colorSwatchesHtml += `
-                <div class="btn-color-swatch" 
-                     style="width: 28px; height: 28px; border-radius: 6px; background-color: ${c.val}; cursor: pointer; ${borderStyle} box-shadow: 0 2px 4px rgba(0,0,0,0.15); transition: all 0.1s ease;" 
-                     onclick="AdvancedTable._updateButtonColField('buttonColor', '${c.val}')" 
-                     title="${c.name}">
-                </div>
-            `;
-        });
-        colorSwatchesHtml += `</div>`;
-
-        let html = `
-            <div id="btnConfigFullArea" style="display:flex; flex-direction:column; gap:10px; padding-bottom:30px;">
-            <details id="btnAestheticOptions" class="aesthetic-block-card" style="background:var(--item-hover); border-radius:8px; border:1px solid var(--border-color); margin-bottom:15px;" ${isAestheticOpen ? 'open' : ''}>
-                <summary style="padding:12px; font-weight:bold; cursor:pointer; outline:none; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);">
-                    <div style="display:flex; flex-direction:column; gap:4px;">
-                        <span style="font-size:0.95rem; display:flex; align-items:center; gap:8px;">${Icons.palette} ${I18n.t('adv_actions.btn_appearance_behavior')}</span>
-                    </div>
-                    <span style="color:var(--text-secondary); font-size:0.8rem;">▼</span>
-                </summary>
-                
-                <div style="padding: 0 15px 15px 15px; display:flex; flex-direction:column; gap:10px; border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 15px;">
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_label_label')}</label>
-                    <input type="text" id="btnConfigLabel" class="modern-input" style="width:100%; margin-bottom: 10px;" value="${(config.buttonLabel || config.name).replace(/"/g, '&quot;')}" onblur="AdvancedTable._triggerRefresh()">
-                    
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_color_label')}</label>
-                    ${colorSwatchesHtml}
-                    
-                    <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer; color:var(--text-secondary); margin-top:15px;">
-                        <input type="checkbox" style="transform:scale(1.1);" ${config.requireConfirm ? 'checked' : ''} onchange="AdvancedTable._updateButtonColField('requireConfirm', this.checked)">
-                        ${I18n.t('adv_actions.btn_confirm_checkbox')}
-                    </label>
-                </div>
-            </details>
-            
-            <h4 style="margin: 0; font-size: 0.95rem; color: var(--accent-color); border-bottom: 1px solid var(--border-color); padding-bottom: 5px;">${I18n.t('adv_actions.btn_actions_title')}</h4>
-        `;
-
-        const formulaPreviews = [];
-
-        if (!config.actionBlocks || config.actionBlocks.length === 0) {
-            html += `<div style="text-align:center; padding:20px; color:var(--text-secondary); font-style:italic; background:var(--bg-color); border:1px dashed var(--border-color); border-radius:6px; margin-top: 10px;">${I18n.t('adv_actions.btn_no_actions_placeholder')}</div>`;
-        } else {
-            const callbacks = {
-                onBlockChange: "AdvancedTable._updateButtonColBlock",
-                onBlockRemove: "AdvancedTable._removeButtonColBlock",
-                onFilterChange: "AdvancedTable._updateButtonColFilter",
-                onFilterRemove: "AdvancedTable._removeButtonColFilter",
-                onFilterAdd: "AdvancedTable._addButtonColFilter",
-                onActionChange: "AdvancedTable._updateButtonColAction",
-                onActionRemove: "AdvancedTable._removeButtonColAction",
-                onActionAdd: "AdvancedTable._addButtonColAction",
-                onRefresh: "AdvancedTable._triggerRefresh"
-            };
-
-            config.actionBlocks.forEach((blk, index) => {
-                const isThisRow = blk.targetDbId === 'THIS_ROW';
-                const targetDbToRead = isThisRow ? tableId : blk.targetDbId;
-                const targetState = targetDbToRead ? AdvancedTable.getTableState(targetDbToRead) : null;
-                if (targetState) targetState.id = targetDbToRead;
-                
-                const sourceState = blk.sourceDbId ? AdvancedTable.getTableState(blk.sourceDbId) : hostState;
-                if (sourceState) sourceState.id = blk.sourceDbId || tableId;
-                
-                html += AutomationUIBuilder.buildActionBlockCard(blk, index, dbList, isThisRow, targetState, sourceState, formulaPreviews, callbacks, true);
-            });
-        }
-
-        html += `<button class="btn" style="width:100%; justify-content:center; padding:10px; border-style:dashed; margin-top:10px;" onclick="AdvancedTable._addButtonColBlock()">${I18n.t('adv_actions.btn_add_action_block')}</button></div>`;
-
-        const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTable._saveButtonColConfig()">${I18n.t('adv_actions.btn_save_actions')}</button>
-        `;
-
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.settings} ${I18n.t('adv_actions.btn_configure_title')}</span>`, html, footerHTML);
-
-        setTimeout(() => {
-            const fullArea = document.getElementById('btnConfigFullArea');
-            if (fullArea) {
-                fullArea.querySelectorAll('.action-block-card, .aesthetic-block-card').forEach(details => {
-                    details.addEventListener('toggle', () => {
-                        AdvancedTable._captureOpenStates();
-                    });
-                });
-            }
-
-            formulaPreviews.forEach(p => {
-                LogicEngine.updateFormulaLivePreview(p.id, p.formula, p.targetState, p.filters, p.sourceState);
-                const inputEl = document.getElementById(p.inputId);
-                if (inputEl) {
-                    let debounceTimer;
-                    inputEl.addEventListener('input', (e) => {
-                        clearTimeout(debounceTimer);
-                        debounceTimer = setTimeout(() => {
-                            LogicEngine.updateFormulaLivePreview(p.id, e.target.value, p.targetState, p.filters, p.sourceState);
-                        }, 300);
-                    });
-                }
-            });
-        }, 100);
-    },
-
-    _updateButtonColField: (field, val) => {
-        AdvancedTable._tempColButtonConfig.config[field] = val;
-        AdvancedTable._triggerRefresh();
-    },
-
-    _updateButtonColBlock: (blkIdx, field, val) => {
-        const blk = AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx];
-        const oldType = blk.actionType;
-        blk[field] = val;
-        
-        if (field === 'targetDbId' && val === 'THIS_ROW') {
-            if (blk.actionType !== 'email') blk.actionType = 'update';
-            blk.filters = [];
-        }
-        
-        if (field === 'actionType' && oldType !== val) {
-            blk.actions = [];
-        }
-
-        AdvancedTable._triggerRefresh();
-    },
-
-    _addButtonColBlock: () => {
-        const newId = 'actblk_' + Store.generateId();
-        AdvancedTable._tempColButtonConfig.config.actionBlocks.push({
-            id: newId, targetDbId: 'THIS_ROW', actionType: 'update', filters: [], actions: []
-        });
-        if (!window._openActionBlocks) window._openActionBlocks = [];
-        window._openActionBlocks.push(newId);
-        AdvancedTable._triggerRefresh();
-    },
-
-    _removeButtonColBlock: (e, idx) => {
-        if (e) e.stopPropagation();
-        if (!confirm(I18n.t('adv_actions.btn_confirm_delete_block'))) return;
-        AdvancedTable._tempColButtonConfig.config.actionBlocks.splice(idx, 1);
-        AdvancedTable._triggerRefresh();
-    },
-
-    _addButtonColFilter: (e, blkIdx) => {
-        if (e) e.stopPropagation();
-        AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx].filters.push({ colId: '', operator: '=', value: '' });
-        AdvancedTable._triggerRefresh();
-    },
-
-    _removeButtonColFilter: (e, blkIdx, fIdx) => {
-        if (e) e.stopPropagation();
-        AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx].filters.splice(fIdx, 1);
-        AdvancedTable._triggerRefresh();
-    },
-
-    _updateButtonColFilter: (blkIdx, fIdx) => {
-        return (field, val) => {
-            const flt = AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx].filters[fIdx];
-            flt[field] = val;
-            if (field === 'colId') { flt.value = ''; flt.operator = '='; }
-            if (field === 'colId' || field === 'operator') AdvancedTable._triggerRefresh();
-        };
-    },
-
-    _addButtonColAction: (e, blkIdx) => {
-        if (e) e.stopPropagation();
-        AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx].actions.push({ colId: '', type: 'set_fixed', value: '' });
-        AdvancedTable._triggerRefresh();
-    },
-
-    _removeButtonColAction: (e, blkIdx, aIdx) => {
-        if (e) e.stopPropagation();
-        AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx].actions.splice(aIdx, 1);
-        AdvancedTable._triggerRefresh();
-    },
-
-    _updateButtonColAction: (blkIdx, aIdx) => {
-        return (field, value) => {
-            let act = AdvancedTable._tempColButtonConfig.config.actionBlocks[blkIdx].actions[aIdx];
-            if (act) {
-                act[field] = value;
-                if (field === 'colId' || field === 'type') {
-                    if (field === 'colId') act.type = 'set_fixed';
-                    act.value = ''; act.value2 = '';
-                    AdvancedTable._triggerRefresh();
-                }
-            }
-        };
-    },
-
-    _saveButtonColConfig: () => {
-        const { tableId, colId, config } = AdvancedTable._tempColButtonConfig;
-        let state = AdvancedTable.getState(tableId);
-        
-        let targetCol = state.columns.find(c => c.id === colId);
-        if (targetCol) {
-            targetCol.buttonLabel = config.buttonLabel;
-            targetCol.buttonColor = config.buttonColor;
-            targetCol.requireConfirm = config.requireConfirm;
-            targetCol.actionBlocks = JSON.parse(JSON.stringify(config.actionBlocks));
-            
-            AdvancedTable.setState(tableId, state);
-            AdvancedTable.renderTable(tableId);
-            Store.triggerAutoSave();
-            UI.closeDrawer();
-        }
     },
 
     // =========================================================================

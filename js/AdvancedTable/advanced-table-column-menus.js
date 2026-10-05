@@ -18,7 +18,7 @@
  * FIX RANGE SPLIT ISO DATE: Eliminata la falsa segmentazione delle date singole ISO (YYYY-MM-DD)
  * che provocava l'impostazione errata della data di fine al 1° Gennaio.
  * FEAT CASCADE FORMULA REFACTOR ON RENAME: Rinomina colonna sincronizza automaticamente tutte le formule
- * dello stesso database e di tabelle collegate esterne, prevenendo errori e rottura delle query.
+ * dello stesso database e di tabelle collegate esterne (sia per nome che per ID immutabile), prevenendo rotture.
  * FIX TYPEERROR S.COLUMNS.SOME: Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare
  * crash su widget non tabellari presenti in AppState.databases (diari, codice, bottoni).
  */
@@ -459,11 +459,6 @@ const AdvancedTableColumnMenus = {
 
         const anchorId = e && e.currentTarget && e.currentTarget.id ? e.currentTarget.id : `adv-th-${tableId}-${colId}`;
         UI.Menu.buildContextMenu(anchorId, menuItems);
-
-        setTimeout(() => {
-            const input = document.getElementById('editColNameInput');
-            if (input) { input.focus(); input.select(); }
-        }, 50);
     },
 
     openColumnCommentModal: (tableId, colId) => {
@@ -1088,6 +1083,7 @@ const AdvancedTableColumnMenus = {
         let pointingTableName = "";
 
         const searchPattern = `riga["${col.name}"]`;
+        const searchIdPattern = `riga["${col.id}"]`;
 
         // Scansione di protezione su tutti i database per rilevare formule, relazioni e rollup (uscenti o entranti)
         if (AppState.databases) {
@@ -1097,7 +1093,7 @@ const AdvancedTableColumnMenus = {
                 if (!otherDb || !Array.isArray(otherDb.columns)) return;
 
                 otherDb.columns.forEach(cDef => {
-                    if (cDef.type === 'formula' && cDef.formula && cDef.formula.includes(searchPattern)) {
+                    if (cDef.type === 'formula' && cDef.formula && (cDef.formula.includes(searchPattern) || cDef.formula.includes(searchIdPattern))) {
                         isUsedInFormula = true;
                     }
                     if (cDef.type === 'relation' && cDef.targetTableId === realTableId && cDef.targetColId === colId) {
@@ -1122,7 +1118,7 @@ const AdvancedTableColumnMenus = {
                     const s = JSON.parse(m[3].replace(/&quot;/g, '"'));
                     if (s.columns) {
                         s.columns.forEach(cDef => {
-                            if (cDef.type === 'formula' && cDef.formula && cDef.formula.includes(searchPattern)) {
+                            if (cDef.type === 'formula' && cDef.formula && (cDef.formula.includes(searchPattern) || cDef.formula.includes(searchIdPattern))) {
                                 isUsedInFormula = true;
                             }
                             if ((cDef.type === 'relation' || cDef.type === 'rollup') && cDef.targetColId === colId && cDef.targetTableId === realTableId) {
@@ -1293,11 +1289,13 @@ Object.assign(AdvancedTable, {
             
             // Guardia difensiva rigorosa su Array.isArray(s.columns) per isolare widget non-tabellari (codice, diari, bottoni)
             const referencesThisDb = Boolean(
-                targetTitle && 
                 Array.isArray(s.columns) && 
                 s.columns.some(c => 
                     c.type === 'formula' && c.formula && 
-                    (c.formula.includes(`tabella["${targetTitle}"]`) || c.formula.includes(`tabella['${targetTitle}']`))
+                    (
+                        (targetTitle && (c.formula.includes(`tabella["${targetTitle}"]`) || c.formula.includes(`tabella['${targetTitle}']`))) ||
+                        (targetRealId && (c.formula.includes(`tabella["${targetRealId}"]`) || c.formula.includes(`tabella['${targetRealId}']`)))
+                    )
                 )
             );
 

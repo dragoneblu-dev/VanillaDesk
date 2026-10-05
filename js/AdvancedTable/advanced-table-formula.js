@@ -7,6 +7,7 @@
  * e pattern per traslare eventi mantenendo inalterata la durata.
  * FIX SUGGERIMENTI DB: Rimosso codice, bottoni, diari e viste collegate.
  * Ripristinato il layout a pillole compatto ed elegante con soli database reali.
+ * FEAT IMMUTABLE ID: Supporto bivalente nel calcolo e nei prompt sia per Titoli che per ID Immutabili.
  */
 
 Object.assign(AdvancedTable, {
@@ -17,7 +18,7 @@ Object.assign(AdvancedTable, {
     _formulaWrappers: `
         const PADRE = (id) => { const n = AppState.notes.find(x => x.id === id); return n ? n.parentId : null; };
         const FIGLI = (id) => AppState.notes.filter(n => n.parentId === id && !n.deletedAt).map(n => n.id);
-        const PROPRIETA = (id, campo) => { const db = AppState.databases['SYS_PROPERTIES_DB']; if(!db) return ""; const row = db.rows.find(r => r.cells['sys_c_note'] === id); if(!row) return ""; const col = db.columns.find(c => c.name === campo); if(!col) return ""; return row.cells[col.id]; };
+        const PROPRIETA = (id, campo) => { const db = AppState.databases['SYS_PROPERTIES_DB']; if(!db) return ""; const row = db.rows.find(r => r.cells['sys_c_note'] === id); if(!row) return ""; const col = db.columns.find(c => c.name === campo || c.id === campo); if(!col) return ""; return row.cells[col.id]; };
         const NOTA_CORRENTE = () => riga["_sys_note_id"] || (typeof AppState !== 'undefined' ? AppState.currentNoteId : null) || null;
         
         const SE = (condizione, se_vero, se_falso) => condizione ? se_vero : se_falso;
@@ -141,7 +142,7 @@ Object.assign(AdvancedTable, {
         try {
             const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, renderCache || {}, tableId);
             const tabella = AdvancedTable._buildTabellaContext(renderCache);
-            const righe = tabella[stateTitle] || []; 
+            const righe = tabella[tableId] || tabella[stateTitle] || []; 
             const origine = origineContext || {};
 
             const fullCode = `'use strict';\n${AdvancedTable._formulaWrappers}\nreturn ${formulaStr};`;
@@ -160,7 +161,8 @@ Object.assign(AdvancedTable, {
             return String(result);
         } catch (e) {
             console.error("🔴 [FORMULA ERROR] Valutazione sincrona fallita:", e, "\nFormula:", formulaStr);
-            return `<span style="color:var(--danger-color)" title="${e.message.replace(/"/g, "'")}">${Icons.alertTriangle} Err</span>`;
+            // Restituisce un token di errore semantico interpretabile da getFormatDisplayValue e renderCell
+            return `ERROR: ${e.message || String(e)}`;
         }
     },
 
@@ -169,7 +171,7 @@ Object.assign(AdvancedTable, {
         try {
             const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, {}, tableId);
             const tabella = AdvancedTable._buildTabellaContext(null); 
-            const righe = tabella[stateTitle] || []; 
+            const righe = tabella[tableId] || tabella[stateTitle] || []; 
             const origine = origineContext || {};
 
             const fullCode = `'use strict';\n${AdvancedTable._formulaWrappers}\nreturn ${scriptStr};`;
@@ -177,13 +179,13 @@ Object.assign(AdvancedTable, {
             const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
             const executor = new AsyncFunction('riga', 'tabella', 'righe', 'origine', 'window', 'document', 'localStorage', 'fetch', 'AppState', 'Store', 'Editor', 'AdvancedTable', 'UI', fullCode);
             
-            // FIX SANDBOX ASYNC: AppState e le API Globali vengono correttamente iniettate!
+            // Iniezione controllata dell'ambiente Sandbox
             const result = await executor.call(null, riga, tabella, righe, origine, undefined, undefined, undefined, undefined, AppState, Store, undefined, AdvancedTable, undefined);
 
             if (result === undefined || result === null) return '';
-            if (typeof result === 'object') return JSON.stringify(result);
             if (Number.isNaN(result)) return 'NaN';
-            return String(result);
+            // Restituisce direttamente il risultato preservandone il tipo nativo (Number, Boolean, Object, String)
+            return result;
         } catch (e) {
             console.error("🔴 [FORMULA ERROR] Valutazione asincrona (Macro/Automazione) fallita:", e, "\nScript:", scriptStr);
             return `<span style="color:var(--danger-color)" title="${e.message.replace(/"/g, "'")}">${Icons.alertTriangle} Async Err</span>`;
@@ -319,11 +321,11 @@ Object.assign(AdvancedTable, {
         let colsInfo = [];
         (state.columns || []).forEach(c => {
             let extra = c.hasEndDate ? " [Ha Data di Fine abilitata - Intervallo]" : "";
-            let info = `- "${c.name}" (Tipo: ${c.type}${extra})`;
+            let info = `- "${c.name}" [ID: "${c.id}"] (Tipo: ${c.type}${extra})`;
             if (c.type === 'relation' && c.targetTableId) {
                 const tState = AdvancedTable.getTableState(c.targetTableId);
                 if (tState && tState.columns) {
-                    info += ` -> Collegato al Database "${tState.title}". Colonne di quel DB: ${tState.columns.map(tc => `"${tc.name}"`).join(', ')}`;
+                    info += ` -> Collegato al Database "${tState.title}" [ID: "${c.targetTableId}"]. Colonne di quel DB: ${tState.columns.map(tc => `"${tc.name}"`).join(', ')}`;
                 }
             }
             colsInfo.push(info);
@@ -344,10 +346,9 @@ L'applicazione gestisce due entità distinte e gerarchiche:
 
 IL CONTESTO DEL MOTORE DELLE FORMULE:
 L'applicazione fornisce le seguenti variabili predefinite nell'ambiente di esecuzione:
-1. \`riga\`: Un oggetto che rappresenta il RECORD corrente della tabella. I campi si leggono con la sintassi case-sensitive: riga["Nome Campo"].
+1. \`riga\`: Un oggetto che rappresenta il RECORD corrente della tabella. I campi si leggono sia per nome: riga["Nome Campo"] che per ID Immutabile: riga["c_12345"].
 2. \`righe\`: Un array di oggetti contenente TUTTI i record del database corrente. Utile per aggregazioni globali sul database (es. percentuali sul totale).
-3. \`tabella\`: Un oggetto che permette di accedere a QUALSIASI ALTRO database dello spazio di lavoro tramite il suo titolo esatto.
-   Esempio: tabella["Nome Altro DB"] restituisce l'array dei record di quell'altra tabella.
+3. \`tabella\`: Un oggetto che permette di accedere a QUALSIASI ALTRO database dello spazio di lavoro tramite il suo ID Immutabile (es: tabella["${tableId}"]) o per Titolo (es: tabella["Nome Altro DB"]). L'accesso per ID Immutabile è raccomandato perché non si romperà mai se il database viene rinominato.
 
 L'applicazione fornisce inoltre queste funzioni personalizzate già pronte per essere usate
 FUNZIONI DI SISTEMA:
@@ -425,13 +426,12 @@ Usa UNISCI() o SOMMA() in modalità Array solo su colonne che contengono primiti
 Se devi manipolare o mappare campi complessi (come le date) estratti da 'tabella["..."]', NON USARE le scorciatoie. Usa ESCLUSIVAMENTE i metodi nativi Javascript: .filter( ).map( ).join( ) assicurandoti di estrarre correttamente l'oggetto interno (es. obj.start).
 
 IL MIO DATABASE ATTUALE:
-Nome del Database corrente: "${state.title}"
+Nome: "${state.title}" [ID Immutabile: "${tableId}"]
 Campi disponibili in questo database:
 ${colsInfo.join('\n')}
 
 LA MIA RICHIESTA:
 [Scrivi qui cosa vuoi ottenere nella tua formula, prestando attenzione ai nomi esatti delle colonne in base a quanto sopra]`;
-
 
         navigator.clipboard.writeText(prompt).then(() => {
             const btn = document.getElementById('btnCopyAIPrompt');
@@ -545,7 +545,7 @@ LA MIA RICHIESTA:
         // escludendo blocchi di codice, bottoni, colonne, diari, tabelle pivot e viste collegate.
         const dbList = [];
         if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(id => {
+            AppState.getRelationalDatabaseIds().forEach(id => {
                 const s = AppState.databases[id];
                 if (!s || !s.columns || !Array.isArray(s.columns)) return;
 
@@ -571,11 +571,16 @@ LA MIA RICHIESTA:
             if (!referencedDBs.includes(matchDB[1])) referencedDBs.push(matchDB[1]);
         }
 
-        const getDbSchema = (dbTitle) => {
-            if (!AppState.databases) return null;
-            for (let id in AppState.databases) {
+        // Risoluzione schema sia per ID Immutabile che per Titolo
+        const getDbSchema = (dbKey) => {
+            if (!AppState.databases || !dbKey) return null;
+            const cleanId = dbKey.split('_cited_')[0];
+            if (AppState.databases[cleanId] && Array.isArray(AppState.databases[cleanId].columns)) {
+                return AppState.databases[cleanId].columns;
+            }
+            for (let id of AppState.getRelationalDatabaseIds()) {
                 const s = AppState.databases[id];
-                if (s && s.title === dbTitle && !s.isPivot && !s.isLinkedView && s.columns && Array.isArray(s.columns)) return s.columns;
+                if (s && s.title === dbKey && !s.isPivot && !s.isLinkedView && s.columns && Array.isArray(s.columns)) return s.columns;
             }
             return null;
         };
@@ -852,12 +857,12 @@ LA MIA RICHIESTA:
             try {
                 const riga = AdvancedTable._buildRigaContext(mockRow, state.columns || [], mockRow.virtualCells, {}, tableId);
                 const tabella = AdvancedTable._buildTabellaContext();
-                const righe = tabella[state.title] || [];
+                const righe = tabella[tableId] || tabella[state.title] || [];
 
                 const fullCode = `'use strict';\n${AdvancedTable._formulaWrappers}\nreturn ${formulaStr};`;
 
                 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
-                // INIEZIONE DI APPSTATE NEL SANDBOX DELLA PREVIEW
+                // Iniezione sicura di AppState nella sandbox di anteprima
                 const executor = new AsyncFunction('riga', 'tabella', 'righe', 'window', 'document', 'localStorage', 'fetch', 'AppState', 'Store', 'Editor', 'AdvancedTable', 'UI', fullCode);
                 
                 const result = await executor.call(null, riga, tabella, righe, undefined, undefined, undefined, undefined, AppState, Store, undefined, AdvancedTable, undefined);

@@ -164,7 +164,7 @@ const AdvancedPivotMenus = {
         let sourceState = null;
 
         if (AppState.databases) {
-            Object.keys(AppState.databases).forEach(id => {
+            AppState.getRelationalDatabaseIds().forEach(id => {
                 const s = AppState.databases[id];
                 if (s && !s.isPivot && !s.isLinkedView && s.columns && !id.includes('adv_code_') && !id.includes('adv_btnbar_') && !id.includes('adv_cols_') && !id.includes('adv_journal_')) {
                     dbList.push({ id: id, title: s.title || I18n.t('editor.database') });

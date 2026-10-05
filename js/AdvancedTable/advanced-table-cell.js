@@ -8,6 +8,8 @@
  * FIX RELAZIONI FORMULE: Utilizzo nativo e pulito dell'engine centrale 'resolveRelationDetails' senza codice duplicato.
  * FEAT: Rendering e navigazione interattiva per la tipologia 'note_link' (Collegamento a Nota).
  * FIX READONLY COMPUTED: Rollup, Formule e Backlink lunghi mostrano solo 'Apri Testo Completo' in sola lettura.
+ * FEAT TRANSPARENT FORMULA ERROR: Rilevamento token di errore (ERROR: ...) con generazione del badge semantico
+ * '⚠️ #VALORE!' con corretto escaping degli attributi data-tooltip per eliminare la rottura del DOM.
  */
 
 Object.assign(AdvancedTable, {
@@ -30,6 +32,26 @@ Object.assign(AdvancedTable, {
         }
 
         const readOnlyTip = isBacklink ? `title="${I18n.t('adv_cell.computed_field_tooltip')}" style="cursor:help;"` : '';
+
+        // =========================================================================
+        // FEEDBACK VISIVO TRASPARENTE PER ERRORI DELLE FORMULE (#VALORE!)
+        // =========================================================================
+        if (col.type === 'formula' && typeof val === 'string' && val.startsWith('ERROR:')) {
+            const rawErrorMsg = val.replace(/^ERROR:\s*/, '').trim();
+            const safeErrorText = UI.escapeHTML(rawErrorMsg);
+            
+            // Costruzione del tooltip sicura senza doppi apici annidati nell'attributo data-tooltip
+            const tooltipContent = `<b>Errore Formula:</b><br><span style='color:var(--danger-color); font-family:monospace;'>${safeErrorText}</span>`;
+            const safeTooltipAttr = tooltipContent.replace(/"/g, '&quot;');
+
+            return `
+                <div class="adv-cell-text adv-cell-readonly" style="background:rgba(239, 68, 68, 0.08); border-radius:4px; padding:2px 6px; cursor:help; display:inline-flex; align-items:center;" data-tooltip="${safeTooltipAttr}" contenteditable="false">
+                    <span style="color:var(--danger-color); font-weight:bold; font-family:monospace; font-size:0.85rem; display:inline-flex; align-items:center; gap:4px; pointer-events:none;">
+                        ${typeof Icons !== 'undefined' ? Icons.alertTriangle : '⚠️'} #VALORE!
+                    </span>
+                </div>
+            `;
+        }
 
         if (isBacklink && (col.backlinkDisplay === 'count' || col.backlinkDisplay === 'property')) {
             if (col.backlinkDisplay === 'count') {

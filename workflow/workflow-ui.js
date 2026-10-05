@@ -74,29 +74,29 @@ Object.assign(WorkflowApp, {
         const currentBorder = WorkflowApp.layout.borderColor || '';
 
         const bgPresets = [
-            { name: 'Predefinito (Tema)', val: '' },
-            { name: 'Bianco Puro', val: '#ffffff' },
-            { name: 'Carta Avorio', val: '#f9f8f3' },
-            { name: 'Grigio Studio', val: '#f3f4f6' },
-            { name: 'Menta Soft', val: '#f0fdf4' },
-            { name: 'Celeste Soft', val: '#f0f9ff' },
-            { name: 'Blu Notte', val: '#1e293b' },
-            { name: 'Lavagna Scura', val: '#212732' },
-            { name: 'Notte Stellata', val: '#191919' },
-            { name: 'Nero Profondo', val: '#0a0a0a' }
+            { name: I18n.t('workflow.preset_default'), val: '' },
+            { name: I18n.t('workflow.preset_pure_white'), val: '#ffffff' },
+            { name: I18n.t('workflow.preset_ivory'), val: '#f9f8f3' },
+            { name: I18n.t('workflow.preset_studio_gray'), val: '#f3f4f6' },
+            { name: I18n.t('workflow.preset_soft_mint'), val: '#f0fdf4' },
+            { name: I18n.t('workflow.preset_soft_sky'), val: '#f0f9ff' },
+            { name: I18n.t('workflow.preset_night_blue'), val: '#1e293b' },
+            { name: I18n.t('workflow.preset_dark_slate'), val: '#212732' },
+            { name: I18n.t('workflow.preset_starry_night'), val: '#191919' },
+            { name: I18n.t('workflow.preset_deep_black'), val: '#0a0a0a' }
         ];
 
         const borderPresets = [
-            { name: 'Predefinito (Tema)', val: '' },
-            { name: 'Blu Accent', val: '#2563eb' },
-            { name: 'Smeraldo', val: '#10b981' },
-            { name: 'Ambra / Arancio', val: '#f59e0b' },
-            { name: 'Rosso Corallo', val: '#ef4444' },
-            { name: 'Viola Indaco', val: '#8b5cf6' },
-            { name: 'Rosa Magenta', val: '#ec4899' },
-            { name: 'Ardesia Neutro', val: '#64748b' },
-            { name: 'Bianco Perla', val: '#ffffff' },
-            { name: 'Nero Inchiostro', val: '#111827' }
+            { name: I18n.t('workflow.preset_default'), val: '' },
+            { name: I18n.t('workflow.preset_blue_accent'), val: '#2563eb' },
+            { name: I18n.t('workflow.preset_emerald'), val: '#10b981' },
+            { name: I18n.t('workflow.preset_amber'), val: '#f59e0b' },
+            { name: I18n.t('workflow.preset_coral_red'), val: '#ef4444' },
+            { name: I18n.t('workflow.preset_purple_indigo'), val: '#8b5cf6' },
+            { name: I18n.t('workflow.preset_magenta'), val: '#ec4899' },
+            { name: I18n.t('workflow.preset_neutral_slate'), val: '#64748b' },
+            { name: I18n.t('workflow.preset_pearl_white'), val: '#ffffff' },
+            { name: I18n.t('workflow.preset_ink_black'), val: '#111827' }
         ];
 
         let bgSwatchesHtml = `<div style="display:grid; grid-template-columns: repeat(5, 1fr); gap:8px; margin-bottom: 12px;">`;
@@ -138,16 +138,16 @@ Object.assign(WorkflowApp, {
                 <!-- SEZIONE 1: SFONDO CANVAS -->
                 <div>
                     <h4 style="margin:0 0 6px 0; font-size:0.92rem; color:var(--accent-color); display:flex; align-items:center; gap:6px;">
-                        ${Icons.palette} Colore Sfondo Canvas
+                        ${Icons.palette} ${I18n.t('workflow.colors_bg_title')}
                     </h4>
                     <p style="color:var(--text-secondary); margin-bottom:10px; font-size:0.8rem; line-height:1.4;">
-                        Personalizza la tinta dello sfondo dell'area di lavoro.
+                        ${I18n.t('workflow.colors_bg_desc')}
                     </p>
                     ${bgSwatchesHtml}
                     <div style="display:flex; gap:8px; align-items:center;">
                         <input type="color" id="wfCustomColorPicker" value="${currentBg || '#f3f4f6'}" style="width:40px; height:32px; border:1px solid var(--border-color); border-radius:4px; cursor:pointer; background:transparent;" onchange="WorkflowApp.applyCanvasBackground(this.value); document.getElementById('wfCustomColorHex').value = this.value;">
-                        <input type="text" id="wfCustomColorHex" class="modern-input" value="${currentBg || ''}" placeholder="#hex o vuoto per default" style="flex:1;" oninput="WorkflowApp.applyCanvasBackground(this.value);">
-                        <button class="btn" onclick="WorkflowApp.applyCanvasBackground(''); document.getElementById('wfCustomColorHex').value = ''; WorkflowApp.openColorsDrawer();">Ripristina</button>
+                        <input type="text" id="wfCustomColorHex" class="modern-input" value="${currentBg || ''}" placeholder="#hex" style="flex:1;" oninput="WorkflowApp.applyCanvasBackground(this.value);">
+                        <button class="btn" onclick="WorkflowApp.applyCanvasBackground(''); document.getElementById('wfCustomColorHex').value = ''; WorkflowApp.openColorsDrawer();">${I18n.t('workflow.colors_reset')}</button>
                     </div>
                 </div>
 
@@ -156,26 +156,26 @@ Object.assign(WorkflowApp, {
                 <!-- SEZIONE 2: BORDI SCHEDE -->
                 <div>
                     <h4 style="margin:0 0 6px 0; font-size:0.92rem; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
-                        ${Icons.square} Colore Bordi Schede
+                        ${Icons.square} ${I18n.t('workflow.colors_border_title')}
                     </h4>
                     <p style="color:var(--text-secondary); margin-bottom:10px; font-size:0.8rem; line-height:1.4;">
-                        Definisci il colore primario del contorno di tutti i blocchi del grafo. I nodi con regole condizionali mantengono la loro priorità.
+                        ${I18n.t('workflow.colors_border_desc')}
                     </p>
                     ${borderSwatchesHtml}
                     <div style="display:flex; gap:8px; align-items:center;">
                         <input type="color" id="wfCustomBorderPicker" value="${currentBorder || '#64748b'}" style="width:40px; height:32px; border:1px solid var(--border-color); border-radius:4px; cursor:pointer; background:transparent;" onchange="WorkflowApp.applyBlockBorderColor(this.value); document.getElementById('wfCustomBorderHex').value = this.value;">
-                        <input type="text" id="wfCustomBorderHex" class="modern-input" value="${currentBorder || ''}" placeholder="#hex o vuoto per default" style="flex:1;" oninput="WorkflowApp.applyBlockBorderColor(this.value);">
-                        <button class="btn" onclick="WorkflowApp.applyBlockBorderColor(''); document.getElementById('wfCustomBorderHex').value = ''; WorkflowApp.openColorsDrawer();">Ripristina</button>
+                        <input type="text" id="wfCustomBorderHex" class="modern-input" value="${currentBorder || ''}" placeholder="#hex" style="flex:1;" oninput="WorkflowApp.applyBlockBorderColor(this.value);">
+                        <button class="btn" onclick="WorkflowApp.applyBlockBorderColor(''); document.getElementById('wfCustomBorderHex').value = ''; WorkflowApp.openColorsDrawer();">${I18n.t('workflow.colors_reset')}</button>
                     </div>
                 </div>
             </div>
         `;
 
         const footerHTML = `
-            <button class="btn btn-primary" onclick="UI.closeDrawer(); WorkflowApp.saveWorkflowAuto();">Salva Configurazione</button>
+            <button class="btn btn-primary" onclick="UI.closeDrawer(); WorkflowApp.saveWorkflowAuto();">${I18n.t('workflow.colors_save')}</button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.palette} Personalizzazione Colori</span>`, bodyHTML, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.palette} ${I18n.t('workflow.colors_drawer_title')}</span>`, bodyHTML, footerHTML);
     },
 
     openCanvasBackgroundDrawer: () => WorkflowApp.openColorsDrawer(),
@@ -204,10 +204,10 @@ Object.assign(WorkflowApp, {
 
         // 1. SOTTOMENÙ: Selezione Campo Relazione (solo se sono presenti auto-relazioni)
         if (selfRels.length > 0) {
-            const currentRelName = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.name : 'Nessuna';
+            const currentRelName = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.name : I18n.t('common.none');
             items.push({
                 icon: Icons.relation || Icons.link,
-                label: `Relazione Workflow (${currentRelName})`,
+                label: I18n.t('workflow.menu_rel_workflow', { name: currentRelName }),
                 type: 'submenu',
                 items: selfRels.map(rel => ({
                     label: rel.name + (WorkflowApp.selfRelCol?.id === rel.id ? chk : ''),
@@ -220,30 +220,30 @@ Object.assign(WorkflowApp, {
         // 2. SOTTOMENÙ: Disposizione & Layout
         items.push({
             icon: Icons.layoutAuto || Icons.tablePivot,
-            label: 'Disposizione & Layout',
+            label: I18n.t('workflow.menu_layout'),
             type: 'submenu',
             items: [
                 {
                     icon: Icons.tablePivot,
-                    label: 'Auto-Disponi Organico',
+                    label: I18n.t('workflow.menu_auto_organic'),
                     disabled: isLocked,
                     onClick: () => WorkflowApp.runOrganicAutoLayout(true)
                 },
                 {
                     icon: Icons.focus,
-                    label: 'Centra e Adatta Grafo (Fit)',
+                    label: I18n.t('workflow.menu_fit_view'),
                     onClick: () => WorkflowApp.fitToView()
                 },
                 {
                     icon: Icons.group || Icons.folder,
-                    label: 'Raggruppa in Cluster (Box)...',
+                    label: I18n.t('workflow.menu_cluster'),
                     disabled: isLocked,
                     onClick: () => WorkflowApp.openClusterDrawer()
                 },
                 { type: 'divider' },
                 {
                     icon: Icons.lock,
-                    label: 'Blocca Disposizione (Lock)' + (isLocked ? chk : ''),
+                    label: I18n.t('workflow.menu_lock') + (isLocked ? chk : ''),
                     onClick: () => WorkflowApp.toggleLayoutLock()
                 }
             ]
@@ -252,28 +252,28 @@ Object.assign(WorkflowApp, {
         // 3. SOTTOMENÙ: Stile Connessioni & Flusso
         items.push({
             icon: Icons.relation || Icons.link,
-            label: 'Stile Connessioni & Flusso',
+            label: I18n.t('workflow.menu_conn_style'),
             type: 'submenu',
             items: [
                 {
-                    label: 'Curve Morbide (Bézier)' + (style === 'bezier' ? chk : ''),
+                    label: I18n.t('workflow.menu_bezier') + (style === 'bezier' ? chk : ''),
                     onClick: () => WorkflowApp.setConnectionStyle('bezier')
                 },
                 {
-                    label: 'Linee Ortogonali (Canalizzate R12)' + (style === 'orthogonal' ? chk : ''),
+                    label: I18n.t('workflow.menu_orthogonal') + (style === 'orthogonal' ? chk : ''),
                     onClick: () => WorkflowApp.setConnectionStyle('orthogonal')
                 },
                 {
-                    label: 'Ortogonali (Evita Ostacoli R12)' + (style === 'avoidance' ? chk : ''),
+                    label: I18n.t('workflow.menu_avoidance') + (style === 'avoidance' ? chk : ''),
                     onClick: () => WorkflowApp.setConnectionStyle('avoidance')
                 },
                 { type: 'divider' },
                 {
-                    label: 'Verso: A ➔ B (Successore)' + (dir === 'successor' ? chk : ''),
+                    label: I18n.t('workflow.menu_dir_successor') + (dir === 'successor' ? chk : ''),
                     onClick: () => WorkflowApp.setRelationDirection('successor')
                 },
                 {
-                    label: 'Verso: B ➔ A (Predecessore)' + (dir === 'predecessor' ? chk : ''),
+                    label: I18n.t('workflow.menu_dir_predecessor') + (dir === 'predecessor' ? chk : ''),
                     onClick: () => WorkflowApp.setRelationDirection('predecessor')
                 }
             ]
@@ -284,18 +284,18 @@ Object.assign(WorkflowApp, {
         // 4. SOTTOMENÙ: Personalizzazione Visiva
         items.push({
             icon: Icons.palette,
-            label: 'Personalizzazione Visiva',
+            label: I18n.t('workflow.menu_visual'),
             type: 'submenu',
             items: [
                 {
                     icon: Icons.palette,
-                    label: 'Colori (Sfondo & Bordi Schede)...',
+                    label: I18n.t('workflow.menu_colors'),
                     onClick: () => WorkflowApp.openColorsDrawer()
                 },
                 { type: 'divider' },
                 {
                     icon: Icons.filter,
-                    label: 'Campi Visibili sulle Card...',
+                    label: I18n.t('workflow.menu_visible_fields'),
                     onClick: () => WorkflowApp.openPropertiesDrawer()
                 }
             ]
@@ -303,26 +303,26 @@ Object.assign(WorkflowApp, {
 
         items.push({ type: 'divider' });
 
-        // 5. SOTTOMENÙ: Esportazione Vettoriale & File
+        // 6. SOTTOMENÙ: Esportazione Vettoriale & File
         items.push({
             icon: Icons.export || Icons.file,
-            label: 'Esporta & Condividi',
+            label: I18n.t('workflow.menu_export_share'),
             type: 'submenu',
             items: [
                 {
                     icon: Icons.image || Icons.export,
-                    label: 'Esporta Grafo Vettoriale (SVG)...',
+                    label: I18n.t('workflow.menu_export_svg'),
                     onClick: () => WorkflowApp.exportGraphToSVG()
                 },
                 { type: 'divider' },
                 {
                     icon: Icons.save,
-                    label: 'Esporta Copia Layout JSON',
+                    label: I18n.t('workflow.menu_export_layout_json'),
                     onClick: () => WorkflowApp.saveLayoutFileManualDownload()
                 },
                 {
                     icon: Icons.download,
-                    label: 'Carica Layout JSON Esterno...',
+                    label: I18n.t('workflow.menu_import_layout_json'),
                     onClick: () => {
                         const inp = document.createElement('input');
                         inp.type = 'file';
@@ -403,7 +403,7 @@ Object.assign(WorkflowApp, {
             let matchedField = null;
 
             if (titleText.toLowerCase().includes(term)) {
-                matchedField = 'Titolo';
+                matchedField = I18n.t('workflow.search_field_title');
             } else {
                 for (const c of db.columns) {
                     const val = String(r.cells[c.id] || '').toLowerCase();
@@ -415,12 +415,12 @@ Object.assign(WorkflowApp, {
             }
 
             if (matchedField) {
-                matches.push({ rowId: r.id, title: titleText || 'Senza Titolo', field: matchedField });
+                matches.push({ rowId: r.id, title: titleText || I18n.t('editor.untitled'), field: matchedField });
             }
         });
 
         if (matches.length === 0) {
-            dropdown.innerHTML = `<div style="padding:10px; font-size:0.8rem; color:var(--text-secondary); text-align:center;">Nessun riscontro per "${UI.escapeHTML(value)}"</div>`;
+            dropdown.innerHTML = `<div style="padding:10px; font-size:0.8rem; color:var(--text-secondary); text-align:center;">${I18n.t('workflow.search_no_matches', { term: UI.escapeHTML(value) })}</div>`;
             dropdown.classList.add('active');
             return;
         }
@@ -490,7 +490,7 @@ Object.assign(WorkflowApp, {
         });
 
         if (matchingRows.length === 0) {
-            UI.showToast(`Nessun elemento trovato per "${query}".`, "warning");
+            UI.showToast(I18n.t('workflow.search_none_found', { query }), "warning");
             WorkflowApp.clearFocusBranch();
             return;
         }
@@ -507,11 +507,11 @@ Object.assign(WorkflowApp, {
         if (matchingRows.length === 1) {
             WorkflowApp.focusBranch(matchingRows[0].id);
             WorkflowApp.centerOnNode(matchingRows[0].id);
-            UI.showToast(`1 elemento trovato.`, "info");
+            UI.showToast(I18n.t('workflow.search_one_found'), "info");
         } else {
             const matchingIds = new Set(matchingRows.map(r => r.id));
             WorkflowApp.fitMatchingNodes(matchingIds);
-            UI.showToast(`Trovati ${matchingRows.length} elementi corrispondenti.`, "info");
+            UI.showToast(I18n.t('workflow.search_multiple_found', { count: matchingRows.length }), "info");
         }
     },
 
@@ -560,7 +560,7 @@ Object.assign(WorkflowApp, {
 
         let html = `
             <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">
-                Scegli quali proprietà visualizzare all'interno dei singoli blocchi del workflow:
+                ${I18n.t('workflow.props_drawer_desc')}
             </div>
             <div style="display:flex; flex-direction:column; gap:8px;">
         `;
@@ -577,7 +577,7 @@ Object.assign(WorkflowApp, {
         });
 
         html += `</div>`;
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.filter} Campi Visibili sulle Card</span>`, html, null);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.filter} ${I18n.t('workflow.props_drawer_title')}</span>`, html, null);
     },
 
     toggleColumnVisibility: (colId, isVisible) => {

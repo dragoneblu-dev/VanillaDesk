@@ -127,7 +127,7 @@ Object.assign(WorkflowApp, {
         const db = WorkflowApp.currentDbState;
         if (!db || !db.rows) return;
 
-        const titleCol = (db.columns && db.columns[0]) ? db.columns[0] : { id: 'c_title', name: 'Titolo' };
+        const titleCol = (db.columns && db.columns[0]) ? db.columns[0] : { id: 'c_title', name: I18n.t('workflow.search_field_title') };
         const renderCache = {};
         let positionedCount = 0;
 
@@ -164,7 +164,7 @@ Object.assign(WorkflowApp, {
                 const rawTitle = virtualCells[titleCol.id];
                 const titleVal = (rawTitle !== undefined && rawTitle !== null && rawTitle !== '')
                     ? AdvancedTable.getFormatDisplayValue(titleCol, rawTitle, renderCache)
-                    : 'Senza Titolo';
+                    : I18n.t('editor.untitled');
 
                 const colorStyles = WorkflowApp.getComputedNodeStyles(row, db, renderCache);
 
@@ -216,7 +216,7 @@ Object.assign(WorkflowApp, {
                         const dateText = AdvancedTable.getFormatDisplayValue(colDef, rawVal, renderCache);
                         formattedContent = `<span class="wf-date-badge">${UI.escapeHTML(dateText)}</span>`;
                     } else if (colDef.type === 'checkbox') {
-                        formattedContent = rawVal ? `<span class="wf-bool-true">✓ Sì</span>` : `<span class="wf-bool-false">✕ No</span>`;
+                        formattedContent = rawVal ? `<span class="wf-bool-true">✓ ${I18n.t('notes_info.yes')}</span>` : `<span class="wf-bool-false">✕ ${I18n.t('notes_info.no')}</span>`;
                     } else {
                         formattedContent = UI.escapeHTML(AdvancedTable.getFormatDisplayValue(colDef, rawVal, renderCache));
                     }
@@ -233,13 +233,13 @@ Object.assign(WorkflowApp, {
 
                 // Inserimento dei 4 punti di aggancio cardinali (Top, Right, Bottom, Left)
                 node.innerHTML = `
-                    <div class="wf-port top is-idle" data-port="top" title="Punto di connessione" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'top')"></div>
-                    <div class="wf-port right is-idle" data-port="right" title="Punto di connessione" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'right')"></div>
-                    <div class="wf-port bottom is-idle" data-port="bottom" title="Punto di connessione" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'bottom')"></div>
-                    <div class="wf-port left is-idle" data-port="left" title="Punto di connessione" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'left')"></div>
+                    <div class="wf-port top is-idle" data-port="top" title="${I18n.t('workflow.port_free')}" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'top')"></div>
+                    <div class="wf-port right is-idle" data-port="right" title="${I18n.t('workflow.port_free')}" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'right')"></div>
+                    <div class="wf-port bottom is-idle" data-port="bottom" title="${I18n.t('workflow.port_free')}" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'bottom')"></div>
+                    <div class="wf-port left is-idle" data-port="left" title="${I18n.t('workflow.port_free')}" onmousedown="WorkflowApp.startLinkDrag(event, '${row.id}', 'left')"></div>
                     <div class="wf-node-header" style="${headerStyle}">
                         <span class="wf-node-title" style="${titleStyle}">${UI.escapeHTML(String(titleVal))}</span>
-                        <span style="opacity:0.6; font-size:0.75rem; cursor:pointer; flex-shrink:0; padding-top:2px;" onclick="event.stopPropagation(); WorkflowApp.openRecordDrawer('${row.id}')" title="Dettaglio Record">🔍</span>
+                        <span style="opacity:0.6; font-size:0.75rem; cursor:pointer; flex-shrink:0; padding-top:2px;" onclick="event.stopPropagation(); WorkflowApp.openRecordDrawer('${row.id}')" title="${I18n.t('adv_record.title_record')}">🔍</span>
                     </div>
                     ${propsHtml ? `<div class="wf-node-body">${propsHtml}</div>` : ''}
                 `;
@@ -303,8 +303,6 @@ Object.assign(WorkflowApp, {
                 console.error("Errore durante la creazione del nodo:", nodeErr, row);
             }
         });
-
-        console.log(`[WORKFLOW DEBUG] buildNodesDOM: generati ${db.rows.length} nodi (${positionedCount} posizionati alle coordinate salvate).`);
     },
 
     getComputedNodeStyles: (row, db, renderCache = {}) => {
@@ -476,7 +474,7 @@ Object.assign(WorkflowApp, {
             WorkflowApp.updateSelectionToolbar();
         }
         if (WorkflowApp.selectedNodeIds.size > 1) {
-            UI.showToast(`Selezionati ${WorkflowApp.selectedNodeIds.size} blocchi.`, 'info');
+            UI.showToast(I18n.t('workflow.toast_nodes_selected', { count: WorkflowApp.selectedNodeIds.size }), 'info');
         }
     }
 });

@@ -78,7 +78,7 @@ window.WorkflowApp = {
         WorkflowApp.layout.locked = !WorkflowApp.layout.locked;
         WorkflowApp.applyLayoutLockState();
         WorkflowApp.saveWorkflowAuto();
-        const msg = WorkflowApp.layout.locked ? "Layout Bloccato: modalità consultazione protetta attiva." : "Layout Sbloccato: modifiche abilitate.";
+        const msg = WorkflowApp.layout.locked ? I18n.t('workflow.toast_layout_locked') : I18n.t('workflow.toast_layout_unlocked');
         UI.showToast(msg, WorkflowApp.layout.locked ? "warning" : "info");
         if (typeof WorkflowApp.updateSelectionToolbar === 'function') {
             WorkflowApp.updateSelectionToolbar();
@@ -94,16 +94,16 @@ window.WorkflowApp = {
             document.body.classList.add('layout-locked');
             if (btn) {
                 btn.classList.add('active');
-                btn.title = "Layout protetto: clicca per sbloccare modifiche e posizioni";
+                btn.title = I18n.t('workflow.menu_lock');
             }
-            if (label) label.innerText = "Sblocca";
+            if (label) label.innerText = I18n.t('workflow.unlock');
         } else {
             document.body.classList.remove('layout-locked');
             if (btn) {
                 btn.classList.remove('active');
-                btn.title = "Blocca/Sblocca spostamento schede e collegamenti";
+                btn.title = I18n.t('workflow.menu_lock');
             }
-            if (label) label.innerText = "Blocca";
+            if (label) label.innerText = I18n.t('workflow.lock');
         }
     },
 
@@ -177,11 +177,11 @@ window.WorkflowApp = {
 
         const titleEl = document.getElementById('activeDbTitle');
         if (titleEl) {
-            titleEl.innerText = `${db.title || 'Database'} [${newRelCol.name}]`;
+            titleEl.innerText = `${db.title || I18n.t('editor.database')} [${newRelCol.name}]`;
         }
 
         WorkflowApp.saveWorkflowAuto();
-        UI.showToast(`Visualizzazione Workflow per: "${newRelCol.name}"`, "info");
+        UI.showToast(I18n.t('workflow.toast_workflow_view_for', { name: newRelCol.name }), "info");
     },
 
     // =========================================================================
@@ -271,7 +271,7 @@ window.WorkflowApp = {
         // Fallback difensivo per la navigazione a note nel drawer
         if (!UI.selectNote) {
             UI.selectNote = () => {
-                UI.showToast("La visualizzazione completa delle note è disponibile nell'applicazione principale VanillaDesk.", "info");
+                UI.showToast(I18n.t('workflow.note_view_notice'), "info");
             };
         }
 
@@ -565,9 +565,9 @@ window.WorkflowApp = {
             grid.innerHTML = `
                 <div style="grid-column: 1/-1; text-align:center; padding:50px 20px; color:var(--text-secondary); background:var(--sidebar-bg); border:1px dashed var(--border-color); border-radius:12px;">
                     <div style="font-size:2rem; margin-bottom:12px;">🔍</div>
-                    <h3 style="color:var(--text-primary); margin-bottom:8px;">Nessun Database con Auto-Relazione Trovato</h3>
+                    <h3 style="color:var(--text-primary); margin-bottom:8px;">${I18n.t('workflow.no_self_rel_found_title')}</h3>
                     <p style="max-width:550px; margin:0 auto; line-height:1.5; font-size:0.9rem;">
-                        Per visualizzare una tabella in <b>Workflow Studio</b>, apri <b>VanillaDesk</b> e aggiungi una colonna di tipo <b>Relazione</b> che punti alla tabella stessa.
+                        ${I18n.t('workflow.no_self_rel_found_desc')}
                     </p>
                 </div>
             `;
@@ -592,13 +592,13 @@ window.WorkflowApp = {
             card.innerHTML = `
                 <div class="db-card-title">
                     <span style="display:inline-flex;">${Icons.tableDatabase}</span>
-                    <span>${UI.escapeHTML(db.title || 'Database Senza Nome')}</span>
+                    <span>${UI.escapeHTML(db.title || I18n.t('workflow.untitled_db'))}</span>
                 </div>
                 <div style="font-size:0.85rem; color:var(--text-secondary);">
-                    <b>${rowCount}</b> record &bull; <b>${(db.columns || []).length}</b> colonne
+                    <b>${I18n.t('workflow.records_count', { count: rowCount })}</b> &bull; <b>${I18n.t('workflow.columns_count', { count: (db.columns || []).length })}</b>
                 </div>
                 <div>
-                    <span class="db-card-badge badge-ready">🌟 Workflow Pronto (${UI.escapeHTML(relNames || 'Relazione')})</span>
+                    <span class="db-card-badge badge-ready">${I18n.t('workflow.workflow_ready', { rels: UI.escapeHTML(relNames || I18n.t('adv_col_menu.type_relation')) })}</span>
                 </div>
             `;
 
@@ -631,7 +631,7 @@ window.WorkflowApp = {
 
         const titleEl = document.getElementById('activeDbTitle');
         if (titleEl) {
-            titleEl.innerText = activeRel ? `${db.title || 'Database'} [${activeRel.name}]` : (db.title || 'Database');
+            titleEl.innerText = activeRel ? `${db.title || I18n.t('editor.database')} [${activeRel.name}]` : (db.title || I18n.t('editor.database'));
         }
 
         // Inizializza il contenitore multi-layout per le relazioni
@@ -716,7 +716,7 @@ window.WorkflowApp = {
 
             const titleEl = document.getElementById('activeDbTitle');
             if (titleEl) {
-                titleEl.innerText = selfRel ? `${freshDbState.title || 'Database'} [${selfRel.name}]` : (freshDbState.title || 'Database');
+                titleEl.innerText = selfRel ? `${freshDbState.title || I18n.t('editor.database')} [${selfRel.name}]` : (freshDbState.title || I18n.t('editor.database'));
             }
 
             WorkflowApp.buildNodesDOM();
@@ -733,11 +733,11 @@ window.WorkflowApp = {
             WorkflowApp.renderConnections();
             WorkflowApp.renderClusters();
             WorkflowApp.updateMinimap();
-            if (!silent) UI.showToast("Dati aggiornati ricaricati dal disco!", "success");
+            if (!silent) UI.showToast(I18n.t('workflow.toast_data_reloaded'), "success");
         } catch(e) {
             if (!silent) {
                 console.error("Errore ricarica:", e);
-                UI.showToast("Errore durante la ricarica dal disco.", "error");
+                UI.showToast(I18n.t('workflow.toast_reload_error'), "error");
             }
         }
     },
@@ -834,7 +834,7 @@ window.WorkflowApp = {
             try {
                 const parsed = JSON.parse(e.target.result);
                 if (parsed.type !== 'vanilladesk_workflow_layout') {
-                    alert("Il file caricato non è una configurazione di layout Workflow valida.");
+                    alert(I18n.t('workflow.alert_invalid_layout_file'));
                     return;
                 }
 
@@ -870,7 +870,7 @@ window.WorkflowApp = {
                 WorkflowApp.updateCanvasTransform();
                 WorkflowApp.saveWorkflowAuto();
 
-                UI.showToast("Layout ripristinato e sincronizzato con successo!", "success");
+                UI.showToast(I18n.t('workflow.toast_layout_restored'), "success");
             } catch (err) {
                 alert("Errore durante la lettura del layout: " + err.message);
             }

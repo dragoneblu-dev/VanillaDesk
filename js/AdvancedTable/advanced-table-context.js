@@ -18,6 +18,8 @@
  * e stack overflow tra relazioni e rollup incrociati bidirezionali.
  * FIX CROSS-DB FORMULA DEPENDENCY & RESOLUTION: _buildTabellaContext risolve in modo lazy e protetto
  * le virtualCells dei campi calcolati esterni, intercettando cicli cross-tabella con guardie set 'renderCache._resolvingCrossDB'.
+ * FEAT IMMUTABLE ID RESOLUTION: _buildTabellaContext, _buildRigaContext e i record risolvono indifferentemente
+ * tramite ID Immutabile (es. adv_tbl_*, c_*) o Titolo/Nome colonna, rendendo le query immuni a qualsiasi rinomina.
  */
 
 Object.assign(AdvancedTable, {
@@ -107,14 +109,14 @@ Object.assign(AdvancedTable, {
         const targetState = AdvancedTable.getTableState(targetDbId);
         if (!targetState) return vals.map(id => ({ id: id, name: 'Orfano' }));
 
-        const displayColId = colDef.type === 'relation' ? colDef.targetColId : targetState.columns[0].id;
-        const displayColDef = targetState.columns.find(c => c.id === displayColId);
+        const displayColId = colDef.type === 'relation' ? colDef.targetColId : (targetState.columns && targetState.columns[0] ? targetState.columns[0].id : null);
+        const displayColDef = (targetState.columns || []).find(c => c.id === displayColId);
 
         // FAST-PATH: Se la colonna bersaglio non è un campo calcolato, saltiamo il pesante motore virtuale
         const isCalculatedCol = displayColDef && ['formula', 'rollup', 'relation_backlink'].includes(displayColDef.type);
 
         return vals.map(tId => {
-            const tRow = targetState.rows.find(r => r.id === tId);
+            const tRow = (targetState.rows || []).find(r => r.id === tId);
             if (!tRow) return { id: tId, name: 'Orfano' };
             
             let val;
@@ -136,7 +138,7 @@ Object.assign(AdvancedTable, {
                     }
                 }
             } else {
-                val = tRow.cells[displayColId];
+                val = (tRow.cells || {})[displayColId];
             }
             
             // Se la colonna target è a sua volta una "Pagina", risolve il titolo reale della nota
@@ -253,12 +255,22 @@ Object.assign(AdvancedTable, {
                 let foundId = null;
                 
                 if (AppState.databases) {
-                    for (const id in AppState.databases) {
-                        const s = AppState.databases[id];
-                        if (s && !s.isPivot && s.title === prop) {
-                            foundState = s;
-                            foundId = id;
-                            break;
+                    // 1. Risoluzione prioritaria tramite ID Immutabile (es. adv_tbl_...)
+                    const cleanPropId = typeof prop === 'string' ? prop.split('_cited_')[0] : prop;
+                    if (AppState.isRelationalTable(cleanPropId) && !AppState.databases[cleanPropId].isPivot) {
+                        foundState = AppState.databases[cleanPropId];
+                        foundId = cleanPropId;
+                    }
+
+                    // 2. Risoluzione tramite Titolo per retrocompatibilità e usabilità
+                    if (!foundState) {
+                        for (const id of AppState.getRelationalDatabaseIds()) {
+                            const s = AppState.databases[id];
+                            if (s && !s.isPivot && s.title === prop) {
+                                foundState = s;
+                                foundId = id;
+                                break;
+                            }
                         }
                     }
                 }
@@ -270,7 +282,8 @@ Object.assign(AdvancedTable, {
                         get: function(rowTarget, colName) {
                             if (colName in rowTarget) return rowTarget[colName];
 
-                            const c = (foundState.columns || []).find(col => col.name === colName);
+                            // Risoluzione colonna sia per Nome ('Prezzo') che per ID Immutabile ('c_12345')
+                            const c = (foundState.columns || []).find(col => col.name === colName || col.id === colName);
                             if (!c) return undefined;
 
                             let val;
@@ -362,7 +375,8 @@ Object.assign(AdvancedTable, {
             get: function(target, propName) {
                 if (propName in target) return target[propName];
 
-                const c = (columns || []).find(col => col.name === propName);
+                // Risoluzione colonna sia per Nome ('Prezzo') che per ID Immutabile ('c_12345')
+                const c = (columns || []).find(col => col.name === propName || col.id === propName);
                 if (!c) return undefined;
 
                 let cellVal = virtualCells ? virtualCells[c.id] : (row && row.cells ? row.cells[c.id] : undefined);
@@ -648,11 +662,12 @@ Object.assign(AdvancedTable, {
                     
                     resolving.add(col.id);
 
-                    // Cerca dipendenze incrociate analizzando il codice sorgente della formula
+                    // Cerca dipendenze incrociate analizzando il codice sorgente della formula (sia per nome che per ID)
                     formulaCols.forEach(otherCol => {
                         if (otherCol.id !== col.id && col.formula) {
                             const escapedName = otherCol.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-                            const regex = new RegExp(`riga\\s*\\[\\s*["']${escapedName}["']\\s*\\]|riga\\.${escapedName}\\b`);
+                            const escapedId = otherCol.id.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                            const regex = new RegExp(`riga\\s*\\[\\s*["'](${escapedName}|${escapedId})["']\\s*\\]|riga\\.${escapedName}\\b`);
                             if (regex.test(col.formula)) {
                                 resolveFormula(otherCol);
                             }

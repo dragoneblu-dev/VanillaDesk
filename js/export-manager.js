@@ -287,7 +287,7 @@ const ExportManager = {
                     } else if (type === 'database' || type === 'pivot') {
                         try {
                             const state = AppState.databases[trueId];
-                            if (!state) throw new Error();
+                            if (!state || !AppState.isRelationalTable(state)) throw new Error();
                             
                             const originalDbState = state.isLinkedView || state.isPivot ? AppState.databases[state.sourceTableId] : null;
                             const originalTitle = originalDbState ? originalDbState.title : state.title;
@@ -554,7 +554,7 @@ const ExportManager = {
                 } else if (type === 'database' || type === 'pivot') {
                     try {
                         const state = AppState.databases[trueId];
-                        if (!state) throw new Error();
+                        if (!state || !AppState.isRelationalTable(state)) throw new Error();
                         
                         const originalDbState = state.isLinkedView || state.isPivot ? AppState.databases[state.sourceTableId] : null;
                         const originalTitle = originalDbState ? originalDbState.title : state.title;

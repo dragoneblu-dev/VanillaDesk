@@ -93,16 +93,27 @@ Object.assign(UI, {
         // 1. Modalità Esplicita Database
         if (AppState.showDbNotesInTree) {
             if (AppState.databases) {
-                Object.keys(AppState.databases).forEach(dbId => {
-                    const dbState = AppState.databases[dbId];
-                    const isCodeOrBtn = dbId.includes('adv_code_') || dbId.includes('adv_btnbar_') || dbId.includes('adv_cols_');
-                    const isPivotOrLink = dbState && (dbState.isPivot || dbState.isLinkedView);
+                const sortedDbIds = Object.keys(AppState.databases)
+                    .filter(dbId => {
+                        const dbState = AppState.databases[dbId];
+                        const isCodeOrBtn = dbId.includes('adv_code_') || dbId.includes('adv_btnbar_') || dbId.includes('adv_cols_');
+                        const isPivotOrLink = dbState && (dbState.isPivot || dbState.isLinkedView);
+                        return dbState && !isCodeOrBtn && !isPivotOrLink && dbId !== 'SYS_PROPERTIES_DB';
+                    })
+                    .sort((a, b) => {
+                        const titleA = AppState.databases[a]?.title || '';
+                        const titleB = AppState.databases[b]?.title || '';
+                        return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+                    });
 
-                    if (dbState && !isCodeOrBtn && !isPivotOrLink && dbId !== 'SYS_PROPERTIES_DB') {
-                        const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId);
-                        const el = UI.buildDatabaseVirtualTreeElement(dbId, dbState, dbNotes, false, true);
-                        if (el) container.appendChild(el);
-                    }
+                sortedDbIds.forEach(dbId => {
+                    const dbState = AppState.databases[dbId];
+                    const dbNotes = AppState.notes
+                        .filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId)
+                        .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
+
+                    const el = UI.buildDatabaseVirtualTreeElement(dbId, dbState, dbNotes, false, true);
+                    if (el) container.appendChild(el);
                 });
             }
         } 
@@ -129,7 +140,9 @@ Object.assign(UI, {
 
                 if (forceDbRenderId && AppState.databases[forceDbRenderId]) {
                     const dbState = AppState.databases[forceDbRenderId];
-                    const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === forceDbRenderId);
+                    const dbNotes = AppState.notes
+                        .filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === forceDbRenderId)
+                        .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
                     
                     const el = UI.buildDatabaseVirtualTreeElement(forceDbRenderId, dbState, dbNotes, true, false);
                     if (el) {
@@ -329,7 +342,14 @@ Object.assign(UI, {
         let forceExpandBecauseOfMatch = false;
 
         if (isExplicitDbMode && (!isFiltering || dbTitleMatch)) {
-            Object.keys(AppState.databases).forEach(depId => {
+            // Ordinamento alfabetico anche delle viste collegate e delle macro associate
+            const depDbIds = Object.keys(AppState.databases).sort((a, b) => {
+                const titleA = AppState.databases[a]?.title || '';
+                const titleB = AppState.databases[b]?.title || '';
+                return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            depDbIds.forEach(depId => {
                 const depState = AppState.databases[depId];
                 if (!depState) return;
 
@@ -393,7 +413,12 @@ Object.assign(UI, {
 
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
-        dbNotes.forEach(note => {
+        // Ordinamento alfabetico naturale delle note-record per facilitare la scansione visiva
+        const sortedDbNotes = [...dbNotes].sort((a, b) => 
+            (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
+        );
+
+        sortedDbNotes.forEach(note => {
             let noteDirectMatch = true;
 
             if (activePropFilters.length > 0) {
@@ -629,7 +654,6 @@ Object.assign(UI, {
         if (isGhost) content.classList.add('tree-ghost-node');
 
         if (node.isRecordNote) {
-            content.classList.add('record-note-node');
             content.draggable = false;
         } else {
             content.draggable = true;

@@ -11,13 +11,14 @@
  * FIX COMPATIBILITÀ MODULARE: Verifica l'esistenza di AdvancedTable.renderTable prima dell'invocazione.
  * FIX VALUE EXTRACTION: Utilizzo universale di AdvancedTable.getFormatDisplayValue per formule/rollup/numeri
  * preservando l'accesso diretto a row.createdAt e row.updatedAt per i timestamp di sistema.
+ * FEAT DUPLICATE RECORD (CLONE ROW): Aggiunto pulsante 'Duplica Record' nel footer del drawer.
  */
 
 Object.assign(AdvancedTable, {
     activeRecordId: null,
     activeTableId: null,
 
-    openRecordView: (tableId, rowId, relationCtx = null) => {
+    openRecordView: (tableId, rowId, relationCtx = null, isClonedCopy = false) => {
         let state = null;
         let isReadOnlyForced = false;
         
@@ -70,6 +71,18 @@ Object.assign(AdvancedTable, {
         const pointerEvent = !isEdit ? 'pointer-events: auto; cursor: pointer;' : '';
 
         let html = '<div style="display:flex; flex-direction:column; gap:10px; width:100%;">';
+
+        // BANNER CONTESTUALE DI CONFERMA CLONAZIONE
+        if (isClonedCopy) {
+            html += `
+                <div style="background: rgba(37, 99, 235, 0.08); border: 1px solid var(--accent-color); border-radius: 6px; padding: 10px 14px; margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: var(--accent-color); font-weight: bold;">
+                        <span style="display: inline-flex;">${typeof Icons !== 'undefined' ? Icons.checkCircle : '✓'}</span>
+                        <span>Record duplicato con successo! Stai visualizzando la copia creata.</span>
+                    </div>
+                </div>
+            `;
+        }
 
         state.columns.forEach(col => {
             const isBacklink = col.type === 'relation_backlink';
@@ -142,8 +155,10 @@ Object.assign(AdvancedTable, {
                 }
                 else if (col.type === 'select' || col.type === 'multi-select') {
                     let content = '';
+                    // Clonazione sicura dell'array per non sporcare il JSON
                     let vals = Array.isArray(val) ? [...val] : (val ? [val] : []);
                     
+                    // Ordinamento alfabetico solo per il Multi-Select
                     if (col.type === 'multi-select' && vals.length > 0) {
                         vals.sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
                     }
@@ -199,8 +214,6 @@ Object.assign(AdvancedTable, {
                 }
                 else if (col.type === 'relation') {
                     const targetDbId = col.targetTableId;
-                    
-                    // Delega la risoluzione profonda all'engine
                     const details = AdvancedTable.resolveRelationDetails(col, val, state._renderCache || {});
                     let pills = '';
                     
@@ -434,7 +447,7 @@ Object.assign(AdvancedTable, {
         });
 
         if (isEdit) {
-            html += `<div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed var(--border-color); display: flex; justify-content: space-between;">`;
+            html += `<div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed var(--border-color); display: flex; justify-content: space-between; align-items:center; flex-wrap:wrap; gap:10px;">`;
             
             if (isSysDB) {
                 const activeAutos = (state.automations || []).filter(a => a.active).length;
@@ -449,8 +462,15 @@ Object.assign(AdvancedTable, {
                     </div>
                 `;
             } else {
-                html += `<div style="display:flex; gap:10px;">`;
+                html += `<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">`;
                 
+                // Bottone Duplica Record (Clone Row)
+                html += `
+                    <button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color); font-weight:500;" onclick="AdvancedTable.duplicateRecord('${tableId}', '${rowId}')">
+                        <span style="margin-right:5px; display:inline-flex; align-items:center;">${Icons.clipboard || '📑'}</span> Duplica Record
+                    </button>
+                `;
+
                 // Se il record viene aperto a partire da una Relazione in un'altra riga,
                 // offriamo il bottone "Scollega Record" invece del pericoloso "Elimina Definitivamente".
                 if (relationCtx) {
@@ -478,6 +498,14 @@ Object.assign(AdvancedTable, {
         UI.openDrawer(titlePrefix, html, null);
 
         setTimeout(() => {
+            // SCORRIMENTO FORZATO IN CIMA AL DRAWER SE SI TRATTA DI UNA COPIA DUPLICATA
+            if (isClonedCopy) {
+                const drawerBody = document.getElementById('advDrawerBody');
+                if (drawerBody) {
+                    drawerBody.scrollTop = 0;
+                }
+            }
+
             const el = document.getElementById(tableId);
             // il test sul fatto che sia una function serve per poter richiamare la funzione anche quando la si invoca dall'applicazione/estensione Workflow
             if (el && typeof AdvancedTable.renderTable === 'function') {

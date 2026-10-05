@@ -428,7 +428,7 @@ Object.assign(WorkflowApp, {
     exportGraphToSVG: () => {
         const bounds = WorkflowApp._getGraphBounds(60);
         if (!bounds) {
-            UI.showToast("Nessuna scheda presente sul canvas da esportare.", "warning");
+            UI.showToast(I18n.t('workflow.toast_no_nodes_export'), "warning");
             return;
         }
 
@@ -540,6 +540,6 @@ Object.assign(WorkflowApp, {
             URL.revokeObjectURL(dlUrl);
         }, 300);
 
-        UI.showToast("Grafico Vettoriale SVG esportato!", "success");
+        UI.showToast(I18n.t('workflow.toast_svg_exported'), "success");
     }
 });

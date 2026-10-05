@@ -10,6 +10,7 @@
  * FEAT TRIGGER FROM PROPERTY CHANGE: Propagazione bidirezionale automatica dei cambi tag/proprietà 
  * delle note verso qualsiasi database collegato tramite triggerFromPropertyChange.
  * FIX GLOBAL WINDOW EXPORT: Esposizione esplicita dell'istanza su window.AdvancedAutomations per interoperabilità e test.
+ * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() eliminando iterazioni su widget non-tabellari.
  */
 
 const AdvancedAutomations = {
@@ -41,7 +42,7 @@ const AdvancedAutomations = {
             const currentMinuteStr = `${now.getFullYear()}-${mm}-${dd} ${currentHourMinute}`;
             const todayStr = `${now.getFullYear()}-${mm}-${dd}`;
 
-            for (const tId of Object.keys(AppState.databases)) {
+            for (const tId of AppState.getRelationalDatabaseIds()) {
                 const state = AppState.databases[tId];
                 if (!state || !state.automations || state.isPivot || state.isLinkedView) continue;
 
@@ -214,7 +215,7 @@ const AdvancedAutomations = {
     triggerCrossDB: async (sourceTableId, recursionDepth = 0) => {
         if (!AppState.databases) return;
         
-        for (const tId of Object.keys(AppState.databases)) {
+        for (const tId of AppState.getRelationalDatabaseIds()) {
             if (tId === sourceTableId) continue;
             const state = AppState.databases[tId];
             if (!state || !state.automations) continue;
@@ -242,7 +243,7 @@ const AdvancedAutomations = {
     triggerFromPropertyChange: async (noteId, propColId, oldVal, newVal, recursionDepth = 0) => {
         if (!AppState.databases || !noteId) return;
 
-        for (const tId of Object.keys(AppState.databases)) {
+        for (const tId of AppState.getRelationalDatabaseIds()) {
             if (tId === 'SYS_PROPERTIES_DB') continue;
             const state = AppState.databases[tId];
             if (!state || !state.automations || state.isPivot || state.isLinkedView) continue;

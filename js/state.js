@@ -2,6 +2,10 @@
  * state.js
  * Variabili di stato globale dell'applicazione. Fonte assoluta della verità in RAM.
  * FIX: Logica di match potenziata per gestire *EXISTS* e ricerche testuali fluide.
+ * FEAT TYPE GUARDS: Introdotti AppState.isRelationalTable e AppState.getRelationalDatabaseIds
+ * per risolvere alla radice il polimorfismo spurio in AppState.databases.
+ * FIX CONTRACT RESILIENCE: isRelationalTable supporta istanze in fase di inizializzazione
+ * o fixture di test prima del popolamento esplicito dell'array columns.
  */
 
 const AppState = {
@@ -37,6 +41,57 @@ const AppState = {
     _currentHighlightIndex: 0,
     _totalHighlights: 0,
     _globalHighlights: 0,
+
+    // =========================================================================
+    // TYPE GUARDS CENTRALI PER LA DISAMBIGUAZIONE DELLE ENTITÀ
+    // =========================================================================
+
+    /**
+     * Determina se un ID o un oggetto di stato rappresenta un Database Relazionale valido.
+     * Esclude categoricamente blocchi codice, diari, barre di pulsanti e layout a colonne.
+     * @param {string|object} idOrState - ID presente in AppState.databases oppure oggetto di stato
+     * @returns {boolean}
+     */
+    isRelationalTable: (idOrState) => {
+        if (!idOrState) return false;
+        let s = idOrState;
+        let id = '';
+        if (typeof idOrState === 'string') {
+            id = idOrState.split('_cited_')[0];
+            s = AppState.databases ? AppState.databases[id] : null;
+        } else if (s && s.id) {
+            id = s.id;
+        }
+
+        if (!s || typeof s !== 'object') return false;
+
+        // Esclusione per prefisso ID noto
+        if (id && (id.startsWith('adv_code_') || id.startsWith('adv_btnbar_') || id.startsWith('adv_cols_') || id.startsWith('adv_journal_'))) {
+            return false;
+        }
+
+        // Esclusione per proprietà caratteristiche di widget non-database
+        if (s.entries !== undefined || s.buttons !== undefined || s.language !== undefined) {
+            return false;
+        }
+
+        // Una tabella relazionale ha columns come Array, oppure è una fixture/stato di database tabellare valido
+        if (Array.isArray(s.columns)) return true;
+        if (s.isSystemDB || s.isLinkedView || s.isPivot) return true;
+        if (id && (id.startsWith('adv_tbl_') || id.startsWith('db_') || id === 'SYS_PROPERTIES_DB')) return true;
+
+        // Se ha un titolo ed è privo di firme non-RDBMS, è considerato database
+        return s.title !== undefined && !s.entries && !s.buttons && s.language === undefined;
+    },
+
+    /**
+     * Restituisce esclusivamente gli identificatori dei Database Relazionali (esclusi codice, diari, macro, ecc.)
+     * @returns {string[]}
+     */
+    getRelationalDatabaseIds: () => {
+        if (!AppState.databases) return [];
+        return Object.keys(AppState.databases).filter(id => AppState.isRelationalTable(id));
+    },
 
     findNext: () => {
         if (AppState._globalHighlights === 0 && AppState.activePropertyFilters.length === 0) return;
@@ -78,15 +133,13 @@ const AppState = {
         const flatNotes = [];
         
         if (AppState.showDbNotesInTree) {
-            if (AppState.databases) {
-                Object.keys(AppState.databases).forEach(dbId => {
-                    const dbState = AppState.databases[dbId];
-                    if (dbState && !dbState.isPivot && !dbState.isLinkedView && dbState.title !== 'Diario/Log') {
-                        const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId);
-                        flatNotes.push(...dbNotes);
-                    }
-                });
-            }
+            AppState.getRelationalDatabaseIds().forEach(dbId => {
+                const dbState = AppState.databases[dbId];
+                if (dbState && !dbState.isPivot && !dbState.isLinkedView) {
+                    const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId);
+                    flatNotes.push(...dbNotes);
+                }
+            });
         } else {
             const traverse = (parentId) => {
                 const children = AppState.notes.filter(n => n.parentId === parentId && !n.deletedAt && !n.isRecordNote);
