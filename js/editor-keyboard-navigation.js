@@ -3,6 +3,8 @@
  * Sottomodulo di Editor.
  * Responsabilità: Navigazione complessa del cursore tramite tastiera (Tabulazioni in elenchi e blocchi codice, 
  * Escape intelligente dalla formattazione, Indentazione e Spostamenti geometrici nelle tabelle).
+ * Gestione della navigazione a celle basata su matrice 2D: spostamento perpendicolare affidabile
+ * tra celle, con pieno supporto alla navigazione multilinea interna prima del cambio cella.
  */
 
 Object.assign(Editor, {
@@ -167,8 +169,8 @@ Object.assign(Editor, {
                 // Salta le coordinate logiche già occupate da celle fuse (rowspan/colspan) in righe precedenti
                 while (grid[r][x]) { x++; }
                 
-                const rs = parseInt(td.getAttribute('rowspan')) || 1;
-                const cs = parseInt(td.getAttribute('colspan')) || 1;
+                const rs = parseInt(td.getAttribute('rowspan'), 10) || 1;
+                const cs = parseInt(td.getAttribute('colspan'), 10) || 1;
                 
                 const geo = { cell: td, startX: x, startY: r, endX: x + cs - 1, endY: r + rs - 1 };
                 
@@ -189,66 +191,83 @@ Object.assign(Editor, {
         if (!currGeo) return false;
         const maxRows = grid.length;
 
-        // 2. CALCOLO TOLLERANZA BORDI (Micro-Navigazione Testuale)
-        // Determina se il cursore è arrivato fisicamente sul bordo della cella. Se non lo è, 
-        // lascia che l'utente si sposti normalmente tra le parole senza uscire.
-        const range = sel.getRangeAt(0);
-        let caretRect = range.getBoundingClientRect();
+        // 2. CONTROLLO MOVIMENTO: DIFFERENZIAZIONE TRA NAVIGAZIONE INTERNA E CAMBIO CELLA
+        const origRange = sel.getRangeAt(0).cloneRange();
+        const startContainer = origRange.startContainer;
+        const startOffset = origRange.startOffset;
 
-        // Fix per poter calcolare la posizione geometrica in celle vuote (contenenti solo <br>)
-        if (caretRect.width === 0 && caretRect.height === 0) {
-            const span = document.createElement('span');
-            span.appendChild(document.createTextNode('\u200B'));
-            range.insertNode(span);
-            caretRect = span.getBoundingClientRect();
-            span.remove();
-        }
-
-        const cellRect = cell.getBoundingClientRect();
-        const style = window.getComputedStyle(cell);
-        const pt = parseFloat(style.paddingTop) || 0;
-        const pb = parseFloat(style.paddingBottom) || 0;
-        const lh = parseFloat(style.lineHeight) || 20;
-
-        const textLen = cell.textContent.length;
-        const caretPos = Editor._getAbsoluteCaretPosition(cell, true);
-        const isEmpty = textLen === 0 || cell.innerText.replace(/[\n\r\u200B]/g, '').trim() === '';
-
-        // Rilevamento confini estremi (Tolleranza 80% dell'altezza linea per evitare falsi positivi)
-        let isAtTop = isEmpty || (caretRect.top - cellRect.top - pt) <= (lh * 0.8);
-        let isAtBottom = isEmpty || (cellRect.bottom - pb - caretRect.bottom) <= (lh * 0.8);
-        let isAtLeft = isEmpty || caretPos === 0;
-        let isAtRight = isEmpty || caretPos === textLen;
-
-        // 3. IDENTIFICAZIONE INTENZIONE E COORDINATE BERSAGLIO
-        let targetX = currGeo.startX;
-        let targetY = currGeo.startY;
         let intent = null;
 
-        if (e.key === 'ArrowUp' && isAtTop) intent = 'up';
-        if (e.key === 'ArrowDown' && isAtBottom) intent = 'down';
-        if (e.key === 'ArrowLeft' && isAtLeft) intent = 'left';
-        if (e.key === 'ArrowRight' && isAtRight) intent = 'right';
+        if (e.key === 'ArrowDown') {
+            // Proviamo a muovere il cursore avanti di una linea con il comando nativo del browser
+            sel.modify("move", "forward", "line");
+            const newRange = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+            let newNode = newRange ? newRange.startContainer : null;
 
-        // Se il cursore si trova in mezzo al testo, lasciamo gestire lo spostamento al browser nativo
+            // Se il cursore è ancora nella stessa cella ed è avanzato su un nodo o offset differente
+            const isStillInSameCell = newNode && cell.contains(newNode.nodeType === 3 ? newNode.parentNode : newNode);
+            const hasMoved = newRange && (newNode !== startContainer || newRange.startOffset !== startOffset);
+
+            if (isStillInSameCell && hasMoved) {
+                // Il cursore si è spostato con successo alla riga successiva dentro la stessa cella
+                e.preventDefault();
+                return true;
+            }
+
+            // Altrimenti eravamo già sull'ultima riga della cella (o la cella è a riga singola):
+            // Ripristiniamo la posizione originale e scendiamo alla cella inferiore
+            sel.removeAllRanges();
+            sel.addRange(origRange);
+            intent = 'down';
+
+        } else if (e.key === 'ArrowUp') {
+            // Proviamo a muovere il cursore all'indietro di una linea con il comando nativo del browser
+            sel.modify("move", "backward", "line");
+            const newRange = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
+            let newNode = newRange ? newRange.startContainer : null;
+
+            // Se il cursore è ancora nella stessa cella ed è arretrato su un nodo o offset differente
+            const isStillInSameCell = newNode && cell.contains(newNode.nodeType === 3 ? newNode.parentNode : newNode);
+            const hasMoved = newRange && (newNode !== startContainer || newRange.startOffset !== startOffset);
+
+            if (isStillInSameCell && hasMoved) {
+                // Il cursore si è spostato con successo alla riga precedente dentro la stessa cella
+                e.preventDefault();
+                return true;
+            }
+
+            // Altrimenti eravamo già sulla prima riga della cella (o la cella è a riga singola):
+            // Ripristiniamo la posizione originale e saliamo alla cella superiore
+            sel.removeAllRanges();
+            sel.addRange(origRange);
+            intent = 'up';
+
+        } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            const textLen = cell.textContent.length;
+            const caretPos = Editor._getAbsoluteCaretPosition(cell, true);
+            const isEmpty = textLen === 0 || cell.innerText.replace(/[\n\r\u200B]/g, '').trim() === '';
+
+            if (e.key === 'ArrowLeft' && (isEmpty || caretPos === 0)) {
+                intent = 'left';
+            } else if (e.key === 'ArrowRight' && (isEmpty || caretPos === textLen)) {
+                intent = 'right';
+            }
+        }
+
+        // Se il cursore si trova in mezzo al testo, lasciamo gestire lo spostamento orizzontale al browser nativo
         if (!intent) return false; 
 
-        e.preventDefault(); // Da qui in poi governiamo noi: blocco totale del salto casuale nativo
+        // Da qui in poi governiamo noi: blocco totale del salto casuale nativo alla cella destra
+        e.preventDefault(); 
+
+        // 3. IDENTIFICAZIONE COORDINATE BERSAGLIO
+        let targetX = currGeo.startX;
+        let targetY = currGeo.startY;
 
         if (intent === 'up') targetY = currGeo.startY - 1;
         if (intent === 'down') targetY = currGeo.endY + 1; // Salta in fondo all'ingombro dell'eventuale rowspan
         if (intent === 'left') targetX = currGeo.startX - 1;
         if (intent === 'right') targetX = currGeo.endX + 1; // Salta in fondo all'ingombro dell'eventuale colspan
-
-        // Logica "A Capo" (Wrap-around): Se premo destra a fine riga, vado a capo alla riga successiva a sinistra.
-        if (targetX < 0 && intent === 'left') {
-            targetY = currGeo.startY - 1;
-            targetX = maxCols - 1;
-        }
-        if (targetX >= maxCols && intent === 'right') {
-            targetY = currGeo.endY + 1;
-            targetX = 0;
-        }
 
         // 4. ESECUZIONE SPOSTAMENTO SULLA MATRICE
         let targetCell = null;
@@ -278,18 +297,19 @@ Object.assign(Editor, {
         } else {
             // FUORIUSCITA: Genera un paragrafo vuoto fuori dalla tabella se l'utente tenta di uscirne e non ci sono altri blocchi.
             const wrapper = table.closest('.simple-table-wrapper, .adv-table-wrapper') || table;
-            let pNode = (intent === 'up' || (intent === 'left' && targetY < 0)) ? wrapper.previousElementSibling : wrapper.nextElementSibling;
+            const isExitingUp = intent === 'up' || (intent === 'left' && targetX < 0);
+            let pNode = isExitingUp ? wrapper.previousElementSibling : wrapper.nextElementSibling;
             
             if (!pNode || !['P', 'DIV', 'H1', 'H2', 'H3'].includes(pNode.tagName)) {
                 pNode = document.createElement('p');
                 pNode.innerHTML = '<br>';
-                wrapper.parentNode.insertBefore(pNode, (intent === 'up' || (intent === 'left' && targetY < 0)) ? wrapper : wrapper.nextSibling);
+                wrapper.parentNode.insertBefore(pNode, isExitingUp ? wrapper : wrapper.nextSibling);
             }
 
             const newRange = document.createRange();
             newRange.selectNodeContents(pNode);
             // Se usciamo verso il basso, il cursore va all'inizio del paragrafo, se verso l'alto va alla fine
-            newRange.collapse(intent === 'down' || intent === 'right');
+            newRange.collapse(!isExitingUp);
             sel.removeAllRanges();
             sel.addRange(newRange);
             pNode.scrollIntoView({ behavior: 'auto', block: 'nearest' });
