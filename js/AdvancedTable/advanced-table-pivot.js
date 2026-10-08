@@ -4,9 +4,10 @@
  * FIX CITAZIONI: Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
  * FIX DRY (Refactoring): Rimossa l'intera duplicazione di codice per Filtri e Sorting.
  * FEAT COLORI: Aggiunto calcolo dell'Opacità Condizionale tramite CSS color-mix sulle righe Pivot.
- * FIX RELAZIONI FORMULE: Risoluzione tramite l'engine centrale 'resolveRelationDetails' (Sostituito codice duplicato).
+ * FIX RELAZIONI FORMULE: Risoluzione tramite l'engine centrale 'resolveRelationDetails'.
  * FIX AGGREGAZIONI DATA MAX/MIN: Il controllo isDateCol ha la precedenza assoluta sul controllo numerico,
  * evitando che date ISO (es. '2026-05-20') vengano scambiate per numeri da parseFloat.
+ * FEAT QUICK SORT TH: Supporto all'ordinamento rapido su th con ondblclick per tabelle pivot.
  */
 
 const AdvancedPivot = {
@@ -388,7 +389,8 @@ const AdvancedPivot = {
                     }
                 }
 
-                html += `<th data-col="${col.id}" style="width: ${col.width}px; background: ${isGroup ? 'rgba(37, 99, 235, 0.05)' : 'rgba(0,0,0,0.02)'}; ${isGroup ? 'color: var(--accent-color);' : ''} position: relative;" ${tooltipAttr}>
+                // Doppio click sull'intestazione esegue l'ordinamento rapido
+                html += `<th data-col="${col.id}" style="width: ${col.width}px; background: ${isGroup ? 'rgba(37, 99, 235, 0.05)' : 'rgba(0,0,0,0.02)'}; ${isGroup ? 'color: var(--accent-color);' : ''} position: relative; cursor:pointer;" ${tooltipAttr} ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')">
                             <div class="adv-th-content">
                                 <span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${icon}</span> ${col.name} ${commentIcon}</span>
                                 <span>${sortIndicator}</span>

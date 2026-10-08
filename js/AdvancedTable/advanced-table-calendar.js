@@ -4,6 +4,7 @@
  * FIX COLONNE NASCOSTE: L'etichetta dell'evento è ora dinamicamente assegnata alla PRIMA COLONNA VISIBILE e non hardcodata.
  * FEAT UX: Nomi dei mesi cliccabili nella Vista Annuale per navigare rapidamente alla Vista Mensile corrispondente.
  * FIX ALLINEAMENTO: Risolto bug delle Regex in _cleanFormulaRendering che lasciava Select e Pulsanti disallineati a sinistra nelle Card temporali.
+ * FEAT QUICK SEARCH: Integrata la ricerca rapida universale 'Cerca in tutti i campi' con riuso atomico delle virtualCells.
  */
 
 const AdvancedCalendar = {
@@ -44,7 +45,7 @@ const AdvancedCalendar = {
     },
 
     handlePointerDown: (e) => {
-        if (e.target.closest('.adv-cal-event-std, .adv-cal-event-abs, button, .adv-add-btn, .adv-cal-more-btn, .adv-select-pill')) return;
+        if (e.target.closest('.adv-cal-event-std, .adv-cal-event-abs, button, .adv-add-btn, .adv-cal-more-btn, .adv-select-pill, .adv-quick-search-wrapper')) return;
         AdvancedCalendar.touchStartX = e.clientX;
         AdvancedCalendar.touchStartY = e.clientY;
     },
@@ -125,7 +126,7 @@ const AdvancedCalendar = {
 
     createRecord: (e, tableId, baseTimeMs, pxPerHour = null) => {
         if (!AppState.isEditMode) return;
-        if (e.target.closest('.adv-cal-event-std, .adv-cal-event-abs, .adv-cal-more-btn')) return;
+        if (e.target.closest('.adv-cal-event-std, .adv-cal-event-abs, .adv-cal-more-btn, .adv-quick-search-wrapper')) return;
         
         let finalMs = Number(baseTimeMs);
         if (pxPerHour) {
@@ -375,7 +376,6 @@ const AdvancedCalendar = {
         // 3. Pulisce eventuali sfondi ereditati dalla griglia ReadOnly
         cleaned = cleaned.replace(/background:\s*rgba\(0,\s*0,\s*0,\s*0\.02\);?/gi, '');
         cleaned = cleaned.replace(/adv-cell-readonly/g, '');
-        
         return cleaned;
     },
 
@@ -425,16 +425,27 @@ const AdvancedCalendar = {
 
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
-            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewCalendar, label: 'Calendario', onClick: AdvancedBoard.openViewMenu });
+            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewCalendar, label: (typeof I18n !== 'undefined' && I18n.t('adv_board.calendar_view')) || 'Calendario', onClick: AdvancedBoard.openViewMenu });
             if (!state.isLinkedView) {
-                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
+                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: (typeof I18n !== 'undefined' && I18n.t('table.automations')) || 'Automazioni', onClick: AdvancedAutomations.openPanel });
             }
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina', active: hasSort, onClick: AdvancedTable.openSortMenu });
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra', active: hasFilter, onClick: AdvancedTable.openFilterMenu });
+
+            // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
+            tools.push({ 
+                id: `adv-search-btn-${tableId}`, 
+                icon: Icons.search, 
+                title: (typeof I18n !== 'undefined' && I18n.t('adv_search.title')) || 'Cerca in tutti i campi...', 
+                active: !!state.showQuickSearch, 
+                editOnly: false, 
+                onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
+            });
+
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: (typeof I18n !== 'undefined' && I18n.t('table.sort')) || 'Ordina', active: hasSort, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: (typeof I18n !== 'undefined' && I18n.t('table.filter')) || 'Filtra', active: hasFilter, onClick: AdvancedTable.openFilterMenu });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
-                title: state.title || 'Database',
+                title: state.title || (typeof I18n !== 'undefined' && I18n.t('editor.database')) || 'Database',
                 optionsId: `adv-opt-btn-${tableId}`,
                 tools: tools,
                 onTitleChange: AdvancedTable.updateTitle,
@@ -446,10 +457,15 @@ const AdvancedCalendar = {
 
         let html = '';
 
+        // Iniezione barra di ricerca rapida a scomparsa
+        html += AdvancedTable.renderQuickSearchBar(tableId, state);
+
         let viewRows =[];
         const renderCache = {};
         state.rows.forEach(r => {
-            let vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+            let vRow = r.virtualCells ? r : AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+            if (!r.virtualCells) r.virtualCells = vRow.virtualCells;
+
             let rawDate = vRow.virtualCells[dateColId];
             let parsedStart = null, parsedEnd = null;
 
@@ -566,19 +582,12 @@ const AdvancedCalendar = {
 
         html += `<div class="adv-cal-wrapper" style="touch-action: pan-y; ${selectCol && mode !== 'year' ? 'border-top-left-radius:0; border-top-right-radius:0;' : ''}" onpointerdown="AdvancedCalendar.handlePointerDown(event)" onpointerup="AdvancedCalendar.handlePointerUp(event, '${tableId}')">`;
 
-        // -------------------------------------------------------------
-        // CALCOLO DELLE COLONNE VISIBILI (Usato da Month, Week e Day)
-        // -------------------------------------------------------------
+        // Calcolo delle colonne visibili
         const viewId = 'calendar_' + dateColId;
         const hiddenList = state.viewConfig && state.viewConfig[viewId] ? state.viewConfig[viewId].hiddenCols : [];
         const visibleCols = state.columns.filter(c => !c.hidden && !hiddenList.includes(c.id));
-        
-        // FIX BUG 1: Il titolo è la prima colonna VISIBILE, non la prima assoluta!
         const titleCol = visibleCols.length > 0 ? visibleCols[0] : state.columns[0];
-        
-        // Le proprietà da mostrare sono tutte le visibili TRANNE il titolo e la data corrente
         const propCols = visibleCols.filter(c => c.id !== titleCol.id && c.id !== dateColId);
-
 
         // --- VISTA ANNUALE ---
         if (mode === 'year') {
@@ -705,7 +714,6 @@ const AdvancedCalendar = {
                         
                         const safePColName = String(pCol.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         
-                        // FIX: Aggiunto display:flex e justify-content:flex-end al wrapper interno per incollare Select e Bottoni a destra
                         extraPropsHtml += `<div style="display:flex; justify-content:space-between; align-items:center; gap:5px; font-size:0.65rem;">
                                             <span style="opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%;">${safePColName}</span>
                                             <div style="flex:1; text-align:right; overflow:hidden; display:flex; justify-content:flex-end; align-items:center;">${rendered}</div>
@@ -786,7 +794,6 @@ const AdvancedCalendar = {
                         
                         const safePColName = String(pCol.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         
-                        // FIX: Aggiunto display:flex e justify-content:flex-end al wrapper interno
                         extraPropsHtml += `<div style="display:flex; justify-content:space-between; align-items:center; gap:5px; font-size:0.65rem;">
                                             <span style="opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%;">${safePColName}</span>
                                             <div style="flex:1; text-align:right; overflow:hidden; display:flex; justify-content:flex-end; align-items:center;">${rendered}</div>

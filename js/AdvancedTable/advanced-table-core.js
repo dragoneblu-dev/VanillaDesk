@@ -9,6 +9,8 @@
  * FEAT DEFAULT COMMENT: Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
  * FEAT REACTIVE DEPENDENCIES (2-PASS CONVERGENCE): updateDependentViews supporta formule cross-database sia per
  * Titolo (tabella["..."]) che per ID Immutabile (tabella["adv_tbl_..."]) e convergenza ciclica stabilizzata a 2 passaggi.
+ * FEAT QUICK SEARCH: Motore universale di ricerca full-text integrato nello stato (quickSearch, showQuickSearch).
+ * PERF QUICK SEARCH: Gestione sincrona del focus/cursore senza timeout intermedi e correzione 'event.key' su Escape.
  */
 
 const AdvancedTable = {
@@ -18,6 +20,78 @@ const AdvancedTable = {
     startWidth: 0,
     pillColors: ['', 'hl-c1', 'hl-c2', 'hl-c3', 'hl-c4', 'hl-c5', 'hl-c6', 'hl-c7', 'hl-c8', 'hl-c9', 'hl-c10'],
     panState: null,
+    _quickSearchTimer: null,
+
+    // =========================================================================
+    // MOTORE RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
+    // =========================================================================
+    renderQuickSearchBar: (tableId, state) => {
+        if (!state.showQuickSearch) return '';
+        const safeTerm = String(state.quickSearch || '').replace(/"/g, '&quot;');
+        const clearBtn = state.quickSearch ? `<button class="adv-icon-btn danger" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', '')" title="Azzera ricerca">${Icons.close}</button>` : '';
+
+        return `
+            <div class="adv-quick-search-wrapper" style="padding: 4px 2px 8px 2px; display:flex; align-items:center; width:100%; position:relative;" onmousedown="event.stopPropagation()">
+                <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); opacity:0.5; display:flex; pointer-events:none;">${Icons.search}</span>
+                <input type="text" id="adv-search-input-${tableId}" class="modern-input" style="width:100%; padding:6px 28px 6px 32px !important; border-radius:6px !important; background:var(--bg-color) !important; border:1px solid var(--border-color) !important; font-size:0.85rem;" placeholder="${(typeof I18n !== 'undefined' && I18n.t('adv_search.placeholder')) || 'Cerca in tutti i campi (testo, tag, date, pagine)...'}" value="${safeTerm}"
+                       autocomplete="off"
+                       oninput="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', this.value)"
+                       onkeydown="if(event.key==='Escape'){ event.stopPropagation(); AdvancedTable.toggleQuickSearch('${tableId}'); } event.stopPropagation();"
+                       onkeyup="event.stopPropagation()"
+                       onmousedown="event.stopPropagation()">
+                ${clearBtn}
+            </div>
+        `;
+    },
+
+    toggleQuickSearch: (tableId) => {
+        let state = AdvancedTable.getState(tableId);
+        if (!state) return;
+        state.showQuickSearch = !state.showQuickSearch;
+        if (!state.showQuickSearch) {
+            state.quickSearch = '';
+        }
+        AdvancedTable.setState(tableId, state);
+        AdvancedTable.renderTable(tableId);
+        Store.triggerAutoSave();
+
+        if (state.showQuickSearch) {
+            setTimeout(() => {
+                const input = document.getElementById(`adv-search-input-${tableId}`);
+                if (input) input.focus();
+            }, 50);
+        }
+    },
+
+    setQuickSearch: (tableId, term) => {
+        let state = AdvancedTable.getState(tableId);
+        if (!state) return;
+        state.quickSearch = term;
+        state.currentPage = 1;
+        AdvancedTable.setState(tableId, state);
+
+        clearTimeout(AdvancedTable._quickSearchTimer);
+        AdvancedTable._quickSearchTimer = setTimeout(() => {
+            const inputId = `adv-search-input-${tableId}`;
+            const activeInput = document.getElementById(inputId);
+            const isFocused = activeInput && (document.activeElement === activeInput);
+            const start = isFocused ? activeInput.selectionStart : null;
+            const end = isFocused ? activeInput.selectionEnd : null;
+
+            AdvancedTable.renderTable(tableId);
+
+            // Ripristino sincrono immediato del focus e del cursore per non interrompere la digitazione
+            if (isFocused) {
+                const refreshed = document.getElementById(inputId);
+                if (refreshed) {
+                    refreshed.focus();
+                    if (start !== null && end !== null) {
+                        refreshed.setSelectionRange(start, end);
+                    }
+                }
+            }
+        }, 120);
+    },
 
     // ==========================================
     // GESTIONE SHADOW DATABASE (Proprietà di Pagina e Tag)
@@ -128,6 +202,8 @@ const AdvancedTable = {
         if (!state.conditionalColors) state.conditionalColors = [];
         if (state.hideFooterControls === undefined) state.hideFooterControls = false;
         if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
+        if (state.quickSearch === undefined) state.quickSearch = '';
+        if (state.showQuickSearch === undefined) state.showQuickSearch = false;
 
         // Normalizzazione di sicurezza della dimensione pagina (Per vecchie versioni: No unpaged 'all', default 25, max 200)
         if (state.pageSize === 'all') {
@@ -365,7 +441,7 @@ const AdvancedTable = {
 
     setState: (tableId, state) => {
         if (!AppState.databases) AppState.databases = {};
-        if (!state) return; // Guardia difensiva contro stati nulli o cancellazioni
+        if (!state) return;
         
         const trueId = tableId.split('_cited_')[0];
 
@@ -407,7 +483,9 @@ const AdvancedTable = {
             conditionalColors: state.conditionalColors || [],
             pageSize: safePageSize,
             currentPage: state.currentPage || 1,
-            hideFooterControls: state.hideFooterControls || false
+            hideFooterControls: state.hideFooterControls || false,
+            quickSearch: state.quickSearch || '',
+            showQuickSearch: !!state.showQuickSearch
         };
 
         if (state.isLinkedView) {
@@ -423,7 +501,7 @@ const AdvancedTable = {
     
     startPan: (e) => {
         const tgt = e.target;
-        if (tgt.closest('input, textarea, button, a, select, .adv-select-pill, .adv-add-btn, .adv-tool-btn, .adv-icon-btn, .widget-drag-handle, .widget-options-btn, .adv-board-card, .adv-tree-toggle, .adv-tree-quick-add')) return;
+        if (tgt.closest('input, textarea, button, a, select, .adv-select-pill, .adv-add-btn, .adv-tool-btn, .adv-icon-btn, .widget-drag-handle, .widget-options-btn, .adv-board-card, .adv-tree-toggle, .adv-tree-quick-add, .adv-quick-search-wrapper')) return;
         if (tgt.closest('.widget-editable-area') || tgt.closest('.adv-col-resizer') || tgt.closest('.adv-cell-text[contenteditable="true"]')) return;
         if (tgt.closest('th')) return;
 
@@ -462,12 +540,10 @@ const AdvancedTable = {
     },
 
     onPanEnd: () => {
-        if (AdvancedTable.panState) {
-            AdvancedTable.panState = null;
-            document.removeEventListener('mousemove', AdvancedTable.onPanMove);
-            document.removeEventListener('mouseup', AdvancedTable.onPanEnd);
-        }
-        document.body.style.cursor = ''; 
+        if (!AdvancedTable.panState) return;
+        AdvancedTable.panState = null;
+        document.removeEventListener('mousemove', AdvancedTable.onPanMove);
+        document.removeEventListener('mouseup', AdvancedTable.onPanEnd);
     },
 
     initEvents: () => {
@@ -549,6 +625,8 @@ const AdvancedTable = {
             automations: [],
             conditionalColors: [],
             hideFooterControls: false,
+            quickSearch: '',
+            showQuickSearch: false,
             columns:[
                 { id: 'c_1', name: 'Nome', type: 'text', width: 200, hidden: false, comment: defaultNameComment },
                 { id: 'c_2', name: 'Tag', type: 'multi-select', width: 180, hidden: false },

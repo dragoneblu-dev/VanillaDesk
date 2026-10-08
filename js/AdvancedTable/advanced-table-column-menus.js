@@ -22,6 +22,7 @@
  * FIX TYPEERROR S.COLUMNS.SOME: Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare
  * crash su widget non tabellari presenti in AppState.databases (diari, codice, bottoni).
  * FEAT WBS SEMANTIC DIRECTION: Toggle rapido e memorizzazione sullo schema colonna (col.treeDirection) per auto-relazioni.
+ * FIX OPEN_COL_MENU TYPEGUARD: Protezione da chiamate asincrone o debounced per openColMenu senza eccezioni stopPropagation.
  */
 
 const AdvancedTableColumnMenus = {
@@ -331,17 +332,20 @@ const AdvancedTableColumnMenus = {
     },
 
     openColMenu: (e, tableId, colId) => {
-        if (e) e.stopPropagation();
-        if (e && e.target && e.target.classList.contains('adv-col-resizer')) return;
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        if (e && e.target && e.target.classList && e.target.classList.contains('adv-col-resizer')) return;
 
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         const state = AdvancedTable.getState(realTableId);
+        if (!state || !Array.isArray(state.columns)) return;
         
         // Uso stateForView per recuperare i parametri di visualizzazione della vista corrente
-        const stateForView = AdvancedTable.getState(tableId);
+        const stateForView = AdvancedTable.getState(tableId) || state;
         
         const colIndex = state.columns.findIndex(c => c.id === colId);
+        if (colIndex === -1) return;
         const col = state.columns[colIndex];
+        if (!col) return;
 
         const safeName = col.name.replace(/"/g, '&quot;');
 

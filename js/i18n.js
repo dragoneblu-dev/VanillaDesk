@@ -271,6 +271,11 @@ dict: {
             cb_checked: "Sì",
             cb_unchecked: "No"
         },
+        adv_search: {
+            title: "Cerca in tutti i campi...",
+            placeholder: "Cerca in tutti i campi (testo, tag, date, pagine)...",
+            clear: "Azzera ricerca"
+        },
         adv_col_menu: {
             rename_placeholder: "Rinomina e premi Invio...",
             comment_edit: "Modifica Commento...",
@@ -1531,6 +1536,11 @@ audio: {
             cb_checked: "Yes",
             cb_unchecked: "No"
         },
+        adv_search: {
+            title: "Search in all fields...",
+            placeholder: "Search in all fields (text, tags, dates, pages)...",
+            clear: "Clear search"
+        },
         adv_col_menu: {
             rename_placeholder: "Rename and press Enter...",
             comment_edit: "Edit Comment...",
@@ -2790,6 +2800,11 @@ audio: {
             cb_checked: "Sí",
             cb_unchecked: "No"
         },
+        adv_search: {
+            title: "Buscar en todos los campos...",
+            placeholder: "Buscar en todos los campos (texto, etiquetas, fechas, páginas)...",
+            clear: "Borrar búsqueda"
+        },
         adv_col_menu: {
             rename_placeholder: "Renombrar y presionar Enter...",
             comment_edit: "Editar Comentario...",
@@ -4048,6 +4063,11 @@ audio: {
             confirm_delete_saved: "Möchtest du diesen Filter wirklich dauerhaft aus der Liste löschen?",
             cb_checked: "Ja",
             cb_unchecked: "Nein"
+        },
+        adv_search: {
+            title: "Buscar en todos los campos...",
+            placeholder: "Buscar en todos los campos (texto, etiquetas, fechas, páginas)...",
+            clear: "Borrar búsqueda"
         },
         adv_col_menu: {
             rename_placeholder: "Umbenennen und Enter drücken...",

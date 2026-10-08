@@ -5,6 +5,7 @@
  * FEAT WORKFLOW SELECTOR: Apertura Workflow Studio con selezione esplicita della relazione se multiple.
  * PERF: Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
  * Protegge le prestazioni del browser con migliaia di record e mantiene intatta la posizione di scroll.
+ * PERF REUSE VIRTUALCELLS & CLEAN PIPELINE: Riuso di virtualCells senza manipolazioni artificiose del DOM.
  */
 
 const AdvancedBoard = {
@@ -13,7 +14,7 @@ const AdvancedBoard = {
     ghostElement: null,
     dragOffsetX: 0,
     dragOffsetY: 0,
-    _columnLimits: {}, // Memorizza il limite visibile per ogni colonna (tableId + '_' + groupVal)
+    _columnLimits: {},
 
     openViewMenu: (e, tableId) => {
         if (e) e.stopPropagation();
@@ -228,6 +229,17 @@ const AdvancedBoard = {
             if (!state.isLinkedView && !isSysDB) {
                 tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
+
+            // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
+            tools.push({ 
+                id: `adv-search-btn-${tableId}`, 
+                icon: Icons.search, 
+                title: (typeof I18n !== 'undefined' && I18n.t('adv_search.title')), 
+                active: !!state.showQuickSearch, 
+                editOnly: false, 
+                onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
+            });
+
             tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, onClick: AdvancedTable.openSortMenu });
             tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, onClick: AdvancedTable.openFilterMenu });
 
@@ -243,10 +255,17 @@ const AdvancedBoard = {
             });
         }
 
+        // RIUSO ATOMICO O(1) DELLE VIRTUALCELLS: se le righe sono già state calcolate, riusa lo stato in memoria
         let viewRows =[];
         const renderCache = {};
         state.rows.forEach(r => {
-            viewRows.push(AdvancedTable.buildVirtualRow(tableId, r, state, renderCache));
+            if (r.virtualCells) {
+                viewRows.push(r);
+            } else {
+                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+                r.virtualCells = vRow.virtualCells;
+                viewRows.push(vRow);
+            }
         });
 
         viewRows = AdvancedTable.filterRows(viewRows, state);
@@ -266,7 +285,9 @@ const AdvancedBoard = {
             else boardData[''].push(r);
         });
 
-        let html = `<div class="adv-scroll-container adv-board-container">`;
+        let html = '';
+        html += AdvancedTable.renderQuickSearchBar(tableId, state);
+        html += `<div class="adv-scroll-container adv-board-container">`;
 
         const viewId = 'board_' + groupColId;
         const hiddenList = state.viewConfig && state.viewConfig[viewId] ? state.viewConfig[viewId].hiddenCols :[];

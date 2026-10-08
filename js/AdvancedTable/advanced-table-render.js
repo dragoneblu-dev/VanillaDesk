@@ -12,7 +12,7 @@
  * FIX LIVE REFRESH: Il pulsante refresh ora ricarica e sincronizza fedelmente i dati dal disco.
  * FEAT AUTO-DRAWER LONG-TEXT: Andare a capo su un campo di testo apre automaticamente il drawer a tutta altezza
  * posizionando il cursore all'inizio della nuova riga per una scrittura fluida.
- * FIX SYNC VIRTUALCELLS: Assegna esplicitamente le virtualCells calcolate sull'oggetto riga di state.rows per propagare i dati a tutti i listener.
+ * PERF REUSE VIRTUALCELLS & CLEAN PIPELINE: Riuso di virtualCells già presenti e pipeline lineare pulita.
  */
 
 Object.assign(AdvancedTable, {
@@ -41,7 +41,7 @@ Object.assign(AdvancedTable, {
                     align-items: center;
                     overflow: hidden;
                     box-sizing: border-box;
-                    pointer-events: auto; /* Scudo attivo: blocca qualsiasi click sulle celle sottostanti */
+                    pointer-events: auto;
                     cursor: default;
                 }
                 .adv-floating-header-scroll {
@@ -208,7 +208,6 @@ Object.assign(AdvancedTable, {
                     </div>
                 `;
             } else {
-                // Colonna finale di servizio (+) per chiudere l'allineamento geometrico
                 colsHtml += `<div class="adv-floating-col-item" style="width:${w}px; min-width:${w}px; max-width:${w}px; background:var(--bg-color);"></div>`;
             }
         });
@@ -327,12 +326,17 @@ Object.assign(AdvancedTable, {
         const visibleCols = state.columns.filter(c => !c.hidden && !hiddenList.includes(c.id));
         const hasHiddenCols = state.columns.length > visibleCols.length;
 
+        // RIUSO ATOMICO O(1) DELLE VIRTUALCELLS: se le righe sono già state calcolate, riusa lo stato in memoria
         let viewRows = [];
         const renderCache = {};
         state.rows.forEach(r => {
-            const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
-            r.virtualCells = vRow.virtualCells;
-            viewRows.push(vRow);
+            if (r.virtualCells) {
+                viewRows.push(r);
+            } else {
+                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+                r.virtualCells = vRow.virtualCells;
+                viewRows.push(vRow);
+            }
         });
 
         // CHIAMATE AL MOTORE CENTRALE IN DATA.JS
@@ -371,8 +375,19 @@ Object.assign(AdvancedTable, {
             if (!state.isLinkedView && !isSysDB) {
                 tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
+
             tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
-            
+
+            // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
+            tools.push({ 
+                id: `adv-search-btn-${tableId}`, 
+                icon: Icons.search, 
+                title: (typeof I18n !== 'undefined' && I18n.t('adv_search.title')), 
+                active: !!state.showQuickSearch, 
+                editOnly: false, 
+                onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
+            });
+
             // FILTRI E VISTE SALVATE
             tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
             
@@ -395,6 +410,10 @@ Object.assign(AdvancedTable, {
         }
 
         let html = '';
+        
+        // Iniezione barra di ricerca rapida a scomparsa (Lineare e Naturale)
+        html += AdvancedTable.renderQuickSearchBar(tableId, state);
+
         const zebraClass = (state.striped !== false) ? 'table-striped' : '';
         const tableWidthClass = state.freeWidth ? '' : 'adv-table-full-width';
         
@@ -447,7 +466,11 @@ Object.assign(AdvancedTable, {
 
             const isReadonlySystemCol = isSysDB && col.id === 'sys_c_note';
             const pointerStyle = isEdit && !isReadonlySystemCol ? 'cursor:pointer;' : 'cursor:default;';
-            const clickEvent = isEdit && !isReadonlySystemCol ? `onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')"` : '';
+
+            // Singolo click (debounced) apre opzioni colonna, doppio click esegue ordinamento rapido
+            const clickEvent = isEdit && !isReadonlySystemCol 
+                ? `onclick="AdvancedTable.onThClick(event, '${tableId}', '${col.id}')" ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')"` 
+                : `ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')"`;
 
             const dragAttrs = isEdit 
                 ? `draggable="true" 
@@ -591,6 +614,7 @@ Object.assign(AdvancedTable, {
         }
 
         bodyContainer.innerHTML = html;
+
         if (isEdit && typeof AdvancedTable.attachCellEvents !== 'undefined') {
             AdvancedTable.attachCellEvents(bodyContainer, tableId);
         }
@@ -698,7 +722,6 @@ Object.assign(AdvancedTable, {
                             if (raw === null || raw === '') {
                                 valToSave = '';
                             } else {
-                                // Parsing corazzato: garantisce un casting a Number ignorando i difetti della virgola
                                 let parsed = parseFloat(String(raw).replace(',', '.'));
                                 valToSave = isNaN(parsed) ? '' : parsed;
                             }
@@ -743,7 +766,7 @@ Object.assign(AdvancedTable, {
                 const wrapperRect = widgetWrapper.getBoundingClientRect();
 
                 globalSelector.style.top = (trRect.top + (trRect.height / 2) - 12) + 'px';
-                globalSelector.style.left = (wrapperRect.left - 22) + 'px'; 
+                globalSelector.style.left = (wrapperRect.left - 20) + 'px'; 
 
                 const isSelected = tr.classList.contains('adv-row-selected');
                 const cb = globalSelector.querySelector('input');

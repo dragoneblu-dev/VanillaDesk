@@ -2,9 +2,66 @@
  * AdvancedTableSort.js
  * Modulo dedicato alla logica di Ordinamento Multi-Colonna.
  * FIX UX: Possibilità di invertire l'ordine con un doppio click sulla regola esistente.
+ * FEAT QUICK SORT: Doppio click sull'intestazione colonna (th) esegue l'ordinamento rapido o inverte la direzione.
+ * FEAT ANTI-CONFLICT TIMER: Disaccoppiamento intelligente tra singolo click (menu colonna) e doppio click (ordinamento).
+ * FIX OPEN_COL_MENU DISPATCH: Invocazione difensiva di openColMenu con target e stopPropagation sicuri.
  */
 
 Object.assign(AdvancedTable, {
+    _thClickTimer: null,
+
+    onThClick: (e, tableId, colId) => {
+        if (e) {
+            if (typeof e.stopPropagation === 'function') e.stopPropagation();
+            if (e.target && e.target.classList && e.target.classList.contains('adv-col-resizer')) return;
+        }
+        const anchorId = e && e.currentTarget && e.currentTarget.id ? e.currentTarget.id : `adv-th-${tableId}-${colId}`;
+        clearTimeout(AdvancedTable._thClickTimer);
+        AdvancedTable._thClickTimer = setTimeout(() => {
+            const el = document.getElementById(anchorId);
+            if (typeof AdvancedTableColumnMenus !== 'undefined' && typeof AdvancedTableColumnMenus.openColMenu === 'function') {
+                AdvancedTableColumnMenus.openColMenu({ currentTarget: el, target: el, stopPropagation: () => {} }, tableId, colId);
+            }
+        }, 220);
+    },
+
+    onThDblClick: (e, tableId, colId) => {
+        if (e) {
+            if (typeof e.stopPropagation === 'function') e.stopPropagation();
+            if (typeof e.preventDefault === 'function') e.preventDefault();
+        }
+        clearTimeout(AdvancedTable._thClickTimer);
+        AdvancedTable.quickSortColumn(tableId, colId);
+    },
+
+    quickSortColumn: (tableId, colId) => {
+        let state = AdvancedTable.getState(tableId);
+        if (!state) return;
+
+        if (!state.sorts) state.sorts = [];
+
+        const existingIdx = state.sorts.findIndex(s => s.colId === colId);
+
+        if (existingIdx === 0) {
+            // È già l'ordinamento primario attivo: inverte la direzione (1 -> -1 -> 1)
+            state.sorts[0].dir *= -1;
+        } else if (existingIdx > 0) {
+            // È presente tra i sort secondari: promuovi a primario invertendo
+            const [rule] = state.sorts.splice(existingIdx, 1);
+            rule.dir *= -1;
+            state.sorts.unshift(rule);
+        } else {
+            // Non era ordinato: imposta come ordinamento primario crescente (A-Z)
+            state.sorts = [{ colId, dir: 1 }];
+        }
+
+        AdvancedTable.setState(tableId, state);
+        AdvancedTable.closeDropdowns(true);
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
+        AdvancedTable.renderTable(tableId);
+        Store.triggerAutoSave();
+    },
+
     openSortMenu: (e, tableId) => {
         if (e) e.stopPropagation();
 

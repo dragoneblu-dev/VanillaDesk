@@ -306,6 +306,9 @@ Object.assign(AdvancedTable, {
         AdvancedTable.setState(realTableId, state);
         AdvancedTable.updateDependentViews(realTableId);
         Store.triggerAutoSave();
+
+        // APERTURA REATTIVA IMMEDIATA: Apre direttamente il drawer per compilare il record
+        AdvancedTable.openRecordView(tableId, newRow.id);
     },
 
     // =========================================================================
@@ -324,10 +327,8 @@ Object.assign(AdvancedTable, {
         const now = Date.now();
         const newRowId = 'r' + Store.generateId();
 
-        // Clonazione atomica e fedele delle celle senza suffissi arbitrari
         const clonedCells = JSON.parse(JSON.stringify(sourceRow.cells || {}));
 
-        // Gestione sicura delle pagine dedicate (record_note) per non condividere lo stesso puntatore ID
         state.columns.filter(c => c.type === 'record_note').forEach(c => {
             const oldNoteId = clonedCells[c.id];
             if (oldNoteId && typeof Store !== 'undefined') {
@@ -392,8 +393,6 @@ Object.assign(AdvancedTable, {
         AdvancedTable.updateDependentViews(realTableId);
         Store.triggerAutoSave();
 
-        // APERTURA REATTIVA: Il Drawer naviga istantaneamente sul nuovo record duplicato
-        // mostrando il banner informativo di conferma
         AdvancedTable.openRecordView(tableId, newRowId, null, true);
 
         if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
@@ -454,7 +453,6 @@ Object.assign(AdvancedTable, {
 
         const row = state.rows.find(r => r.id === rowId);
         if (row) {
-            // FIX TRANSAZIONALITÀ RECORD NOTE: Soft-Delete (Cestino) invece di Hard-Delete irreversibile.
             const nowTime = Date.now();
             state.columns.filter(c => c.type === 'record_note').forEach(c => {
                 const noteId = row.cells[c.id];
@@ -648,7 +646,6 @@ Object.assign(AdvancedTable, {
         state.rows = state.rows.filter(r => !deletedIdsSet.has(r.id));
         viewState.selectedRows = [];
 
-        // Pulizia referenziale delle relazioni orfane in tutti i database
         AdvancedTable._cascadeDeleteRecordReferences(realTableId, deletedIdsSet);
 
         // Reset del selettore fluttuante globale
@@ -901,12 +898,49 @@ Object.assign(AdvancedTable, {
     },
 
     // ==========================================
-    // MOTORE CENTRALE FILTRAGGIO DATI
+    // MOTORE CENTRALE FILTRAGGIO DATI (CON RICERCA RAPIDA OR)
     // ==========================================
     filterRows: (viewRows, state, isPivotContext = false, sourceStateForPivot = null) => {
-        if (!state || !state.filters || Object.keys(state.filters).length === 0) return viewRows;
+        if (!state) return viewRows;
 
         let filtered = [...viewRows];
+
+        // 1. RICERCA RAPIDA UNIVERSALE (FULL-TEXT IN OR SU TUTTI I CAMPI)
+        if (state.quickSearch && state.quickSearch.trim() !== '') {
+            const q = state.quickSearch.trim().toLowerCase();
+
+            filtered = filtered.filter(r => {
+                return (state.columns || []).some(colDef => {
+                    let cellVal = r.virtualCells ? r.virtualCells[colDef.id] : undefined;
+                    if (cellVal === undefined && r.cells) cellVal = r.cells[colDef.id];
+                    if (cellVal === undefined || cellVal === null || cellVal === '') return false;
+
+                    let displayStr = '';
+
+                    if (isPivotContext) {
+                        displayStr = String(cellVal || '');
+                    } else {
+                        displayStr = AdvancedTable.getFormatDisplayValue(colDef, cellVal);
+                        
+                        if (colDef.type === 'checkbox') {
+                            if (cellVal === true) displayStr += ' completato true checked sì si yes';
+                            if (cellVal === false) displayStr += ' falso false unchecked no';
+                        }
+                        if (colDef.type === 'record_note' && cellVal) {
+                            const linkedNote = typeof Store !== 'undefined' ? Store.getNote(cellVal) : null;
+                            if (linkedNote && typeof UI !== 'undefined' && UI.extractSearchableText) {
+                                displayStr += " " + UI.extractSearchableText(linkedNote.content);
+                            }
+                        }
+                    }
+
+                    return String(displayStr || '').toLowerCase().includes(q);
+                });
+            });
+        }
+
+        // 2. FILTRI SPECIFICI PER COLONNA (IN AND)
+        if (!state.filters || Object.keys(state.filters).length === 0) return filtered;
         
         const isStrictNumeric = (str) => {
             if (str === null || str === undefined) return false;

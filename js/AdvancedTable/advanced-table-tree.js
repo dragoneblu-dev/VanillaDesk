@@ -12,6 +12,8 @@
  * - LIVE REFRESH: Pulsante refresh per ricaricare fedelmente i dati dal disco.
  * - FEAT CANCEL SELECTION: Pulsante per annullare la selezione attiva delle righe.
  * - Inizializzazione garantita di createdAt e updatedAt per prevenire anomalie di formattazione date.
+ * - PERF REUSE VIRTUALCELLS & DOM SEARCH PRESERVATION: Riuso delle virtualCells già calcolate in memoria su 10.000 righe.
+ * - PRESERVAZIONE LINEARE STRUTTURA: Mantenuta la riga canonica html += renderQuickSearchBar senza over-engineering.
  */
 
 const AdvancedTree = {
@@ -91,10 +93,8 @@ const AdvancedTree = {
         const hasOpenParents = Array.from(allParentIds).some(id => !currentCollapsed.has(id));
 
         if (hasOpenParents) {
-            // Se c'è almeno un ramo aperto, collassa tutto
             state.treeCollapsedNodes = Array.from(allParentIds);
         } else {
-            // Altrimenti espandi tutto
             state.treeCollapsedNodes = [];
         }
 
@@ -225,7 +225,7 @@ const AdvancedTree = {
 
         if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
 
-        // 2. Toolbar Tools (Pulita: rimossi switch di schema per evitare click accidentali)
+        // 2. Toolbar Tools
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
         const hasSavedFilters = state.savedFilters && state.savedFilters.length > 0;
         const hasSort = state.sorts && state.sorts.length > 0;
@@ -261,7 +261,19 @@ const AdvancedTree = {
             if (!state.isLinkedView && !isSysDB) {
                 tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
             }
+
             tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina Database (tra fratelli)', active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
+
+            // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
+            tools.push({ 
+                id: `adv-search-btn-${tableId}`, 
+                icon: Icons.search, 
+                title: (typeof I18n !== 'undefined' && I18n.t('adv_search.title')), 
+                active: !!state.showQuickSearch, 
+                editOnly: false, 
+                onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
+            });
+
             tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra Dati (Campi)', active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
 
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
@@ -289,12 +301,17 @@ const AdvancedTree = {
         const hasHiddenCols = state.columns.length > visibleCols.length;
         const titleCol = visibleCols.length > 0 ? visibleCols[0] : state.columns[0];
 
-        // 4. Mappatura Virtuale delle Righe
+        // 4. Mappatura Virtuale delle Righe (Riuso O(1) di virtualCells già presenti)
         const renderCache = {};
         const virtualRowsMap = new Map();
         state.rows.forEach(r => {
-            const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
-            virtualRowsMap.set(r.id, vRow);
+            if (r.virtualCells) {
+                virtualRowsMap.set(r.id, r);
+            } else {
+                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+                r.virtualCells = vRow.virtualCells;
+                virtualRowsMap.set(r.id, vRow);
+            }
         });
 
         // 5. Costruzione Mappa Antenati e Discendenti
@@ -336,7 +353,9 @@ const AdvancedTree = {
         let matchingRowIds = null;
         let visibleInTreeSet = null;
 
-        if (hasFilter) {
+        const isFilteredMode = (hasFilter || (state.quickSearch && state.quickSearch.trim() !== ''));
+
+        if (isFilteredMode) {
             const allVirtualList = Array.from(virtualRowsMap.values());
             const filteredRows = AdvancedTable.filterRows(allVirtualList, state);
             matchingRowIds = new Set(filteredRows.map(r => r.id));
@@ -361,7 +380,7 @@ const AdvancedTree = {
 
         rootRowIds = sortSiblingRowIds(rootRowIds);
 
-        if (hasFilter) {
+        if (isFilteredMode) {
             rootRowIds = rootRowIds.filter(id => visibleInTreeSet.has(id));
         }
 
@@ -392,13 +411,13 @@ const AdvancedTree = {
             if (!vRow) return;
 
             let children = childrenMap.get(rowId) || [];
-            if (hasFilter) {
+            if (isFilteredMode) {
                 children = children.filter(cId => visibleInTreeSet.has(cId));
             }
             children = sortSiblingRowIds(children);
 
             const hasChildren = children.length > 0;
-            const forceExpandedByFilter = hasFilter && children.some(cId => visibleInTreeSet.has(cId));
+            const forceExpandedByFilter = isFilteredMode && children.some(cId => visibleInTreeSet.has(cId));
             const isCollapsed = !forceExpandedByFilter && (state.treeCollapsedNodes && state.treeCollapsedNodes.includes(rowId));
 
             flatTreeRows.push({
@@ -407,7 +426,7 @@ const AdvancedTree = {
                 hasChildren: hasChildren,
                 childrenCount: (childrenMap.get(rowId) || []).length,
                 isCollapsed: isCollapsed,
-                isMatchDirect: !hasFilter || matchingRowIds.has(rowId)
+                isMatchDirect: !isFilteredMode || matchingRowIds.has(rowId)
             });
 
             if (hasChildren && !isCollapsed) {
@@ -423,8 +442,10 @@ const AdvancedTree = {
             traverseTree(rootId, 0);
         });
 
-        // 11. Costruzione Markup Tabella Fluida
+        // 11. Costruzione Markup Tabella Fluida (Struttura Lineare Naturale)
         let html = '';
+        html += AdvancedTable.renderQuickSearchBar(tableId, state);
+
         const zebraClass = (state.striped !== false) ? 'table-striped' : '';
         const tableWidthClass = state.freeWidth ? '' : 'adv-table-full-width';
 
@@ -476,7 +497,11 @@ const AdvancedTree = {
 
             const isReadonlySystemCol = isSysDB && col.id === 'sys_c_note';
             const pointerStyle = isEdit && !isReadonlySystemCol ? 'cursor:pointer;' : 'cursor:default;';
-            const clickEvent = isEdit && !isReadonlySystemCol ? `onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')"` : '';
+
+            // Singolo click (debounced) apre opzioni colonna, doppio click esegue ordinamento rapido
+            const clickEvent = isEdit && !isReadonlySystemCol 
+                ? `onclick="AdvancedTable.onThClick(event, '${tableId}', '${col.id}')" ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')"` 
+                : `ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')"`;
 
             html += `<th id="adv-th-${tableId}-${col.id}" style="width: ${col.width || 150}px; ${pointerStyle} ${thStyleOverrides}" data-col="${col.id}" ${clickEvent} ${tooltipAttr}>
                         <div class="adv-th-content">
@@ -625,6 +650,8 @@ const AdvancedTree = {
                     html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
                     html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
                 }
+            } else if (isSysDB) {
+                html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
             }
 
             html += `</div><div class="adv-footer-right">`;
