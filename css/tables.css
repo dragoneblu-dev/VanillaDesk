@@ -54,7 +54,7 @@
 /* INTESTAZIONE FISSA ALLO SCORRIMENTO (STICKY HEADER) */
 .editor-content table.table-sticky-header th {
     position: sticky;
-    top: 0;
+    top: -32px;
     z-index: 10;
     background-color: var(--editor-bg);
     box-shadow: inset 0 1px 0 var(--border-color), inset 0 -1px 0 var(--border-color);
@@ -158,41 +158,6 @@
     cursor: grabbing;
 }
 
-/* --- MENU STYLES --- */
-.notion-table-menu {
-    position: absolute;
-    background: var(--sidebar-bg);
-    border: 1px solid var(--border-color);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    border-radius: 8px;
-    padding: 8px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-    z-index: 115; 
-    min-width: 200px;
-    font-size: 0.85rem;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
-.notion-table-menu button {
-    background: transparent; 
-    border: none; 
-    text-align: left; 
-    padding: 6px 10px; 
-    border-radius: 5px;
-    color: var(--text-primary); 
-    cursor: pointer; 
-    width: 100%; 
-    display: flex; 
-    align-items: center; 
-    gap: 8px; 
-    white-space: nowrap;
-    transition: background 0.1s;
-}
-.notion-table-menu button:hover { background: var(--item-hover); }
-.notion-table-menu .divider { height: 1px; background: var(--border-color); margin: 6px 0; }
-
 .color-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; padding: 4px 8px; }
 
 .color-swatch { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; border: 1px solid rgba(0, 0, 0, 0.1); transition: transform 0.1s, border-color 0.1s; }
@@ -208,13 +173,6 @@
 .editor-content th.hl-c8 { background-color: color-mix(in srgb, var(--hl-c8) 30%, transparent); }
 .editor-content th.hl-c9 { background-color: color-mix(in srgb, var(--hl-c9) 30%, transparent); }
 .editor-content th.hl-c10 { background-color: color-mix(in srgb, var(--hl-c10) 30%, transparent); }
-
-.std-col-resizer {
-    position: absolute; top: 0; right: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10;
-}
-.std-col-resizer:hover, .std-col-resizer.resizing {
-    background: var(--accent-color); opacity: 0.5;
-}
 
 /* TOOLBAR CONTESTUALE PER SELEZIONE MULTIPLA: OPAQUE E BEN EVIDENTE */
 #adv-tbl-selection-popover {

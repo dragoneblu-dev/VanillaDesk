@@ -306,3 +306,27 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 }
 
 .highlighted-target { transition: box-shadow 0.3s ease; }
+
+
+/* Snippet Riservato / Password (Mascherato) */
+.adv-copy-snippet.snippet-masked:not(:focus-within) .snippet-text {
+    -webkit-text-security: disc;
+    letter-spacing: normal;
+    font-size: 0.85em;
+    max-width: 140px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+
+.adv-copy-snippet.snippet-masked {
+    border-color: rgba(234, 179, 8, 0.4);
+    background: rgba(234, 179, 8, 0.05);
+    transition: width 0.15s ease, background-color 0.15s ease;
+}
+
+.adv-copy-snippet.snippet-masked:focus-within {
+    border-color: var(--accent-color);
+    background: var(--bg-color);
+}

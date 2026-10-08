@@ -217,13 +217,6 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
 #noteLastUpdate { font-family: var(--font-editor); opacity: 0.8; }
 .hidden { display: none !important; }
 
-.list-options-dropdown {
-    position: absolute; top: 100%; left: 0; background: var(--sidebar-bg); border: 1px solid var(--border-color);
-    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.15); border-radius: 4px; padding: 5px; display: flex; flex-direction: column; gap: 2px; z-index: 100; min-width: 120px;
-}
-.list-option-btn { text-align: left; background: transparent; border: none; padding: 6px 10px; cursor: pointer; font-size: 0.9rem; color: var(--text-primary); border-radius: 3px; display: flex; align-items: center; gap: 8px; }
-.list-option-btn:hover { background: var(--item-hover); }
-
 /* --- GHOST MODE: Toolbar contestuali fluttuanti (Tabelle, Link, Immagini) --- */
 .adv-floating-popover {
     position: absolute;
@@ -282,10 +275,6 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
     background: rgba(239, 68, 68, 0.1);
     color: var(--danger-color);
 }
-
-.link-trigger { position: absolute; background: var(--sidebar-bg); border: 1px solid var(--border-color); padding: 4px 8px; border-radius: 4px; box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2); z-index: 100; display: flex; gap: 5px; font-size: 0.8rem; align-items: center; }
-.link-trigger button { background: transparent; border: none; cursor: pointer; color: var(--text-secondary); padding: 2px; }
-.link-trigger button:hover { color: var(--accent-color); }
 
 .ff-serif { font-family: "Georgia", "Times New Roman", serif !important; }
 .ff-mono { font-family: "Menlo", "Consolas", "Courier New", monospace !important; }

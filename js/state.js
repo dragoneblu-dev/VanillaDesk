@@ -279,7 +279,7 @@ const AppState = {
             targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
             
             const counterEl = document.getElementById('searchCounter');
-            if (counterEl) counterEl.innerText = `${index + 1}/${AppState._totalHighlights}/${AppState._globalHighlights}`;
+            if (counterEl) counterEl.innerText = `${index + 1}/${AppState._totalHighlights}`;
         }
     }
 };

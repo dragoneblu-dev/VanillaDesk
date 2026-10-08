@@ -459,6 +459,7 @@ const AdvancedPivot = {
                     state.columns.forEach((col, idx) => {
                         const isGroup = col.id.startsWith('grp_');
                         let htmlVal = row.virtualCells[col.id] || '';
+                        const safeColName = String(col.name || '').replace(/"/g, '&quot;');
 
                         if (isGroup && row.rawGroupKeys[idx] !== '(Vuoto)') {
                             const srcColDef = sourceState.columns.find(c => c.id === col.sourceColId);
@@ -474,8 +475,6 @@ const AdvancedPivot = {
                             }
                             else if (srcColDef && srcColDef.type === 'relation') {
                                 let content = '';
-                                // Se è una relazione, le stringhe arrivate qui sono già state decodificate e risolte dal Core!
-                                // Possiamo limitarci a splittarle sulla virgola e stamparle come pillole distinte.
                                 const rawArray = Array.isArray(row.rawGroupKeys[idx]) ? row.rawGroupKeys[idx] : [row.rawGroupKeys[idx]];
                                 rawArray.forEach(v => { 
                                     const splitVals = typeof v === 'string' ? v.split(',').map(s => s.trim()) : [v];
@@ -486,7 +485,7 @@ const AdvancedPivot = {
                                 htmlVal = content || '<span class="adv-select-empty">Vuoto</span>';
                             }
                         }
-                        html += `<td style="${isGroup ? 'font-weight:bold; background: rgba(0,0,0,0.01);' : ''} width: ${col.width}px; max-width: ${col.width}px; word-wrap: break-word;">${htmlVal}</td>`;
+                        html += `<td style="${isGroup ? 'font-weight:bold; background: rgba(0,0,0,0.01);' : ''} width: ${col.width}px; max-width: ${col.width}px; word-wrap: break-word;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">${htmlVal}</td>`;
                     });
                     html += `</tr>`;
                 });

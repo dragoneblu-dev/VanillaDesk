@@ -119,6 +119,14 @@ Object.assign(WorkflowApp, {
         const py = isFinite(WorkflowApp.layout.pan.y) ? WorkflowApp.layout.pan.y : 72;
         const pz = isFinite(WorkflowApp.layout.zoom) ? WorkflowApp.layout.zoom : 1;
         plane.style.transform = `translate(${px}px, ${py}px) scale(${pz})`;
+
+        // Calcolo dello spessore adattivo anti-svanimento (LOD):
+        // Garantisce che a schermo reale la linea non scenda mai sotto 1.6px,
+        // evitando il sub-pixel anti-aliasing senza mai produrre l'effetto "tubo" (tetto massimo a 8px).
+        const screenPx = 1;
+        const virtualWidth = Math.min(8, Math.max(1.2, screenPx / pz));
+        plane.style.setProperty('--wf-line-width', `${virtualWidth.toFixed(2)}px`);
+
         WorkflowApp.updateMinimap();
     },
 
@@ -504,7 +512,7 @@ Object.assign(WorkflowApp, {
         ]]></style>
         ${defsSvg}
     </defs>
-    <rect width="100%" height="100%" fill="${bg}" />
+    <rect width="100%" fill="${bg}" height="100%" />
     <g transform="translate(${-bounds.minX}, ${-bounds.minY})">
         <foreignObject x="0" y="0" width="${worldW}" height="${worldH}">
             <div xmlns="http://www.w3.org/1999/xhtml" data-theme="${themeAttr}" class="${isDark ? 'canvas-dark-theme' : 'canvas-light-theme'}" style="position:relative; width:${worldW}px; height:${worldH}px;">

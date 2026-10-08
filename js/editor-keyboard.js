@@ -4,8 +4,6 @@
  * Responsabilità: Intercettazione della digitazione pura (Auto-Close Brackets), 
  * Motore per le Scorciatoie Markdown (Markdown Shortcuts Engine) e Helper per i range.
  * FIX: Previene l'inserimento accidentale di Segnalibri nei Blocchi Codice.
- * FIX CARET/TAB: Implementato _getRawText per calcolare perfettamente offset e indentazioni 
- * all'interno degli span generati dal syntax highlighter, risolvendo i salti cursore.
  * FEAT SMART HOME: Aggiunto gestore handleHomeKey per i blocchi di codice.
  * FEAT LINK RAPIDI: Intercettazione della digitazione "[[" per evocare in modo nativo LinkManager.openInternalModal().
  * FIX LINK RAPIDI INDEXSIZEERROR: Risolto crash setStart(4294967295) collassando direttamente cleanRange
@@ -13,19 +11,6 @@
  */
 
 Object.assign(Editor, {
-
-    // Helper per estrarre il testo esattamente come lo legge il motore delle coordinate (_getCodeOffset),
-    // bypassando i bug del getter nativo 'innerText' dei browser sui tag <br> annidati negli span.
-    _getRawText: (node) => {
-        let text = '';
-        const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null, false);
-        let curr;
-        while ((curr = walker.nextNode())) {
-            if (curr.nodeType === 3) text += curr.nodeValue;
-            else if (curr.nodeName === 'BR') text += '\n';
-        }
-        return text;
-    },
 
     // MOTORE SMART HOME: Alterna il cursore tra inizio riga e primo carattere valido
     handleHomeKey: (e) => {

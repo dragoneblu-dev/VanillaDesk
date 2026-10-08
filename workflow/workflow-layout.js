@@ -101,6 +101,9 @@ Object.assign(WorkflowApp, {
         const relCol = WorkflowApp.selfRelCol;
         if (!db || !db.rows || db.rows.length === 0) return;
 
+        // Registra snapshot di cronologia prima della disposizione massiva
+        WorkflowApp.saveHistorySnapshot();
+
         const nodeWidth = 288;
         const gapX = 144;  
         const gapY = 48;  
@@ -296,6 +299,7 @@ Object.assign(WorkflowApp, {
     },
 
     applyClusterGroup: (colId) => {
+        WorkflowApp.saveHistorySnapshot();
         WorkflowApp.layout.clusterColId = colId || null;
         UI.closeDrawer();
         WorkflowApp.runOrganicAutoLayout(true);
@@ -369,6 +373,7 @@ Object.assign(WorkflowApp, {
 
     setRelationDirection: (dir) => {
         if (WorkflowApp.layout.relationDirection === dir) return;
+        WorkflowApp.saveHistorySnapshot();
         WorkflowApp.layout.relationDirection = dir;
         WorkflowApp.runOrganicAutoLayout(true);
         WorkflowApp.fitToView();
@@ -376,6 +381,7 @@ Object.assign(WorkflowApp, {
     },
 
     setConnectionStyle: (style) => {
+        WorkflowApp.saveHistorySnapshot();
         WorkflowApp.layout.connectionStyle = style;
         WorkflowApp.renderConnections();
         WorkflowApp.saveWorkflowAuto();
@@ -414,6 +420,8 @@ Object.assign(WorkflowApp, {
 
         const nodes = WorkflowApp._getSelectedNodesGeometry();
         if (nodes.length < 2) return;
+
+        WorkflowApp.saveHistorySnapshot();
 
         if (mode === 'left') {
             const minX = Math.min(...nodes.map(n => n.x));
@@ -487,6 +495,8 @@ Object.assign(WorkflowApp, {
             return;
         }
 
+        WorkflowApp.saveHistorySnapshot();
+
         if (axis === 'horizontal') {
             nodes.sort((a, b) => a.x - b.x);
             const first = nodes[0];
@@ -541,6 +551,8 @@ Object.assign(WorkflowApp, {
 
         const nodes = WorkflowApp._getSelectedNodesGeometry();
         if (nodes.length === 0) return;
+
+        WorkflowApp.saveHistorySnapshot();
 
         nodes.forEach(n => {
             const sx = WorkflowApp.snapToGrid(n.x);

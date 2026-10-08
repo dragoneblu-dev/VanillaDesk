@@ -181,7 +181,7 @@ Object.assign(WorkflowApp, {
         const svg = document.getElementById('canvasSvgLayer');
         const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
         path.setAttribute('stroke', 'var(--accent-color)');
-        path.setAttribute('stroke-width', '2.5');
+        path.style.strokeWidth = 'calc(var(--wf-line-width, 1.5px) * 1.5)';
         path.setAttribute('stroke-dasharray', '5');
         path.setAttribute('fill', 'none');
         path.setAttribute('marker-end', 'url(#wfArrow)');
@@ -355,6 +355,9 @@ Object.assign(WorkflowApp, {
             return;
         }
 
+        // Registra lo snapshot di cronologia prima della modifica
+        WorkflowApp.saveHistorySnapshot();
+
         if (relCol.singleRecord) {
             currentTargets = [targetRecordId];
         } else {
@@ -390,6 +393,9 @@ Object.assign(WorkflowApp, {
 
         let currentTargets = row.cells[relCol.id];
         if (!Array.isArray(currentTargets)) return;
+
+        // Registra lo snapshot di cronologia prima della modifica
+        WorkflowApp.saveHistorySnapshot();
 
         row.cells[relCol.id] = currentTargets.filter(id => id !== targetRecordId);
         row.updatedAt = Date.now();
@@ -530,7 +536,6 @@ Object.assign(WorkflowApp, {
             } else {
                 const cornerY = feederY !== null ? feederY : q2.y;
                 waypoints.push({ x: q1.x, y: cornerY });
-                // FIX GEOMETRICO: Confronto corretto tra ordinate sull'asse Y (cornerY !== q2.y)
                 if (cornerY !== q2.y) {
                     waypoints.push({ x: q2.x, y: cornerY });
                 }
@@ -808,7 +813,7 @@ Object.assign(WorkflowApp, {
 
         // =====================================================================
         // TRUNKING: RAGGRUPPAMENTO E CONFLUENZA COMUNE PER PORTE CONDIVISE
-        // =====================================================================
+        // =========================================================================
         const targetPortGroups = new Map();
         resolvedEdges.forEach(edge => {
             const key = `${edge.toId}:${edge.targetSide}`;
@@ -831,7 +836,10 @@ Object.assign(WorkflowApp, {
             }
         });
 
-        // Rendering effettivo degli archi SVG
+        // Identificazione del campo titolo primario configurato
+        const titleColId = WorkflowApp.layout.titleColId || (db.columns && db.columns[0]?.id);
+
+        // Rendering effettivo degli archi SVG (lo spessore è governato dal CSS con --wf-line-width)
         resolvedEdges.forEach(edge => {
             let d = '';
 
@@ -860,7 +868,6 @@ Object.assign(WorkflowApp, {
             const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
             path.setAttribute('d', d);
             path.setAttribute('stroke', 'var(--accent-color)');
-            path.setAttribute('stroke-width', '1.5');
             path.setAttribute('fill', 'none');
             path.setAttribute('marker-end', 'url(#wfArrow)');
             path.setAttribute('opacity', '0.85');
@@ -872,8 +879,8 @@ Object.assign(WorkflowApp, {
                 e.stopPropagation();
                 const fromRow = db.rows.find(r => r.id === edge.fromId);
                 const toRow = db.rows.find(r => r.id === edge.toId);
-                const fromName = fromRow?.cells ? (fromRow.cells[db.columns[0]?.id] || 'Elemento') : 'Elemento';
-                const toName = toRow?.cells ? (toRow.cells[db.columns[0]?.id] || 'Elemento') : 'Elemento';
+                const fromName = fromRow?.cells ? (fromRow.cells[titleColId] || 'Elemento') : 'Elemento';
+                const toName = toRow?.cells ? (toRow.cells[titleColId] || 'Elemento') : 'Elemento';
 
                 if (confirm(I18n.t('workflow.confirm_disconnect', { from: fromName, to: toName }))) {
                     WorkflowApp.disconnectNodes(edge.fromId, edge.toId);

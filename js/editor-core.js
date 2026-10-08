@@ -3,7 +3,7 @@
  * Inizializzazione editor e core engine (Caret, Boundaries, RawText e Sanificazione JSON).
  * Scansione transitiva centralizzata delegata a Store.cleanOrphanedRAMCaches per tutelare database relazionali, template e asset.
  * Re-idratazione immediata post-salvataggio con rilevamento immagini non trovate e placeholder SVG.
- * Estirpazione degli Zero-Width Space (\u200B) orfani dal DOM.
+ * Normalizzazione e ripristino deterministico dei cuscinetti Zero-Width Space (\u200B) ed estirpazione degli orfani.
  * Inseriti .adv-board-card e gli eventi calendario nella Whitelist di handleSmartClickEscape.
  * Normalizzazione retroattiva degli appunti inline salvati con tag a blocco.
  * FIX CARET: Integrato l'estrattore geometrico assoluto basato su Range.cloneContents per il calcolo infallibile degli offset.
@@ -205,6 +205,83 @@ const Editor = {
                 if (parent) parent.normalize();
             }
         });
+    },
+
+    // Ripristino deterministico dei cuscinetti \u200B attorno ai widget inline ed estirpazione degli orfani sparsi
+    ensureInlineWidgetBuffers: (container) => {
+        if (!container) return;
+
+        // 1. Ripristina/Garantisce i cuscinetti \u200B prima e dopo ogni shell inline o link interno
+        const inlineShells = container.querySelectorAll('.adv-inline-shell, a.internal-link, a.file-link');
+        inlineShells.forEach(shell => {
+            // Cuscinetto prima dell'elemento
+            const prev = shell.previousSibling;
+            if (!prev || prev.nodeType !== Node.TEXT_NODE) {
+                shell.parentNode.insertBefore(document.createTextNode('\u200B'), shell);
+            } else if (!prev.nodeValue.endsWith('\u200B')) {
+                prev.nodeValue += '\u200B';
+            }
+
+            // Cuscinetto dopo l'elemento
+            const next = shell.nextSibling;
+            if (!next || next.nodeType !== Node.TEXT_NODE) {
+                shell.parentNode.insertBefore(document.createTextNode('\u200B'), shell.nextSibling);
+            } else if (!next.nodeValue.startsWith('\u200B')) {
+                next.nodeValue = '\u200B' + next.nodeValue;
+            }
+        });
+
+        // 2. Garanzia cuscinetto minimo per checklist e snippet vuoti (o rimozione se contengono testo reale)
+        container.querySelectorAll('.checklist-text, .snippet-text').forEach(el => {
+            const clean = el.textContent.replace(/[\u200B\uFEFF]/g, '').trim();
+            if (clean === '') {
+                if (el.textContent !== '\u200B') el.textContent = '\u200B';
+            } else if (el.textContent.includes('\u200B')) {
+                el.textContent = el.textContent.replace(/\u200B/g, '');
+            }
+        });
+
+        // 3. Estirpazione degli Zero-Width Space orfani in punti errati del documento
+        const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
+        const orphanNodes = [];
+        let textNode;
+
+        while ((textNode = walker.nextNode())) {
+            const val = textNode.nodeValue;
+            if (!val.includes('\u200B')) continue;
+
+            const parent = textNode.parentNode;
+            // AUDIT DIFENSIVO: Protegge i nodi di layout interni a snippet, note inline e checklist
+            if (parent && (parent.closest('.adv-inline-shell') || parent.classList.contains('checklist-text') || parent.classList.contains('snippet-text'))) {
+                continue;
+            }
+
+            const prev = textNode.previousSibling;
+            const next = textNode.nextSibling;
+
+            const isAdjacentToShell = (prev && (prev.classList?.contains('adv-inline-shell') || prev.tagName === 'A')) ||
+                                      (next && (next.classList?.contains('adv-inline-shell') || next.tagName === 'A'));
+
+            if (!isAdjacentToShell) {
+                // Nodo non adiacente a nessun widget: rimuovi completamente i \u200B
+                const cleaned = val.replace(/\u200B/g, '');
+                if (cleaned === '') {
+                    orphanNodes.push(textNode);
+                } else {
+                    textNode.nodeValue = cleaned;
+                }
+            } else if (val !== '\u200B') {
+                // Adiacente a widget ma con accumuli multipli: riduci a singolo \u200B sul bordo corretto
+                const starts = val.startsWith('\u200B');
+                const ends = val.endsWith('\u200B');
+                let inner = val.replace(/\u200B/g, '');
+                if (starts) inner = '\u200B' + inner;
+                if (ends && inner !== '\u200B') inner = inner + '\u200B';
+                textNode.nodeValue = inner;
+            }
+        }
+
+        orphanNodes.forEach(n => n.remove());
     },
 
     hydrateMedia: (container) => {
@@ -621,6 +698,10 @@ const Editor = {
 
         const editor = document.getElementById('noteContent');
         if (!editor) return "";
+
+        // Normalizzazione immediata del DOM vivo prima della clonazione
+        Editor.ensureInlineWidgetBuffers(editor);
+
         const clone = editor.cloneNode(true);
 
         clone.querySelectorAll(WidgetManager.blockSelector).forEach(el => {
@@ -643,6 +724,7 @@ const Editor = {
         
         clone.normalize();
         Editor._normalizeEmptyBlocks(clone);
+        Editor.ensureInlineWidgetBuffers(clone);
         return Editor.minifyHTMLForStorage(clone.innerHTML, false);
     },
 
@@ -695,31 +777,8 @@ const Editor = {
             }
         });
 
-        const walker = document.createTreeWalker(editor, NodeFilter.SHOW_TEXT, null, false);
-        let node;
-        const nodesToRemove = [];
-        
-        while ((node = walker.nextNode())) {
-            if (node.nodeValue.includes('\u200B')) {
-                if (node.nodeValue !== '\u200B') {
-                    node.nodeValue = node.nodeValue.replace(/\u200B/g, '');
-                } else {
-                    const prev = node.previousSibling;
-                    const next = node.nextSibling;
-                    const parent = node.parentNode;
-                    
-                    const isNeeded = (prev && (prev.tagName === 'A' || (prev.classList && prev.classList.contains('adv-inline-shell')))) ||
-                                     (next && (next.tagName === 'A' || (next.classList && next.classList.contains('adv-inline-shell')))) ||
-                                     (parent && (parent.classList && (parent.classList.contains('checklist-text') || parent.classList.contains('snippet-text'))));
-                    
-                    if (!isNeeded) {
-                        nodesToRemove.push(node);
-                    }
-                }
-            }
-        }
-        
-        nodesToRemove.forEach(n => n.remove());
+        // Ripristino garantito dei cuscinetti ZWS per tutti i widget inline ed eliminazione orfani
+        Editor.ensureInlineWidgetBuffers(editor);
 
         editor.normalize();
         Editor._normalizeEmptyBlocks(editor);
@@ -796,10 +855,7 @@ const Editor = {
         }
     },
 
-    // =========================================================================
     // MODALITA' AVANZATA: MODIFICA DIRETTA CODICE SORGENTE HTML (LIOFILIZZATO)
-    // =========================================================================
-
     openRawHtmlEditor: () => {
         if (!AppState.currentNoteId) return;
         const note = Store.getNote(AppState.currentNoteId);
@@ -810,7 +866,6 @@ const Editor = {
         }
 
         const rawMinifiedHtml = Editor.getCleanHTML();
-
         const safeTitle = (note.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
 
         const bodyHTML = `

@@ -698,23 +698,24 @@ body.is-linking .wf-port.is-out {
     cursor: not-allowed;
 }
 
-/* --- LINEE DI CONNESSIONE SVG --- */
+/* --- LINEE DI CONNESSIONE SVG (CON SPESSORE ADATTIVO LOD) --- */
 .wf-connection-line {
     cursor: pointer;
     pointer-events: stroke;
     stroke-linejoin: round;
     stroke-linecap: round;
+    stroke-width: var(--wf-line-width, 1.5px);
     transition: stroke 0.2s, stroke-width 0.2s, opacity 0.2s;
 }
 
 .wf-connection-line:hover {
     stroke: var(--danger-color) !important;
-    stroke-width: 4 !important;
+    stroke-width: calc(var(--wf-line-width, 1.5px) * 1.8) !important;
 }
 
 /* --- LINEE DI CONNESSIONE EVIDENZIATE NEL PERCORSO (FOCUS BRANCH) --- */
 .wf-path-highlighted {
-    stroke-width: 3.5 !important;
+    stroke-width: calc(var(--wf-line-width, 1.5px) * 2.0) !important;
     opacity: 1 !important;
 }
 

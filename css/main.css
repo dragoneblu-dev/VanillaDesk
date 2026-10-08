@@ -250,50 +250,10 @@ header.header-unsaved .btn:not(.btn-primary):hover {
     font-weight: bold;
 }
 
-/* Hamburger Menu */
+/* Hamburger Menu Button */
 .main-menu-btn {
     width: 34px;
     height: 34px;
-}
-
-.main-menu-dropdown {
-    position: absolute;
-    top: 100%;
-    right: 0;
-    margin-top: 5px;
-    background: var(--sidebar-bg);
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
-    width: 220px;
-    display: flex;
-    flex-direction: column;
-    padding: 6px;
-    z-index: 1000;
-}
-
-.menu-item {
-    padding: 8px 12px;
-    border-radius: 4px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    color: var(--text-primary);
-    font-size: 0.9rem;
-}
-
-.menu-item:hover {
-    background: var(--item-hover);
-}
-
-.menu-item-row {
-    padding: 8px 12px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    color: var(--text-primary);
-    font-size: 0.9rem;
 }
 
 .separator-h {
@@ -406,6 +366,23 @@ aside.collapsed {
 .search-clear-btn:hover {
     background: rgba(239, 68, 68, 0.1);
     color: var(--danger-color);
+}
+
+/* --- PILLOLA CONTEGGIO OCCORRENZE RICERCA NELL'ALBERO (DINAMICA PER OGNI TEMA) --- */
+.search-match-count {
+    font-size: 0.7rem;
+    font-weight: 700;
+    padding: 1px 6px;
+    border-radius: 10px;
+    background: var(--item-active);
+    color: var(--accent-color);
+    border: 1px solid var(--border-color);
+    margin-left: auto;
+    margin-right: 4px;
+    line-height: 1.3;
+    flex-shrink: 0;
+    user-select: none;
+    pointer-events: none;
 }
 
 /* --- NUOVE TABS SIDEBAR (NOTION STYLE) --- */

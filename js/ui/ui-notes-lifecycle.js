@@ -528,7 +528,7 @@ Object.assign(UI, {
                     if (AppState._currentHighlightIndex === -1) AppState._currentHighlightIndex = AppState._totalHighlights - 1;
                     else if (AppState._currentHighlightIndex >= AppState._totalHighlights) AppState._currentHighlightIndex = 0;
                     
-                    searchCounter.innerText = `${AppState._currentHighlightIndex + 1}/${AppState._totalHighlights}/${AppState._globalHighlights}`;
+                    searchCounter.innerText = `${AppState._currentHighlightIndex + 1}/${AppState._totalHighlights}`;
                     
                     const marks = contentEl.querySelectorAll('mark.search-highlight');
                     const targetMark = marks[AppState._currentHighlightIndex];
@@ -544,7 +544,7 @@ Object.assign(UI, {
                         setTimeout(() => targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
                     }
                 } else {
-                    searchCounter.innerText = `0/0/${AppState._globalHighlights}`;
+                    searchCounter.innerText = "0/0";
                 }
             }
             setTimeout(() => { AppState.isSwitchingNote = false; UI.updateTOCScrollSpy(); }, 300);

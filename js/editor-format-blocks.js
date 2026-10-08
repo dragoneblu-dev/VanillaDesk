@@ -4,6 +4,8 @@
  * Inserimento e movimento di Blocchi complessi, esecuzione di execCommand nativi e gestione del Contesto (Widget).
  * FIX SYNC BLOCCHI CODICE: All'inserimento del blocco codice, sincronizza immediatamente
  * il markup e il flag _isDirty sulla nota corrente per garantire la reattività dell'autosave.
+ * FEAT SNIPPET RISERVATO: Supporto all'inserimento di snippet mascherati (password/credenziali)
+ * tramite riciclo dell'elemento nativo e classe CSS 'snippet-masked'.
  */
 
 Object.assign(Editor, {
@@ -27,7 +29,8 @@ Object.assign(Editor, {
             { type: 'divider' },
             { icon: Icons.bookmark, label: I18n.t('format_blocks.menu_insert_bookmark'), shortcut: 'Ctrl+Shift+B', onClick: () => executeInsert(() => Editor.insertBookmark()) },
             { icon: Icons.noteInline, label: I18n.t('format_blocks.menu_insert_inline_note'), onClick: () => executeInsert(() => Editor.insertInlineNote()) },
-            { icon: Icons.clipboard, label: I18n.t('format_blocks.menu_insert_snippet'), onClick: () => executeInsert(() => Editor.insertCopySnippet()) }
+            { icon: Icons.clipboard, label: I18n.t('format_blocks.menu_insert_snippet'), onClick: () => executeInsert(() => Editor.insertCopySnippet(false)) },
+            { icon: Icons.lock, label: I18n.t('format_blocks.menu_insert_snippet_masked') || "Snippet Riservato / Password", onClick: () => executeInsert(() => Editor.insertCopySnippet(true)) }
         ];
 
         UI.Menu.buildContextMenu(anchorId, items);
@@ -136,14 +139,14 @@ Object.assign(Editor, {
         }, 50);
     },
 
-    insertCopySnippet: () => {
+    insertCopySnippet: (isMasked = false) => {
         Editor.saveSnapshot();
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
         const range = selection.getRangeAt(0);
 
         const wrapper = document.createElement('span');
-        wrapper.className = 'adv-copy-snippet adv-inline-shell';
+        wrapper.className = 'adv-copy-snippet adv-inline-shell' + (isMasked ? ' snippet-masked' : '');
         wrapper.setAttribute('data-widget-type', 'snippet');
         wrapper.setAttribute('contenteditable', 'false');
 

@@ -2,7 +2,8 @@
  * editor-format-text.js
  * Sottomodulo di Editor.
  * Gestione formattazioni inline, Menu Stile, Font e la "Gomma Draconiana" (Deep Sanitization).
- * Tutela dell'infrastruttura Widget, dell'attributo 'start' degli elenchi numerati (OL) e di colspan/rowspan per le celle.
+ * Tutela dell'infrastruttura Widget, dell'attributo 'start' degli elenchi numerati (OL), di colspan/rowspan per le celle
+ * e dei metadati dei link di VanillaDesk (incluso data-link-note per la descrizione aggiuntiva).
  * Inclusione classi e attributi per segnalibri e note commentate.
  * FEAT: toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
  * FEAT STATEFUL LIST ICON: Aggiornamento contestuale dinamico dell'icona, del tooltip e dello stato active-format su btnListMenu.
@@ -478,14 +479,16 @@ Object.assign(Editor, {
             // Diario
             'adv-journal-wrapper', 'adv-journal-list', 'journal-date-node', 'journal-date-header', 'journal-toggle', 'journal-date-label', 'journal-time-list', 'journal-time-node', 'journal-time-label', 'journal-content', 'hidden-time',
             // Codice e Snippet Copiabili
-            'code-wrapper', 'code-action-bar', 'code-action-btn', 'code-content', 'code-action-lang', 'code-action-copy', 'code-copy-btn', 'adv-copy-snippet', 'snippet-text', 'snippet-copy-btn',
+            'code-wrapper', 'code-action-bar', 'code-action-btn', 'code-content', 'code-action-lang', 'code-action-copy', 'code-copy-btn',
+            'adv-copy-snippet', 'snippet-text', 'snippet-copy-btn', 'snippet-masked',
             // Citazioni
             'block-citation', 'citation-body', 'citation-header',
             // Colonne Multi-Layout
             'adv-columns-container-wrap', 'adv-columns-continuous', 'adv-columns-independent', 'col-box', 'col-resizer'
         ];
         
-        const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
+        // Whitelist per attributi Data: include data-link-note per salvaguardare le descrizioni opzionali dei link
+        const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-link-note', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
 
         let container = range.commonAncestorContainer;
         if (container.nodeType === 3) container = container.parentNode;
@@ -571,6 +574,7 @@ Object.assign(Editor, {
                 if (tag === 'SVG' && ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'].includes(attr.name)) return;
                 if (['PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'].includes(tag) && ['d', 'points', 'x1', 'y1', 'x2', 'y2', 'x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'rx', 'ry'].includes(attr.name)) return;
                 if (attr.name === 'href' && tag === 'A') return;
+                if (attr.name === 'target' && tag === 'A') return;
                 if (attr.name === 'src' && (tag === 'IMG' || tag === 'AUDIO')) return;
                 if (attr.name === 'controls' && tag === 'AUDIO') return;
                 if (attr.name === 'type' && ['UL', 'OL', 'INPUT'].includes(tag)) return;
@@ -623,6 +627,13 @@ Object.assign(Editor, {
         } catch(e) {}
 
         Editor.healWidgetWrappers();
+
+        // Ripristino e purificazione deterministica dei cuscinetti ZWS post-pulizia
+        const rootEditor = document.getElementById('noteContent');
+        if (rootEditor && typeof Editor.ensureInlineWidgetBuffers === 'function') {
+            Editor.ensureInlineWidgetBuffers(rootEditor);
+        }
+
         Store.triggerAutoSave();
         Editor.updateToolbarFormatting();
     }

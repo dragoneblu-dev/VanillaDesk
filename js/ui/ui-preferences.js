@@ -5,7 +5,7 @@
  * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
  * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
  * FEAT I18N: Voce "Lingua" trasformata in sottomenu dedicato per non occupare spazio verticale in "Configura".
- * FEAT CONTINUOUS EDIT: Modularizzazione di setContinuousEdit per attivazione programmatica all'apertura del Workspace.
+ * FEAT CONTINUOUS EDIT: Attivazione di default (true) al primo avvio o su nuovi Workspace.
  */
 
 Object.assign(UI, {
@@ -440,15 +440,17 @@ Object.assign(UI, {
             }
         }
         
-        // Recupero l'impostazione dell'Edit Continuo dal Local Storage
+        // Recupero l'impostazione dell'Edit Continuo: ATTIVO di default su nuovi workspace o primo avvio
         const savedContinuous = localStorage.getItem('pronotes_continuous');
-        if (savedContinuous === 'true') {
+        if (savedContinuous === null || savedContinuous === 'true') {
             AppState.continuousEditMode = true;
             const icon = document.getElementById('continuousEditIcon');
             if (icon) {
                 icon.innerHTML = Icons.checkSquare;
                 icon.style.color = 'var(--accent-color)';
             }
+        } else {
+            AppState.continuousEditMode = false;
         }
 
         const savedPageWidth = localStorage.getItem('pronotes_pagewidth');
@@ -512,7 +514,7 @@ Object.assign(UI, {
             }
         }, true);
 
-        // ASCOLTATORE SCROLL PRINCIPALE (Aggancio per TOC e Minimappa)
+        // ASCOLTATORE SCROLL PRINCIPALE (Aggancio per TOC, Minimappa e Floating Header Bar)
         const editorScrollArea = document.getElementById('editorScrollContent');
         if (editorScrollArea) {
             editorScrollArea.addEventListener('scroll', () => {
@@ -522,6 +524,11 @@ Object.assign(UI, {
                 }
                 if (typeof UI.Minimap !== 'undefined') UI.Minimap.updateViewport();
                 if (typeof UI.updateTOCScrollSpy === 'function') UI.updateTOCScrollSpy();
+                
+                // Aggiornamento sincronizzato della barra intestazioni galleggiante
+                if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.updateFloatingHeader === 'function') {
+                    AdvancedTable.updateFloatingHeader(editorScrollArea);
+                }
             });
         }
 

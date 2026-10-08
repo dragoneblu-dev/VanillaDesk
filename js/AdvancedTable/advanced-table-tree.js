@@ -364,12 +364,12 @@ const AdvancedTree = {
         let totalRoots = rootRowIds.length;
         let totalPages = Math.max(1, Math.ceil(totalRoots / pageSize));
 
-            if (currentPage > totalPages) currentPage = totalPages;
-            if (currentPage < 1) currentPage = 1;
-            state.currentPage = currentPage;
+        if (currentPage > totalPages) currentPage = totalPages;
+        if (currentPage < 1) currentPage = 1;
+        state.currentPage = currentPage;
 
-            const startIdx = (currentPage - 1) * pageSize;
-            pagedRootIds = rootRowIds.slice(startIdx, startIdx + pageSize);
+        const startIdx = (currentPage - 1) * pageSize;
+        const pagedRootIds = rootRowIds.slice(startIdx, startIdx + pageSize);
 
         // 10. Appiattimento Ricorsivo con Protezione da Cicli
         const flatTreeRows = [];
@@ -414,7 +414,7 @@ const AdvancedTree = {
             traverseTree(rootId, 0);
         });
 
-        // 11. Costruzione Markup Tabella
+        // 11. Costruzione Markup Tabella Fluida
         let html = '';
         const zebraClass = (state.striped !== false) ? 'table-striped' : '';
         const tableWidthClass = state.freeWidth ? '' : 'adv-table-full-width';
@@ -540,7 +540,7 @@ const AdvancedTree = {
                 let inlineBgStyle = '';
                 if (rowColorClass && pOp < 100) {
                     inlineBgStyle = `background-color: color-mix(in srgb, var(--${rowColorClass}) ${pOp}%, transparent) !important;`;
-                    rowColorClass = '';
+                    rowColorClass = ''; 
                 }
 
                 const dblClickEvent = isEdit ? `ondblclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')"` : '';
@@ -550,6 +550,7 @@ const AdvancedTree = {
                 visibleCols.forEach(col => {
                     const isTitle = (col.id === titleCol.id);
                     const val = row.virtualCells[col.id] !== undefined ? row.virtualCells[col.id] : '';
+                    const safeColName = String(col.name || '').replace(/"/g, '&quot;');
 
                     if (isTitle) {
                         const indentPx = Math.max(8, 8 + (item.level * 22));
@@ -578,7 +579,7 @@ const AdvancedTree = {
                         const cellRendererHtml = AdvancedTable.renderCell(tableId, row, col, val, state, isEdit);
 
                         html += `
-                            <td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; padding-left: 0 !important;">
+                            <td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; padding-left: 0 !important;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">
                                 <div class="adv-tree-cell-wrapper" style="padding-left: ${indentPx}px;">
                                     ${toggleHtml}
                                     <div class="adv-tree-content-inner" style="flex: 1; min-width: 0;">
@@ -589,7 +590,7 @@ const AdvancedTree = {
                             </td>
                         `;
                     } else {
-                        html += `<td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px;">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
+                        html += `<td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                     }
                 });
 

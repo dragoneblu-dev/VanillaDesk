@@ -137,6 +137,285 @@ data_aggiornamento: "${note.updatedAt}"
     },
 
     /**
+     * Legge una nota cercandola per titolo e restituisce metadati e Markdown completo.
+     */
+    readNote: async (noteTitle) => {
+        if (!noteTitle || typeof noteTitle !== 'string') {
+            throw new Error("Specificare il titolo della nota da leggere.");
+        }
+
+        const note = AppState.notes.find(n => !n.deletedAt && (n.title || '').trim().toLowerCase() === noteTitle.trim().toLowerCase());
+        if (!note) {
+            throw new Error(`Nota "${noteTitle}" non trovata o presente nel Cestino.`);
+        }
+
+        const parentNote = note.parentId ? Store.getNote(note.parentId) : null;
+        const markdown = AIBridge.exportNoteToSemanticMarkdown(note.title);
+
+        return {
+            id: note.id,
+            title: note.title,
+            parentTitle: parentNote ? parentNote.title : null,
+            isFavorite: !!note.isMarked,
+            createdAt: note.createdAt,
+            updatedAt: note.updatedAt,
+            contentMarkdown: markdown
+        };
+    },
+
+    /**
+     * Crea una nuova nota nel Workspace a partire da un payload Markdown.
+     * Gestisce gerarchia parent, token di revisione, database proprietà e persistenza.
+     */
+    createNote: async ({ title, contentMarkdown = "", parentNoteTitle = null, isFavorite = false }) => {
+        if (!title || typeof title !== 'string' || title.trim() === "") {
+            throw new Error("Il titolo della nuova nota è obbligatorio.");
+        }
+
+        const cleanTitle = title.trim();
+
+        // 1. Risoluzione della nota genitore opzionale
+        let parentId = null;
+        if (parentNoteTitle && typeof parentNoteTitle === 'string') {
+            const parentNote = AppState.notes.find(n => !n.deletedAt && (n.title || '').trim().toLowerCase() === parentNoteTitle.trim().toLowerCase());
+            if (parentNote) {
+                parentId = parentNote.id;
+                parentNote.expanded = true;
+            } else {
+                console.warn(`[AIBridge] Nota genitore "${parentNoteTitle}" non trovata. La nota verrà creata alla radice.`);
+            }
+        }
+
+        // 2. Conversione del Markdown in HTML nativo
+        let htmlContent = '<p><br></p>';
+        if (contentMarkdown && contentMarkdown.trim() !== "") {
+            if (typeof ExportManager !== 'undefined' && typeof ExportManager.parseMarkdownToHTML === 'function') {
+                htmlContent = ExportManager.parseMarkdownToHTML(contentMarkdown.trim());
+            } else {
+                htmlContent = `<p>${UI.escapeHTML(contentMarkdown).replace(/\n/g, '<br>')}</p>`;
+            }
+        }
+
+        // 3. Creazione del modello della nota
+        const newNoteId = Store.generateId();
+        const now = new Date().toISOString();
+        const initialRevId = Store.generateId();
+
+        const newNote = {
+            id: newNoteId,
+            parentId: parentId,
+            title: cleanTitle,
+            content: htmlContent,
+            isMarked: !!isFavorite,
+            expanded: true,
+            createdAt: now,
+            updatedAt: now,
+            revId: initialRevId,
+            _baseRevId: initialRevId,
+            _isDraft: false,
+            _isDirty: true
+        };
+
+        AppState.notes.push(newNote);
+
+        // 4. Sincronizzazione con il database di sistema delle proprietà
+        if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
+            AdvancedTable.syncSystemPropertiesRow(newNoteId);
+        }
+
+        // 5. Aggiornamento interfaccia e persistenza
+        if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+            UI.renderTree();
+        }
+
+        if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+            Store.triggerAutoSave(true);
+        }
+
+        return {
+            success: true,
+            operation: 'CREATE_NOTE',
+            noteId: newNoteId,
+            title: cleanTitle,
+            parentTitle: parentNoteTitle || null
+        };
+    },
+
+    /**
+     * Modifica una nota esistente individuandola per titolo.
+     * Permette di aggiornare titolo, sostituire o aggiungere contenuto in Markdown,
+     * spostare la nota sotto un altro genitore o modificare lo stato preferito.
+     */
+    updateNote: async (targetTitle, { newTitle = null, contentMarkdown = null, appendContentMarkdown = null, newParentTitle = undefined, isFavorite = undefined }) => {
+        if (!targetTitle || typeof targetTitle !== 'string') {
+            throw new Error("Specificare il titolo della nota da modificare.");
+        }
+
+        const targetNote = AppState.notes.find(n => !n.deletedAt && (n.title || '').trim().toLowerCase() === targetTitle.trim().toLowerCase());
+        if (!targetNote) {
+            throw new Error(`Nota "${targetTitle}" non trovata o presente nel Cestino.`);
+        }
+
+        // 1. Aggiornamento Titolo
+        if (newTitle !== null && typeof newTitle === 'string' && newTitle.trim() !== '') {
+            targetNote.title = newTitle.trim();
+        }
+
+        // 2. Aggiornamento / Concatenazione Contenuto
+        if (contentMarkdown !== null && typeof contentMarkdown === 'string') {
+            if (typeof ExportManager !== 'undefined' && typeof ExportManager.parseMarkdownToHTML === 'function') {
+                targetNote.content = ExportManager.parseMarkdownToHTML(contentMarkdown.trim());
+            } else {
+                targetNote.content = `<p>${UI.escapeHTML(contentMarkdown).replace(/\n/g, '<br>')}</p>`;
+            }
+        } else if (appendContentMarkdown !== null && typeof appendContentMarkdown === 'string' && appendContentMarkdown.trim() !== '') {
+            let appendedHtml = '';
+            if (typeof ExportManager !== 'undefined' && typeof ExportManager.parseMarkdownToHTML === 'function') {
+                appendedHtml = ExportManager.parseMarkdownToHTML(appendContentMarkdown.trim());
+            } else {
+                appendedHtml = `<p>${UI.escapeHTML(appendContentMarkdown).replace(/\n/g, '<br>')}</p>`;
+            }
+            targetNote.content = (targetNote.content || '') + '<p><br></p>' + appendedHtml;
+        }
+
+        // 3. Spostamento Gerarchico (Parent)
+        if (newParentTitle !== undefined) {
+            if (newParentTitle === null || newParentTitle.trim() === '') {
+                targetNote.parentId = null;
+            } else {
+                const newParent = AppState.notes.find(n => !n.deletedAt && (n.title || '').trim().toLowerCase() === newParentTitle.trim().toLowerCase());
+                if (newParent) {
+                    // Evita l'auto-riferimento gerarchico o loop diretti
+                    if (newParent.id === targetNote.id) {
+                        throw new Error("Una nota non può essere genitrice di se stessa.");
+                    }
+                    targetNote.parentId = newParent.id;
+                    newParent.expanded = true;
+                } else {
+                    console.warn(`[AIBridge] Nuova nota genitore "${newParentTitle}" non trovata. Spostamento ignorato.`);
+                }
+            }
+        }
+
+        // 4. Stato Preferito
+        if (isFavorite !== undefined) {
+            targetNote.isMarked = !!isFavorite;
+        }
+
+        targetNote.updatedAt = new Date().toISOString();
+        targetNote._isDirty = true;
+
+        // 5. Reidratazione in diretta se la nota è attualmente aperta nell'editor
+        if (AppState.currentNoteId === targetNote.id) {
+            const titleInput = document.getElementById('noteTitle');
+            const contentEl = document.getElementById('noteContent');
+
+            if (titleInput && newTitle !== null) {
+                titleInput.value = targetNote.title;
+            }
+            if (contentEl && (contentMarkdown !== null || appendContentMarkdown !== null)) {
+                contentEl.innerHTML = targetNote.content || '<p><br></p>';
+                if (typeof Editor !== 'undefined') {
+                    if (Editor.hydrateMedia) Editor.hydrateMedia(contentEl);
+                    if (Editor.saveSnapshot) Editor.saveSnapshot();
+                }
+                if (typeof WidgetManager !== 'undefined') {
+                    WidgetManager.mountAll(contentEl);
+                }
+                if (typeof CitationManager !== 'undefined') {
+                    CitationManager.renderLiveCitations();
+                }
+            }
+            if (typeof UI !== 'undefined') {
+                UI.updateBreadcrumb(targetNote);
+                UI.renderInlineFootnotes();
+                UI.updateMarkBtn(targetNote.isMarked);
+            }
+        }
+
+        // 6. Aggiornamento albero e salvataggio su disco
+        if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+            UI.renderTree();
+        }
+
+        if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+            Store.triggerAutoSave(true);
+        }
+
+        return {
+            success: true,
+            operation: 'UPDATE_NOTE',
+            noteId: targetNote.id,
+            title: targetNote.title,
+            updatedAt: targetNote.updatedAt
+        };
+    },
+
+    /**
+     * Elimina una nota cercandola per titolo.
+     * Di default esegue un Soft-Delete sicuro nel Cestino (ripristinabile con un click).
+     * Se moveToTrash è impostato a false, esegue l'eliminazione definitiva con bonifica delle dipendenze.
+     */
+    deleteNote: async (targetTitle, { moveToTrash = true } = {}) => {
+        if (!targetTitle || typeof targetTitle !== 'string') {
+            throw new Error("Specificare il titolo della nota da eliminare.");
+        }
+
+        const targetNote = AppState.notes.find(n => !n.deletedAt && (n.title || '').trim().toLowerCase() === targetTitle.trim().toLowerCase());
+        if (!targetNote) {
+            throw new Error(`Nota "${targetTitle}" non trovata o già eliminata.`);
+        }
+
+        const noteId = targetNote.id;
+
+        if (moveToTrash) {
+            // Soft-Delete ricorsivo (incluso figlie)
+            const now = Date.now();
+            const traverse = (id) => {
+                const n = Store.getNote(id);
+                if (n) {
+                    n.deletedAt = now;
+                    n._isDirty = true;
+                    if (typeof AdvancedTable !== 'undefined' && AdvancedTable.deleteSystemPropertiesRow) {
+                        AdvancedTable.deleteSystemPropertiesRow(id);
+                    }
+                    AppState.notes.filter(child => child.parentId === id).forEach(child => traverse(child.id));
+                }
+            };
+            traverse(noteId);
+        } else {
+            // Eliminazione fisica definitiva
+            if (typeof UI !== 'undefined' && UI.Trash && typeof UI.Trash.forceHardDeleteRecursive === 'function') {
+                UI.Trash.forceHardDeleteRecursive(noteId);
+            } else {
+                AppState.notes = AppState.notes.filter(n => n.id !== noteId && n.parentId !== noteId);
+            }
+        }
+
+        // Se la nota eliminata era aperta a schermo, riporta l'interfaccia alla Home
+        if (AppState.currentNoteId === noteId) {
+            if (typeof UI !== 'undefined' && typeof UI.goHome === 'function') {
+                UI.goHome();
+            }
+        }
+
+        if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
+            UI.renderTree();
+        }
+
+        if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+            Store.triggerAutoSave(true);
+        }
+
+        return {
+            success: true,
+            operation: moveToTrash ? 'SOFT_DELETE_NOTE' : 'HARD_DELETE_NOTE',
+            deletedTitle: targetTitle,
+            movedToTrash: moveToTrash
+        };
+    },
+
+    /**
      * Esegue una mutazione transazionale su un Database guidata dall'IA.
      * Mappa i nomi delle colonne e dei record collegati negli ID interni, garantendo zero corruzioni.
      */

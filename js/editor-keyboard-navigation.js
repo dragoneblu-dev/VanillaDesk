@@ -5,9 +5,84 @@
  * Escape intelligente dalla formattazione, Indentazione e Spostamenti geometrici nelle tabelle).
  * Gestione della navigazione a celle basata su matrice 2D: spostamento perpendicolare affidabile
  * tra celle, con pieno supporto alla navigazione multilinea interna prima del cambio cella.
+ * FIX SHIFT SELECTION SNIPPET: Permette la selezione estesa verticale (Shift+ArrowUp/Down)
+ * attraverso gli snippet copiabili senza bloccare la selezione sul confine contenteditable="false".
  */
 
 Object.assign(Editor, {
+
+    /**
+     * SNIPPET SHIFT SELECTION (Estensione Selezione Multi-Riga)
+     * Consente a Shift+ArrowDown e Shift+ArrowUp di scavalcare gli snippet copiabili
+     * senza arrestare la selezione al confine del contenitore.
+     */
+    _handleSnippetShiftSelection: (e) => {
+        if (!e.shiftKey) return false;
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false;
+
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return false;
+
+        const focusNode = sel.focusNode;
+        if (!focusNode) return false;
+        const focusEl = focusNode.nodeType === 3 ? focusNode.parentNode : focusNode;
+
+        const editor = document.getElementById('noteContent');
+        if (!editor || !editor.contains(focusEl)) return false;
+
+        // Verifica se l'estremo attivo della selezione è dentro o subito adiacente a uno snippet copiabile
+        const snippet = focusEl.closest('.adv-copy-snippet') ||
+                        (focusNode.nextSibling && focusNode.nextSibling.classList && focusNode.nextSibling.classList.contains('adv-copy-snippet') ? focusNode.nextSibling : null) ||
+                        (focusNode.previousSibling && focusNode.previousSibling.classList && focusNode.previousSibling.classList.contains('adv-copy-snippet') ? focusNode.previousSibling : null);
+
+        if (!snippet) return false;
+
+        const currentBlock = snippet.closest('p, div, li, h1, h2, h3, h4, h5, h6');
+        if (!currentBlock || currentBlock.id === 'noteContent') return false;
+
+        let targetBlock = null;
+
+        if (e.key === 'ArrowDown') {
+            targetBlock = currentBlock.nextElementSibling;
+            while (targetBlock && (!Editor.isBlockElement(targetBlock) || (targetBlock.classList && targetBlock.classList.contains('adv-widget-shell')))) {
+                targetBlock = targetBlock.nextElementSibling;
+            }
+        } else if (e.key === 'ArrowUp') {
+            targetBlock = currentBlock.previousElementSibling;
+            while (targetBlock && (!Editor.isBlockElement(targetBlock) || (targetBlock.classList && targetBlock.classList.contains('adv-widget-shell')))) {
+                targetBlock = targetBlock.previousElementSibling;
+            }
+        }
+
+        if (targetBlock) {
+            e.preventDefault();
+
+            // Calcolo del punto di atterraggio sul blocco successivo
+            const anchorNode = sel.anchorNode;
+            const anchorOffset = sel.anchorOffset;
+
+            // Troviamo il primo o ultimo nodo di testo nel blocco di destinazione per una selezione naturale
+            const walker = document.createTreeWalker(targetBlock, NodeFilter.SHOW_TEXT, null, false);
+            let destTextNode = null;
+
+            if (e.key === 'ArrowDown') {
+                destTextNode = walker.nextNode() || targetBlock;
+                const offset = destTextNode.nodeType === 3 ? Math.min(destTextNode.length, sel.focusOffset || 0) : 0;
+                sel.setBaseAndExtent(anchorNode, anchorOffset, destTextNode, offset);
+            } else {
+                let lastText = null;
+                while (walker.nextNode()) lastText = walker.currentNode;
+                destTextNode = lastText || targetBlock;
+                const offset = destTextNode.nodeType === 3 ? destTextNode.length : targetBlock.childNodes.length;
+                sel.setBaseAndExtent(anchorNode, anchorOffset, destTextNode, offset);
+            }
+
+            targetBlock.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+            return true;
+        }
+
+        return false;
+    },
 
     /**
      * SNIPPET VERTICAL ESCAPE (Raycast Engine)
@@ -16,7 +91,11 @@ Object.assign(Editor, {
      */
     _handleSnippetVerticalEscape: (e) => {
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false;
-        if (e.shiftKey) return false; 
+        
+        // Se Shift è premuto, deleghiamo al gestore di selezione estesa
+        if (e.shiftKey) {
+            return Editor._handleSnippetShiftSelection(e);
+        }
 
         const sel = window.getSelection();
         if (!sel.rangeCount) return false;

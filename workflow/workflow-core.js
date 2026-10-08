@@ -7,6 +7,8 @@
  * FEAT MULTI-RELATION WORKFLOW: Supporto completo a workflow multipli e indipendenti per database aventi
  * diverse auto-relazioni. Ogni relazione dispone del proprio layout spaziale, collegamenti, stile e impostazioni.
  * FIX PERSISTENZA: Salvataggio automatico nativo su assets/workflow/{dbId}.json con architettura multi-layout.
+ * FEAT TITLE COLUMN: Supporto per la selezione dinamica della colonna usata come titolo primario dei nodi (titleColId).
+ * FEAT UNDO/REDO: Stack di cronologia completo (Ctrl+Z / Ctrl+Y) per posizioni nodi, connessioni e layout sul canvas.
  */
 
 window.WorkflowApp = {
@@ -27,9 +29,15 @@ window.WorkflowApp = {
     _pendingTargetRelId: null,
     _pendingTargetDir: null,
     
+    // Stack di cronologia per Undo/Redo sul canvas
+    undoStack: [],
+    redoStack: [],
+    _isRestoringHistory: false,
+
     layout: {
         zoom: 1,
         pan: { x: 72, y: 72 },
+        titleColId: null,               // Colonna usata come Titolo Primario dei blocchi
         visibleColumns: [],
         relationDirection: 'successor',
         connectionStyle: 'orthogonal', // 'bezier' | 'orthogonal' | 'avoidance'
@@ -41,7 +49,7 @@ window.WorkflowApp = {
     },
 
     panState: { active: false, startX: 0, startY: 0, initialPanX: 0, initialPanY: 0, hasMoved: false },
-    dragNodeState: { active: false, masterId: null, startMouseX: 0, startMouseY: 0, initialPositions: {} },
+    dragNodeState: { active: false, masterId: null, startMouseX: 0, startMouseY: 0, initialPositions: {}, hasMoved: false },
     linkDragState: { active: false, fromRowId: null, fromPortSide: null, startX: 0, startY: 0, tempPath: null },
     marqueeState: { active: false, startClientX: 0, startClientY: 0, startWorldX: 0, startWorldY: 0 },
     minimapDragState: { active: false },
@@ -49,6 +57,130 @@ window.WorkflowApp = {
     _minimapMeta: null,
 
     escapeHTML: (str) => UI.escapeHTML(str),
+
+    // =========================================================================
+    // MOTORE CRONOLOGIA CANVAS (UNDO / REDO)
+    // =========================================================================
+    saveHistorySnapshot: () => {
+        if (WorkflowApp._isRestoringHistory || !WorkflowApp.currentDbState) return;
+
+        const relId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null;
+        const snapshot = {
+            layout: JSON.parse(JSON.stringify(WorkflowApp.layout)),
+            relationValues: (WorkflowApp.currentDbState.rows || []).map(r => ({
+                id: r.id,
+                targets: relId ? (Array.isArray(r.cells?.[relId]) ? [...r.cells[relId]] : (r.cells?.[relId] ? [r.cells[relId]] : [])) : []
+            }))
+        };
+
+        if (WorkflowApp.undoStack.length > 0) {
+            const last = WorkflowApp.undoStack[WorkflowApp.undoStack.length - 1];
+            if (JSON.stringify(last) === JSON.stringify(snapshot)) return;
+        }
+
+        WorkflowApp.undoStack.push(snapshot);
+        if (WorkflowApp.undoStack.length > 30) WorkflowApp.undoStack.shift();
+        WorkflowApp.redoStack = [];
+    },
+
+    undo: async () => {
+        if (WorkflowApp.layout.locked) {
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
+            return;
+        }
+        if (!WorkflowApp.undoStack || WorkflowApp.undoStack.length === 0) {
+            UI.showToast("Nessuna azione precedente da annullare.", "info");
+            return;
+        }
+
+        const relId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null;
+        const currentSnapshot = {
+            layout: JSON.parse(JSON.stringify(WorkflowApp.layout)),
+            relationValues: (WorkflowApp.currentDbState.rows || []).map(r => ({
+                id: r.id,
+                targets: relId ? (Array.isArray(r.cells?.[relId]) ? [...r.cells[relId]] : (r.cells?.[relId] ? [r.cells[relId]] : [])) : []
+            }))
+        };
+        WorkflowApp.redoStack.push(currentSnapshot);
+
+        const targetSnapshot = WorkflowApp.undoStack.pop();
+        await WorkflowApp._applyHistorySnapshot(targetSnapshot);
+        UI.showToast("Azione annullata (Undo)", "info");
+    },
+
+    redo: async () => {
+        if (WorkflowApp.layout.locked) {
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
+            return;
+        }
+        if (!WorkflowApp.redoStack || WorkflowApp.redoStack.length === 0) {
+            UI.showToast("Nessuna azione successiva da ripetere.", "info");
+            return;
+        }
+
+        const relId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null;
+        const currentSnapshot = {
+            layout: JSON.parse(JSON.stringify(WorkflowApp.layout)),
+            relationValues: (WorkflowApp.currentDbState.rows || []).map(r => ({
+                id: r.id,
+                targets: relId ? (Array.isArray(r.cells?.[relId]) ? [...r.cells[relId]] : (r.cells?.[relId] ? [r.cells[relId]] : [])) : []
+            }))
+        };
+        WorkflowApp.undoStack.push(currentSnapshot);
+
+        const targetSnapshot = WorkflowApp.redoStack.pop();
+        await WorkflowApp._applyHistorySnapshot(targetSnapshot);
+        UI.showToast("Azione ripristinata (Redo)", "info");
+    },
+
+    _applyHistorySnapshot: async (snap) => {
+        if (!snap) return;
+        WorkflowApp._isRestoringHistory = true;
+        try {
+            WorkflowApp.layout = JSON.parse(JSON.stringify(snap.layout));
+
+            const relId = WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null;
+            let relationsChanged = false;
+
+            if (relId && snap.relationValues && WorkflowApp.currentDbState?.rows) {
+                const targetMap = new Map(snap.relationValues.map(item => [item.id, item.targets]));
+                WorkflowApp.currentDbState.rows.forEach(r => {
+                    if (targetMap.has(r.id)) {
+                        const restoredVal = targetMap.get(r.id);
+                        if (JSON.stringify(r.cells[relId]) !== JSON.stringify(restoredVal)) {
+                            r.cells[relId] = Array.isArray(restoredVal) ? [...restoredVal] : restoredVal;
+                            r.updatedAt = Date.now();
+                            relationsChanged = true;
+                        }
+                    }
+                });
+            }
+
+            if (relationsChanged) {
+                await WorkflowApp.persistDatabaseToDisk();
+            }
+
+            WorkflowApp.applyCanvasBackground(WorkflowApp.layout.backgroundColor);
+            WorkflowApp.applyLayoutLockState();
+
+            const db = WorkflowApp.currentDbState;
+            (db.rows || []).forEach(r => {
+                const pos = WorkflowApp.layout.nodes[r.id];
+                const el = document.getElementById(`wf_node_${r.id}`);
+                if (pos && el) {
+                    el.style.left = `${pos.x}px`;
+                    el.style.top = `${pos.y}px`;
+                }
+            });
+
+            WorkflowApp.renderConnections();
+            WorkflowApp.renderClusters();
+            WorkflowApp.updateCanvasTransform();
+            WorkflowApp.saveWorkflowAuto();
+        } finally {
+            WorkflowApp._isRestoringHistory = false;
+        }
+    },
 
     // =========================================================================
     // METODI FONDAMENTALI DI STATO E TRANSIZIONE (CORE)
@@ -143,6 +275,8 @@ window.WorkflowApp = {
         WorkflowApp.selfRelCol = newRelCol;
         WorkflowApp.clearFocusBranch();
         WorkflowApp.clearSelection();
+        WorkflowApp.undoStack = [];
+        WorkflowApp.redoStack = [];
 
         // Recupera o inizializza il layout associato a questa specifica relazione
         if (WorkflowApp.layoutsByRelation && WorkflowApp.layoutsByRelation[newRelColId]) {
@@ -159,6 +293,7 @@ window.WorkflowApp = {
             WorkflowApp.layout = {
                 zoom: 1,
                 pan: { x: 72, y: 72 },
+                titleColId: null,
                 visibleColumns: defaultCols,
                 relationDirection: 'successor',
                 connectionStyle: 'orthogonal',
@@ -277,6 +412,22 @@ window.WorkflowApp = {
 
         WorkflowApp.initLiveSync();
 
+        // GESTORE TASTIERA GLOBALE (UNDO / REDO)
+        document.addEventListener('keydown', (e) => {
+            if (e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.isContentEditable)) return;
+
+            const isCtrl = e.ctrlKey || e.metaKey;
+            const key = e.key.toLowerCase();
+
+            if (isCtrl && !e.shiftKey && key === 'z') {
+                e.preventDefault();
+                WorkflowApp.undo();
+            } else if ((isCtrl && key === 'y') || (isCtrl && e.shiftKey && key === 'z')) {
+                e.preventDefault();
+                WorkflowApp.redo();
+            }
+        });
+
         document.addEventListener('click', (e) => {
             if (!e.target.closest('.adv-dropdown') && !e.target.closest('.adv-context-menu') && !e.target.closest('#btnHamburgerMenu')) {
                 if (typeof UI !== 'undefined' && UI.Menu) {
@@ -370,6 +521,10 @@ window.WorkflowApp = {
                 const rawDx = (e.clientX - WorkflowApp.dragNodeState.startMouseX) / zoom;
                 const rawDy = (e.clientY - WorkflowApp.dragNodeState.startMouseY) / zoom;
 
+                if (Math.hypot(rawDx, rawDy) > 3) {
+                    WorkflowApp.dragNodeState.hasMoved = true;
+                }
+
                 const masterInit = WorkflowApp.dragNodeState.initialPositions[WorkflowApp.dragNodeState.masterId];
                 if (masterInit) {
                     let tentativeMasterX = masterInit.x + rawDx;
@@ -420,7 +575,13 @@ window.WorkflowApp = {
             }
 
             if (WorkflowApp.dragNodeState.active) {
-                WorkflowApp.saveWorkflowAuto();
+                // Se i nodi sono stati effettivamente spostati, salva il layout su disco
+                if (WorkflowApp.dragNodeState.hasMoved) {
+                    WorkflowApp.saveWorkflowAuto();
+                } else if (WorkflowApp.undoStack.length > 0) {
+                    // Se non c'è stato movimento reale (solo click sul blocco), scarta lo snapshot preventivo
+                    WorkflowApp.undoStack.pop();
+                }
             }
 
             // Se l'utente ha rilasciato il mouse senza muoverlo (click singolo a vuoto), allora deseleziona
@@ -432,6 +593,7 @@ window.WorkflowApp = {
             WorkflowApp.panState.active = false;
             WorkflowApp.panState.hasMoved = false;
             WorkflowApp.dragNodeState.active = false;
+            WorkflowApp.dragNodeState.hasMoved = false;
             WorkflowApp.minimapDragState.active = false;
             WorkflowApp.clearSmartGuides();
 
@@ -616,6 +778,8 @@ window.WorkflowApp = {
         WorkflowApp.currentDbId = dbId;
         WorkflowApp.currentDbState = db;
         WorkflowApp._lastDbContentHash = JSON.stringify(db);
+        WorkflowApp.undoStack = [];
+        WorkflowApp.redoStack = [];
 
         // Raccolta di tutte le auto-relazioni presenti nel DB
         const selfRels = (db.columns || []).filter(c => c.type === 'relation' && (c.targetTableId === dbId || c.targetTableId === db.id));
@@ -642,6 +806,7 @@ window.WorkflowApp = {
         WorkflowApp.layout = {
             zoom: 1,
             pan: { x: 72, y: 72 },
+            titleColId: null,
             visibleColumns: defaultCols,
             relationDirection: 'successor',
             connectionStyle: 'orthogonal',
@@ -837,6 +1002,8 @@ window.WorkflowApp = {
                     alert(I18n.t('workflow.alert_invalid_layout_file'));
                     return;
                 }
+
+                WorkflowApp.saveHistorySnapshot();
 
                 if (parsed.layoutsByRelation) {
                     WorkflowApp.layoutsByRelation = parsed.layoutsByRelation;

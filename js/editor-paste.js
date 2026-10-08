@@ -16,6 +16,7 @@
  * eliminando lo spostamento e l'iniezione indebita di spazi bianchi.
  * FEAT CONVERSIONE ELENCHI WORD/DOCS: Parser semantico per convertire i paragrafi MsoList (Word) e le righe
  * numerate/puntate in veri elenchi nativi HTML (<ol> e <ul>) con rimozione dei marcatori testuali duplicati.
+ * FIX LINK VANILLADESK: Preservazione integrale di link interni, file link, link esterni e descrizioni personalizzate (data-link-note).
  */
 
 Object.assign(Editor, {
@@ -216,7 +217,7 @@ Object.assign(Editor, {
                 return;
             }
 
-            // GESTIONE COPIA STANDARD (Per testo normale e tabelle)
+            // GESTIONE COPIA STANDARD (Per testo normale, link e tabelle)
             const clone = range.cloneContents();
             const tempDiv = document.createElement('div');
             tempDiv.appendChild(clone);
@@ -240,7 +241,7 @@ Object.assign(Editor, {
                 input.parentNode.replaceChild(span, input);
             });
 
-            // Conserva l'HTML pulito con colspan e rowspan intatti
+            // Conserva l'HTML pulito con link, metadati data-* (incluso data-link-note) e tabelle intatti
             const clipboardHTML = tempDiv.innerHTML;
 
             // 4. Formattazione tabulare snella per plainText (TSV per Excel/Notepad senza cicli quadrupli)
@@ -467,13 +468,14 @@ Object.assign(Editor, {
                     'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon', 'bookmark-comment-data',
                     'adv-checklist', 'adv-checklist-item', 'adv-checklist-cb', 'checklist-text',
                     'adv-journal-wrapper', 'adv-journal-list', 'journal-date-node', 'journal-date-header', 'journal-toggle', 'journal-date-label', 'journal-time-list', 'journal-time-node', 'journal-time-label', 'journal-content', 'hidden-time',
-                    'code-wrapper', 'code-action-bar', 'code-action-btn', 'code-content', 'code-action-lang', 'code-action-copy', 'code-copy-btn', 'adv-copy-snippet', 'snippet-text', 'snippet-copy-btn',
+                    'code-wrapper', 'code-action-bar', 'code-action-btn', 'code-content', 'code-action-lang', 'code-action-copy', 'code-copy-btn', 
+                    'adv-copy-snippet', 'snippet-text', 'snippet-copy-btn', 'snippet-masked',
                     'block-citation', 'citation-body', 'citation-header',
                     'adv-columns-container-wrap', 'adv-columns-continuous', 'adv-columns-independent', 'col-box', 'col-resizer'
                 ];
                 
-                // Whitelist rigorosa per attributi Data (elimina data-id di altri siti web)
-                const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
+                // Whitelist rigorosa per attributi Data: include data-link-note per preservare le descrizioni dei link di VanillaDesk
+                const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-link-note', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
 
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(pastedHTML, 'text/html');
@@ -679,6 +681,7 @@ Object.assign(Editor, {
                             if (tag === 'SVG' && ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'].includes(attr.name)) return;
                             if (['PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'].includes(tag) && ['d', 'points', 'x1', 'y1', 'x2', 'y2', 'x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'rx', 'ry'].includes(attr.name)) return;
                             if (attr.name === 'href' && tag === 'A') return;
+                            if (attr.name === 'target' && tag === 'A') return;
                             if (attr.name === 'src' && (tag === 'IMG' || tag === 'AUDIO')) return;
                             if (attr.name === 'controls' && tag === 'AUDIO') return;
                             if (attr.name === 'type' && ['UL', 'OL', 'INPUT'].includes(tag)) return;
@@ -752,8 +755,8 @@ Object.assign(Editor, {
                 // Conversione fedele degli spazi non comprimibili generati dai browser su copia
                 finalHTML = finalHTML.replace(/<span[^>]*class="Apple-converted-space"[^>]*>.*?<\/span>/gi, '&nbsp;');
 
-                // Rimozione di link vuoti creati dai siti web
-                finalHTML = finalHTML.replace(/<a[^>]*>\s*(<br\s*\/?>)?\s*<\/a>/gi, '');
+                // Rimozione di link vuoti privi di testo o icone creati accidentalmente da siti web
+                finalHTML = finalHTML.replace(/<a(?![^>]*class=["'][^"']*(internal-link|file-link)[^"']*["'])[^>]*>\s*(<br\s*\/?>)?\s*<\/a>/gi, '');
 
                 // Converte i <br> isolati del testo ordinario in blocchi di paragrafo preservando tabelle, liste e span protetti
                 if (!targetNode.closest('td, th, li, pre')) {

@@ -133,17 +133,17 @@
                 <!-- LIVELLO SVG (Linee Connessione & Smart Alignment Guides) -->
                 <svg id="canvasSvgLayer">
                     <defs>
-                        <!-- Marker predefinito -->
+                        <!-- Marker predefinito (per linea normale) -->
                         <marker id="wfArrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
                             <polygon points="0 0, 8 4, 0 8" fill="var(--accent-color)" />
                         </marker>
-                        <!-- Marker per ramo evidenziato su sfondo scuro (Bianco) -->
-                        <marker id="wfArrowHighlightedDark" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-                            <polygon points="0 1, 9 5, 0 9" fill="#ffffff" />
+                        <!-- Marker compensato per ramo evidenziato su sfondo scuro: non si deforma con lo spessore maggiorato -->
+                        <marker id="wfArrowHighlightedDark" markerWidth="4" markerHeight="4" refX="3.5" refY="2" orient="auto">
+                            <polygon points="0 0, 4 2, 0 4" fill="#ffffff" />
                         </marker>
-                        <!-- Marker per ramo evidenziato su sfondo chiaro (Nero) -->
-                        <marker id="wfArrowHighlightedLight" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto">
-                            <polygon points="0 1, 9 5, 0 9" fill="#111827" />
+                        <!-- Marker compensato per ramo evidenziato su sfondo chiaro: non si deforma con lo spessore maggiorato -->
+                        <marker id="wfArrowHighlightedLight" markerWidth="4" markerHeight="4" refX="3.5" refY="2" orient="auto">
+                            <polygon points="0 0, 4 2, 0 4" fill="#111827" />
                         </marker>
                     </defs>
                 </svg>

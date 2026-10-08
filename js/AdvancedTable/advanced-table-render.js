@@ -17,6 +17,217 @@
 
 Object.assign(AdvancedTable, {
 
+    // =========================================================================
+    // MOTORE FLOATING STICKY HEADER BAR (Allineamento 1:1 e Scudo Click Mouse)
+    // =========================================================================
+    updateFloatingHeader: (scrollArea) => {
+        if (!scrollArea) scrollArea = document.getElementById('editorScrollContent');
+        if (!scrollArea) return;
+
+        // Iniezione automatica dello stile della barra fluttuante
+        if (!document.getElementById('adv-floating-header-style')) {
+            const st = document.createElement('style');
+            st.id = 'adv-floating-header-style';
+            st.innerHTML = `
+                .adv-floating-table-bar {
+                    position: absolute;
+                    z-index: 85;
+                    height: 36px;
+                    background: var(--bg-color);
+                    border: 1px solid var(--border-color);
+                    border-bottom: 2px solid var(--accent-color);
+                    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.15);
+                    display: flex;
+                    align-items: center;
+                    overflow: hidden;
+                    box-sizing: border-box;
+                    pointer-events: auto; /* Scudo attivo: blocca qualsiasi click sulle celle sottostanti */
+                    cursor: default;
+                }
+                .adv-floating-header-scroll {
+                    width: 100%;
+                    height: 100%;
+                    overflow-x: hidden;
+                    overflow-y: hidden;
+                    display: flex;
+                    align-items: center;
+                    scrollbar-width: none;
+                    pointer-events: auto;
+                }
+                .adv-floating-header-scroll::-webkit-scrollbar {
+                    display: none;
+                }
+                .adv-floating-col-item {
+                    display: flex;
+                    align-items: center;
+                    padding: 0 10px;
+                    height: 100%;
+                    border-right: 1px solid var(--border-color);
+                    box-sizing: border-box;
+                    user-select: none;
+                    overflow: hidden;
+                    pointer-events: auto;
+                    cursor: default;
+                }
+            `;
+            document.head.appendChild(st);
+        }
+
+        let floatBar = document.getElementById('advFloatingTableBar');
+        if (!floatBar) {
+            floatBar = document.createElement('div');
+            floatBar.id = 'advFloatingTableBar';
+            floatBar.className = 'adv-floating-table-bar';
+            floatBar.style.display = 'none';
+
+            // Assorbe ed estingue qualsiasi mousedown e click per proteggere le celle sottostanti
+            floatBar.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            floatBar.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            floatBar.addEventListener('dblclick', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+            });
+
+            if (scrollArea.parentElement) {
+                scrollArea.parentElement.appendChild(floatBar);
+            }
+        }
+
+        const editor = document.getElementById('noteContent');
+        if (!editor || !AppState.currentNoteId) {
+            floatBar.style.display = 'none';
+            return;
+        }
+
+        const scrollRect = scrollArea.getBoundingClientRect();
+        const tables = editor.querySelectorAll('.adv-table-wrapper, [data-widget-type="database"], [data-widget-type="pivot"]');
+
+        let activeTableWrap = null;
+        let activeTableEl = null;
+
+        for (const wrap of tables) {
+            const tbl = wrap.querySelector('table.adv-table');
+            if (!tbl) continue;
+            const thead = tbl.querySelector('thead');
+            if (!thead) continue;
+
+            const theadRect = thead.getBoundingClientRect();
+            const tblRect = tbl.getBoundingClientRect();
+
+            // Il thead reale è salito sopra la visuale, ma la tabella è ancora parzialmente nello schermo
+            if (theadRect.bottom < scrollRect.top && tblRect.bottom > scrollRect.top + 60) {
+                activeTableWrap = wrap;
+                activeTableEl = tbl;
+                break;
+            }
+        }
+
+        if (!activeTableWrap || !activeTableEl) {
+            floatBar.style.display = 'none';
+            floatBar.dataset.activeTableId = '';
+            return;
+        }
+
+        const tableId = activeTableWrap.id.split('_cited_')[0];
+        const state = AdvancedTable.getState(tableId);
+        if (!state) {
+            floatBar.style.display = 'none';
+            return;
+        }
+
+        const sourceScrollContainer = activeTableWrap.querySelector('.adv-scroll-container');
+        if (!sourceScrollContainer) {
+            floatBar.style.display = 'none';
+            return;
+        }
+
+        const cRect = sourceScrollContainer.getBoundingClientRect();
+        const sRect = scrollArea.getBoundingClientRect();
+
+        // Posizionamento e larghezza coincidenti al millimetro con la tabella sottostante
+        floatBar.style.display = 'block';
+        floatBar.style.top = scrollArea.offsetTop + 'px';
+        floatBar.style.left = (cRect.left - sRect.left + scrollArea.scrollLeft) + 'px';
+        floatBar.style.width = sourceScrollContainer.clientWidth + 'px';
+
+        // Supporto scorrimento orizzontale con la rotella del mouse sopra la barra fluttuante
+        floatBar.onwheel = (e) => {
+            if (sourceScrollContainer) {
+                if (e.deltaX !== 0) {
+                    sourceScrollContainer.scrollLeft += e.deltaX;
+                } else if (e.deltaY !== 0 && (e.shiftKey || sourceScrollContainer.scrollWidth > sourceScrollContainer.clientWidth)) {
+                    sourceScrollContainer.scrollLeft += e.deltaY;
+                }
+            }
+        };
+
+        // Ricostruzione delle colonne identiche al thead reale
+        const realThs = Array.from(activeTableEl.querySelectorAll('thead th'));
+        let colsHtml = '';
+
+        realThs.forEach(th => {
+            const colId = th.getAttribute('data-col');
+            const w = th.getBoundingClientRect().width;
+
+            if (colId) {
+                const col = state.columns.find(c => c.id === colId);
+                if (!col) return;
+
+                const isFiltered = state.filters && state.filters[col.id] && String(state.filters[col.id]).trim() !== '';
+
+                let icon = typeof Icons !== 'undefined' ? Icons.text : '📄';
+                if (col.type === 'checkbox') icon = Icons.checkbox;
+                if (col.type === 'select') icon = Icons.select;
+                if (col.type === 'multi-select') icon = Icons.multiSelect;
+                if (col.type === 'date' || col.type === 'datetime') icon = Icons.date;
+                if (col.type === 'number') icon = Icons.number;
+                if (col.type === 'formula') icon = Icons.formula;
+                if (col.type === 'relation' || col.type === 'relation_backlink') icon = Icons.relation;
+                if (col.type === 'rollup') icon = Icons.rollup;
+                if (col.type === 'url') icon = Icons.url;
+                if (col.type === 'record_note') icon = Icons.recordPage;
+                if (col.type === 'note_link') icon = Icons.link;
+                if (col.type === 'button') icon = Icons.play;
+
+                const bgStyle = isFiltered 
+                    ? 'background:rgba(37,99,235,0.15); color:var(--accent-color);' 
+                    : 'background:var(--bg-color); color:var(--text-primary);';
+
+                colsHtml += `
+                    <div class="adv-floating-col-item" style="width:${w}px; min-width:${w}px; max-width:${w}px; ${bgStyle}">
+                        <span style="display:inline-flex; align-items:center; gap:5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
+                            <span style="opacity:0.7;">${icon}</span>
+                            <span style="font-weight:600; font-size:0.8rem;">${col.name}</span>
+                        </span>
+                    </div>
+                `;
+            } else {
+                // Colonna finale di servizio (+) per chiudere l'allineamento geometrico
+                colsHtml += `<div class="adv-floating-col-item" style="width:${w}px; min-width:${w}px; max-width:${w}px; background:var(--bg-color);"></div>`;
+            }
+        });
+
+        floatBar.innerHTML = `
+            <div class="adv-floating-header-scroll" id="advFloatingHeaderScroll">
+                <div class="adv-floating-header-cols" style="display:flex; width:${activeTableEl.offsetWidth}px; flex-shrink:0;">
+                    ${colsHtml}
+                </div>
+            </div>
+        `;
+
+        // Sincronizzazione immediata dello scorrimento orizzontale
+        const floatScroll = document.getElementById('advFloatingHeaderScroll');
+        if (floatScroll) {
+            floatScroll.scrollLeft = sourceScrollContainer.scrollLeft;
+        }
+    },
+
     renderTable: (tableId) => {
         if (!tableId) return;
         const wrapper = document.getElementById(tableId);
@@ -186,6 +397,8 @@ Object.assign(AdvancedTable, {
         let html = '';
         const zebraClass = (state.striped !== false) ? 'table-striped' : '';
         const tableWidthClass = state.freeWidth ? '' : 'adv-table-full-width';
+        
+        // La tabella scorre naturale a tutta altezza senza limitazioni artificiali
         html += `<div class="adv-scroll-container"><table class="adv-table ${zebraClass} ${tableWidthClass}"><thead><tr>`;
 
         visibleCols.forEach(col => {
@@ -336,7 +549,10 @@ Object.assign(AdvancedTable, {
 
                 visibleCols.forEach(col => {
                     const val = row.virtualCells[col.id] !== undefined ? row.virtualCells[col.id] : '';
-                    html += `<td style="width: ${col.width}px; max-width: ${col.width}px;">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
+                    const safeColName = String(col.name || '').replace(/"/g, '&quot;');
+                    
+                    // Indicazione chiara su ogni cella del nome colonna corrispondente (su hover)
+                    html += `<td style="width: ${col.width}px; max-width: ${col.width}px;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                 });
 
                 let actionCell = `<button class="adv-icon-btn" title="${I18n.t('adv_render.options')}" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
@@ -385,6 +601,16 @@ Object.assign(AdvancedTable, {
                 newScroll.scrollLeft = prevScrollX;
                 newScroll.scrollTop = prevScrollY;
             }
+        }
+
+        // Sincronizzazione orizzontale in tempo reale per la barra d'intestazione fluttuante
+        const scrollBox = bodyContainer.querySelector('.adv-scroll-container');
+        if (scrollBox) {
+            scrollBox.addEventListener('scroll', () => {
+                if (typeof AdvancedTable.updateFloatingHeader === 'function') {
+                    AdvancedTable.updateFloatingHeader();
+                }
+            });
         }
     },
 

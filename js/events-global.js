@@ -90,7 +90,7 @@ const EventsGlobal = {
                         }
                         AppState._focusHighlight(AppState._currentHighlightIndex);
                     } else {
-                        searchCounter.innerText = `0/0/${AppState._globalHighlights}`;
+                        searchCounter.innerText = "0/0";
                     }
                 }
             }
@@ -425,8 +425,6 @@ const EventsGlobal = {
                 EventsGlobal._executeSearchLogic(searchInput);
             });
             
-            // FIX RIPRISTINO SUGGERIMENTI: Selezionando una nota si perdeva il blur. 
-            // Cliccando sull'input ora si riaprono i suggerimenti!
             searchInput.addEventListener('focus', (e) => {
                 if (e.target.value) {
                     if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
@@ -477,8 +475,6 @@ const EventsGlobal = {
             if (!e.key) return; 
 
             // ISOLAMENTO RIGOROSO INPUT NATIVI: Se l'utente sta digitando in un input o textarea
-            // (es. Titolo nota, barre di ricerca, campi form, modali), lascia che il browser gestisca
-            // nativamente testo, tasti freccia, cancellazione e virgolette senza intromissioni dell'editor.
             const isNativeInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
             if (isNativeInput) {
                 return;
@@ -494,7 +490,7 @@ const EventsGlobal = {
                     let node = sel.anchorNode;
                     if (node && node.nodeType === 3) node = node.parentNode;
                     
-                    // Identifica se siamo in una sotto-area editabile protetta (Codice, Diario, Cella DB o Tabella Semplice, Snippet)
+                    // Identifica se siamo in una sotto-area editabile protetta
                     const isolatedArea = node ? node.closest('.code-content, .journal-content, .snippet-text, .adv-cell-text, td[contenteditable="true"], th[contenteditable="true"]') : null;
                     
                     if (isolatedArea) {
@@ -527,14 +523,7 @@ const EventsGlobal = {
                 }
             }
 
-            // =========================================================================
             // SCORCIATOIE RAPIDE PER TITOLI H1, H2, H3 E PARAGRAFO CORPO
-            // - H1 nativo (<h1>): Ctrl+Alt+1 oppure Ctrl+Shift+1
-            // - H2 nativo (<h2>): Ctrl+Alt+2 oppure Ctrl+Shift+2
-            // - H3 nativo (<h3>): Ctrl+Alt+3 oppure Ctrl+Shift+3 (esclusiva da tastiera)
-            // - Paragrafo normale (<p>): Ctrl+Alt+0
-            // =========================================================================
-            // 1. SCORCIATOIE H1, H2 E RESET PARAGRAFO: CTRL+ALT+1/2/0 oppure CTRL+SHIFT+1/2/0
             if (isCtrlOrCmd && (e.altKey || e.shiftKey) && AppState.isEditMode) {
                 const isDigit1 = e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1' || e.key === '!';
                 const isDigit2 = e.code === 'Digit2' || e.code === 'Numpad2' || e.key === '2';
@@ -782,7 +771,6 @@ const EventsGlobal = {
                     const tempDiv = document.createElement('div');
                     tempDiv.appendChild(range.cloneContents());
 
-                    // Rimuove tag di blocco che provocherebbero lo split del contenitore di destinazione
                     let cleanHtml = tempDiv.innerHTML.replace(/<\/?(ul|ol|li|p|div)[^>]*>/gi, '');
                     const plainText = sel.toString();
 
@@ -814,10 +802,8 @@ const EventsGlobal = {
                 e.preventDefault(); 
                 e.dataTransfer.dropEffect = 'move';
 
-                // ==============================================================
                 // DRAG ASSIST: Scroll Engine a 60FPS
                 // Se mi avvicino ai margini dell'editor, scorro automaticamente
-                // ==============================================================
                 const scrollContainer = document.getElementById('editorScrollContent');
                 if (scrollContainer) {
                     const rect = scrollContainer.getBoundingClientRect();
@@ -965,7 +951,7 @@ const EventsGlobal = {
             AppState.draggedBlockType = null;
             document.querySelectorAll('.node-content').forEach(el => el.classList.remove('drag-top', 'drag-bottom', 'drag-middle'));
             const tc = document.getElementById('treeContainer');
-            if (tc) tc.classList.remove('drag-over-root');
+            if (tc) tc.classList.remove('drag-over-root'); 
             
             // DRAG ASSIST: Rimuove lo scudo e ferma lo scorrimento
             stopDragAssist();
@@ -1175,9 +1161,7 @@ const EventsGlobal = {
             }
         });
 
-        // =========================================================================
         // SCROLL ORIZZONTALE FLUIDO CON MOUSE WHEEL (Shift + Wheel o Timeline/Kanban)
-        // =========================================================================
         document.addEventListener('wheel', (e) => {
             let target = e.target;
             if (target && target.nodeType === 3) target = target.parentNode;
@@ -1298,6 +1282,9 @@ const EventsGlobal = {
                 }
             }
 
+            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI):
+            // Leggiamo textContent anziché innerText per evitare che le proprietà CSS
+            // di mascheramento (-webkit-text-security) copino i pallini al posto della password reale.
             if (target.closest('.snippet-copy-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1306,7 +1293,8 @@ const EventsGlobal = {
                 if (wrapper) {
                     const textSpan = wrapper.querySelector('.snippet-text');
                     if (textSpan) {
-                        const textToCopy = textSpan.innerText.trim().replace(/\u00A0/g, ' ');
+                        const rawText = textSpan.textContent || textSpan.innerText || '';
+                        const textToCopy = rawText.replace(/[\u200B\uFEFF]/g, '').trim().replace(/\u00A0/g, ' ');
                         navigator.clipboard.writeText(textToCopy).then(() => {
                             btn.classList.add('copied');
                             btn.innerHTML = typeof Icons !== 'undefined' ? Icons.checkCircle : '✓';

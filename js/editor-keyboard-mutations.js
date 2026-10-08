@@ -7,6 +7,8 @@
  * FIX MERGE INLINE WIDGETS: Intercettazione chirurgica della fusione dei paragrafi tramite Backspace/Canc
  * utilizzando un DOM TreeWalker assoluto per scavalcare correttamente i confini delle liste (UL/OL) 
  * proteggendo gli appunti inline e gli snippet copiabili dalla distruzione nativa del browser.
+ * CANCELLAZIONE SNIPPET LINEARE: Eliminazione atomica e fluida dello snippet copiabile su Backspace/Canc
+ * senza popup bloccanti o over-engineering, con pieno supporto al ripristino istantaneo tramite Undo (Ctrl+Z).
  */
 
 Object.assign(Editor, {
@@ -259,7 +261,6 @@ Object.assign(Editor, {
                 Editor.updateToolbarFormatting();
                 return;
             }
-            // Se la riga non è vuota, lasciamo che il browser vada a capo normalmente dentro il blockquote
         }
 
         const closestLi = node.closest('li');
@@ -343,6 +344,43 @@ Object.assign(Editor, {
 
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
+
+        // CANCELLAZIONE ATOMICA SNIPPET (BACKSPACE): Se il cursore è subito dopo uno snippet, eliminalo direttamente
+        let snippetBefore = null;
+        if (container.nodeType === 3) {
+            const textBeforeCaret = container.nodeValue.substring(0, range.startOffset).replace(/[\u200B\uFEFF]/g, '');
+            if (textBeforeCaret.length === 0) {
+                let prev = container.previousSibling;
+                while (prev && prev.nodeType === 3 && prev.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                    prev = prev.previousSibling;
+                }
+                if (prev && prev.classList && prev.classList.contains('adv-copy-snippet')) {
+                    snippetBefore = prev;
+                }
+            }
+        } else if (container.nodeType === 1 && range.startOffset > 0) {
+            const prev = container.childNodes[range.startOffset - 1];
+            if (prev && prev.classList && prev.classList.contains('adv-copy-snippet')) {
+                snippetBefore = prev;
+            }
+        }
+
+        if (snippetBefore) {
+            e.preventDefault();
+            Editor.saveSnapshot();
+            
+            // Pulisce i cuscinetti \u200B adiacenti per evitare nodi vuoti
+            if (snippetBefore.previousSibling && snippetBefore.previousSibling.nodeType === 3 && snippetBefore.previousSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                snippetBefore.previousSibling.remove();
+            }
+            if (snippetBefore.nextSibling && snippetBefore.nextSibling.nodeType === 3 && snippetBefore.nextSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                snippetBefore.nextSibling.remove();
+            }
+
+            snippetBefore.remove();
+            Store.triggerAutoSave();
+            return;
+        }
 
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
 
@@ -556,8 +594,45 @@ Object.assign(Editor, {
 
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
-        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
 
+        // CANCELLAZIONE ATOMICA SNIPPET (DELETE / CANC): Se il cursore è subito prima di uno snippet (o su un cuscinetto \u200B adiacente), eliminalo direttamente
+        let snippetAfter = null;
+        if (container.nodeType === 3) {
+            const textAfterCaret = container.nodeValue.substring(range.startOffset).replace(/[\u200B\uFEFF]/g, '');
+            if (textAfterCaret.length === 0) {
+                let next = container.nextSibling;
+                while (next && next.nodeType === 3 && next.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                    next = next.nextSibling;
+                }
+                if (next && next.classList && next.classList.contains('adv-copy-snippet')) {
+                    snippetAfter = next;
+                }
+            }
+        } else if (container.nodeType === 1 && range.startOffset < container.childNodes.length) {
+            const next = container.childNodes[range.startOffset];
+            if (next && next.classList && next.classList.contains('adv-copy-snippet')) {
+                snippetAfter = next;
+            }
+        }
+
+        if (snippetAfter) {
+            e.preventDefault();
+            Editor.saveSnapshot();
+
+            // Pulisce i cuscinetti \u200B adiacenti per evitare nodi vuoti
+            if (snippetAfter.previousSibling && snippetAfter.previousSibling.nodeType === 3 && snippetAfter.previousSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                snippetAfter.previousSibling.remove();
+            }
+            if (snippetAfter.nextSibling && snippetAfter.nextSibling.nodeType === 3 && snippetAfter.nextSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                snippetAfter.nextSibling.remove();
+            }
+
+            snippetAfter.remove();
+            Store.triggerAutoSave();
+            return;
+        }
+
+        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
 
         if (block) {

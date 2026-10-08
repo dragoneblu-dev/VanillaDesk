@@ -562,6 +562,7 @@ Object.assign(UI, {
         const isDefaultView = !filter && !reqBook && !reqFav && activePropFilters.length === 0;
 
         let nodeDirectMatch = true;
+        let noteMatchCount = 0;
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
         if (activePropFilters.length > 0) {
@@ -578,15 +579,23 @@ Object.assign(UI, {
             let matchContent = UI.extractSearchableText(node.content).toLowerCase().includes(filter);
             if (!matchTitle && !matchContent) nodeDirectMatch = false;
             
-            if (nodeDirectMatch && !forceRender) {
+            if (nodeDirectMatch) {
                 if (matchTitle) {
                     let idx = (node.title || "").toLowerCase().indexOf(filter);
-                    while (idx !== -1) { AppState._globalHighlights++; idx = (node.title || "").toLowerCase().indexOf(filter, idx + filter.length); }
+                    while (idx !== -1) { 
+                        noteMatchCount++;
+                        if (!forceRender) AppState._globalHighlights++; 
+                        idx = (node.title || "").toLowerCase().indexOf(filter, idx + filter.length); 
+                    }
                 }
                 if (matchContent) {
                     let text = UI.extractSearchableText(node.content).toLowerCase();
                     let idx = text.indexOf(filter);
-                    while (idx !== -1) { AppState._globalHighlights++; idx = text.indexOf(filter, idx + filter.length); }
+                    while (idx !== -1) { 
+                        noteMatchCount++;
+                        if (!forceRender) AppState._globalHighlights++; 
+                        idx = text.indexOf(filter, idx + filter.length); 
+                    }
                 }
             }
         }
@@ -772,7 +781,17 @@ Object.assign(UI, {
         addBtn.title = I18n.t('editor_alerts.tree_add_subnote');
         addBtn.onclick = (e) => { e.stopPropagation(); node.expanded = true; if(typeof UI.addNote !== 'undefined') UI.addNote(node.id); };
 
-        content.append(toggle, title, addBtn);
+        // Creazione pillola conteggio occorrenze ricerca (dinamica con variabili CSS di tema)
+        if (filter && noteMatchCount > 0 && !isGhost) {
+            const countPill = document.createElement('span');
+            countPill.className = 'search-match-count';
+            countPill.title = `${noteMatchCount} occorrenze trovate`;
+            countPill.textContent = noteMatchCount;
+            content.append(toggle, title, countPill, addBtn);
+        } else {
+            content.append(toggle, title, addBtn);
+        }
+
         wrapper.appendChild(content);
 
         if (hasAnyChildren) {

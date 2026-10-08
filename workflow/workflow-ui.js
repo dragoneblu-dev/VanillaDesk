@@ -394,18 +394,21 @@ Object.assign(WorkflowApp, {
         const db = WorkflowApp.currentDbState;
         if (!db || !db.rows) return;
 
-        const titleColId = db.columns[0]?.id;
+        // Cerca prioritariamente nel campo impostato come Titolo Principale del blocco
+        const configuredTitleColId = WorkflowApp.layout.titleColId || db.columns[0]?.id;
+        const titleCol = (db.columns || []).find(c => c.id === configuredTitleColId) || db.columns[0];
         const matches = [];
 
         db.rows.forEach(r => {
             if (!r.cells) return;
-            const titleText = String(r.cells[titleColId] || '').trim();
+            const titleText = String(r.cells[titleCol?.id] || '').trim();
             let matchedField = null;
 
             if (titleText.toLowerCase().includes(term)) {
-                matchedField = I18n.t('workflow.search_field_title');
+                matchedField = titleCol?.name || I18n.t('workflow.search_field_title');
             } else {
                 for (const c of db.columns) {
+                    if (c.id === titleCol?.id) continue;
                     const val = String(r.cells[c.id] || '').toLowerCase();
                     if (val.includes(term)) {
                         matchedField = c.name;
@@ -455,7 +458,8 @@ Object.assign(WorkflowApp, {
         const r = db?.rows?.find(x => x.id === rowId);
         if (r && r.cells) {
             const input = document.getElementById('workflowSearchInput');
-            if (input) input.value = r.cells[db.columns[0]?.id] || '';
+            const configuredTitleColId = WorkflowApp.layout.titleColId || db.columns[0]?.id;
+            if (input) input.value = r.cells[configuredTitleColId] || '';
         }
         WorkflowApp.closeSearchDropdown();
         WorkflowApp.clearSelection();
@@ -481,10 +485,10 @@ Object.assign(WorkflowApp, {
         const db = WorkflowApp.currentDbState;
         if (!db || !db.rows) return;
 
-        const titleColId = db.columns[0]?.id;
+        const configuredTitleColId = WorkflowApp.layout.titleColId || db.columns[0]?.id;
         const matchingRows = db.rows.filter(r => {
             if (!r.cells) return false;
-            const title = String(r.cells[titleColId] || '').toLowerCase();
+            const title = String(r.cells[configuredTitleColId] || '').toLowerCase();
             if (title.includes(q)) return true;
             return db.columns.some(c => String(r.cells[c.id] || '').toLowerCase().includes(q));
         });
@@ -558,15 +562,35 @@ Object.assign(WorkflowApp, {
         const db = WorkflowApp.currentDbState;
         if (!db) return;
 
+        const currentTitleColId = WorkflowApp.layout.titleColId || (db.columns && db.columns[0]?.id);
+
+        let titleColOptions = '';
+        (db.columns || []).forEach(c => {
+            const isSelected = c.id === currentTitleColId ? 'selected' : '';
+            titleColOptions += `<option value="${c.id}" ${isSelected}>${UI.escapeHTML(c.name)} (${c.type})</option>`;
+        });
+
+        const titleLabel = (typeof I18n !== 'undefined' && I18n.t('workflow.props_title_col_label')) || "Proprietà Principale (Titolo Scheda):";
+
         let html = `
+            <div style="margin-bottom:15px; padding-bottom:15px; border-bottom:1px solid var(--border-color);">
+                <label style="font-size:0.75rem; text-transform:uppercase; font-weight:700; color:var(--accent-color); display:block; margin-bottom:6px;">
+                    ${titleLabel}
+                </label>
+                <select class="modern-input" style="width:100%; font-weight:600;" onchange="WorkflowApp.setTitleColumn(this.value)">
+                    ${titleColOptions}
+                </select>
+            </div>
             <div style="font-size:0.85rem; color:var(--text-secondary); margin-bottom:10px;">
                 ${I18n.t('workflow.props_drawer_desc')}
             </div>
             <div style="display:flex; flex-direction:column; gap:8px;">
         `;
 
-        db.columns.forEach((c, idx) => {
-            if (idx === 0) return;
+        db.columns.forEach((c) => {
+            // Non visualizzare come proprietà secondaria il campo scelto come titolo
+            if (c.id === currentTitleColId) return;
+
             const isChecked = WorkflowApp.layout.visibleColumns.includes(c.id);
             html += `
                 <label style="display:flex; align-items:center; gap:10px; font-size:0.9rem; padding:8px; background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; cursor:pointer;">
@@ -578,6 +602,15 @@ Object.assign(WorkflowApp, {
 
         html += `</div>`;
         UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.filter} ${I18n.t('workflow.props_drawer_title')}</span>`, html, null);
+    },
+
+    setTitleColumn: (colId) => {
+        WorkflowApp.layout.titleColId = colId || null;
+        WorkflowApp.buildNodesDOM();
+        WorkflowApp.renderConnections();
+        WorkflowApp.renderClusters();
+        WorkflowApp.saveWorkflowAuto();
+        WorkflowApp.openPropertiesDrawer();
     },
 
     toggleColumnVisibility: (colId, isVisible) => {

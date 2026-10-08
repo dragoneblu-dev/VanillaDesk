@@ -9,6 +9,9 @@
  * - Focus e isolamento visivo del ramo di dipendenze (focusBranch / clearFocusBranch)
  *   con frecce e contorni dinamici ad alto contrasto (bianco su scuro, nero su chiaro).
  * - Gestione delle 4 porte cardinali (top, right, bottom, left) per ciascun blocco.
+ * - FEAT TITLE COLUMN: Risoluzione del titolo del blocco tramite layout.titleColId (fallback su columns[0])
+ *   ed esclusione automatica della colonna titolo dalle proprietà secondarie nel corpo del blocco.
+ * - FEAT UNDO: Registrazione automatica snapshot di cronologia all'avvio del trascinamento (drag) dei blocchi.
  */
 
 Object.assign(WorkflowApp, {
@@ -127,7 +130,9 @@ Object.assign(WorkflowApp, {
         const db = WorkflowApp.currentDbState;
         if (!db || !db.rows) return;
 
-        const titleCol = (db.columns && db.columns[0]) ? db.columns[0] : { id: 'c_title', name: I18n.t('workflow.search_field_title') };
+        // Risoluzione colonna usata come titolo primario: layout.titleColId oppure columns[0]
+        const configuredTitleColId = WorkflowApp.layout.titleColId || (db.columns && db.columns[0]?.id);
+        const titleCol = (db.columns || []).find(c => c.id === configuredTitleColId) || (db.columns && db.columns[0]) || { id: 'c_title', name: I18n.t('workflow.search_field_title') };
         const renderCache = {};
         let positionedCount = 0;
 
@@ -185,8 +190,11 @@ Object.assign(WorkflowApp, {
                 }
 
                 // Rendering delle proprietà visibili sul nodo tramite le funzioni centrali di VanillaDesk
+                // (Escludendo la colonna scelta come titolo per non duplicarla)
                 let propsHtml = '';
                 (WorkflowApp.layout.visibleColumns || []).forEach(cId => {
+                    if (cId === titleCol.id) return;
+
                     const colDef = (db.columns || []).find(c => c.id === cId);
                     if (!colDef) return;
 
@@ -278,6 +286,9 @@ Object.assign(WorkflowApp, {
 
                     if (WorkflowApp.layout.locked) return;
 
+                    // Registra uno snapshot di cronologia prima dell'avvio del movimento
+                    WorkflowApp.saveHistorySnapshot();
+
                     const initialPositions = {};
                     WorkflowApp.selectedNodeIds.forEach(id => {
                         const pos = WorkflowApp.layout.nodes[id] || { x: 0, y: 0 };
@@ -289,7 +300,8 @@ Object.assign(WorkflowApp, {
                         masterId: row.id,
                         startMouseX: e.clientX,
                         startMouseY: e.clientY,
-                        initialPositions: initialPositions
+                        initialPositions: initialPositions,
+                        hasMoved: false
                     };
                 });
 
