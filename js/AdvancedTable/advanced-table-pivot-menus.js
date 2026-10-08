@@ -4,6 +4,7 @@
  * FIX VISIBILITÀ: Inserito sottomenu "Visualizza Campo" per nascondere colonne anche nelle Viste Analitiche e Board.
  * FIX CONTROLLI: Reintegrato il comando per abilitare/disabilitare l'aggiunta di nuove righe dalle Viste Collegate.
  * FEAT WBS LINKED VIEW: Aggiunta la possibilità di creare Viste Collegate in formato Gerarchia WBS (Albero).
+ * EREDITARIETÀ SEMANTICA: Lettura di col.treeDirection per assegnare automaticamente la direzione della WBS.
  */
 
 const AdvancedPivotMenus = {
@@ -130,7 +131,7 @@ const AdvancedPivotMenus = {
                 if (lbl) {
                     lbl.style.fontWeight = 'normal';
                     lbl.style.color = 'var(--text-primary)';
-            }
+                }
             }
         });
     },
@@ -173,13 +174,13 @@ const AdvancedPivotMenus = {
         }
 
         if (!AdvancedPivotMenus.pendingConfig || AdvancedPivotMenus.pendingConfig.tableId !== editTableId) {
-        AdvancedPivotMenus.pendingConfig = {
-            tableId: editTableId,
-            sourceId: null,
-            groupBy: [],
-            aggregations: [],
+            AdvancedPivotMenus.pendingConfig = {
+                tableId: editTableId,
+                sourceId: null,
+                groupBy: [],
+                aggregations: [],
                 chartConfig: { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium' }
-        };
+            };
         }
 
         let isEditing = false;
@@ -188,16 +189,16 @@ const AdvancedPivotMenus = {
             if (state && state.isPivot) {
                 isEditing = true;
                 if (!AdvancedPivotMenus.pendingConfig.sourceId) {
-                AdvancedPivotMenus.pendingConfig.sourceId = state.sourceTableId;
-                AdvancedPivotMenus.pendingConfig.groupBy = [...state.groupBy];
-                AdvancedPivotMenus.pendingConfig.aggregations = JSON.parse(JSON.stringify(state.aggregations));
-                
-                if (state.chartConfig) {
-                    AdvancedPivotMenus.pendingConfig.chartConfig = Object.assign(
+                    AdvancedPivotMenus.pendingConfig.sourceId = state.sourceTableId;
+                    AdvancedPivotMenus.pendingConfig.groupBy = [...state.groupBy];
+                    AdvancedPivotMenus.pendingConfig.aggregations = JSON.parse(JSON.stringify(state.aggregations));
+                    
+                    if (state.chartConfig) {
+                        AdvancedPivotMenus.pendingConfig.chartConfig = Object.assign(
                             { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium' }, 
-                        JSON.parse(JSON.stringify(state.chartConfig))
-                    );
-                }
+                            JSON.parse(JSON.stringify(state.chartConfig))
+                        );
+                    }
                 }
 
                 const dbRef = dbList.find(d => d.id === state.sourceTableId);
@@ -606,7 +607,7 @@ const AdvancedPivotMenus = {
             const selfRelCol = (sourceState.columns || []).find(c => c.type === 'relation' && (c.targetTableId === sourceId || c.targetTableId === realSourceId));
             if (selfRelCol) {
                 linkedState.treeRelationColId = selfRelCol.id;
-                linkedState.treeRelationDirection = 'children';
+                linkedState.treeRelationDirection = selfRelCol.treeDirection || (selfRelCol.singleRecord ? 'parent' : 'children');
 
                 // Collasso automatico iniziale dei nodi genitore
                 const allParentIds = new Set();
@@ -614,7 +615,11 @@ const AdvancedPivotMenus = {
                     let targets = r.cells[selfRelCol.id];
                     if (!targets) return;
                     if (!Array.isArray(targets)) targets = [targets];
-                    if (targets.length > 0) allParentIds.add(r.id);
+                    if (linkedState.treeRelationDirection === 'children') {
+                        if (targets.length > 0) allParentIds.add(r.id);
+                    } else {
+                        targets.forEach(pId => { if (pId) allParentIds.add(pId); });
+                    }
                 });
                 linkedState.treeCollapsedNodes = Array.from(allParentIds);
             }

@@ -192,7 +192,6 @@ Object.assign(WorkflowApp, {
 
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
         const style = WorkflowApp.layout.connectionStyle;
-        const dir = WorkflowApp.layout.relationDirection;
         const isLocked = !!WorkflowApp.layout.locked;
 
         // Tutte le relazioni auto-referenziali disponibili in questo database
@@ -249,7 +248,7 @@ Object.assign(WorkflowApp, {
             ]
         });
 
-        // 3. SOTTOMENÙ: Stile Connessioni & Flusso
+        // 3. SOTTOMENÙ: Stile Connessioni
         items.push({
             icon: Icons.relation || Icons.link,
             label: I18n.t('workflow.menu_conn_style'),
@@ -266,15 +265,6 @@ Object.assign(WorkflowApp, {
                 {
                     label: I18n.t('workflow.menu_avoidance') + (style === 'avoidance' ? chk : ''),
                     onClick: () => WorkflowApp.setConnectionStyle('avoidance')
-                },
-                { type: 'divider' },
-                {
-                    label: I18n.t('workflow.menu_dir_successor') + (dir === 'successor' ? chk : ''),
-                    onClick: () => WorkflowApp.setRelationDirection('successor')
-                },
-                {
-                    label: I18n.t('workflow.menu_dir_predecessor') + (dir === 'predecessor' ? chk : ''),
-                    onClick: () => WorkflowApp.setRelationDirection('predecessor')
                 }
             ]
         });
@@ -303,7 +293,7 @@ Object.assign(WorkflowApp, {
 
         items.push({ type: 'divider' });
 
-        // 6. SOTTOMENÙ: Esportazione Vettoriale & File
+        // 5. SOTTOMENÙ: Esportazione Vettoriale & File
         items.push({
             icon: Icons.export || Icons.file,
             label: I18n.t('workflow.menu_export_share'),
@@ -349,7 +339,7 @@ Object.assign(WorkflowApp, {
 
         const exportObj = {
             type: "vanilladesk_workflow_layout",
-            version: "3.1",
+            version: "3.2",
             databaseId: WorkflowApp.currentDbId,
             databaseTitle: WorkflowApp.currentDbState.title,
             activeRelationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
@@ -394,7 +384,6 @@ Object.assign(WorkflowApp, {
         const db = WorkflowApp.currentDbState;
         if (!db || !db.rows) return;
 
-        // Cerca prioritariamente nel campo impostato come Titolo Principale del blocco
         const configuredTitleColId = WorkflowApp.layout.titleColId || db.columns[0]?.id;
         const titleCol = (db.columns || []).find(c => c.id === configuredTitleColId) || db.columns[0];
         const matches = [];
@@ -634,5 +623,5 @@ Object.assign(WorkflowApp, {
     }
 });
 
-// INIZIALIZZAZIONE SICURA: Esegue solo dopo il caricamento completo di tutti e 6 i moduli
+// INIZIALIZZAZIONE SICURA: Esegue solo dopo il caricamento completo di tutti i moduli
 document.addEventListener('DOMContentLoaded', WorkflowApp.init);

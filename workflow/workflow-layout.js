@@ -110,7 +110,7 @@ Object.assign(WorkflowApp, {
         
         const rows = db.rows;
         const rowIds = new Set(rows.map(r => r.id));
-        const isPredecessorMode = WorkflowApp.layout.relationDirection === 'predecessor';
+        const isPredecessorMode = WorkflowApp.getEffectiveDirection() === 'predecessor';
 
         const outgoing = new Map();
         const incoming = new Map();
@@ -369,15 +369,6 @@ Object.assign(WorkflowApp, {
             clusterCard.appendChild(header);
             container.appendChild(clusterCard);
         });
-    },
-
-    setRelationDirection: (dir) => {
-        if (WorkflowApp.layout.relationDirection === dir) return;
-        WorkflowApp.saveHistorySnapshot();
-        WorkflowApp.layout.relationDirection = dir;
-        WorkflowApp.runOrganicAutoLayout(true);
-        WorkflowApp.fitToView();
-        WorkflowApp.saveWorkflowAuto();
     },
 
     setConnectionStyle: (style) => {

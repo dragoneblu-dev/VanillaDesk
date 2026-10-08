@@ -69,11 +69,16 @@ const EventsGlobal = {
         UI.renderTree();
         
         // Se c'è una ricerca testuale esplicita, ricarica la nota aperta per applicare i mark gialli;
-        // altrimenti aggiorna solo la classe attiva sull'albero evitando cicli di re-rendering asincroni
+        // altrimenti ripulisce immediatamente tutti i mark residui dall'editor vivo senza ricaricare la pagina
         if (AppState.searchFilter.length > 0) {
             if (AppState.currentNoteId) UI.selectNote(AppState.currentNoteId);
-        } else if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
-            UI.highlightTreeNode(AppState.currentNoteId);
+        } else {
+            if (typeof Editor !== 'undefined' && typeof Editor.cleanHighlightsBeforeSave === 'function') {
+                Editor.cleanHighlightsBeforeSave();
+            }
+            if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
+	            UI.highlightTreeNode(AppState.currentNoteId);
+	        }
         }
         
         setTimeout(() => {
@@ -454,8 +459,15 @@ const EventsGlobal = {
                     searchInput.value = '';
                     searchInput.focus();
                 }
-                // Svuota anche i filtri Proprietà/Tag
+                // Svuota anche i filtri Proprietà/Tag e azzera il filtro attivo
                 AppState.activePropertyFilters = [];
+                AppState.searchFilter = "";
+
+                // Rimuove istantaneamente ogni evidenziatore <mark> dall'editor vivo
+                if (typeof Editor !== 'undefined' && typeof Editor.cleanHighlightsBeforeSave === 'function') {
+                    Editor.cleanHighlightsBeforeSave();
+                }
+
                 EventsGlobal._triggerSearchUpdate();
             });
         }

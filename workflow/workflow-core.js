@@ -2,10 +2,12 @@
  * workflow-core.js
  * Modulo Core di Workflow Studio: Stato, Inizializzazione, Sincronizzazione,
  * Gestione Schermate, Persistenza automatica e Navigazione Canvas non distruttiva.
- * FEAT AUTO-LAUNCH: Riconoscimento parametri da URL hash (#db=...&rel=...&dir=...) 
+ * FEAT AUTO-LAUNCH: Riconoscimento parametri da URL hash (#db=...&rel=...) 
  * ed ereditarietà trasparente dello stato/handle dal genitore (window.opener) per l'apertura immediata.
  * FEAT MULTI-RELATION WORKFLOW: Supporto completo a workflow multipli e indipendenti per database aventi
  * diverse auto-relazioni. Ogni relazione dispone del proprio layout spaziale, collegamenti, stile e impostazioni.
+ * EREDITARIETÀ SEMANTICA WBS: Il workflow eredita automaticamente relationDirection ('successor' | 'predecessor')
+ * dalla colonna auto-relazione attiva (col.treeDirection || col.singleRecord ? 'predecessor' : 'successor').
  * FIX PERSISTENZA: Salvataggio automatico nativo su assets/workflow/{dbId}.json con architettura multi-layout.
  * FEAT TITLE COLUMN: Supporto per la selezione dinamica della colonna usata come titolo primario dei nodi (titleColId).
  * FEAT UNDO/REDO: Stack di cronologia completo (Ctrl+Z / Ctrl+Y) per posizioni nodi, connessioni e layout sul canvas.
@@ -27,7 +29,6 @@ window.WorkflowApp = {
     // Parametri di avvio rapido da URL hash
     _pendingTargetDbId: null,
     _pendingTargetRelId: null,
-    _pendingTargetDir: null,
     
     // Stack di cronologia per Undo/Redo sul canvas
     undoStack: [],
@@ -39,7 +40,6 @@ window.WorkflowApp = {
         pan: { x: 72, y: 72 },
         titleColId: null,               // Colonna usata come Titolo Primario dei blocchi
         visibleColumns: [],
-        relationDirection: 'successor',
         connectionStyle: 'orthogonal', // 'bezier' | 'orthogonal' | 'avoidance'
         clusterColId: null,
         backgroundColor: null,          // Sfondo dinamico persistito
@@ -57,6 +57,14 @@ window.WorkflowApp = {
     _minimapMeta: null,
 
     escapeHTML: (str) => UI.escapeHTML(str),
+
+    // Calcola il verso delle frecce direttamente dalla semantica della colonna attiva
+    getEffectiveDirection: () => {
+        const col = WorkflowApp.selfRelCol;
+        if (!col) return 'successor';
+        const dir = col.treeDirection || (col.singleRecord ? 'parent' : 'children');
+        return dir === 'parent' ? 'predecessor' : 'successor';
+    },
 
     // =========================================================================
     // MOTORE CRONOLOGIA CANVAS (UNDO / REDO)
@@ -295,7 +303,6 @@ window.WorkflowApp = {
                 pan: { x: 72, y: 72 },
                 titleColId: null,
                 visibleColumns: defaultCols,
-                relationDirection: 'successor',
                 connectionStyle: 'orthogonal',
                 clusterColId: null,
                 backgroundColor: null,
@@ -329,19 +336,16 @@ window.WorkflowApp = {
 
         let targetDbId = null;
         let targetRelId = null;
-        let targetDir = null;
 
         if (queryString) {
             const params = new URLSearchParams(queryString);
             targetDbId = params.get('db');
             targetRelId = params.get('rel');
-            targetDir = params.get('dir');
         }
 
         if (targetDbId) {
             WorkflowApp._pendingTargetDbId = targetDbId;
             WorkflowApp._pendingTargetRelId = targetRelId;
-            WorkflowApp._pendingTargetDir = targetDir;
         }
 
         // Tenta l'aggancio diretto a window.opener se disponibile
@@ -801,14 +805,14 @@ window.WorkflowApp = {
         // Inizializza il contenitore multi-layout per le relazioni
         WorkflowApp.layoutsByRelation = {};
 
-        // Inizializza il layout corrente di fallback
+        // Inizializza il layout corrente di fallback ereditando la semantica dalla colonna
         const defaultCols = (db.columns || []).filter(c => c.id !== activeRel?.id && !['formula', 'rollup'].includes(c.type)).slice(1, 4).map(c => c.id);
+
         WorkflowApp.layout = {
             zoom: 1,
             pan: { x: 72, y: 72 },
             titleColId: null,
             visibleColumns: defaultCols,
-            relationDirection: 'successor',
             connectionStyle: 'orthogonal',
             clusterColId: null,
             backgroundColor: null,
@@ -817,12 +821,6 @@ window.WorkflowApp = {
             nodes: {}
         };
 
-        if (WorkflowApp._pendingTargetDir) {
-            WorkflowApp.layout.relationDirection = (WorkflowApp._pendingTargetDir === 'parent' || WorkflowApp._pendingTargetDir === 'predecessor') ? 'predecessor' : 'successor';
-            WorkflowApp._pendingTargetDir = null;
-        }
-
-        // CARICAMENTO AUTOMATICO NATIVO DA assets/workflow/{dbId}.json
         const hasLoadedCustomLayout = await WorkflowApp.loadWorkflowFromFile(dbId);
 
         WorkflowApp.applyCanvasBackground(WorkflowApp.layout.backgroundColor);
@@ -934,7 +932,7 @@ window.WorkflowApp = {
             
             const exportObj = {
                 type: "vanilladesk_workflow_layout",
-                version: "3.1",
+                version: "3.2",
                 databaseId: WorkflowApp.currentDbId,
                 databaseTitle: WorkflowApp.currentDbState ? WorkflowApp.currentDbState.title : 'database',
                 activeRelationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,

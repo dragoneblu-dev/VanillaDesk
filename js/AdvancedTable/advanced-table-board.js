@@ -1,11 +1,10 @@
 /**
  * AdvancedTableBoard.js
  * Modulo Kanban (Bacheca Trello-style) e selettore viste per Tabelle Database.
- * FEAT: Integrazione della Vista ad Albero (WBS) con selettore colonna e direzione gerarchica.
- * FIX: Messaggio informativo in rosso quando non è presente alcuna colonna di relazione con se stesso.
+ * FEAT: Attivazione diretta WBS a click singolo per ogni auto-relazione.
+ * FEAT WORKFLOW SELECTOR: Apertura Workflow Studio con selezione esplicita della relazione se multiple.
  * PERF: Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
  * Protegge le prestazioni del browser con migliaia di record e mantiene intatta la posizione di scroll.
- * FEAT: Lancio diretto di Workflow Studio con ancoraggio al database e relazione selezionata.
  */
 
 const AdvancedBoard = {
@@ -42,7 +41,7 @@ const AdvancedBoard = {
             }
         ];
 
-        // Sezione Vista ad Albero (WBS) con avviso di coerenza se assente
+        // Sezione Vista ad Albero (WBS)
         menuItems.push({ type: 'divider' });
         menuItems.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">${I18n.t('adv_board.tree_wbs_title')}</div>` });
 
@@ -52,47 +51,43 @@ const AdvancedBoard = {
                 html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_self_relation')}</div>` 
             });
         } else {
+            // Click diretto sul campo per attivare la WBS corrispondente
             selfRelCols.forEach(c => {
                 const isTreeActive = state.viewType === 'tree' && state.treeRelationColId === c.id;
-                const isChildrenDir = isTreeActive && state.treeRelationDirection === 'children';
-                const isParentDir = isTreeActive && state.treeRelationDirection === 'parent';
-
-                let treeSubMenu = [
-                    { 
-                        icon: Icons.treeNode, 
-                        label: I18n.t('adv_board.tree_indicates_children', { colName: c.name }) + (isChildrenDir ? chk : ''), 
-                        onClick: () => {
-                            if (typeof AdvancedTree !== 'undefined') {
-                                AdvancedTree.setView(tableId, c.id, 'children');
-                            }
-                        } 
-                    },
-                    { 
-                        icon: Icons.treeNode, 
-                        label: I18n.t('adv_board.tree_indicates_parent', { colName: c.name }) + (isParentDir ? chk : ''), 
-                        onClick: () => {
-                            if (typeof AdvancedTree !== 'undefined') {
-                                AdvancedTree.setView(tableId, c.id, 'parent');
-                            }
-                        } 
-                    },
-                    { type: 'divider' },
-                    {
-                        icon: Icons.data || Icons.tablePivot,
-                        label: I18n.t('adv_board.open_workflow_studio'),
-                        onClick: () => {
-                            AdvancedBoard.openInWorkflowStudio(tableId, c.id, state.treeRelationDirection || 'children');
-                        }
-                    }
-                ];
-
                 menuItems.push({
                     icon: Icons.treeNode,
                     label: c.name + (isTreeActive ? chk : ''),
-                    type: 'submenu',
-                    items: treeSubMenu
+                    onClick: () => {
+                        if (typeof AdvancedTree !== 'undefined') {
+                            AdvancedTree.setView(tableId, c.id);
+                        }
+                    }
                 });
             });
+
+            // Lancio Workflow Studio: diretto se c'è 1 sola relazione, con sottomenù di scelta se ve ne sono multiple
+            if (selfRelCols.length === 1) {
+                menuItems.push({
+                    icon: Icons.data || Icons.tablePivot,
+                    label: I18n.t('adv_board.open_workflow_studio'),
+                    onClick: () => {
+                        AdvancedBoard.openInWorkflowStudio(tableId, selfRelCols[0].id);
+                    }
+                });
+            } else {
+                menuItems.push({
+                    icon: Icons.data || Icons.tablePivot,
+                    label: I18n.t('adv_board.open_workflow_studio'),
+                    type: 'submenu',
+                    items: selfRelCols.map(c => ({
+                        icon: Icons.relation || Icons.link,
+                        label: c.name,
+                        onClick: () => {
+                            AdvancedBoard.openInWorkflowStudio(tableId, c.id);
+                        }
+                    }))
+                });
+            }
         }
 
         menuItems.push({ type: 'divider' });
@@ -142,7 +137,7 @@ const AdvancedBoard = {
         UI.Menu.buildContextMenu(anchorId, menuItems);
     },
 
-    openInWorkflowStudio: (tableId, relColId, direction = 'children') => {
+    openInWorkflowStudio: (tableId, relColId) => {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         
         // Salva le modifiche pendenti su disco in VanillaDesk prima dell'apertura
@@ -150,8 +145,7 @@ const AdvancedBoard = {
             Store.saveToFile();
         }
 
-        const dirParam = direction === 'parent' ? 'parent' : 'children';
-        const hash = `db=${encodeURIComponent(realTableId)}&rel=${encodeURIComponent(relColId)}&dir=${encodeURIComponent(dirParam)}`;
+        const hash = `db=${encodeURIComponent(realTableId)}&rel=${encodeURIComponent(relColId)}`;
         const targetUrl = `workflow/index.html#${hash}`;
 
         window.open(targetUrl, 'VanillaDeskWorkflow');

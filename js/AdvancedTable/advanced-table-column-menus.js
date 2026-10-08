@@ -21,6 +21,7 @@
  * dello stesso database e di tabelle collegate esterne (sia per nome che per ID immutabile), prevenendo rotture.
  * FIX TYPEERROR S.COLUMNS.SOME: Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare
  * crash su widget non tabellari presenti in AppState.databases (diari, codice, bottoni).
+ * FEAT WBS SEMANTIC DIRECTION: Toggle rapido e memorizzazione sullo schema colonna (col.treeDirection) per auto-relazioni.
  */
 
 const AdvancedTableColumnMenus = {
@@ -50,6 +51,25 @@ const AdvancedTableColumnMenus = {
                     r.cells[colId] = [r.cells[colId][0]];
                 }
             });
+        }
+
+        AdvancedTable.setState(realTableId, state);
+        AdvancedTable.updateDependentViews(realTableId);
+        Store.triggerAutoSave();
+        AdvancedTable.closeDropdowns(true);
+    },
+
+    toggleTreeDirection: (tableId, colId) => {
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        let state = AdvancedTable.getState(realTableId);
+        const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
+
+        const currentDir = col.treeDirection || (col.singleRecord ? 'parent' : 'children');
+        col.treeDirection = currentDir === 'parent' ? 'children' : 'parent';
+
+        if (state.treeRelationColId === colId) {
+            state.treeRelationDirection = col.treeDirection;
         }
 
         AdvancedTable.setState(realTableId, state);
@@ -367,8 +387,21 @@ const AdvancedTableColumnMenus = {
         }
 
         if (col.type === 'relation') {
+            const isSelfRel = col.targetTableId === realTableId || col.targetTableId === tableId;
+
             menuItems.push({ icon: Icons.relation, label: I18n.t('adv_col_menu.configure_relation'), onClick: () => AdvancedTableColumnMenus.reconfigureRelation(realTableId, colId) });
             menuItems.push({ icon: Icons.checkSquare, label: I18n.t('adv_col_menu.single_record_limit') + (col.singleRecord ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleRelationSingle(realTableId, colId) });
+
+            if (isSelfRel) {
+                const currentDir = col.treeDirection || (col.singleRecord ? 'parent' : 'children');
+                const dirLabel = currentDir === 'parent' ? I18n.t('adv_col_menu.tree_direction_parent') : I18n.t('adv_col_menu.tree_direction_children');
+                menuItems.push({
+                    icon: Icons.treeNode,
+                    label: dirLabel,
+                    onClick: () => AdvancedTableColumnMenus.toggleTreeDirection(realTableId, colId)
+                });
+            }
+
             menuItems.push({ icon: Icons.relation, label: I18n.t('adv_col_menu.show_backlink_in_target') + (col.showBacklink ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleRelationBacklink(realTableId, colId) });
             menuItems.push({ type: 'divider' });
         }
@@ -982,6 +1015,7 @@ const AdvancedTableColumnMenus = {
             delete col.showBacklink;
             delete col.backlinkColId;
             delete col.singleRecord;
+            delete col.treeDirection;
         }
         if (oldType === 'rollup' && newType !== 'rollup') {
             delete col.relationColId;
@@ -1219,6 +1253,11 @@ const AdvancedTableColumnMenus = {
             if (tState.timelineDateCol === colId) {
                 delete tState.timelineDateCol;
                 if (tState.viewType === 'timeline') tState.viewType = 'table';
+            }
+            if (tState.treeRelationColId === colId) {
+                delete tState.treeRelationColId;
+                delete tState.treeRelationDirection;
+                if (tState.viewType === 'tree') tState.viewType = 'table';
             }
         };
 

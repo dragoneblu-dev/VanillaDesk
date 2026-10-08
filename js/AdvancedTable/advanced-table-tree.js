@@ -2,27 +2,33 @@
  * advanced-table-tree.js
  * Modulo per la Vista Tabella Gerarchica ad Albero (Tree Table / WBS) nei Database Avanzati.
  * Implementa:
- * - 1.C: Direzione flessibile (Genitore vs Figli) per auto-relazioni.
- * - 3: Ordinamento gerarchico tra fratelli dello stesso livello e conservazione degli antenati nei filtri.
- * - 4.A: Paginazione basata sul conteggio delle sole Radici (Livello 0).
+ * - Direzione gerarchica ereditata dallo schema colonna (col.treeDirection || singleRecord ? parent : children).
+ * - Ordinamento gerarchico tra fratelli dello stesso livello e conservazione degli antenati nei filtri.
+ * - Paginazione basata sul conteggio delle sole Radici (Livello 0).
  * - Collasso automatico di tutti i rami genitore alla prima apertura della vista WBS.
  * - Tasto rapido Espandi Tutto / Comprimi Tutto nella barra della tabella.
  * - Differenziazione cromatica per livelli di profondità (Livello 0..4) applicata a freccia, pallino e badge.
  * - FIX HEADER TOOLTIPS & COMMENTS: Mostra i tooltip informativi dei campi, i commenti colonna e l'icona informativa nell'intestazione <th>.
- * - LIVE REFRESH: Pulsante refresh aggiornato per ricaricare fedelmente i dati dal disco.
- * - FEAT CANCEL SELECTION: Aggiunto pulsante accanto all'eliminazione per annullare la selezione attiva delle righe.
- * - FIX TIMESTAMPS: Inizializzazione garantita di createdAt e updatedAt all'apertura della vista per prevenire anomalie di formattazione date.
+ * - LIVE REFRESH: Pulsante refresh per ricaricare fedelmente i dati dal disco.
+ * - FEAT CANCEL SELECTION: Pulsante per annullare la selezione attiva delle righe.
+ * - Inizializzazione garantita di createdAt e updatedAt per prevenire anomalie di formattazione date.
  */
 
 const AdvancedTree = {
 
-    setView: (tableId, relColId, direction = 'children') => {
+    setView: (tableId, relColId, direction = null) => {
         let state = AdvancedTable.getState(tableId);
         if (!state) return;
 
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        const realState = AdvancedTable.getState(realTableId);
+        const col = (realState && realState.columns ? realState.columns.find(c => c.id === relColId) : null) || (state.columns || []).find(c => c.id === relColId);
+
+        const effectiveDirection = direction || (col && col.treeDirection) || (col && col.singleRecord ? 'parent' : 'children');
+
         state.viewType = 'tree';
         state.treeRelationColId = relColId;
-        state.treeRelationDirection = direction;
+        state.treeRelationDirection = effectiveDirection;
 
         // All'attivazione iniziale della vista WBS, collassa tutti i rami di default per non disorientare l'utente
         const allParentIds = new Set();
@@ -30,7 +36,7 @@ const AdvancedTree = {
             let targets = r.cells[relColId];
             if (!targets) return;
             if (!Array.isArray(targets)) targets = [targets];
-            if (direction === 'children') {
+            if (effectiveDirection === 'children') {
                 if (targets.length > 0) allParentIds.add(r.id);
             } else {
                 targets.forEach(pId => { if (pId) allParentIds.add(pId); });
@@ -121,7 +127,7 @@ const AdvancedTree = {
             else newRow.cells[c.id] = '';
         });
 
-        // Collega gerarchicamente il nuovo record in base alla direzione scelta (1.C)
+        // Collega gerarchicamente il nuovo record in base alla direzione dello schema
         if (direction === 'children') {
             let currentChildren = parentRow.cells[relColId];
             if (!Array.isArray(currentChildren)) currentChildren = currentChildren ? [currentChildren] : [];
@@ -212,14 +218,17 @@ const AdvancedTree = {
             return AdvancedTable._renderAsTable(wrapper, state, tableId);
         }
 
-        const direction = state.treeRelationDirection || 'children'; // 'children' | 'parent'
+        // Direzione gerarchica ricavata dallo schema colonna
+        const colDefForDir = (state.columns || []).find(c => c.id === relColId);
+        const direction = state.treeRelationDirection || (colDefForDir && colDefForDir.treeDirection) || (colDefForDir && colDefForDir.singleRecord ? 'parent' : 'children');
+        state.treeRelationDirection = direction;
+
         if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
 
-        // 2. Toolbar Tools
+        // 2. Toolbar Tools (Pulita: rimossi switch di schema per evitare click accidentali)
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
         const hasSavedFilters = state.savedFilters && state.savedFilters.length > 0;
         const hasSort = state.sorts && state.sorts.length > 0;
-        const hasCalculatedFields = state.columns.some(c => ['formula', 'relation', 'relation_backlink', 'rollup'].includes(c.type));
         const hasActiveAuto = state.automations && state.automations.some(a => a.active);
 
         const allParentIds = new Set();
@@ -239,7 +248,7 @@ const AdvancedTree = {
             const tools = [];
             tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.treeNode, title: 'Cambia visualizzazione', label: 'WBS', onClick: AdvancedBoard.openViewMenu });
             
-            // Pulsante di Usabilità 1: Espandi / Collassa Tutti i Rami
+            // Pulsante di Usabilità Operativa: Espandi / Collassa Tutti i Rami
             if (allParentIds.size > 0) {
                 tools.push({
                     icon: hasOpenParents ? Icons.chevronDown : Icons.chevronRight,
@@ -323,7 +332,7 @@ const AdvancedTree = {
             }
         });
 
-        // 7. Filtro e Conservazione Percorso Antenati (Decisione 3)
+        // 7. Filtro e Conservazione Percorso Antenati
         let matchingRowIds = null;
         let visibleInTreeSet = null;
 
@@ -342,7 +351,7 @@ const AdvancedTree = {
             });
         }
 
-        // 8. Ordinamento Gerarchico tra Fratelli (Decisione 3)
+        // 8. Ordinamento Gerarchico tra Fratelli
         const sortSiblingRowIds = (idList) => {
             if (!hasSort || idList.length <= 1) return idList;
             const rowsToSort = idList.map(id => virtualRowsMap.get(id)).filter(Boolean);
@@ -554,7 +563,6 @@ const AdvancedTree = {
 
                     if (isTitle) {
                         const indentPx = Math.max(8, 8 + (item.level * 22));
-                        // Applica la classe cromatica corrispondente al livello di profondità (0..4)
                         const levelColorClass = `adv-tree-level-${Math.min(item.level, 4)}`;
 
                         let toggleHtml = '';

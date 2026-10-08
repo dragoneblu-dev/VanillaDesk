@@ -42,7 +42,9 @@ Object.assign(WorkflowApp, {
         const relCol = WorkflowApp.selfRelCol;
         if (!db || !relCol) return;
 
-        const isPredecessorMode = WorkflowApp.layout.relationDirection === 'predecessor';
+        const isPredecessorMode = (typeof WorkflowApp.getEffectiveDirection === 'function') 
+            ? WorkflowApp.getEffectiveDirection() === 'predecessor' 
+            : (WorkflowApp.layout.relationDirection === 'predecessor');
 
         const outgoing = new Map();
         const incoming = new Map();

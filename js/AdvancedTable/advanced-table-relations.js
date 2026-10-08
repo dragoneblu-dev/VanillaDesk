@@ -8,6 +8,8 @@
  * - Scollegamento chirurgico tra entità relazionate (unlinkRelation)
  * - FEAT SECONDARY FIELD DISAMBIGUATION: Tendina "Dettaglio" nel Drawer di selezione relazionale
  *   per disambiguare record omonimi mostrando una colonna secondaria su layout monoriga con troncamento (Ellipsis).
+ * - FEAT WBS SEMANTIC AUTO-SETUP: Inizializzazione automatica di col.treeDirection ('parent' o 'children')
+ *   quando una relazione punta alla tabella stessa (auto-relazione).
  */
 
 Object.assign(AdvancedTable, {
@@ -138,11 +140,22 @@ Object.assign(AdvancedTable, {
             delete col.showBacklink;
             delete col.backlinkColId;
             delete col.singleRecord;
+            delete col.treeDirection;
         }
 
         col.type = 'relation';
         col.targetTableId = tId;
         col.targetColId = cTargetId;
+
+        // Auto-imposta la semantica della gerarchia WBS per le auto-relazioni
+        const isSelfRel = (tId === realTableId);
+        if (isSelfRel) {
+            if (!col.treeDirection) {
+                col.treeDirection = col.singleRecord ? 'parent' : 'children';
+            }
+        } else {
+            delete col.treeDirection;
+        }
 
         // Pulizia attributi residui di altri tipi di dato per non lasciare lo stato ibrido
         delete col.hasEndDate;
@@ -200,10 +213,6 @@ Object.assign(AdvancedTable, {
 
                 otherDb.columns.forEach(otherCol => {
                     if (otherCol.type === 'relation' && otherCol.targetTableId === realTableId) {
-                        // DEDUPLICAZIONE ELEGANTE:
-                        // Se questa tabella possiede già una colonna fisica di tipo relation_backlink
-                        // associata esattamente a questa tabella remota e a questa colonna remota,
-                        // scartiamo la voce virtuale per evitare duplicati identici nella tendina.
                         const alreadyHasLocalBacklink = (state.columns || []).some(localCol => 
                             localCol.type === 'relation_backlink' && 
                             localCol.linkedTableId === dbId && 
@@ -369,6 +378,7 @@ Object.assign(AdvancedTable, {
         delete col.hasEndDate;
         delete col.formula;
         delete col.singleRecord;
+        delete col.treeDirection;
         delete col.showBacklink;
         delete col.backlinkColId;
         delete col.buttonLabel;
@@ -436,7 +446,7 @@ Object.assign(AdvancedTable, {
 
         let currentVals = Array.isArray(row.cells[colId]) ? [...row.cells[colId]] : (row.cells[colId] ? [row.cells[colId]] : []);
 
-        // Costruzione opzioni per la tendina "Dettaglio / Disambiguazione" (Regola 1)
+        // Costruzione opzioni per la tendina "Dettaglio / Disambiguazione"
         const primaryDisplayColId = targetColId;
         const activeSecondaryColId = col.secondaryDisplayColId || '';
 

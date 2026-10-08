@@ -11,12 +11,10 @@
  * - Evitamento ostacoli reale tramite Channel Routing perimetrale a clearance fissa (R >= 12px).
  * - Selezione intelligente delle porte con penalità di collisione (Obstacle Crossing Penalty)
  *   e tangenti Bézier proiettate per impedire sovrapposizioni e sbandate su nodi intermedi.
- * - FIX DIFENSIVO ROBUSTO: Filtraggio preventivo degli archi per verificare l'esistenza fisica 
- *   di entrambi i nodi in db.rows prima del calcolo di portRoles, eliminando alla radice l'errore "Cannot read properties of undefined (reading 'top')".
- * - FIX GEOMETRICO: Ripristinato il confronto corretto sull'asse Y (cornerY !== q2.y) per le uscite verticali.
+ * - Ereditarietà automatica del verso della relazione tramite getEffectiveDirection().
+ * - Filtraggio preventivo degli archi per verificare l'esistenza fisica di entrambi i nodi in db.rows.
  */
 
-// Inizializzazione del registro persistito dei ruoli delle porte
 WorkflowApp._portRoles = WorkflowApp._portRoles || {};
 
 Object.assign(WorkflowApp, {
@@ -335,7 +333,10 @@ Object.assign(WorkflowApp, {
             return;
         }
 
-        const isPredecessor = WorkflowApp.layout.relationDirection === 'predecessor';
+        const isPredecessor = (typeof WorkflowApp.getEffectiveDirection === 'function') 
+            ? WorkflowApp.getEffectiveDirection() === 'predecessor' 
+            : (WorkflowApp.layout.relationDirection === 'predecessor');
+
         const sourceRecordId = isPredecessor ? toId : fromId;
         const targetRecordId = isPredecessor ? fromId : toId;
 
@@ -384,7 +385,10 @@ Object.assign(WorkflowApp, {
         const relCol = WorkflowApp.selfRelCol;
         if (!db || !relCol) return;
 
-        const isPredecessor = WorkflowApp.layout.relationDirection === 'predecessor';
+        const isPredecessor = (typeof WorkflowApp.getEffectiveDirection === 'function') 
+            ? WorkflowApp.getEffectiveDirection() === 'predecessor' 
+            : (WorkflowApp.layout.relationDirection === 'predecessor');
+
         const sourceRecordId = isPredecessor ? toId : fromId;
         const targetRecordId = isPredecessor ? fromId : toId;
 
@@ -427,9 +431,7 @@ Object.assign(WorkflowApp, {
         }
     },
 
-    // =========================================================================
     // RACCORDO GEOMETRICO ARROTONDATO (R >= 12px) PER CURVE ORTOGONALI
-    // =========================================================================
     _pointsToRoundedPath: (points, radius = 12) => {
         if (!points || points.length === 0) return '';
         if (points.length === 1) return `M ${points[0].x} ${points[0].y}`;
@@ -485,9 +487,7 @@ Object.assign(WorkflowApp, {
         return d;
     },
 
-    // =========================================================================
     // COSTRUZIONE WAYPOINTS ORTOGONALI CON CANALIZZAZIONE E TRUNKING CONDIVISO
-    // =========================================================================
     _buildOrthogonalWaypoints: (p1, n1, p2, n2, obstacles = [], sharedTrunkFeeder = null) => {
         // 1. ASSE VERTICALE DIRETTO: se le porte si affacciano direttamente in verticale
         if (n1.x === 0 && n2.x === 0 && Math.abs(p1.x - p2.x) < 4) {
@@ -654,7 +654,10 @@ Object.assign(WorkflowApp, {
         const relCol = WorkflowApp.selfRelCol;
         if (!db || !relCol || !db.rows) return;
 
-        const isPredecessorMode = WorkflowApp.layout.relationDirection === 'predecessor';
+        const isPredecessorMode = (typeof WorkflowApp.getEffectiveDirection === 'function') 
+            ? WorkflowApp.getEffectiveDirection() === 'predecessor' 
+            : (WorkflowApp.layout.relationDirection === 'predecessor');
+
         const styleMode = WorkflowApp.layout.connectionStyle;
 
         // Bounding box degli ostacoli reali sul canvas (con clearance di 12px)
@@ -689,7 +692,6 @@ Object.assign(WorkflowApp, {
                 const fromId = isPredecessorMode ? targetRowId : row.id;
                 const toId = isPredecessorMode ? row.id : targetRowId;
 
-                // Entrambi gli estremi devono esistere sia nei record che nelle coordinate di layout
                 if (validRowIds.has(fromId) && validRowIds.has(toId) && 
                     WorkflowApp.layout.nodes && WorkflowApp.layout.nodes[fromId] && WorkflowApp.layout.nodes[toId]) {
                     rawEdges.push({ fromId, toId });
@@ -836,7 +838,6 @@ Object.assign(WorkflowApp, {
             }
         });
 
-        // Identificazione del campo titolo primario configurato
         const titleColId = WorkflowApp.layout.titleColId || (db.columns && db.columns[0]?.id);
 
         // Rendering effettivo degli archi SVG (lo spessore è governato dal CSS con --wf-line-width)
