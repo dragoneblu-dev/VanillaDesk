@@ -1,8 +1,3 @@
-/**
- * sec-views.js
- * Sezione 5 del Manuale d'Uso: Viste Multiple, Albero Gerarchico WBS e Workflow Studio.
- */
-
 Manual.registerSection(
     'sec-5',
     '5. Viste Database: WBS (Albero), Kanban, Calendario, Timeline e Workflow Studio',
@@ -13,7 +8,7 @@ Manual.registerSection(
     </h3>
     <p>Compare automaticamente nel menu <i>"Vista"</i> se nel database è presente una colonna <b>Relazione</b> che punta alla tabella stessa (auto-relazione). Consente di strutturare i record a livelli di annidamento infiniti (Progetto ➔ Macro-fase ➔ Task ➔ Sotto-attività).</p>
     <ul>
-        <li><b>Flessibilità di Direzione:</b> Puoi scegliere se la colonna di relazione rappresenta <i>"I Figli / Sub-task"</i> oppure <i>"Il Genitore / Super-task"</i>. Il motore calcola in entrambi i casi l'albero corretto.</li>
+        <li><b>Flessibilità di Direzione:</b> Puoi scegliere se la colonna di relazione rappresenta <i>"I Figli / Sub-task"</i> oppure <i>"Il Genitore / Super-task"</i>. Il motore calcola in entrambi i casi l'albero corretto, con selezione guidata della direzione nel menu Vista.</li>
         <li><b>Espansione e Collasso Reattivo (▶ / ▼):</b> Ogni nodo genitore presenta un indicatore freccia cliccabile per mostrare o nascondere all'istante l'intero ramo dei discendenti. Lo stato aperto/chiuso viene ricordato in memoria.</li>
         <li><b>Aggiunta Rapida Sotto-Attività (+):</b> Passando il mouse sopra qualsiasi attività compare un pulsante <code>+</code> che crea al volo una riga pre-collegata a quel genitore, ne espande il ramo e porta il cursore sul titolo.</li>
         <li><b>Ordinamento Gerarchico Indipendente:</b> Le regole di ordinamento (es. Alfabetico o per Scadenza) agiscono rigorosamente tra <i>fratelli dello stesso livello</i>, garantendo che le sotto-attività non sfuggano mai al controllo del loro genitore.</li>
@@ -73,6 +68,8 @@ Manual.registerSection(
     <p>Workflow Studio (accessibile dalla cartella <code>workflow/</code>) è un'applicazione satellite modulare progettata per visualizzare ed esplorare le reti di dati complesse sotto forma di <b>Grafo di Nodi 2D Interattivo</b>.</p>
 
     <ul>
+        <li><b>Scelta del Titolo Iniziale della Scheda:</b> Nel cassetto delle proprietà visibili puoi scegliere a tendina quale colonna del database usare come titolo principale in grassetto sulle schede del grafo, escludendola automaticamente dalle proprietà secondarie per evitare duplicazioni.</li>
+        <li><b>Undo / Redo sul Canvas (<kbd>Ctrl + Z</kbd> / <kbd>Ctrl + Y</kbd>):</b> Spostamenti di nodi, allineamenti, auto-layout, creazioni ed eliminazioni di frecce possono essere annullati e ripristinati istantaneamente da tastiera.</li>
         <li><b>Auto-Disposizione Organica (Tree Ranking):</b> Cliccando su <i>Disposizione & Layout ➔ Auto-Disponi Organico</i>, il motore matematico ordina le schede in livelli gerarchici calcolando le dipendenze da sinistra verso destra ed allineando i nodi su una griglia discreta a passi di 24px.</li>
         <li><b>Raggruppamento in Cluster (Riquadri Delimitati):</b> Puoi racchiudere automaticamente i blocchi correlati dentro riquadri sul canvas selezionando una proprietà (es. per Reparto, Fase o Categoria). I cluster calcolano il proprio perimetro in tempo reale adattandosi allo spostamento delle schede.</li>
         <li id="sec-5-routing"><b>Stile dei Connettori & Evitamento Ostacoli (R12):</b>

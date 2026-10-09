@@ -4,9 +4,11 @@ Manual.registerSection(
     `<p>L'applicazione è strutturata per farti concentrare sui contenuti, mantenendo l'ordine gerarchico sempre a portata di mano e fornendo strumenti di layout pensati per massimizzare la produttività.</p>
     <ul>
         <li><b>L'Albero delle Note (Sidebar):</b> Sulla sinistra troverai tutte le tue note. Puoi creare infiniti livelli di "sotto-note". Clicca sul simbolo <b>+</b> accanto a una nota per creare immediatamente una nota figlia. L'albero supporta il <b>Drag & Drop</b> strutturale: trascina e rilascia per riordinare le note.</li>
+
+        <li><b>Software Multilingua:</b> VanillaDesk supporta nativamente 4 lingue (Italiano, Inglese, Spagnolo e Tedesco). Puoi cambiare lingua dal menu principale (☰) sotto <i>"Configura ➔ Lingua / Language"</i>.</li>
         
         <li><b>Proprietà e Tag di Pagina (🏷️):</b> Nell'intestazione di ogni nota troverai l'icona Etichetta. Cliccandola si aprirà un pannello per assegnare Tag (es. "Importante", "Da rivedere") o altre proprietà a quell'intera Nota. Stai inserendo dati all'interno di un <i>Database di Sistema Invisibile</i> che potrai interrogare globalmente! 
-        <br><span style="color:var(--text-secondary); font-size: 0.85em;">💡 <b>Pro-Tip:</b> Non sei limitato ai soli Tag! Entrando nelle opzioni di questo database di sistema, puoi aggiungere nuove colonne (Es. "Data Scadenza Nota" o "Autore") che diventeranno compilabili per tutte le pagine del tuo Workspace.</span></li>
+        <br><span style="color:var(--text-secondary); font-size: 0.85em;">💡 <b>Pro-Tip:</b> Non sei limitato ai soli Tag! Entrando nelle opzioni di questo database di sistema, puoi aggiungere nuove colonne (Es. "Data Scadenza Nota" o "Autore") che diventeranno compilabili per tutte le pagine del tuo Workspace. Inoltre, se la nota è collegata a una riga di un database (Pagina Record), all'inizio della nota compare anche il pulsante rapido per aprire e consultare direttamente il record nel suo database d'origine.</span></li>
         
         <li><b>Il Pannello Laterale (Drawer) e l'Ergonomia:</b> Quando apri le impostazioni di un database o le proprietà di una nota, l'app utilizza un cassetto scorrevole (Drawer). Questo pannello è dotato di funzionalità avanzate per non farti perdere il focus:
             <ul style="margin-top:5px; margin-bottom:5px;">
@@ -26,7 +28,7 @@ Manual.registerSection(
 
         <li><b>Modelli (Templates):</b> Scrivi spesso lo stesso tipo di documento (es. Verbali o Schede)? Crea la struttura una volta, apri il menu delle opzioni della nota (⋮) in alto a destra e scegli <b>"Salva come Template Locale"</b>. La prossima volta che creerai una nota vuota, ti verrà proposto di applicarlo con un solo click.</li>
         
-        <li><b>Impostazioni di Editazione:</b> Dal menu principale (☰), puoi attivare l'<b>Edit Continuo</b> (navigando da una nota all'altra, l'editor resterà in modalità scrittura) o disabilitare l'andata a capo automatica (<b>No Word Wrap</b>).</li>
+        <li><b>Impostazioni di Editazione:</b> Dal menu principale (☰), puoi attivare l'<b>Edit Continuo</b> (navigando da una nota all'altra, l'editor resterà in modalità scrittura; ora attivo di default alla creazione di un nuovo workspace) o disabilitare l'andata a capo automatica (<b>No Word Wrap</b>).</li>
         
         <li><b>Sommario Dinamico (TOC):</b> Se all'interno di una nota scrivi dei titoli (H1 o H2), questi appariranno automaticamente sotto il nome della nota nell'albero di sinistra. Cliccandoci, la pagina scorrerà in quel punto. Il TOC integra uno "Scroll Spy": mentre leggi, il titolo corrente nell'albero si illuminerà.</li>
     </ul>`

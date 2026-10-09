@@ -10,14 +10,173 @@
  * JIT COMPONENT RECONCILIATION: Esecuzione di Store.syncWidgetsForNote prima del montaggio del DOM.
  * SINCRONISMO STATO ATTIVO: Assegnazione immediata di AppState.currentNoteId e disattivazione del banner di pericolo al ripristino.
  * FIX JUMP TO WIDGET & SCROLL POSITION: jumpToWidget trasmette il refId del widget a selectNote impedendo la sovrascrittura di _lastScroll e atterrando direttamente sull'elemento target.
+ * REFACTOR DRY HEADER PROPERTIES: Riciclo integrale di AdvancedTable.renderCell(..., false) per il rendering di sola lettura;
+ * corretta gestione di array/relazioni nell'helper isFieldEmpty ed esclusione automatica di tutti i campi vuoti.
  */
 
 Object.assign(UI, {
     updateCurrentNoteTimer: null,
     _lastHighlightedWidget: null,
 
+    // MOTORE PROPRIETÀ NELL'HEADER DELLA NOTA
+    renderPageHeaderProperties: (note) => {
+        let container = document.getElementById('noteHeaderProperties');
+        if (!container) {
+            const titleInput = document.getElementById('noteTitle');
+            const contentEl = document.getElementById('noteContent');
+            if (titleInput && titleInput.parentNode) {
+                container = document.createElement('div');
+                container.id = 'noteHeaderProperties';
+                container.className = 'note-header-properties';
+                titleInput.parentNode.insertBefore(container, contentEl);
+            }
+        }
+        if (!container) return;
+
+        if (!note || note.deletedAt) {
+            container.style.display = 'none';
+            container.innerHTML = '';
+            return;
+        }
+
+        const isRecordNote = note.isRecordNote && note.linkedTableId && note.linkedRowId;
+        let htmlBlocks = '';
+
+        // Helper robusto per verificare se un valore è vuoto (non considera vuoti gli array popolati di relazioni/select)
+        const isFieldEmpty = (v) => {
+            if (v === '' || v === null || v === undefined) return true;
+            if (Array.isArray(v)) return v.length === 0;
+            if (typeof v === 'object') {
+                if (v.start || v.end) return false;
+                if (v.noteId || v.title) return false;
+                return Object.keys(v).length === 0;
+            }
+            return false;
+        };
+
+        // BLOCCO 1: CAMPI DEL RECORD DATABASE (Ricicla AdvancedTable.renderCell in sola lettura)
+        if (isRecordNote) {
+            const realTableId = typeof AdvancedTable !== 'undefined' ? AdvancedTable._resolveSourceId(note.linkedTableId) : note.linkedTableId;
+            const dbState = typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+
+            if (dbState && dbState.showHeaderRecordFields !== false) {
+                const row = (dbState.rows || []).find(r => r.id === note.linkedRowId);
+                if (row) {
+                    const titleCol = dbState.columns[0];
+                    const displayCols = (dbState.columns || []).filter(c => c.id !== titleCol?.id && c.type !== 'record_note' && !c.hidden);
+
+                    let chipsHtml = '';
+                    displayCols.forEach(col => {
+                        let cellVal = (row.virtualCells && row.virtualCells[col.id] !== undefined) ? row.virtualCells[col.id] : (row.cells ? row.cells[col.id] : undefined);
+                        
+                        // Esclude le proprietà vuote per massimizzare lo spazio utile
+                        if (isFieldEmpty(cellVal)) return;
+
+                        // Riciclo al 100% della funzione nativa collaudata di VanillaDesk
+                        const rendered = typeof AdvancedTable !== 'undefined' 
+                            ? AdvancedTable.renderCell(realTableId, row, col, cellVal, dbState, false) 
+                            : String(cellVal || '');
+
+                        const safeColName = UI.escapeHTML(col.name);
+
+                        chipsHtml += `
+                            <div class="header-prop-chip" style="display:inline-flex; align-items:center; gap:6px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:3px 8px; font-size:0.8rem; min-height:26px; box-sizing:border-box;">
+                                <span style="color:var(--text-secondary); font-weight:600; white-space:nowrap;">${safeColName}:</span>
+                                <span style="display:inline-flex; align-items:center;">${rendered}</span>
+                            </div>
+                        `;
+                    });
+
+                    if (chipsHtml) {
+                        const dbTitle = UI.escapeHTML(dbState.title || I18n.t('editor.database'));
+
+                        htmlBlocks += `
+                            <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
+                                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                    <div style="display:flex; align-items:center; gap:6px;">
+                                        <span style="display:inline-flex; color:var(--accent-color);">${Icons.tableDatabase}</span>
+                                        <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
+                                            RECORD: <b style="color:var(--accent-color);">${dbTitle}</b>
+                                        </span>
+                                    </div>
+                                    <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="UI.jumpToWidget('${realTableId}')" title="Apri Tabella Database">↗</button>
+                                </div>
+                                <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                                    ${chipsHtml}
+                                </div>
+                            </div>
+                        `;
+                    }
+                }
+            }
+        }
+
+        // BLOCCO 2: PROPRIETÀ E TAG PAGINA (SYS_PROPERTIES_DB)
+        const realTableId = isRecordNote ? (typeof AdvancedTable !== 'undefined' ? AdvancedTable._resolveSourceId(note.linkedTableId) : note.linkedTableId) : null;
+        const dbState = realTableId && typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+
+        const isPagePropsActive = isRecordNote 
+            ? (dbState ? dbState.showHeaderPageProps === true : false)
+            : (propsDb ? propsDb.showHeaderOnNotes === true : false);
+
+        if (isPagePropsActive && propsDb && propsDb.rows) {
+            const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === note.id);
+            if (sysRow) {
+                const activeCols = (propsDb.columns || []).filter(c => c.id !== 'sys_c_note' && !c.hidden);
+                let pagePropsChipsHtml = '';
+
+                activeCols.forEach(col => {
+                    let cellVal = sysRow.cells[col.id];
+                    
+                    // Esclude le proprietà vuote per massimizzare lo spazio utile
+                    if (isFieldEmpty(cellVal)) return;
+
+                    const rendered = typeof AdvancedTable !== 'undefined' 
+                        ? AdvancedTable.renderCell('SYS_PROPERTIES_DB', sysRow, col, cellVal, propsDb, false) 
+                        : String(cellVal || '');
+
+                    const safeColName = UI.escapeHTML(col.name);
+
+                    pagePropsChipsHtml += `
+                        <div class="header-prop-chip" style="display:inline-flex; align-items:center; gap:6px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:3px 8px; font-size:0.8rem; min-height:26px; box-sizing:border-box;">
+                            <span style="color:var(--text-secondary); font-weight:600; white-space:nowrap;">${safeColName}:</span>
+                            <span style="display:inline-flex; align-items:center;">${rendered}</span>
+                        </div>
+                    `;
+                });
+
+                if (pagePropsChipsHtml) {
+                    htmlBlocks += `
+                        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
+                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
+                                <div style="display:flex; align-items:center; gap:6px;">
+                                    <span style="display:inline-flex; color:var(--accent-color);">${Icons.tag}</span>
+                                    <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
+                                        PROPRIETÀ E TAG PAGINA
+                                    </span>
+                                </div>
+                                <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="AdvancedTable.openRecordView('SYS_PROPERTIES_DB', 'sys_r_${note.id}')" title="Modifica Proprietà Pagina">⚙️</button>
+                            </div>
+                            <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
+                                ${pagePropsChipsHtml}
+                            </div>
+                        </div>
+                    `;
+                }
+            }
+        }
+
+        if (htmlBlocks) {
+            container.innerHTML = htmlBlocks;
+            container.style.display = 'block';
+        } else {
+            container.style.display = 'none';
+            container.innerHTML = '';
+        }
+    },
+
     promptNoteConflict: (localNote, diskNote) => {
-        // Pulizia preventiva di qualsiasi overlay di conflitto orfano
         const oldOverlay = document.getElementById('advNoteConflictOverlay');
         if (oldOverlay) oldOverlay.remove();
 
@@ -98,7 +257,6 @@ Object.assign(UI, {
             UI.closeDrawer();
             const note = Store.getNote(noteId);
             if (note) {
-                // Sincronizza immediatamente il banner e l'interfaccia di modifica prima di avviare il reload della pagina
                 UI._updateTrashedNoteUI(note);
             }
             UI.selectNote(noteId);
@@ -358,7 +516,7 @@ Object.assign(UI, {
                 }
             }
 
-            // 2. JIT COMPONENT RECONCILIATION: Allinea i database e widget referenziati all'accesso della nota
+            // 2. JIT COMPONENT RECONCILIATION
             if (typeof Store.syncWidgetsForNote === 'function' && note.content) {
                 await Store.syncWidgetsForNote(note.content);
             }
@@ -491,6 +649,9 @@ Object.assign(UI, {
 
             if (typeof Editor !== 'undefined' && Editor.saveSnapshot) Editor.saveSnapshot();
         }
+
+        // RENDERING PROPRIETÀ NELL'HEADER
+        UI.renderPageHeaderProperties(note);
 
         // Aggiornamento interfaccia per note cestinate o attive
         UI._updateTrashedNoteUI(note);
@@ -633,6 +794,13 @@ Object.assign(UI, {
 
         UI._updateTrashedNoteUI(null);
         UI.showEditor(false);
+
+        const headerProps = document.getElementById('noteHeaderProperties');
+        if (headerProps) {
+            headerProps.style.display = 'none';
+            headerProps.innerHTML = '';
+        }
+
         if (typeof UI.Minimap !== 'undefined') UI.Minimap.sync(); 
         
         setTimeout(() => {

@@ -1,10 +1,3 @@
-/**
- * sec-tables.js
- * Sezione 4 del Manuale d'Uso: Tabelle Semplici vs Database Relazionali (RDBMS).
- * Arricchita con spiegazioni esaustive, ancore per la navigazione rapida e
- * dettagli operativi sulle maniglie di trascinamento righe/colonne.
- */
-
 Manual.registerSection(
     'sec-4',
     '4. Tabelle Semplici vs Database (Guida Completa)',
@@ -44,6 +37,7 @@ Manual.registerSection(
                 <li><b>🤖 Adattivo (Testo):</b> Le colonne modulano la loro larghezza automaticamente in base al contenuto testuale inserito.</li>
                 <li><b>% Percentuale (Schermo):</b> La tabella occupa il 100% della pagina. Le colonne si ridimensionano in percentuale preservando l'adattabilità responsiva.</li>
                 <li><b>⬄ Libera (Pixel):</b> Assegna larghezze fisse alle colonne e abilita lo scorrimento orizzontale qualora la tabella ecceda i limiti visivi del monitor.</li>
+                <li><b>Intestazione Fissa allo Scorrimento (Sticky):</b> Fissa l'intestazione della tabella subito sotto la toolbar durante lo scorrimento della pagina.</li>
             </ul>
         </li>
     </ul>
@@ -58,7 +52,7 @@ Manual.registerSection(
                 <li><i>Tavolozza Colori:</i> Assegna tinte di sfondo specifiche per evidenziare totali o anomalie.</li>
                 <li><i>Unisci Celle (${typeof Icons !== 'undefined' ? Icons.merge : '⊞'}):</i> Fonde un blocco di celle contigue (generando attributi <code>colspan</code> e <code>rowspan</code> validi W3C).</li>
                 <li><i>Dividi Cella (${typeof Icons !== 'undefined' ? Icons.split : '⊟'}):</i> Selezionando una cella precedentemente unita, il comando la scompone ripristinando la griglia originale.</li>
-                <li><i>Copia per Excel (📋):</i> Copia i dati in formato TSV negli appunti. Aprendo Excel o Fogli Google e premendo <kbd>Ctrl+V</kbd>, la tabella verrà incollata con righe e colonne perfettamente allineate.</li>
+                <li><i>Copia per Excel (📋):</i> Copia i dati in formato TSV negli appunti. Aprendo Excel o Fogli Google e premendo <kbd>Ctrl+V</kbd>, la tabella verrà incollata con righe e colonne perfettamente allineate. È inoltre possibile copiare l'intera tabella dal menu ingranaggio (⚙️) sotto "Importa / Esporta Dati".</li>
             </ul>
         </li>
         <li><b>Conversione in Database:</b> Se un progetto inizialmente redatto su tabella semplice richiede filtri complessi o formule, dal menu ingranaggio (⚙️) puoi selezionare <i>"Converti in Database"</i>: la tabella statica verrà istantaneamente trasformata in un database relazionale.</li>
@@ -69,7 +63,7 @@ Manual.registerSection(
     <h3 id="sec-4-rdbms" style="color: var(--accent-color); display:flex; align-items:center; gap:8px;">
         ${typeof Icons !== 'undefined' ? Icons.tableDatabase : '📊'} I Database Relazionali (RDBMS)
     </h3>
-    <p>Nei Database le informazioni non sono memorizzate come semplice markup visivo, ma come record strutturati isolati in memoria. Questo garantisce che modifiche a formule, ordinamenti o filtri non corrompano mai i dati grezzi.</p>
+    <p>Nei Database le informazioni non sono memorizzate come semplice markup visivo, ma come record strutturati isolati in memoria. Questo garantisce che modifiche a formule, ordinamenti o filtri non corrompano mai i dati grezzi. Le intestazioni delle colonne rimangono sempre visibili durante lo scorrimento grazie alla barra galleggiante superiore.</p>
 
     <h4>Architettura Relazionale: Relazioni, Backlink e Rollup</h4>
     <ul>
@@ -81,12 +75,12 @@ Manual.registerSection(
                 <li><i>Estrazione Proprietà (Distinct):</i> Estrae una specifica colonna dai record collegati (es. i singoli importi), rimuovendo i duplicati o calcolandone la somma/conteggio.</li>
             </ol>
         </li>
-        <li><b>Rollup (Lookup - 🔍):</b> Permette di proiettare sul record corrente una proprietà presente nel record collegato tramite la Relazione (ad esempio, visualizzare l'indirizzo email o il codice fiscale del cliente collegato senza doverlo duplicare a mano).</li>
+        <li><b>Rollup (Lookup - 🔍):</b> Permette di proiettare sul record corrente una proprietà presente nel record collegato tramite la Relazione (ad esempio, visualizzare l'indirizzo email o il codice fiscale del cliente collegato senza doverlo duplicare a mano). Ora la funzione Rollup funziona in modo bidirezionale: sia sulla tabella che crea la relazione (uscente), sia sulla tabella di destinazione collegata (entrante).</li>
     </ul>
 
     <h4 id="sec-4-types">Tipologie di Dato Supportate</h4>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.85rem; margin-bottom:15px;">
-        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Testo (📝):</b> Stringa libera con troncamento visivo configurabile.</div>
+        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Testo (📝):</b> Stringa libera con troncamento visivo configurabile. Premendo Invio o cliccando l'icona, puoi aprire il testo nel pannello laterale per una comoda lettura e modifica.</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Numero (123):</b> Valori numerici con arrotondamento e decimali fissi (0-4).</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Select / Multi-Select (▾ / 🍱):</b> Tag colorati con gestione colori e rinomina globale.</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Data e Datetime (📅):</b> Date singole o intervalli con <i>Data di Fine</i>.</div>

@@ -574,8 +574,7 @@ Object.assign(AdvancedTable, {
                     const val = row.virtualCells[col.id] !== undefined ? row.virtualCells[col.id] : '';
                     const safeColName = String(col.name || '').replace(/"/g, '&quot;');
                     
-                    // Indicazione chiara su ogni cella del nome colonna corrispondente (su hover)
-                    html += `<td style="width: ${col.width}px; max-width: ${col.width}px;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
+                    html += `<td style="width: ${col.width}px; max-width: ${col.width}px;" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                 });
 
                 let actionCell = `<button class="adv-icon-btn" title="${I18n.t('adv_render.options')}" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;

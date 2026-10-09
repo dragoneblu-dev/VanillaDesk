@@ -36,6 +36,7 @@ Manual.registerSection(
         <li><b>📊 Grafico Visivo:</b> L'app genera un grafico interattivo (Chart.js) personalizzabile.
             <ul>
                 <li><b>Tipi di Grafico:</b> A Barre, Barre Orizzontali, Linea, Ciambella (Doughnut) o Torta (Pie).</li>
+                <li><b>Altezza del Blocco Grafico (3 Dimensioni):</b> Puoi configurare l'altezza del riquadro scegliendo tra <i>Piccola (200px)</i> per dashboard compatte, <i>Media (320px)</i> standard, o <i>Grande (480px)</i> per grafici complessi o con molte etichette.</li>
                 <li><b>Palette Cromatiche:</b> Puoi scegliere tra temi automatici: <i>Predefinita, Pastello, Vibrante, Oceano, Tramonto</i>.</li>
                 <li><b>Opzioni Strutturali Avanzate:</b> 
                     <br>- <b>Raggruppa a blocchi (Stacking):</b> Se hai configurato esattamente <i>due raggruppamenti</i> (Asse X), il grafico a barre impilerà i valori del secondo gruppo sopra quelli del primo.

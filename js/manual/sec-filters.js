@@ -4,7 +4,13 @@ Manual.registerSection(
     `<p>L'applicazione distingue tra la ricerca generale (usata per trovare le Note e filtrare tramite metadati globali) e la manipolazione analitica dei database tramite le condizioni WHERE.</p>
     
     <h4>Ricerca Globale e Autocompletamento Tag (Sidebar)</h4>
-    <p>La barra di ricerca in alto a sinistra (<i>"Cerca o digita Tag..."</i>) scandaglia l'intero spazio di lavoro. Cerca le parole in tempo reale sia nei titoli che nei contenuti, <b>inclusi i testi degli appunti nascosti (Footnotes), i blocchi di codice e i diari</b>.</p>
+    <p>La barra di ricerca in alto a sinistra (<i>"Cerca o digita Tag..."</i>) scandaglia l'intero spazio di lavoro. Cerca le parole in tempo reale sia nei titoli che nei contenuti, <b>inclusi tutti i campi dei database, i testi degli appunti nascosti (Footnotes), i blocchi di codice e i diari</b>.</p>
+
+    <ul>
+        <li><b>Contatore Risultati a 2 Cifre:</b> Nel campo di ricerca il contatore indica con precisione <code>attuale/totale</code> della nota aperta (es. <code>1/3</code>, oppure <code>0/0</code> se non vi sono riscontri nella nota corrente).</li>
+        <li><b>Pillole Occorrenze per Singola Nota:</b> Accanto al nome di ciascuna nota che contiene il testo cercato compare una piccola pillola colorata con il numero di corrispondenze trovate (es. <code>[5]</code>), consentendo di valutare immediatamente dove risiedono le informazioni. Il colore della pillola si adatta dinamicamente a qualunque tema attivo.</li>
+        <li><b>Reset Istantaneo con la Croce (✕):</b> Cliccando sulla ✕ o cancellando il testo, tutte le evidenziazioni gialle vengono rimosse all'istante dall'editor della nota aperta.</li>
+    </ul>
     
     <p><b>La Magia dei Filtri Strutturali (Tag e Proprietà):</b><br>
     Non appena inizi a digitare nella barra di ricerca, compare una tendina ad alta visibilità (con capienza espansa a <b>7-8 righe visibili</b>). Il sistema legge in tempo reale il Database di Sistema (quello che gestisce le Proprietà e le Etichette di tutte le Note) e ti suggerisce filtri mirati:</p>

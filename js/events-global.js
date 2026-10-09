@@ -77,8 +77,8 @@ const EventsGlobal = {
                 Editor.cleanHighlightsBeforeSave();
             }
             if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
-	            UI.highlightTreeNode(AppState.currentNoteId);
-	        }
+              UI.highlightTreeNode(AppState.currentNoteId);
+          }
         }
         
         setTimeout(() => {
@@ -310,7 +310,7 @@ const EventsGlobal = {
                         editorEl.focus();
                         const range = document.createRange();
                         range.selectNodeContents(targetNodeToFocus);
-                        range.collapse(true); // Posiziona il cursore all'inizio del blocco / riga
+                        range.collapse(true);
                         sel.removeAllRanges();
                         sel.addRange(range);
                     } else {
@@ -377,7 +377,6 @@ const EventsGlobal = {
                 if (typeof TableManager.UI.hideTriggers === 'function') TableManager.UI.hideTriggers();
                 if (typeof TableManager.UI.hideMenus === 'function') TableManager.UI.hideMenus();
                 
-                // SCROLL: Forza la chiusura del Floating Menu in selezione per le Tabelle Semplici
                 if (TableManager.Selection && typeof TableManager.Selection.hideFloatingMenu === 'function') {
                     TableManager.Selection.hideFloatingMenu();
                 }
@@ -422,7 +421,6 @@ const EventsGlobal = {
 
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
-                // Innesca l'autocomplete per i Tag
                 if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
                     SidebarManager.SearchAutocomplete.show(e.target, e.target.value);
                 }
@@ -481,9 +479,30 @@ const EventsGlobal = {
         }
 
         document.addEventListener('keydown', (e) => {
+            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+            const key = e.key ? e.key.toLowerCase() : '';
+
+            // SCORCIATOIA VELOCE: CTRL+P APRE LA SIDEBAR E FOCALIZZA LA RICERCA GLOBALE
+            if (isCtrlOrCmd && key === 'p') {
+                e.preventDefault();
+                e.stopPropagation();
+
+                const sb = document.getElementById('sidebar');
+                const btn = document.getElementById('sidebarToggleBtn');
+                if (sb && sb.classList.contains('collapsed')) {
+                    sb.classList.remove('collapsed');
+                    if (btn) btn.classList.add('active');
+                }
+
+                const searchInputEl = document.getElementById('searchInput');
+                if (searchInputEl) {
+                    searchInputEl.focus();
+                    searchInputEl.select();
+                }
+                return;
+            }
+
             if (!AppState.isEditMode) return;
-            
-            // Blocco di sicurezza anti-crash per eventi sintetici scatenati dal Browser Autocomplete
             if (!e.key) return; 
 
             // ISOLAMENTO RIGOROSO INPUT NATIVI: Se l'utente sta digitando in un input o textarea
@@ -491,9 +510,6 @@ const EventsGlobal = {
             if (isNativeInput) {
                 return;
             }
-
-            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
-            const key = e.key.toLowerCase();
 
             // ISOLAMENTO SELECT-ALL (Ctrl+A)
             if (isCtrlOrCmd && key === 'a' && AppState.isEditMode) {
@@ -577,7 +593,7 @@ const EventsGlobal = {
                 if (e.key === 'Tab') { Editor.registerTypingStart(e.key); Editor.handleTabKey(e); }
                 if (e.key === 'Backspace') { Editor.handleBackspaceKey(e); }
                 if (e.key === 'Delete') { 
-                    if (e.shiftKey) return; // Lascia che il browser gestisca Shift+Delete come Cut (Taglia) nativo
+                    if (e.shiftKey) return;
                     Editor.handleDeleteKey(e); 
                 }
                 
@@ -1243,8 +1259,6 @@ const EventsGlobal = {
             }
         });
 
-        // FIX UX CURSORE: Inibiamo esplicitamente l'apparizione delle toolbar tabella
-        // se il mouse è stato rilasciato sopra un'immagine!
         const checkSelectionAll = (e) => {
             if (e && e.target && e.target.tagName === 'IMG') return;
             

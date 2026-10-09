@@ -4,6 +4,8 @@
  * Funzioni di supporto, formattazione, Breadcrumb e segnalibri della Nota (Utilities).
  * Integrazione del badge Cestino nel breadcrumb per le note eliminate e marcatura dirty su toggle preferiti.
  * Aggiunta voce "Modifica Sorgente HTML..." nel menu contestuale della nota.
+ * FEAT HEADER PROPERTIES INDEPENDENT TOGGLES: Voci nel menu Opzioni Nota gestite tramite I18n.t
+ * per abilitare/disabilitare indipendentemente i Campi del Record e le Proprietà Pagina.
  */
 
 Object.assign(UI, {
@@ -83,6 +85,76 @@ Object.assign(UI, {
                 }
             });
         } else {
+            // GESTIONE INDIPENDENTE DEI DUE SET DI PROPRIETÀ IN CIMA ALLA PAGINA
+            if (currentNote && currentNote.isRecordNote && currentNote.linkedTableId) {
+                const realTableId = typeof AdvancedTable !== 'undefined' ? AdvancedTable._resolveSourceId(currentNote.linkedTableId) : currentNote.linkedTableId;
+                const dbState = typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+                
+                const isRecordFieldsEnabled = dbState ? dbState.showHeaderRecordFields !== false : true;
+                const chkRecord = isRecordFieldsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+
+                const isPagePropsEnabled = dbState ? dbState.showHeaderPageProps === true : false;
+                const chkProps = isPagePropsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+
+                const labelRecordFields = I18n.t('notes_utils.menu_header_record_fields') || "Campi Record Database in Cima";
+                const labelPageProps = I18n.t('notes_utils.menu_header_page_props') || "Proprietà / Tag Pagina in Cima";
+
+                items.push({
+                    icon: Icons.tableDatabase,
+                    label: labelRecordFields + chkRecord,
+                    onClick: () => {
+                        if (dbState) {
+                            dbState.showHeaderRecordFields = !isRecordFieldsEnabled;
+                            AdvancedTable.setState(realTableId, dbState);
+                            Store.triggerAutoSave();
+                            if (typeof UI.renderPageHeaderProperties === 'function') {
+                                UI.renderPageHeaderProperties(currentNote);
+                            }
+                        }
+                    }
+                });
+
+                items.push({
+                    icon: Icons.tag,
+                    label: labelPageProps + chkProps,
+                    onClick: () => {
+                        if (dbState) {
+                            dbState.showHeaderPageProps = !isPagePropsEnabled;
+                            AdvancedTable.setState(realTableId, dbState);
+                            Store.triggerAutoSave();
+                            if (typeof UI.renderPageHeaderProperties === 'function') {
+                                UI.renderPageHeaderProperties(currentNote);
+                            }
+                        }
+                    }
+                });
+
+                items.push({ type: 'divider' });
+            } else if (currentNote) {
+                // Per le note libere standard
+                const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+                const isPropsEnabled = propsDb ? propsDb.showHeaderOnNotes === true : false;
+                const chk = isPropsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+                const labelPageProps = I18n.t('notes_utils.menu_header_page_props') || "Proprietà / Tag Pagina in Cima";
+
+                items.push({
+                    icon: Icons.tag,
+                    label: labelPageProps + chk,
+                    onClick: () => {
+                        if (propsDb) {
+                            propsDb.showHeaderOnNotes = !isPropsEnabled;
+                            AdvancedTable.setState('SYS_PROPERTIES_DB', propsDb);
+                            Store.triggerAutoSave();
+                            if (typeof UI.renderPageHeaderProperties === 'function') {
+                                UI.renderPageHeaderProperties(currentNote);
+                            }
+                        }
+                    }
+                });
+
+                items.push({ type: 'divider' });
+            }
+
             items.push({ icon: Icons.save, label: I18n.t('notes_utils.menu_save_template'), onClick: () => TemplateManager.saveCurrentNoteAsTemplate() });
             items.push({ icon: Icons.tableSimple, label: I18n.t('notes_utils.menu_manage_templates'), onClick: () => TemplateManager.openManager() });
             items.push({ type: 'divider' });

@@ -10,6 +10,8 @@
  * FIX READONLY COMPUTED: Rollup, Formule e Backlink lunghi mostrano solo 'Apri Testo Completo' in sola lettura.
  * FEAT TRANSPARENT FORMULA ERROR: Rilevamento token di errore (ERROR: ...) con generazione del badge semantico
  * '⚠️ #VALORE!' con corretto escaping degli attributi data-tooltip per eliminare la rottura del DOM.
+ * PERF READ-ONLY RELATIONS CLEANUP: Rimosso il padding superfluo e il margin-left di 10px in modalità sola lettura,
+ * garantendo che le pillole relazionali scorrano compatte a filo senza contenitori gonfiati.
  */
 
 Object.assign(AdvancedTable, {
@@ -236,10 +238,8 @@ Object.assign(AdvancedTable, {
                 
         } else if (col.type === 'select' || col.type === 'multi-select') {
             let content = '';
-            // Clonazione sicura dell'array per non sporcare il JSON
             let vals = Array.isArray(val) ? [...val] : (val ? [val] : []);
             
-            // Ordinamento alfabetico solo per il Multi-Select
             if (col.type === 'multi-select' && vals.length > 0) {
                 vals.sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
             }
@@ -269,7 +269,9 @@ Object.assign(AdvancedTable, {
                     if (rel.name === 'Orfano') {
                         content += `<span class="adv-select-pill hl-c10">${I18n.t('adv_record.orphan_badge')}</span>`;
                     } else {
-                        content += `<span class="adv-select-pill default-color" style="margin-right:4px; margin-left: 10px; ${pointerEvent}" onclick="event.stopPropagation(); AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxObjStr})">
+                        // In sola lettura: rimosso margin-left: 10px artificiale per allineare a filo le pillole
+                        const pillMargin = isEdit ? 'margin-right:4px; margin-left:6px;' : 'margin:1px 2px;';
+                        content += `<span class="adv-select-pill default-color" style="${pillMargin} ${pointerEvent}" onclick="event.stopPropagation(); AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxObjStr})">
                                        ${UI.escapeHTML(rel.name)} 
                                        <span style="cursor:pointer; margin-left:4px; display:inline-flex; align-items:center;" title="${I18n.t('adv_cell.view_detail')}">${Icons.recordView}</span>
                                     </span>`;
@@ -280,7 +282,8 @@ Object.assign(AdvancedTable, {
             }
 
             const cellId = `adv-rel-${tableId}-${row.id}-${col.id}`;
-            return `<div id="${cellId}" class="adv-relation-container" ${clickEventRel} ${readOnlyTip}>${content}</div>`;
+            const containerStyle = !isEdit ? 'style="padding:0; min-height:auto;"' : '';
+            return `<div id="${cellId}" class="adv-relation-container" ${containerStyle} ${clickEventRel} ${readOnlyTip}>${content}</div>`;
             
         } else if (col.type === 'url') {
             if (isEdit) {
