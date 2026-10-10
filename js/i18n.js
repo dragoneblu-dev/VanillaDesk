@@ -164,6 +164,10 @@ dict: {
             csv_prio_normal: "Normale"
         },
         notes_utils: {
+            header_record_badge: "RECORD:",
+            header_record_open_table: "Apri Tabella Database",
+            header_page_props_badge: "PROPRIETÀ E TAG PAGINA",
+            header_page_props_edit: "Modifica Proprietà Pagina",
             menu_save_template: "Salva come Template Locale",
             menu_manage_templates: "Gestisci Template...",
             menu_export_modpack: "Esporta come Modulo (Modpack)",
@@ -380,6 +384,8 @@ dict: {
         adv_record: {
             title_system: "🏷️ Tag e Proprietà Pagina",
             title_record: "📄 Dettaglio Record",
+            title_record_db: "📄 Dettaglio Record: {dbTitle}",
+            external_nav_banner: "Stai visualizzando un record appartenente al database <b>{targetDb}</b> (collegato da <i>{srcDb}</i>).",
             unlink_record: "Scollega Record",
             delete_permanently: "Elimina Definitivamente il Record",
             new_property: "Nuova Proprietà",
@@ -422,6 +428,8 @@ dict: {
             compress_error: "Errore durante la compressione dell'immagine: "
         },
 toolbar: {
+    page_properties_count: "Proprietà / Tag Pagina ({count} valorizzati)",
+    page_info_count: "Informazioni e Collegamenti Nota ({count} menzioni in entrata)",
     undo: "Annulla Ultima Modifica (Ctrl+Z)",
     redo: "Ripeti (Ctrl+Y / Ctrl+Shift+Z)",
     eraser: "Gomma Formattazioni",
@@ -1023,7 +1031,7 @@ audio: {
             mode_independent: "Moduli Indipendenti"
         },
         bookmarks: {
-            confirm_overwrite: "Il segnalibro presente in questa pagina contiene un appunto o commento. Vuoi procedere e sostituirlo? La nota andrà persa.",
+            confirm_overwrite: "In questa pagina è già presente un segnalibro con una nota.\n\nPremi OK per trasferire e importare la nota nel nuovo segnalibro.\nPremi Annulla per creare il nuovo segnalibro vuoto.",
             toast_snoozed: "Promemoria posticipato di {minutes} minuti.",
             date_unknown: "Data sconosciuta",
             comment_edit_title: "Modifica appunto del segnalibro",
@@ -1431,6 +1439,10 @@ audio: {
             csv_prio_normal: "Normal"
         },
         notes_utils: {
+            header_record_badge: "RECORD:",
+            header_record_open_table: "Open Database Table",
+            header_page_props_badge: "PAGE PROPERTIES AND TAGS",
+            header_page_props_edit: "Edit Page Properties",
             menu_save_template: "Save as Local Template",
             menu_manage_templates: "Manage Templates...",
             menu_export_modpack: "Export as Module (Modpack)",
@@ -1647,6 +1659,8 @@ audio: {
         adv_record: {
             title_system: "🏷️ Page Tags & Properties",
             title_record: "📄 Record Details",
+            title_record_db: "📄 Record Details: {dbTitle}",
+            external_nav_banner: "Viewing a record from database <b>{targetDb}</b> (linked from <i>{srcDb}</i>).",
             unlink_record: "Unlink Record",
             delete_permanently: "Permanently Delete Record",
             new_property: "New Property",
@@ -1689,6 +1703,8 @@ audio: {
             compress_error: "Error during image compression: "
         },
 toolbar: {
+    page_properties_count: "Page Properties / Tags ({count} set)",
+    page_info_count: "Note Information and Links ({count} incoming mentions)",
     undo: "Undo Last Edit (Ctrl+Z)",
     redo: "Redo (Ctrl+Y / Ctrl+Shift+Z)",
     eraser: "Clear Formatting",
@@ -2289,7 +2305,7 @@ audio: {
             mode_independent: "Independent Modules"
         },
         bookmarks: {
-            confirm_overwrite: "The bookmark in this note contains a comment. Do you want to proceed and overwrite it? The comment will be lost.",
+            confirm_overwrite: "This page already has a bookmark with a note.\n\nClick OK to transfer and keep the existing note in the new bookmark.\nClick Cancel to create an empty bookmark.",
             toast_snoozed: "Reminder snoozed by {minutes} minutes.",
             date_unknown: "Unknown date",
             comment_edit_title: "Edit bookmark comment",
@@ -2300,7 +2316,7 @@ audio: {
             btn_delete: "Remove bookmark",
             drawer_comment_title: "💬 Bookmark Comment",
             btn_save_comment: "Save Comment",
-            confirm_delete_commented: "This bookmark contains a comment. Are you sure you want to delete it?"
+            confirm_delete_commented: "This bookmark contains a note. Are you sure you want to delete it?"
         },
         inline_notes: {
             drawer_title: "💬 Edit Inline Footnote",
@@ -2697,6 +2713,10 @@ audio: {
             csv_prio_normal: "Normal"
         },
         notes_utils: {
+            header_record_badge: "REGISTRO:",
+            header_record_open_table: "Abrir tabla de base de datos",
+            header_page_props_badge: "PROPIEDADES Y ETIQUETAS DE PÁGINA",
+            header_page_props_edit: "Editar propiedades de página",
             menu_save_template: "Guardar como Plantilla Local",
             menu_manage_templates: "Gestionar Plantillas...",
             menu_export_modpack: "Exportar como Módulo (Modpack)",
@@ -2913,6 +2933,8 @@ audio: {
         adv_record: {
             title_system: "🏷️ Etiquetas y Propiedades",
             title_record: "📄 Detalle del Registro",
+            title_record_db: "📄 Detalle del Registro: {dbTitle}",
+            external_nav_banner: "Viendo un registro de la base de datos <b>{targetDb}</b> (vinculado desde <i>{srcDb}</i>).",
             unlink_record: "Desvincular Registro",
             delete_permanently: "Eliminar Registro Definitivamente",
             new_property: "Nueva Propiedad",
@@ -2955,6 +2977,8 @@ audio: {
             compress_error: "Error durante la compresión: "
         },
 toolbar: {
+    page_properties_count: "Propiedades / Etiquetas de página ({count} asignadas)",
+    page_info_count: "Información y enlaces de nota ({count} menciones entrantes)",
     undo: "Deshacer última edición (Ctrl+Z)",
     redo: "Rehacer (Ctrl+Y / Ctrl+Shift+Z)",
     eraser: "Borrar Formato",
@@ -3555,7 +3579,7 @@ audio: {
             mode_independent: "Módulos Independientes"
         },
         bookmarks: {
-            confirm_overwrite: "El marcador de esta página contiene una nota. ¿Deseas continuar y sobrescribirlo? La nota se perderá.",
+            confirm_overwrite: "Esta página ya contiene un marcador con una nota.\n\nPulse Aceptar para transferir y conservar la nota en el nuevo marcador.\nPulse Cancelar para crear un marcador vacío.",
             toast_snoozed: "Recordatorio pospuesto {minutes} minutos.",
             date_unknown: "Fecha desconocida",
             comment_edit_title: "Modificar nota del marcador",
@@ -3566,7 +3590,7 @@ audio: {
             btn_delete: "Eliminar marcador",
             drawer_comment_title: "💬 Nota del Marcador",
             btn_save_comment: "Guardar Nota",
-            confirm_delete_commented: "Este marcador contiene una nota. ¿Seguro que deseas eliminarlo?"
+            confirm_delete_commented: "Este marcador contiene una nota. ¿Está seguro de que desea eliminarlo?"
         },
         inline_notes: {
             drawer_title: "💬 Modificar Nota al Pie Oculta",
@@ -3963,6 +3987,10 @@ audio: {
             csv_prio_normal: "Normal"
         },
         notes_utils: {
+            header_record_badge: "DATENSATZ:",
+            header_record_open_table: "Datenbanktabelle öffnen",
+            header_page_props_badge: "SEITENEIGENSCHAFTEN UND TAGS",
+            header_page_props_edit: "Seiteneigenschaften bearbeiten",
             menu_save_template: "Als lokale Vorlage speichern",
             menu_manage_templates: "Vorlagen verwalten...",
             menu_export_modpack: "Als Modul exportieren (Modpack)",
@@ -4179,6 +4207,8 @@ audio: {
         adv_record: {
             title_system: "🏷️ Seiten-Tags & Eigenschaften",
             title_record: "📄 Datensatzdetails",
+            title_record_db: "📄 Datensatzdetails: {dbTitle}",
+            external_nav_banner: "Sie sehen einen Datensatz aus der Datenbank <b>{targetDb}</b> (verknüpft von <i>{srcDb}</i>).",
             unlink_record: "Datensatz trennen",
             delete_permanently: "Datensatz endgültig löschen",
             new_property: "Neue Eigenschaft",
@@ -4221,6 +4251,8 @@ audio: {
             compress_error: "Fehler beim Komprimieren: "
         },
 toolbar: {
+    page_properties_count: "Seiteneigenschaften / Tags ({count} ausgefüllt)",
+    page_info_count: "Hinweisinformationen und Links ({count} eingehende Erwähnungen)",
     undo: "Letzte Änderung rückgängig machen (Strg+Z)",
     redo: "Wiederholen (Strg+Y / Strg+Umschalt+Z)",
     eraser: "Formatierung löschen",
@@ -4822,7 +4854,7 @@ audio: {
             mode_independent: "Unabhängige Module"
         },
         bookmarks: {
-            confirm_overwrite: "Das Lesezeichen in dieser Notiz enthält einen Kommentar. Möchtest du fortfahren und es ersetzen? Der Kommentar geht verloren.",
+            confirm_overwrite: "Diese Seite enthält bereits ein Lesezeichen mit einer Notiz.\n\nKlicken Sie auf OK, um die vorhandene Notiz in das neue Lesezeichen zu übernehmen.\nKlicken Sie auf Abbrechen, um ein leeres Lesezeichen zu erstellen.",
             toast_snoozed: "Erinnerung um {minutes} Minuten verschoben.",
             date_unknown: "Unbekanntes Datum",
             comment_edit_title: "Lesezeichen-Kommentar bearbeiten",
@@ -4833,7 +4865,7 @@ audio: {
             btn_delete: "Lesezeichen entfernen",
             drawer_comment_title: "💬 Lesezeichen-Kommentar",
             btn_save_comment: "Kommentar speichern",
-            confirm_delete_commented: "Dieses Lesezeichen enthält einen Kommentar. Möchtest du es wirklich löschen?"
+            confirm_delete_commented: "Dieses Lesezeichen enthält eine Notiz. Möchten Sie es wirklich löschen?"
         },
         inline_notes: {
             drawer_title: "💬 Versteckte Fußnote bearbeiten",

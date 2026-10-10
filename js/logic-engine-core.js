@@ -16,7 +16,12 @@
 if (typeof UI !== 'undefined' && !UI.escapeHTML) {
     UI.escapeHTML = (str) => {
         if (str === null || str === undefined) return '';
-        return String(str).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
     };
 }
 

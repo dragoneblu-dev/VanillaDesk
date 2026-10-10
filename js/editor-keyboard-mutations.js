@@ -2,13 +2,15 @@
  * editor-keyboard-mutations.js
  * Sottomodulo di Editor.
  * Responsabilità: Intercettazione di tasti che distruggono o creano nodi complessi
- * FIX CANCELLAZIONE WIDGET INTERNI: Aggiunto controllo di identità tra widget corrente 
- * e widget bersaglio per permettere l'uso dei tasti Canc e Backspace all'interno delle aree editabili (Es. Colonne).
- * FIX MERGE INLINE WIDGETS: Intercettazione chirurgica della fusione dei paragrafi tramite Backspace/Canc
- * utilizzando un DOM TreeWalker assoluto per scavalcare correttamente i confini delle liste (UL/OL) 
- * proteggendo gli appunti inline e gli snippet copiabili dalla distruzione nativa del browser.
- * CANCELLAZIONE SNIPPET LINEARE: Eliminazione atomica e fluida dello snippet copiabile su Backspace/Canc
- * senza popup bloccanti o over-engineering, con pieno supporto al ripristino istantaneo tramite Undo (Ctrl+Z).
+ * Cancellazione protetta dei widget interni: permette l'uso dei tasti Canc e Backspace
+ * all'interno delle aree editabili (es. Colonne), impedendo la distruzione accidentale
+ * dei widget soprastanti/sottostanti quando il blocco corrente contiene testo.
+ * Fusione protetta dei blocchi in presenza di widget inline tramite rimozione atomica uniforme
+ * per snippet, note nascoste e segnalibri, salvaguardando la struttura del documento.
+ * Cancellazione atomica e lineare degli elementi inline su Backspace/Canc con supporto
+ * immediato al ripristino da Undo (Ctrl+Z).
+ * Cancellazione diretta di <hr> se precede il blocco su Backspace o se segue su Canc.
+ * Salvaguardia del blocco unico minimo (<p><br></p>) a svuotamento integrale dell'editor.
  */
 
 Object.assign(Editor, {
@@ -85,7 +87,7 @@ Object.assign(Editor, {
                     if (type === 'database' || type === 'pivot') {
                         let state = AppState.databases ? AppState.databases[id] : null;
 
-                        // DB SISTEMA: Impedire eliminazione del JSON globale se viene raso al suolo il widget a schermo
+                        // DB SISTEMA: Impedire eliminazione del JSON globale se viene rimosso il widget a schermo
                         const trueId = id.split('_cited_')[0];
                         if (trueId === 'SYS_PROPERTIES_DB') {
                             if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Interfaccia rimossa. I dati del sistema rimangono intatti in background.", "info");
@@ -134,7 +136,35 @@ Object.assign(Editor, {
         let node = selection.getRangeAt(0).commonAncestorContainer;
         if (node.nodeType === 3) node = node.parentNode;
 
-        // --- FIX TABELLE HTML: Evita il raddoppio dei tag BR
+        // --- GESTIONE INVIO SU SNIPPET COPIABILE (EVITA NESTING ERRATO DI BLOCCHI IN SPAN) ---
+        const snippetText = node.closest('.snippet-text');
+        if (snippetText) {
+            e.preventDefault();
+            Editor.saveSnapshot();
+
+            const snippetWrapper = snippetText.closest('.adv-copy-snippet, .adv-inline-shell') || snippetText;
+            const parentBlock = snippetWrapper.closest('p, div, li, h1, h2, h3, h4, h5, h6') || snippetWrapper.parentNode;
+
+            const p = document.createElement('p');
+            p.innerHTML = '<br>';
+
+            if (parentBlock && parentBlock.parentNode) {
+                parentBlock.parentNode.insertBefore(p, parentBlock.nextSibling);
+            } else {
+                snippetWrapper.parentNode.insertBefore(p, snippetWrapper.nextSibling);
+            }
+
+            const newRange = document.createRange();
+            newRange.setStart(p, 0);
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+
+            Store.triggerAutoSave();
+            return;
+        }
+
+        // --- GESTIONE TABELLE HTML: Evita il raddoppio dei tag BR
         const simpleTableCell = node.closest('.simple-table-wrapper td, .simple-table-wrapper th');
         if (simpleTableCell) {
             e.preventDefault();
@@ -224,6 +254,9 @@ Object.assign(Editor, {
 
                 Store.triggerAutoSave();
                 return;
+            } else {
+                // Invio in mezzo al titolo: scatta uno snapshot prima della divisione nativa
+                Editor.saveSnapshot();
             }
         }
 
@@ -345,8 +378,21 @@ Object.assign(Editor, {
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
 
-        // CANCELLAZIONE ATOMICA SNIPPET (BACKSPACE): Se il cursore è subito dopo uno snippet, eliminalo direttamente
-        let snippetBefore = null;
+        // CANCELLAZIONE SEPARATORE <HR> CON BACKSPACE (Quando il cursore è direttamente nel root editor prima/dopo <hr>)
+        const editorRoot = document.getElementById('noteContent');
+        if (container === editorRoot && range.startOffset > 0) {
+            const nodeBefore = editorRoot.childNodes[range.startOffset - 1];
+            if (nodeBefore && nodeBefore.tagName === 'HR') {
+                e.preventDefault();
+                Editor.saveSnapshot();
+                nodeBefore.remove();
+                Store.triggerAutoSave();
+                return;
+            }
+        }
+
+        // CANCELLAZIONE ATOMICA WIDGET INLINE (BACKSPACE): Copre snippet, note inline e segnalibri
+        let inlineBefore = null;
         if (container.nodeType === 3) {
             const textBeforeCaret = container.nodeValue.substring(0, range.startOffset).replace(/[\u200B\uFEFF]/g, '');
             if (textBeforeCaret.length === 0) {
@@ -354,30 +400,41 @@ Object.assign(Editor, {
                 while (prev && prev.nodeType === 3 && prev.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
                     prev = prev.previousSibling;
                 }
-                if (prev && prev.classList && prev.classList.contains('adv-copy-snippet')) {
-                    snippetBefore = prev;
+                if (prev && prev.nodeType === 1 && (prev.classList.contains('adv-inline-shell') || prev.classList.contains('adv-copy-snippet') || prev.classList.contains('inline-note-wrapper') || prev.classList.contains('adv-bookmark-marker'))) {
+                    inlineBefore = prev;
                 }
             }
         } else if (container.nodeType === 1 && range.startOffset > 0) {
             const prev = container.childNodes[range.startOffset - 1];
-            if (prev && prev.classList && prev.classList.contains('adv-copy-snippet')) {
-                snippetBefore = prev;
+            if (prev && prev.nodeType === 1 && (prev.classList.contains('adv-inline-shell') || prev.classList.contains('adv-copy-snippet') || prev.classList.contains('inline-note-wrapper') || prev.classList.contains('adv-bookmark-marker'))) {
+                inlineBefore = prev;
             }
         }
 
-        if (snippetBefore) {
+        if (inlineBefore) {
             e.preventDefault();
             Editor.saveSnapshot();
             
+            const isBookmark = inlineBefore.classList.contains('adv-bookmark-marker');
+            const isInlineNote = inlineBefore.classList.contains('inline-note-wrapper');
+
             // Pulisce i cuscinetti \u200B adiacenti per evitare nodi vuoti
-            if (snippetBefore.previousSibling && snippetBefore.previousSibling.nodeType === 3 && snippetBefore.previousSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
-                snippetBefore.previousSibling.remove();
+            if (inlineBefore.previousSibling && inlineBefore.previousSibling.nodeType === 3 && inlineBefore.previousSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                inlineBefore.previousSibling.remove();
             }
-            if (snippetBefore.nextSibling && snippetBefore.nextSibling.nodeType === 3 && snippetBefore.nextSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
-                snippetBefore.nextSibling.remove();
+            if (inlineBefore.nextSibling && inlineBefore.nextSibling.nodeType === 3 && inlineBefore.nextSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                inlineBefore.nextSibling.remove();
             }
 
-            snippetBefore.remove();
+            inlineBefore.remove();
+
+            if (isBookmark && typeof UI !== 'undefined' && UI.renderTree) {
+                UI.renderTree();
+            }
+            if (isInlineNote && typeof UI !== 'undefined' && UI.renderInlineFootnotes) {
+                UI.renderInlineFootnotes();
+            }
+
             Store.triggerAutoSave();
             return;
         }
@@ -459,6 +516,17 @@ Object.assign(Editor, {
             if (currentWidget) {
                 return;
             }
+
+            // GESTIONE MINIMALE HR CON BACKSPACE: Se il blocco precedente è un separatore <hr>, rimuovilo
+            const prevSibling = block.previousElementSibling;
+            if (prevSibling && prevSibling.tagName === 'HR') {
+                e.preventDefault();
+                Editor.saveSnapshot();
+                prevSibling.remove();
+                Store.triggerAutoSave();
+                return;
+            }
+
             const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
             const isEmptyBlock = cleanText(block.textContent) === '';
             
@@ -478,6 +546,13 @@ Object.assign(Editor, {
                     }
                     break;
                 }
+            }
+
+            // Se il blocco è l'unico rimasto nell'editor ed è vuoto, impedisci lo svuotamento assoluto del documento
+            if (editorRoot && editorRoot.children.length === 1 && editorRoot.firstElementChild === block && isEmptyBlock) {
+                e.preventDefault();
+                block.innerHTML = '<br>';
+                return;
             }
 
             // Se il blocco precedente è vuoto: rimuovilo senza spostare il cursore a fine riga
@@ -536,7 +611,8 @@ Object.assign(Editor, {
                  return;
             }
 
-            // Selezione / eliminazione sicura davanti a widget protetti
+            // Gestione sicura davanti a widget protetti: se la riga corrente contiene testo, impedisce la fusione errata
+            // senza selezionare né distruggere inaspettatamente il widget soprastante.
             if (prevNode && WidgetManager.isProtectedBlock(prevNode)) {
                 const targetWidget = prevNode.closest('.adv-widget-shell');
                 if (currentWidget && targetWidget && currentWidget === targetWidget) {
@@ -560,17 +636,7 @@ Object.assign(Editor, {
                     return;
                 }
 
-                const shell = targetWidget || prevNode;
-                if (shell) {
-                    if (shell.classList.contains('adv-widget-selected')) {
-                        Editor.safeDeleteWidget(shell);
-                        Editor.clearWidgetSelection();
-                    } else {
-                        Editor.clearWidgetSelection();
-                        shell.classList.add('adv-widget-selected');
-                        Editor.selectedWidget = shell;
-                    }
-                }
+                // Se la riga attuale contiene testo, arresta semplicemente l'arretramento
                 return; 
             }
         }
@@ -595,8 +661,21 @@ Object.assign(Editor, {
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
 
-        // CANCELLAZIONE ATOMICA SNIPPET (DELETE / CANC): Se il cursore è subito prima di uno snippet (o su un cuscinetto \u200B adiacente), eliminalo direttamente
-        let snippetAfter = null;
+        // CANCELLAZIONE SEPARATORE <HR> CON CANC/DELETE (Quando il cursore è direttamente nel root editor prima di <hr>)
+        const editorRoot = document.getElementById('noteContent');
+        if (container === editorRoot && range.startOffset < editorRoot.childNodes.length) {
+            const nodeAfter = editorRoot.childNodes[range.startOffset];
+            if (nodeAfter && nodeAfter.tagName === 'HR') {
+                e.preventDefault();
+                Editor.saveSnapshot();
+                nodeAfter.remove();
+                Store.triggerAutoSave();
+                return;
+            }
+        }
+
+        // CANCELLAZIONE ATOMICA WIDGET INLINE (DELETE / CANC): Copre snippet, note inline e segnalibri
+        let inlineAfter = null;
         if (container.nodeType === 3) {
             const textAfterCaret = container.nodeValue.substring(range.startOffset).replace(/[\u200B\uFEFF]/g, '');
             if (textAfterCaret.length === 0) {
@@ -604,30 +683,41 @@ Object.assign(Editor, {
                 while (next && next.nodeType === 3 && next.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
                     next = next.nextSibling;
                 }
-                if (next && next.classList && next.classList.contains('adv-copy-snippet')) {
-                    snippetAfter = next;
+                if (next && next.nodeType === 1 && (next.classList.contains('adv-inline-shell') || next.classList.contains('adv-copy-snippet') || next.classList.contains('inline-note-wrapper') || next.classList.contains('adv-bookmark-marker'))) {
+                    inlineAfter = next;
                 }
             }
         } else if (container.nodeType === 1 && range.startOffset < container.childNodes.length) {
             const next = container.childNodes[range.startOffset];
-            if (next && next.classList && next.classList.contains('adv-copy-snippet')) {
-                snippetAfter = next;
+            if (next && next.nodeType === 1 && (next.classList.contains('adv-inline-shell') || next.classList.contains('adv-copy-snippet') || next.classList.contains('inline-note-wrapper') || next.classList.contains('adv-bookmark-marker'))) {
+                inlineAfter = next;
             }
         }
 
-        if (snippetAfter) {
+        if (inlineAfter) {
             e.preventDefault();
             Editor.saveSnapshot();
 
+            const isBookmark = inlineAfter.classList.contains('adv-bookmark-marker');
+            const isInlineNote = inlineAfter.classList.contains('inline-note-wrapper');
+
             // Pulisce i cuscinetti \u200B adiacenti per evitare nodi vuoti
-            if (snippetAfter.previousSibling && snippetAfter.previousSibling.nodeType === 3 && snippetAfter.previousSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
-                snippetAfter.previousSibling.remove();
+            if (inlineAfter.previousSibling && inlineAfter.previousSibling.nodeType === 3 && inlineAfter.previousSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                inlineAfter.previousSibling.remove();
             }
-            if (snippetAfter.nextSibling && snippetAfter.nextSibling.nodeType === 3 && snippetAfter.nextSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
-                snippetAfter.nextSibling.remove();
+            if (inlineAfter.nextSibling && inlineAfter.nextSibling.nodeType === 3 && inlineAfter.nextSibling.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
+                inlineAfter.nextSibling.remove();
             }
 
-            snippetAfter.remove();
+            inlineAfter.remove();
+
+            if (isBookmark && typeof UI !== 'undefined' && UI.renderTree) {
+                UI.renderTree();
+            }
+            if (isInlineNote && typeof UI !== 'undefined' && UI.renderInlineFootnotes) {
+                UI.renderInlineFootnotes();
+            }
+
             Store.triggerAutoSave();
             return;
         }
@@ -658,6 +748,16 @@ Object.assign(Editor, {
             if (isEmptyBlock) isAtEnd = true;
 
             if (isAtEnd) {
+                // GESTIONE MINIMALE HR CON CANC: Se l'elemento successivo è un <hr>, eliminalo
+                const nextSibling = block.nextElementSibling;
+                if (nextSibling && nextSibling.tagName === 'HR') {
+                    e.preventDefault();
+                    Editor.saveSnapshot();
+                    nextSibling.remove();
+                    Store.triggerAutoSave();
+                    return;
+                }
+
                 let nextNode = null;
                 const walker = document.createTreeWalker(document.getElementById('noteContent'), NodeFilter.SHOW_ELEMENT, null, false);
                 walker.currentNode = block;
@@ -672,7 +772,7 @@ Object.assign(Editor, {
                     }
                 }
 
-                // FIX MANUAL MERGE (DELETE): Se il nodo successivo contiene un widget inline (come un appunto o snippet),
+                // Se il nodo successivo contiene un widget inline (come un appunto o snippet),
                 // il merge nativo del browser distruggerebbe i tag contenteditable=false. Lo uniamo manualmente!
                 if (nextNode && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextNode.tagName) && nextNode.querySelector('.adv-inline-shell')) {
                     e.preventDefault();
@@ -706,9 +806,8 @@ Object.assign(Editor, {
                     return;
                 }
 
+                // Gestione sicura con Canc davanti a widget protetti sottostanti
                 if (nextNode && WidgetManager.isProtectedBlock(nextNode)) {
-                    
-                    // Stesso principio del Backspace
                     const targetWidget = nextNode.closest('.adv-widget-shell');
                     if (currentWidget && targetWidget && currentWidget === targetWidget) {
                         return; 
@@ -731,17 +830,7 @@ Object.assign(Editor, {
                         return;
                     }
 
-                    const shell = targetWidget || nextNode;
-                    if (shell) {
-                        if (shell.classList.contains('adv-widget-selected')) {
-                            Editor.safeDeleteWidget(shell);
-                            Editor.clearWidgetSelection();
-                        } else {
-                            Editor.clearWidgetSelection();
-                            shell.classList.add('adv-widget-selected');
-                            Editor.selectedWidget = shell;
-                        }
-                    }
+                    // Se il blocco contiene testo: impedisce la fusione errata del widget nel testo
                     return; 
                 }
             }

@@ -5,8 +5,9 @@
  * Tutela dell'infrastruttura Widget, dell'attributo 'start' degli elenchi numerati (OL), di colspan/rowspan per le celle
  * e dei metadati dei link di VanillaDesk (incluso data-link-note per la descrizione aggiuntiva).
  * Inclusione classi e attributi per segnalibri e note commentate.
- * FEAT: toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
- * FEAT STATEFUL LIST ICON: Aggiornamento contestuale dinamico dell'icona, del tooltip e dello stato active-format su btnListMenu.
+ * Preservazione esplicita del tag HR nella lista dei tag consentiti dalla gomma formattazioni.
+ * toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
+ * Aggiornamento contestuale dinamico dell'icona, del tooltip e dello stato active-format su btnListMenu.
  */
 
 Object.assign(Editor, {
@@ -458,7 +459,8 @@ Object.assign(Editor, {
             return true;
         };
 
-        const allowedTags = ['B', 'I', 'U', 'S', 'A', 'P', 'SPAN', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'BR', 'IMG', 'INPUT', 'SVG', 'PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'];
+        // NOTA: 'HR' deve essere esplicitamente incluso in allowedTags affinché le linee di separazione non vengano cancellate dalla gomma
+        const allowedTags = ['B', 'I', 'U', 'S', 'A', 'P', 'SPAN', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'BR', 'HR', 'IMG', 'INPUT', 'SVG', 'PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'];
         const allowedPrefixes = ['hl-', 'tx-', 'bg-', 'text-', 'ff-', 'fs-'];
         
         const allowedClasses = [

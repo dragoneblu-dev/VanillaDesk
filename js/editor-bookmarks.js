@@ -5,7 +5,8 @@
  * cronjob globale in background per la notifica dei timer scaduti,
  * gestione resiliente dello Snooze e aggiornamento dinamico della sidebar.
  * Gestione note e commenti sui segnalibri con apertura Drawer dedicato,
- * avvisi di conferma su sovrascrizione o eliminazione e posizionamento esatto del cursore.
+ * supporto per a capo nel tooltip dinamico e trasferimento opzionale della vecchia nota
+ * su creazione di un nuovo segnalibro nella stessa pagina.
  */
 
 Object.assign(Editor, {
@@ -28,21 +29,47 @@ Object.assign(Editor, {
         return temp.textContent.replace(/[\u200B\n\r]/g, '').trim().length > 0;
     },
 
+    _buildBookmarkTooltip: (htmlContent) => {
+        if (!htmlContent) return '';
+        const temp = document.createElement('div');
+        // Converte i <br> e i tag di blocco in ritorni a capo testuali espliciti prima di estrarre il testo
+        temp.innerHTML = htmlContent.replace(/<br\s*[\/]?>/gi, '\n')
+                                    .replace(/<\/p>/gi, '\n')
+                                    .replace(/<\/li>/gi, '\n');
+        
+        const rawLines = temp.textContent.replace(/\u200B/g, '').split('\n')
+            .map(l => l.trim())
+            .filter(l => l.length > 0);
+
+        if (rawLines.length === 0) return '';
+        
+        const safeLines = rawLines.map(l => UI.escapeHTML(l));
+        return `${safeLines.join('<br>')}`;
+    },
+
     insertBookmark: () => {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
 
-        // Controllo preventivo: se esiste già un segnalibro con commenti, chiedi conferma prima di sovrascriverlo
-        const existingBookmarks = editor.querySelectorAll('.adv-bookmark-marker');
+        // Individua eventuali segnalibri già presenti nella pagina
+        const existingBookmarks = Array.from(editor.querySelectorAll('.adv-bookmark-marker'));
+        let oldCommentHTML = '';
         let hasCommentedExisting = false;
-        existingBookmarks.forEach(b => {
-            if (Editor.hasBookmarkComment(b)) hasCommentedExisting = true;
-        });
 
-        if (hasCommentedExisting) {
-            if (!confirm(I18n.t('bookmarks.confirm_overwrite'))) {
-                return;
+        for (const b of existingBookmarks) {
+            if (Editor.hasBookmarkComment(b)) {
+                hasCommentedExisting = true;
+                oldCommentHTML = Editor.getBookmarkComment(b);
+                break;
             }
+        }
+
+        let importExistingComment = false;
+
+        // Se un segnalibro con note esiste già, usa il dialogo nativo del browser:
+        // OK = importa la vecchia nota nel nuovo segnalibro; Annulla = nuovo segnalibro vuoto
+        if (hasCommentedExisting) {
+            importExistingComment = confirm(I18n.t('bookmarks.confirm_overwrite'));
         }
 
         // Ripristina la selezione prima di scattare lo snapshot per non invalidare il range
@@ -59,24 +86,41 @@ Object.assign(Editor, {
         const now = new Date();
         const dateStr = now.toLocaleDateString('it-IT') + ' ' + now.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'});
 
-        marker.innerHTML = `<span class="bookmark-icon">${Icons.bookmark}</span><span class="bookmark-comment-data" style="display:none;"></span>`;
+        const finalCommentHTML = importExistingComment ? oldCommentHTML : '';
+        marker.innerHTML = `<span class="bookmark-icon">${Icons.bookmark}</span><span class="bookmark-comment-data" style="display:none;">${finalCommentHTML}</span>`;
         marker.setAttribute('data-date', dateStr);
+
+        if (importExistingComment && finalCommentHTML) {
+            const tooltipStr = Editor._buildBookmarkTooltip(finalCommentHTML);
+            if (tooltipStr) {
+                marker.setAttribute('data-tooltip', tooltipStr);
+            }
+        }
 
         const sel = window.getSelection();
 
         if (sel.rangeCount > 0) {
             const range = sel.getRangeAt(0);
             range.deleteContents();
-            range.insertNode(marker);
             
-            const spaceNode = document.createTextNode('\u200B');
-            marker.parentNode.insertBefore(spaceNode, marker.nextSibling);
+            // Cuscinetti simmetrici conformi prima e dopo l'inline shell
+            const zwsBefore = document.createTextNode('\u200B');
+            const zwsAfter = document.createTextNode('\u200B');
+            
+            range.insertNode(zwsAfter);
+            range.insertNode(marker);
+            range.insertNode(zwsBefore);
             
             const newRange = document.createRange();
-            newRange.setStartAfter(spaceNode);
+            newRange.setStart(zwsAfter, zwsAfter.length);
             newRange.collapse(true);
             sel.removeAllRanges();
             sel.addRange(newRange);
+
+            // Reset esplicito di comandi ereditati dal contesto per evitare grassetto involontario
+            if (document.queryCommandState('bold')) {
+                try { document.execCommand('bold', false, null); } catch (err) {}
+            }
         } else {
             editor.appendChild(marker);
         }
@@ -336,12 +380,10 @@ Object.assign(Editor, {
         }
         dataSpan.innerHTML = newHTML;
 
-        // Imposta o rimuove il tooltip dinamico per l'hover testuale
-        const temp = document.createElement('div');
-        temp.innerHTML = newHTML;
-        const plain = temp.textContent.replace(/[\u200B\n\r]/g, ' ').trim();
-        if (plain) {
-            marker.setAttribute('data-tooltip', `<b>Segnalibro:</b> ${UI.escapeHTML(plain)}`);
+        // Imposta o rimuove il tooltip dinamico per l'hover testuale preservando le righe multiple (<br>)
+        const tooltipStr = Editor._buildBookmarkTooltip(newHTML);
+        if (tooltipStr) {
+            marker.setAttribute('data-tooltip', tooltipStr);
         } else {
             marker.removeAttribute('data-tooltip');
         }

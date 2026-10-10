@@ -399,8 +399,9 @@ Object.assign(AdvancedTable, {
             <textarea id="advLongTextInput" class="modern-input" ${readonlyAttr} style="width:100%; height:100%; min-height: 300px; resize:vertical; font-family:inherit; font-size:0.95rem; line-height:1.5; padding:10px; ${isComputed ? 'cursor:default;' : ''}">${UI.escapeHTML(String(val))}</textarea>
         `;
         
+        // Se è in sola lettura/calcolato, usa un normale bottone 'btn' senza classe 'btn-primary' per abilitare la chiusura libera al click esterno
         const footerHTML = (isComputed || !AppState.isEditMode) ? `
-            <button class="btn btn-primary" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>
         ` : `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
             <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')">${I18n.t('adv_actions.save_text')}</button>
@@ -466,10 +467,12 @@ Object.assign(AdvancedTable, {
             
             AppState.notes.push(newNote);
             row.cells[colId] = noteId;
+            if (row.virtualCells) row.virtualCells[colId] = noteId;
             AdvancedTable.setState(realTableId, state);
             if (typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
                 AdvancedTable.syncSystemPropertiesRow(noteId);
             }
+            AdvancedTable.updateDependentViews(realTableId);
             Store.triggerAutoSave();
             newlyCreated = true;
         }

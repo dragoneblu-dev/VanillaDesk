@@ -142,7 +142,14 @@ Object.assign(AdvancedTable, {
         try {
             const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, renderCache || {}, tableId);
             const tabella = AdvancedTable._buildTabellaContext(renderCache);
-            const righe = tabella[tableId] || tabella[stateTitle] || []; 
+            
+            // Risoluzione certa e lineare delle righe del database corrente
+            let righe = tableId ? tabella[tableId] : null;
+            if (!righe || righe.length === 0) {
+                righe = stateTitle ? tabella[stateTitle] : null;
+            }
+            if (!righe) righe = [];
+
             const origine = origineContext || {};
 
             const fullCode = `'use strict';\n${AdvancedTable._formulaWrappers}\nreturn ${formulaStr};`;
@@ -161,7 +168,6 @@ Object.assign(AdvancedTable, {
             return String(result);
         } catch (e) {
             console.error("🔴 [FORMULA ERROR] Valutazione sincrona fallita:", e, "\nFormula:", formulaStr);
-            // Restituisce un token di errore semantico interpretabile da getFormatDisplayValue e renderCell
             return `ERROR: ${e.message || String(e)}`;
         }
     },
@@ -171,7 +177,14 @@ Object.assign(AdvancedTable, {
         try {
             const riga = AdvancedTable._buildRigaContext(row, columns, virtualCells, {}, tableId);
             const tabella = AdvancedTable._buildTabellaContext(null); 
-            const righe = tabella[tableId] || tabella[stateTitle] || []; 
+            
+            // Risoluzione certa e lineare delle righe del database corrente
+            let righe = tableId ? tabella[tableId] : null;
+            if (!righe || righe.length === 0) {
+                righe = stateTitle ? tabella[stateTitle] : null;
+            }
+            if (!righe) righe = [];
+
             const origine = origineContext || {};
 
             const fullCode = `'use strict';\n${AdvancedTable._formulaWrappers}\nreturn ${scriptStr};`;
@@ -857,7 +870,13 @@ LA MIA RICHIESTA:
             try {
                 const riga = AdvancedTable._buildRigaContext(mockRow, state.columns || [], mockRow.virtualCells, {}, tableId);
                 const tabella = AdvancedTable._buildTabellaContext();
-                const righe = tabella[tableId] || tabella[state.title] || [];
+                
+                // Risoluzione certa con fallback per la verifica live
+                let righe = tableId ? tabella[tableId] : null;
+                if (!righe || righe.length === 0) {
+                    righe = state.title ? tabella[state.title] : null;
+                }
+                if (!righe) righe = [];
 
                 const fullCode = `'use strict';\n${AdvancedTable._formulaWrappers}\nreturn ${formulaStr};`;
 

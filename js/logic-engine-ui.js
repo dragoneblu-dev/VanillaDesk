@@ -211,12 +211,18 @@ Object.assign(LogicEngine, {
         if (actType && actType.includes('formula')) {
             let ph = "Es: riga['Nome'].toUpperCase()";
             const inputIdAttr = (extraData && extraData.inputId) ? `id="${extraData.inputId}"` : '';
+
+            // Calcolo dell'altezza per almeno 6 righe (140px) se sono presenti più di 5 a capo
+            const rawFormula = val1 || '';
+            const lineCount = rawFormula.split(/\r\n|\r|\n/).length;
+            const dynamicMinHeight = lineCount > 5 ? '140px' : '80px';
+            const autoExpandScript = `if ((this.value.split('\\n').length) > 5) { this.style.minHeight = '140px'; }`;
             
             if (extraData && extraData.isEmailBody) {
-                return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:80px; resize:vertical;" placeholder="'Gentile ' + riga['Nome Cliente'] + ',\\nQuesta è una mail multi-riga!\\n\\n' + riga['Dettagli']" oninput="${onchangeCallback}('value', this.value)">${safeVal1}</textarea>`;
+                return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:${dynamicMinHeight}; resize:vertical;" placeholder="'Gentile ' + riga['Nome Cliente'] + ',\\nQuesta è una mail multi-riga!\\n\\n' + riga['Dettagli']" oninput="${onchangeCallback}('value', this.value); ${autoExpandScript}">${safeVal1}</textarea>`;
             }
             
-            return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:80px; resize:vertical;" placeholder="${ph}" oninput="${onchangeCallback}('value', this.value)">${safeVal1}</textarea>`;
+            return `<textarea ${inputIdAttr} class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:${dynamicMinHeight}; resize:vertical;" placeholder="${ph}" oninput="${onchangeCallback}('value', this.value); ${autoExpandScript}">${safeVal1}</textarea>`;
         }
 
         if (actType === 'set_fixed' && extraData && extraData.isEmailBody) {
@@ -338,7 +344,7 @@ Object.assign(LogicEngine, {
                 targetState ? targetState.columns : [], 
                 targetState ? targetState.id : '', 
                 targetState ? targetState.title : 'Database', 
-                mockRow.virtualCells || mockRow.cells,
+                mockRow.virtualCells || mockRow.cells, 
                 mockOrigine
             );
 

@@ -14,6 +14,7 @@
  * PROCEDURA UNICA SANITIZZAZIONE: Motore centralizzato per note inline e segnalibri limitato alle sole 4 opzioni permesse (Bold, Italic, Underline, Bullet).
  * FEAT BROKEN IMAGES: Generazione di un segnaposto visivo vettoriale chiaro ed evidente per immagini rimosse dal disco o non trovate.
  * FEAT RAW HTML SOURCE EDITOR: Editor a tutto schermo del codice sorgente liofilizzato per modifiche massive esterne (Ctrl+Shift+E).
+ * FIX RAW HTML SOURCE CODING: Popolamento esplicito di ta.value e corretta codifica delle entità HTML senza decodifiche spurie.
  */
 
 const Editor = {
@@ -866,7 +867,7 @@ const Editor = {
         }
 
         const rawMinifiedHtml = Editor.getCleanHTML();
-        const safeTitle = (note.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
+        const safeTitle = UI.escapeHTML(note.title || I18n.t('editor.untitled'));
 
         const bodyHTML = `
             <div style="display:flex; flex-direction:column; gap:10px; height:100%;">
@@ -901,7 +902,10 @@ const Editor = {
 
         setTimeout(() => {
             const ta = document.getElementById('advRawHtmlTextarea');
-            if (ta) ta.focus();
+            if (ta) {
+                ta.value = rawMinifiedHtml;
+                ta.focus();
+            }
         }, 50);
     },
 
@@ -947,6 +951,9 @@ const Editor = {
         }
         if (typeof CitationManager !== 'undefined') {
             CitationManager.renderLiveCitations();
+        }
+        if (typeof Editor.ensureInlineWidgetBuffers === 'function') {
+            Editor.ensureInlineWidgetBuffers(editorEl);
         }
         UI.renderInlineFootnotes();
         if (typeof TemplateManager !== 'undefined') {

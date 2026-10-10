@@ -1,11 +1,11 @@
 /**
  * AdvancedTableBoard.js
  * Modulo Kanban (Bacheca Trello-style) e selettore viste per Tabelle Database.
- * FEAT: Attivazione diretta WBS a click singolo per ogni auto-relazione.
- * FEAT WORKFLOW SELECTOR: Apertura Workflow Studio con selezione esplicita della relazione se multiple.
- * PERF: Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
+ * Attivazione diretta WBS a click singolo per ogni auto-relazione.
+ * Apertura Workflow Studio con selezione esplicita della relazione se multiple.
+ * Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
  * Protegge le prestazioni del browser con migliaia di record e mantiene intatta la posizione di scroll.
- * PERF REUSE VIRTUALCELLS & CLEAN PIPELINE: Riuso di virtualCells senza manipolazioni artificiose del DOM.
+ * Ricalcolo dinamico ad ogni ciclo di render per riflettere tempestivamente le modifiche delle relazioni.
  */
 
 const AdvancedBoard = {
@@ -255,17 +255,13 @@ const AdvancedBoard = {
             });
         }
 
-        // RIUSO ATOMICO O(1) DELLE VIRTUALCELLS: se le righe sono già state calcolate, riusa lo stato in memoria
-        let viewRows =[];
+        // RICALCOLO DINAMICO RIGHE VIRTUALI (Garantisce che i campi calcolati e relazionali siano sempre aggiornati)
+        let viewRows = [];
         const renderCache = {};
         state.rows.forEach(r => {
-            if (r.virtualCells) {
-                viewRows.push(r);
-            } else {
-                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
-                r.virtualCells = vRow.virtualCells;
-                viewRows.push(vRow);
-            }
+            const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+            r.virtualCells = vRow.virtualCells;
+            viewRows.push(vRow);
         });
 
         viewRows = AdvancedTable.filterRows(viewRows, state);

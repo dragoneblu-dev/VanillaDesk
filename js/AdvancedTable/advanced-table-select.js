@@ -1,20 +1,18 @@
 /**
  * js/AdvancedTable/advanced-table-select.js
  * Isolamento gestione Tipi Select (Singola, Multipla, Colori, Opzioni) con UI Stile Notion.
- * FIX ARCHITETTURALE: Rimosso il controllo fragile su drawerTitle.innerText.includes('Dettaglio Record').
- * La riapertura reattiva della vista record usa ora esclusivamente lo stato AdvancedTable.activeRecordId === rowId.
- * FIX POSIZIONAMENTO MENU: Logica di ricalcolo ancoraggio per i menu ricostruiti all'interno del Drawer.
- * FEAT ORDINAMENTO A-Z PERSISTENTE: Inserimento e rinomina opzioni mantengono sempre ordinato
- * l'array state.selectOptions[colId] da A alla Z in memoria e a video.
- * FIX SEARCH INPUT RESET: Azzeramento sicuro di tutti gli elementi #advCreateSelectInput nel DOM.
- * LOCALIZZAZIONE MULTILINGUA: Integrazione completa del dizionario I18n.
- * FIX ASYNC RACE-CONDITION: toggleSelectValue, createSelectOption e clearSelect rese asincrone
- * con await updateData per consentire la corretta esecuzione e il re-render post-automazione.
+ * Riapertura reattiva della vista record tramite stato AdvancedTable.activeRecordId === rowId.
+ * Logica di ricalcolo ancoraggio per i menu ricostruiti all'interno del Drawer.
+ * Ordinamento avanzato: all'apertura mostra prima i tag selezionati (A-Z) e poi quelli disponibili (A-Z).
+ * Eliminato il superfluo pulsante "Svuota Cella": le selezioni si gestiscono con toggle pulito (Notion style).
+ * Sottomenu modifica opzione (tre puntini) con chiusura automatica immediata al click esterno.
+ * Evidenziazione completa dell'intera riga per le opzioni selezionate (.adv-select-item.active) con sfondo dedicato,
+ * bordo d'accento e indicatore di spunta chiaro per massima leggibilità a colpo d'occhio.
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
 const svgTrashSel = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>`;
-const svgCloseSel = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>`;
+const svgCheckSel = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2.5" fill="none" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`;
 
 Object.assign(AdvancedTable, {
     pillColors: ['hl-c1', 'hl-c2', 'hl-c3', 'hl-c4', 'hl-c5', 'hl-c6', 'hl-c7', 'hl-c8', 'hl-c9', 'hl-c10'],
@@ -31,17 +29,28 @@ Object.assign(AdvancedTable, {
         
         if (!col) return;
 
-        // Garantisce l'ordinamento A-Z immediato dell'elenco memorizzato
         if (!state.selectOptions) state.selectOptions = {};
         if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
+        
+        // Ordina alfabeticamente la sorgente dati persistente
         state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
-        const options = [...state.selectOptions[colId]];
 
         if (!state.selectColors) state.selectColors = {};
         if (!state.selectColors[colId]) state.selectColors[colId] = {};
 
         let currentVals = (row && row.cells) ? row.cells[colId] : [];
         if (!Array.isArray(currentVals)) currentVals = currentVals ? [currentVals] : [];
+
+        // ORDINAMENTO BILANCIATO UX: Prima i selezionati (A-Z), poi i non selezionati (A-Z)
+        const selectedGroup = [];
+        const unselectedGroup = [];
+
+        state.selectOptions[colId].forEach(opt => {
+            if (currentVals.includes(opt)) selectedGroup.push(opt);
+            else unselectedGroup.push(opt);
+        });
+
+        const partitionedOptions = [...selectedGroup, ...unselectedGroup];
 
         const dropdown = document.createElement('div');
         dropdown.className = 'adv-dropdown adv-context-menu';
@@ -60,8 +69,6 @@ Object.assign(AdvancedTable, {
         }
         
         if (!anchorId) {
-            // Se non ho l'evento nativo (es. ricaricamento programmatico post-cambio colore)
-            // Analizzo se l'utente si trova nel cassetto laterale (Drawer) o nella tabella principale.
             const drawer = document.getElementById('advGlobalDrawer');
             if (drawer && drawer.classList.contains('open')) {
                 anchorId = `adv-sel-rec-${tableId}-${rowId}-${colId}`;
@@ -70,7 +77,9 @@ Object.assign(AdvancedTable, {
             }
         }
 
-        AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, options, currentVals, col, anchorId);
+        dropdown.setAttribute('data-anchor-id', anchorId || '');
+
+        AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, partitionedOptions, currentVals, col, anchorId);
         document.body.appendChild(dropdown);
         
         UI.Menu.positionAt(dropdown, anchorId);
@@ -95,7 +104,7 @@ Object.assign(AdvancedTable, {
         }
         html += `</div>`; 
 
-        html += `<div id="advSelectOptionsContainer" class="adv-scroll-container" style="flex:1; min-height: 50px; overflow-y: auto; padding-right: 5px; margin-right: -5px;">`;
+        html += `<div id="advSelectOptionsContainer" class="adv-scroll-container" style="flex:1; min-height: 50px; overflow-y: auto; padding-right: 5px; margin-right: -5px; display:flex; flex-direction:column; gap:2px;">`;
 
         options.forEach(opt => {
             const isSelected = currentVals.includes(opt);
@@ -105,24 +114,34 @@ Object.assign(AdvancedTable, {
 
             const btnId = `adv-sel-edit-${Date.now()}-${Math.random().toString(36).substr(2,4)}`;
 
+            // EVIDENZIAZIONE DELL'INTERA RIGA SELEZIONATA:
+            const activeRowStyle = isSelected
+                ? 'background: rgba(37, 99, 235, 0.08); font-weight: 600;'
+                : 'background: transparent;';
+
             html += `
-            <div class="adv-menu-item adv-select-item ${isSelected ? 'active' : ''}" style="padding-right:4px;">
-                <div style="display:flex; align-items:center; flex:1; min-width:0; overflow:hidden;" title="${isSelected ? I18n.t('adv_select.click_to_remove') : I18n.t('adv_select.click_to_select')}" onclick="event.stopPropagation(); AdvancedTable.toggleSelectValue('${tableId}', '${rowId}', '${colId}', '${escapedOpt}')">
-                    <span class="adv-select-pill ${colorClass}" style="margin:0; max-width:${isSelected ? '85%' : '95%'}; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-opt-name="${safeOptName}">${opt.replace(/</g, '&lt;')}</span>
-                    ${isSelected ? `<span style="margin-left:auto; margin-right:8px; opacity:0.5; display:inline-flex; align-items:center; pointer-events:none;">${svgCloseSel}</span>` : ''}
+            <div class="adv-menu-item adv-select-item ${isSelected ? 'active' : ''}" 
+                 style="padding: 4px 6px 4px 8px; border-radius: 4px; transition: background 0.15s ease; ${activeRowStyle}">
+                <div style="display:flex; align-items:center; flex:1; min-width:0; overflow:hidden; gap:8px;" 
+                     onclick="event.stopPropagation(); AdvancedTable.toggleSelectValue('${tableId}', '${rowId}', '${colId}', '${escapedOpt}')">
+                    
+                    <span class="adv-select-pill ${colorClass}" style="margin:0; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" data-opt-name="${safeOptName}">
+                        ${opt.replace(/</g, '&lt;')}
+                    </span>
+
+                    ${isSelected ? `
+                        <span style="margin-left:auto; color:var(--accent-color); display:inline-flex; align-items:center; flex-shrink:0; pointer-events:none;">
+                            ${svgCheckSel}
+                        </span>
+                    ` : ''}
                 </div>
-                <button id="${btnId}" class="adv-icon-btn" style="padding:4px; margin:0; color:currentColor; flex-shrink:0;" title="${I18n.t('adv_select.label_options')}" onclick="AdvancedTable.openSelectEditMenu(event, this, '${tableId}', '${rowId}', '${colId}', '${escapedOpt}', '${parentAnchorId}')">
+                <button id="${btnId}" class="adv-icon-btn" style="padding:4px; margin:0 0 0 4px; color:currentColor; flex-shrink:0;" title="${I18n.t('adv_select.label_options')}" onclick="AdvancedTable.openSelectEditMenu(event, this, '${tableId}', '${rowId}', '${colId}', '${escapedOpt}', '${parentAnchorId}')">
                     ${svgDotsHorizontal}
                 </button>
             </div>`;
         });
         html += `</div>`;
 
-        if (col.type === 'select' || (col.type === 'multi-select' && currentVals.length > 0)) {
-            html += `<div style="flex-shrink:0; padding-top: 4px; border-top: 1px solid var(--border-color); margin-top: 4px;">`;
-            html += `<div class="adv-menu-item" onclick="event.stopPropagation(); AdvancedTable.clearSelect('${tableId}', '${rowId}', '${colId}')"><em>${I18n.t('adv_select.empty_cell')}</em></div>`;
-            html += `</div>`;
-        }
         dropdown.innerHTML = html;
     },
 
@@ -151,7 +170,6 @@ Object.assign(AdvancedTable, {
         const newOpt = value.trim();
         if (!newOpt) return;
 
-        // Azzeramento garantito di tutti gli input advCreateSelectInput presenti nel documento
         document.querySelectorAll('#advCreateSelectInput').forEach(el => {
             el.value = '';
         });
@@ -167,8 +185,12 @@ Object.assign(AdvancedTable, {
     },
 
     openSelectEditMenu: (e, btnElement, tableId, rowId, colId, optName, parentAnchorId) => {
-        if (e) e.stopPropagation();
+        if (e) {
+            e.stopPropagation();
+            e.preventDefault();
+        }
         
+        // Rimuove eventuali sottomenu già aperti
         document.querySelectorAll('.adv-select-edit-menu').forEach(el => el.remove());
 
         const state = AdvancedTable.getState(tableId);
@@ -176,6 +198,7 @@ Object.assign(AdvancedTable, {
         dropdown.className = 'adv-dropdown adv-context-menu adv-select-edit-menu';
         dropdown.style.minWidth = '180px';
         dropdown.style.padding = '8px';
+        dropdown.style.zIndex = '10005';
         
         const safeOptName = optName.replace(/"/g, '&quot;');
         const escapedOpt = optName.replace(/'/g, "\\'");
@@ -208,6 +231,17 @@ Object.assign(AdvancedTable, {
         document.body.appendChild(dropdown);
         
         UI.Menu.positionAt(dropdown, btnElement.id);
+
+        // CHIUSURA DETERMINISTICA AL CLICK ESTERNO (Outside Click Handler)
+        const closeOnOutsideClick = (event) => {
+            if (!dropdown.contains(event.target) && event.target !== btnElement && !btnElement.contains(event.target)) {
+                dropdown.remove();
+                document.removeEventListener('pointerdown', closeOnOutsideClick, true);
+            }
+        };
+        setTimeout(() => {
+            document.addEventListener('pointerdown', closeOnOutsideClick, true);
+        }, 10);
     },
 
     renameSelectOption: (e, tableId, colId, oldName, newNameValue) => {
@@ -293,7 +327,61 @@ Object.assign(AdvancedTable, {
         }
 
         AdvancedTable.setState(tableId, state);
-        await AdvancedTable.toggleSelectValue(tableId, rowId, colId, newOpt);
+
+        const col = state.columns.find(c => c.id === colId);
+        const row = state.rows.find(r => r.id === rowId);
+
+        let finalValue;
+        if (col.type === 'select') {
+            finalValue = newOpt;
+        } else {
+            let current = (row && Array.isArray(row.cells[colId])) ? [...row.cells[colId]] : [];
+            if (!current.includes(newOpt)) current.push(newOpt);
+            finalValue = current;
+        }
+
+        await AdvancedTable.updateData(tableId, rowId, colId, finalValue);
+
+        const drawer = document.getElementById('advGlobalDrawer');
+        if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
+            AdvancedTable.openRecordView(tableId, rowId);
+        }
+
+        // COMPORTAMENTO DIFFERENZIATO:
+        // 1. SELECT SINGOLA: chiusura immediata perché la selezione è completata
+        if (col.type === 'select') {
+            UI.Menu.closeAll(true);
+            return;
+        }
+
+        // 2. MULTI-SELECT: il menu rimane aperto, mostra il nuovo elemento selezionato (✓) e azzera il campo di ricerca
+        const dropdown = document.getElementById('advSelectDropdown');
+        if (dropdown) {
+            state = AdvancedTable.getState(tableId);
+            const freshRow = state.rows.find(r => r.id === rowId);
+
+            let currentVals = (freshRow && freshRow.cells) ? freshRow.cells[colId] : [];
+            if (!Array.isArray(currentVals)) currentVals = currentVals ? [currentVals] : [];
+
+            const selectedGroup = [];
+            const unselectedGroup = [];
+
+            state.selectOptions[colId].forEach(opt => {
+                if (currentVals.includes(opt)) selectedGroup.push(opt);
+                else unselectedGroup.push(opt);
+            });
+
+            const partitionedOptions = [...selectedGroup, ...unselectedGroup];
+            const anchorId = dropdown.getAttribute('data-anchor-id') || null;
+
+            AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, partitionedOptions, currentVals, col, anchorId);
+            
+            document.querySelectorAll('#advCreateSelectInput').forEach(input => {
+                input.value = '';
+                input.focus();
+            });
+            AdvancedTable.filterSelectOptions('');
+        }
     },
 
     deleteSelectOption: (e, tableId, colId, optToDelete) => {
@@ -332,6 +420,7 @@ Object.assign(AdvancedTable, {
         let finalValue = value;
 
         if (col.type === 'select') {
+            // TOGGLE PER SELECT SINGOLA: Cliccare sul valore già attivo lo deseleziona svuotando la cella
             if (row && row.cells[colId] === value) {
                 finalValue = '';
             } else {
@@ -357,35 +446,26 @@ Object.assign(AdvancedTable, {
             state = AdvancedTable.getState(tableId);
             
             if (!state.selectOptions[colId]) state.selectOptions[colId] = [];
-            state.selectOptions[colId].sort((a, b) => String(a).localeCompare(String(b), undefined, { numeric: true, sensitivity: 'base' }));
-            const options = [...state.selectOptions[colId]];
             
+            // Preserva l'ordine visivo mantenuto dall'apertura per non far "saltare" l'elemento sotto il mouse
             const freshRow = state.rows.find(r => r.id === rowId);
             let currentVals = (freshRow && freshRow.cells) ? freshRow.cells[colId] : [];
             if (!Array.isArray(currentVals)) currentVals = currentVals ? [currentVals] : [];
             
-            AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, options, currentVals, col, null);
+            const currentRenderedOptions = Array.from(dropdown.querySelectorAll('.adv-select-pill'))
+                .map(el => el.getAttribute('data-opt-name'))
+                .filter(Boolean);
+
+            const optionsToRender = currentRenderedOptions.length > 0 ? currentRenderedOptions : state.selectOptions[colId];
+            const anchorId = dropdown.getAttribute('data-anchor-id') || null;
+
+            AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, optionsToRender, currentVals, col, anchorId);
             
             document.querySelectorAll('#advCreateSelectInput').forEach(input => {
-                input.value = ''; // Svuota completamente l'input per il prossimo inserimento
+                input.value = '';
                 input.focus();
             });
-            AdvancedTable.filterSelectOptions(''); // Ripristina la visibilità di tutte le opzioni
+            AdvancedTable.filterSelectOptions('');
         }
-    },
-
-    clearSelect: async (tableId, rowId, colId) => {
-        let state = AdvancedTable.getState(tableId);
-        const col = state.columns.find(c => c.id === colId);
-
-        const finalValue = col.type === 'multi-select' ? [] : '';
-        await AdvancedTable.updateData(tableId, rowId, colId, finalValue);
-        
-        const drawer = document.getElementById('advGlobalDrawer');
-        if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId === rowId) {
-            AdvancedTable.openRecordView(tableId, rowId);
-        }
-        
-        UI.Menu.closeAll(true);
     }
 });

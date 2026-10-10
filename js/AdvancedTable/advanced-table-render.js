@@ -1,18 +1,17 @@
 /**
  * AdvancedTableRender.js
  * Motore Grafico Base. Legge lo stato del Database e genera l'HTML dell'infrastruttura Tabella.
- * FIX DOM: Disabilita i controlli "Aggiungi/Elimina Riga" se la vista sta visualizzando il Database di Sistema.
- * FIX CITAZIONI: Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
- * FIX DRY: Rimosse logiche duplicate di sortRows e filterRows. Delega a advanced-table-data.js.
- * FEAT COLORI: Supporto per Opacità Dinamica (CSS color-mix) via Javascript o Valore Fisso.
- * FIX TOOLTIP FILTRI: Unificate le informazioni di Commento e Filtro Attivo nell'unico tooltip di colonna (TH) per evitare conflitti di hover.
- * FEAT: Icona e layout per colonna 'note_link'.
- * FEAT TREE VIEW: Routing automatico verso AdvancedTree.render quando viewType === 'tree'.
- * RESTORE ATTACH CELL EVENTS: Ripristinata integralmente la funzione attachCellEvents e il mouseover globale.
- * FIX LIVE REFRESH: Il pulsante refresh ora ricarica e sincronizza fedelmente i dati dal disco.
- * FEAT AUTO-DRAWER LONG-TEXT: Andare a capo su un campo di testo apre automaticamente il drawer a tutta altezza
- * posizionando il cursore all'inizio della nuova riga per una scrittura fluida.
- * PERF REUSE VIRTUALCELLS & CLEAN PIPELINE: Riuso di virtualCells già presenti e pipeline lineare pulita.
+ * Disabilita i controlli "Aggiungi/Elimina Riga" se la vista sta visualizzando il Database di Sistema.
+ * Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
+ * Rimozione logiche duplicate di sortRows e filterRows con delega ad advanced-table-data.js.
+ * Supporto per Opacità Dinamica (CSS color-mix) via Javascript o Valore Fisso.
+ * Unificate le informazioni di Commento e Filtro Attivo nell'unico tooltip di colonna (TH) per evitare conflitti di hover.
+ * Icona e layout per colonna 'note_link'.
+ * Routing automatico verso AdvancedTree.render quando viewType === 'tree'.
+ * Ripristinata integralmente la funzione attachCellEvents e il mouseover globale.
+ * Il pulsante refresh ricarica e sincronizza fedelmente i dati dal disco.
+ * Andare a capo su un campo di testo apre automaticamente il drawer a tutta altezza.
+ * Ricalcolo dinamico obbligatorio delle virtualCells per garantire l'aggiornamento immediato di Backlink e Rollup.
  */
 
 Object.assign(AdvancedTable, {
@@ -326,17 +325,15 @@ Object.assign(AdvancedTable, {
         const visibleCols = state.columns.filter(c => !c.hidden && !hiddenList.includes(c.id));
         const hasHiddenCols = state.columns.length > visibleCols.length;
 
-        // RIUSO ATOMICO O(1) DELLE VIRTUALCELLS: se le righe sono già state calcolate, riusa lo stato in memoria
+        // RICALCOLO DINAMICO RIGHE VIRTUALI:
+        // Elimina il riuso di virtualCells stantie per garantire che Backlinks, Rollup e Formule
+        // riflettano istantaneamente modifiche e scollegamenti tra tabelle diverse.
         let viewRows = [];
         const renderCache = {};
         state.rows.forEach(r => {
-            if (r.virtualCells) {
-                viewRows.push(r);
-            } else {
-                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
-                r.virtualCells = vRow.virtualCells;
-                viewRows.push(vRow);
-            }
+            const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+            r.virtualCells = vRow.virtualCells;
+            viewRows.push(vRow);
         });
 
         // CHIAMATE AL MOTORE CENTRALE IN DATA.JS

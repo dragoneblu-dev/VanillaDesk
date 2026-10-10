@@ -5,8 +5,9 @@
  * Integrazione visiva della nuvoletta per i segnalibri provvisti di note/commenti.
  * Tracciamento dello stato dirty su spostamento e riordino delle note nell'albero.
  * Allineamento gerarchico completo del TOC laterale per supportare h1, h2 e h3.
- * FIX DATASET ID: Aggiunti attributi dataset.id a database, viste e pulsanti per abilitare la selezione attiva.
- * FIX GHOST NODE: Nella vista dedicata ai Database (isExplicitDbMode), i database vengono mostrati come nodi primari standard al 100% di opacità.
+ * Attributi dataset.id a database, viste e pulsanti per abilitare la selezione attiva.
+ * Nella vista dedicata ai Database (isExplicitDbMode), i database vengono mostrati come nodi primari standard al 100% di opacità.
+ * Gestione TOC per capitoli (H1, H2, H3) indipendente dallo stato expanded delle sotto-note.
  */
 
 Object.assign(UI, {
@@ -684,7 +685,6 @@ Object.assign(UI, {
             e.stopPropagation();
             e.preventDefault();
             
-            // Apertura con flag scrollToTop = true per posizionarsi direttamente in cima alla nota
             if (typeof UI.selectNote !== 'undefined') UI.selectNote(node.id, null, null, true);
             
             if (!AppState.isEditMode) {
@@ -703,7 +703,24 @@ Object.assign(UI, {
         const toggle = document.createElement('div');
         toggle.className = 'toggle-btn';
 
-        let isExpanded = node.expanded !== false || !isDefaultView || dbElementsToInject.length > 0;
+        // SEPARAZIONE NETTA TRA SOTTO-NOTE (CARTELLA) E CAPITOLI TOC DELLA NOTA ATTIVA
+        const isCurrentActive = (node.id === AppState.currentNoteId);
+        const hasSubNotes = childElements.length > 0 || dbElementsToInject.length > 0;
+        const hasOnlyToc = !hasSubNotes && tocHeaders.length > 0;
+
+        let isExpanded = false;
+
+        if (isCurrentActive && hasOnlyToc) {
+            // Se la nota ha solo capitoli TOC, è aperta di default a meno che l'utente non l'abbia appena chiusa manualmente (_tocCollapsed)
+            isExpanded = node._tocCollapsed !== true;
+        } else {
+            // Se ha sotto-note cartella reali, segue la memoria permanente node.expanded
+            isExpanded = node.expanded !== false || !isDefaultView || dbElementsToInject.length > 0;
+            // Ma se è la nota attiva e ha anche capitoli, e l'utente ha collassato il TOC:
+            if (isCurrentActive && node._tocCollapsed === true && !hasSubNotes) {
+                isExpanded = false;
+            }
+        }
         
         if (hasAnyChildren) {
             if (isExpanded) toggle.classList.add('expanded');
@@ -711,8 +728,17 @@ Object.assign(UI, {
             toggle.style.cursor = 'pointer';
             toggle.onclick = (e) => {
                 e.stopPropagation();
-                if (node.expanded === undefined) node.expanded = false; 
-                else node.expanded = !node.expanded;
+                if (isCurrentActive && hasOnlyToc) {
+                    // Toggle temporaneo del TOC per la nota attualmente aperta
+                    node._tocCollapsed = !node._tocCollapsed;
+                } else {
+                    // Toggle permanente delle sotto-note cartella
+                    if (node.expanded === undefined) node.expanded = false; 
+                    else node.expanded = !node.expanded;
+                    if (isCurrentActive && hasAnyChildren) {
+                        node._tocCollapsed = !node.expanded;
+                    }
+                }
                 UI.renderTree();
             };
         } else {
@@ -785,7 +811,7 @@ Object.assign(UI, {
         if (filter && noteMatchCount > 0 && !isGhost) {
             const countPill = document.createElement('span');
             countPill.className = 'search-match-count';
-            countPill.title = `${noteMatchCount} occorrenze trovate`;
+            countPill.title = I18n.t('common.occurrences_found', { count: noteMatchCount });
             countPill.textContent = noteMatchCount;
             content.append(toggle, title, countPill, addBtn);
         } else {

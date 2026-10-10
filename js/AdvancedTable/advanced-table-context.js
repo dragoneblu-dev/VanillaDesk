@@ -4,22 +4,22 @@
  * Motore "Virtual Cells" per la risoluzione dei Rollup, 
  * delle Relazioni (Decodifica Nomi) e Formule Matematiche topologiche.
  * Supporto per la risoluzione e visualizzazione del campo 'note_link'.
- * FIX TIMESTAMPS: Inserimento automatico di created_time e last_edited_time in virtualCells.
- * FIX NUMBER CAST: Conversione automatica in Number dei valori numerici letti da formule concatenate,
- * prevenendo il bug di concatenazione testuale ("10" + 10 = "1010").
- * FIX TRASHED NOTE LINK: getFormatDisplayValue allineato con renderCell nel restituire 'Nota nel Cestino'
+ * Inserimento automatico di created_time e last_edited_time in virtualCells.
+ * Conversione automatica in Number dei valori numerici letti da formule concatenate,
+ * prevenendo la concatenazione testuale ("10" + 10 = "1010").
+ * getFormatDisplayValue allineato con renderCell nel restituire 'Nota nel Cestino'
  * se la nota referenziata possiede l'attributo deletedAt.
- * FIX ROBUST DATE FORMATTING: formatTime reso completamente idempotente;
- * eliminata alla radice la generazione della stringa "Invalid Date Invalid Date" in presenza di date italiane o ri-formattate.
- * CONTRACT RESTORATION: Ripristinato il contratto canonico di getFormatDisplayValue per date singole (stringa inalterata)
- * e range temporali (start ➔ end in formato ISO), garantendo la conformità con la suite di test e l'interscambio dati.
- * FEAT ROLLUP BIDIREZIONALE: Risoluzione di rollup sia su relazioni uscenti che su relazioni entranti/inverse da altri DB.
- * FIX RECURSION GUARD: Introdotti presidi O(1) con Set su renderCache per arrestare matematicamente loop infiniti
- * e stack overflow tra relazioni e rollup incrociati bidirezionali.
- * FIX CROSS-DB FORMULA DEPENDENCY & RESOLUTION: _buildTabellaContext risolve in modo lazy e protetto
- * le virtualCells dei campi calcolati esterni, intercettando cicli cross-tabella con guardie set 'renderCache._resolvingCrossDB'.
- * FEAT IMMUTABLE ID RESOLUTION: _buildTabellaContext, _buildRigaContext e i record risolvono indifferentemente
+ * formatTime reso completamente idempotente per evitare generazioni di "Invalid Date".
+ * Contratto canonico di getFormatDisplayValue per date singole (stringa inalterata)
+ * e range temporali (start ➔ end in formato ISO), garantendo la conformità con l'interscambio dati.
+ * Risoluzione di rollup sia su relazioni uscenti che su relazioni entranti/inverse da altri DB.
+ * Presidi O(1) con Set su renderCache per arrestare loop infiniti e stack overflow tra relazioni e rollup incrociati bidirezionali.
+ * _buildTabellaContext risolve in modo lazy e protetto le virtualCells dei campi calcolati esterni,
+ * intercettando cicli cross-tabella con guardie set 'renderCache._resolvingCrossDB'.
+ * _buildTabellaContext, _buildRigaContext e i record risolvono indifferentemente
  * tramite ID Immutabile (es. adv_tbl_*, c_*) o Titolo/Nome colonna, rendendo le query immuni a qualsiasi rinomina.
+ * Calcolo dinamico in tempo reale dei Backlink (relation_backlink) con normalizzazione
+ * a sempre-array dei valori sorgente e invalidazione sistematica della cache su mutazioni.
  */
 
 Object.assign(AdvancedTable, {
@@ -109,10 +109,14 @@ Object.assign(AdvancedTable, {
         const targetState = AdvancedTable.getTableState(targetDbId);
         if (!targetState) return vals.map(id => ({ id: id, name: 'Orfano' }));
 
-        const displayColId = colDef.type === 'relation' ? colDef.targetColId : (targetState.columns && targetState.columns[0] ? targetState.columns[0].id : null);
+        // Per relation_backlink il displayColId è la prima colonna del DB target (es. ID_Attività o Nome Attività)
+        const displayColId = (colDef.type === 'relation' && colDef.targetColId) 
+            ? colDef.targetColId 
+            : (targetState.columns && targetState.columns[0] ? targetState.columns[0].id : null);
+            
         const displayColDef = (targetState.columns || []).find(c => c.id === displayColId);
 
-        // FAST-PATH: Se la colonna bersaglio non è un campo calcolato, saltiamo il pesante motore virtuale
+        // FAST-PATH: Se la colonna bersaglio non è un campo calcolato, leggiamo direttamente dalle celle
         const isCalculatedCol = displayColDef && ['formula', 'rollup', 'relation_backlink'].includes(displayColDef.type);
 
         return vals.map(tId => {
@@ -126,7 +130,6 @@ Object.assign(AdvancedTable, {
                 const cycleKey = `${targetDbId}_${tRow.id}_${displayColId}`;
 
                 if (renderCache._resolvingRows.has(cycleKey)) {
-                    // Spezza immediatamente il loop ricorsivo usando il dato grezzo salvato senza richiamare buildVirtualRow
                     val = (tRow.cells || {})[displayColId] || '...';
                 } else {
                     renderCache._resolvingRows.add(cycleKey);
@@ -399,8 +402,7 @@ Object.assign(AdvancedTable, {
                     }
                 } else if (virtualCells && virtualCells[c.id] !== undefined) {
                     val = virtualCells[c.id];
-                    // FIX CONCATENAZIONE FORMULE: Se il risultato virtuale è un numero salvato come stringa,
-                    // restituiscilo come Number nativo per evitare "10" + 10 = "1010"
+                    // Se il risultato virtuale è un numero salvato come stringa, restituiscilo come Number nativo
                     if (typeof val === 'string' && val.trim() !== '' && !isNaN(Number(val))) {
                         val = Number(val);
                     }
@@ -440,20 +442,30 @@ Object.assign(AdvancedTable, {
                     return;
                 }
 
+                // =========================================================================
+                // CALCOLO IN TEMPO REALE DEI BACKLINK (RELATION_BACKLINK)
+                // =========================================================================
                 if (col.type === 'relation_backlink' && col.linkedTableId && col.linkedColId) {
                     if (!renderCache.backlinks) renderCache.backlinks = {};
                     if (!renderCache.backlinks[col.id]) {
                         renderCache.backlinks[col.id] = {};
-                        const sourceState = AdvancedTable.getTableState(col.linkedTableId);
-                        if (sourceState) {
+                        const sourceDbId = AdvancedTable._resolveSourceId(col.linkedTableId);
+                        const sourceState = AdvancedTable.getTableState(sourceDbId);
+                        
+                        if (sourceState && Array.isArray(sourceState.rows)) {
                             sourceState.rows.forEach(srcRow => {
-                                const vals = srcRow.cells[col.linkedColId];
-                                if (Array.isArray(vals)) {
-                                    vals.forEach(v => {
-                                        if (!renderCache.backlinks[col.id][v]) renderCache.backlinks[col.id][v] = [];
-                                        renderCache.backlinks[col.id][v].push(srcRow);
-                                    });
-                                }
+                                let rawVals = (srcRow.cells || {})[col.linkedColId];
+                                // Normalizzazione rigorosa: sia array che singolo valore stringa diventano un array
+                                let vals = Array.isArray(rawVals) ? rawVals : (rawVals ? [rawVals] : []);
+                                
+                                vals.forEach(targetId => {
+                                    if (targetId) {
+                                        if (!renderCache.backlinks[col.id][targetId]) {
+                                            renderCache.backlinks[col.id][targetId] = [];
+                                        }
+                                        renderCache.backlinks[col.id][targetId].push(srcRow);
+                                    }
+                                });
                             });
                         }
                     }
@@ -461,7 +473,7 @@ Object.assign(AdvancedTable, {
                     let backlinks = renderCache.backlinks[col.id][row.id] || [];
 
                     if (col.backlinkDisplay === 'property' && col.backlinkPropertyId) {
-                        let props = backlinks.map(r => r.cells[col.backlinkPropertyId]).filter(v => v !== '' && v !== null);
+                        let props = backlinks.map(r => (r.cells || {})[col.backlinkPropertyId]).filter(v => v !== '' && v !== null && v !== undefined);
                         props = props.flat(); 
                         
                         if (col.backlinkDistinct) {
@@ -507,13 +519,15 @@ Object.assign(AdvancedTable, {
                         if (!renderCache.backlinks[cacheKey]) {
                             renderCache.backlinks[cacheKey] = {};
                             const sourceDbState = AdvancedTable.getTableState(targetTableId);
-                            if (sourceDbState) {
-                                (sourceDbState.rows || []).forEach(srcRow => {
-                                    let foreignVals = srcRow.cells[foreignColId];
+                            if (sourceDbState && Array.isArray(sourceDbState.rows)) {
+                                sourceDbState.rows.forEach(srcRow => {
+                                    let foreignVals = (srcRow.cells || {})[foreignColId];
                                     if (!Array.isArray(foreignVals)) foreignVals = foreignVals ? [foreignVals] : [];
                                     foreignVals.forEach(v => {
-                                        if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
-                                        renderCache.backlinks[cacheKey][v].push(srcRow);
+                                        if (v) {
+                                            if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
+                                            renderCache.backlinks[cacheKey][v].push(srcRow);
+                                        }
                                     });
                                 });
                             }
@@ -542,13 +556,15 @@ Object.assign(AdvancedTable, {
                             if (!renderCache.backlinks[cacheKey]) {
                                 renderCache.backlinks[cacheKey] = {};
                                 const sourceDbState = AdvancedTable.getTableState(targetTableId);
-                                if (sourceDbState) {
-                                    (sourceDbState.rows || []).forEach(srcRow => {
-                                        let foreignVals = srcRow.cells[foreignColId];
+                                if (sourceDbState && Array.isArray(sourceDbState.rows)) {
+                                    sourceDbState.rows.forEach(srcRow => {
+                                        let foreignVals = (srcRow.cells || {})[foreignColId];
                                         if (!Array.isArray(foreignVals)) foreignVals = foreignVals ? [foreignVals] : [];
                                         foreignVals.forEach(v => {
-                                            if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
-                                            renderCache.backlinks[cacheKey][v].push(srcRow);
+                                            if (v) {
+                                                if (!renderCache.backlinks[cacheKey][v]) renderCache.backlinks[cacheKey][v] = [];
+                                                renderCache.backlinks[cacheKey][v].push(srcRow);
+                                            }
                                         });
                                     });
                                 }
@@ -557,8 +573,9 @@ Object.assign(AdvancedTable, {
                         } else {
                             // Relazione uscente classica
                             targetTableId = relColDef.targetTableId;
-                            const relationVals = (row.cells || {})[col.relationColId];
-                            if (!relationVals || !Array.isArray(relationVals) || relationVals.length === 0) {
+                            let relationVals = (row.cells || {})[col.relationColId];
+                            if (!Array.isArray(relationVals)) relationVals = relationVals ? [relationVals] : [];
+                            if (relationVals.length === 0) {
                                 vRow.virtualCells[col.id] = '';
                                 return;
                             }
@@ -567,7 +584,7 @@ Object.assign(AdvancedTable, {
                             if (!renderCache.rowIndexes[targetTableId]) {
                                 renderCache.rowIndexes[targetTableId] = {};
                                 const ts = AdvancedTable.getTableState(targetTableId);
-                                if (ts) ts.rows.forEach(r => renderCache.rowIndexes[targetTableId][r.id] = { state: ts, row: r });
+                                if (ts && Array.isArray(ts.rows)) ts.rows.forEach(r => renderCache.rowIndexes[targetTableId][r.id] = { state: ts, row: r });
                             }
 
                             relationVals.forEach(tId => {
@@ -613,13 +630,8 @@ Object.assign(AdvancedTable, {
                             } catch(e) { val = ''; }
                         }
                         else if (targetColDef.type === 'rollup' || targetColDef.type === 'relation_backlink') {
-                            // Se la riga remota ha già calcolato virtualCells, estraiamo da lì, altrimenti deleghiamo con guardia
-                            if (tRow.virtualCells && tRow.virtualCells[col.targetColId] !== undefined) {
-                                val = tRow.virtualCells[col.targetColId];
-                            } else {
-                                const vTargetRow = AdvancedTable.buildVirtualRow(targetTableId, tRow, targetState, renderCache);
-                                val = vTargetRow.virtualCells[col.targetColId];
-                            }
+                            const vTargetRow = AdvancedTable.buildVirtualRow(targetTableId, tRow, targetState, renderCache);
+                            val = vTargetRow.virtualCells[col.targetColId];
                         }
                         else val = (tRow.cells || {})[col.targetColId];
 

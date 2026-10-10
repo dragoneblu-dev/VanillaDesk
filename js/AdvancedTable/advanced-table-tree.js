@@ -14,6 +14,7 @@
  * - Inizializzazione garantita di createdAt e updatedAt per prevenire anomalie di formattazione date.
  * - PERF REUSE VIRTUALCELLS & DOM SEARCH PRESERVATION: Riuso delle virtualCells già calcolate in memoria su 10.000 righe.
  * - PRESERVAZIONE LINEARE STRUTTURA: Mantenuta la riga canonica html += renderQuickSearchBar senza over-engineering.
+ * - FIX SUBTASK AUTOMATIONS: addSubtask ora esegue evaluate e triggerCrossDB al salvataggio per far scattare le regole su nuove righe.
  */
 
 const AdvancedTree = {
@@ -103,7 +104,7 @@ const AdvancedTree = {
         AdvancedTable.renderTable(tableId);
     },
 
-    addSubtask: (tableId, parentRowId) => {
+    addSubtask: async (tableId, parentRowId) => {
         if (!AppState.isEditMode) return;
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         let state = AdvancedTable.getState(realTableId);
@@ -146,6 +147,17 @@ const AdvancedTree = {
             state.treeCollapsedNodes = state.treeCollapsedNodes.filter(id => id !== parentRowId);
         }
 
+        const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, state);
+        newRow.virtualCells = freshVRow.virtualCells;
+        AdvancedTable.setState(realTableId, state);
+
+        // Esecuzione automazioni per nuova riga creata come sotto-attività
+        if (typeof AdvancedAutomations !== 'undefined') {
+            await AdvancedAutomations.evaluate(realTableId, newRowId, true);
+            await AdvancedAutomations.triggerCrossDB(realTableId);
+        }
+
+        state = AdvancedTable.getState(realTableId);
         AdvancedTable.setState(realTableId, state);
         AdvancedTable.updateDependentViews(realTableId);
         Store.triggerAutoSave();
@@ -612,7 +624,7 @@ const AdvancedTree = {
                         const cellRendererHtml = AdvancedTable.renderCell(tableId, row, col, val, state, isEdit);
 
                         html += `
-                            <td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; padding-left: 0 !important;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">
+                            <td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; padding-left: 0 !important;" data-col-name="${safeColName}">
                                 <div class="adv-tree-cell-wrapper" style="padding-left: ${indentPx}px;">
                                     ${toggleHtml}
                                     <div class="adv-tree-content-inner" style="flex: 1; min-width: 0;">
@@ -623,7 +635,7 @@ const AdvancedTree = {
                             </td>
                         `;
                     } else {
-                        html += `<td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
+                        html += `<td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px;" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                     }
                 });
 

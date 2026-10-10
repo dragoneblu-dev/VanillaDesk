@@ -5,11 +5,82 @@
  * Escape intelligente dalla formattazione, Indentazione e Spostamenti geometrici nelle tabelle).
  * Gestione della navigazione a celle basata su matrice 2D: spostamento perpendicolare affidabile
  * tra celle, con pieno supporto alla navigazione multilinea interna prima del cambio cella.
- * FIX SHIFT SELECTION SNIPPET: Permette la selezione estesa verticale (Shift+ArrowUp/Down)
- * attraverso gli snippet copiabili senza bloccare la selezione sul confine contenteditable="false".
+ * Selezione estesa verticale (Shift+ArrowUp/Down) attraverso gli snippet copiabili.
+ * Navigazione orizzontale (ArrowLeft/ArrowRight) priva di blocchi per entrare e uscire da snippet e inline shells.
+ * Rilascio automatico della selezione widget al movimento del cursore con tasti freccia.
  */
 
 Object.assign(Editor, {
+
+    /**
+     * SNIPPET HORIZONTAL ESCAPE
+     * Consente alle frecce ArrowLeft e ArrowRight di uscire fluidamente dallo snippet copiabile
+     * quando si raggiunge il primo o l'ultimo carattere, evitando che il cursore rimanga intrappolato.
+     */
+    _handleSnippetHorizontalEscape: (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return false;
+        if (e.shiftKey) return false;
+
+        const sel = window.getSelection();
+        if (!sel.rangeCount || !sel.isCollapsed) return false;
+
+        const range = sel.getRangeAt(0);
+        let node = range.startContainer;
+        let parent = node.nodeType === 3 ? node.parentNode : node;
+
+        const snippetText = parent.closest('.snippet-text');
+        if (!snippetText) return false;
+
+        const snippetWrapper = snippetText.closest('.adv-copy-snippet, .adv-inline-shell') || snippetText;
+
+        if (e.key === 'ArrowLeft') {
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(snippetText);
+            preRange.setEnd(range.startContainer, range.startOffset);
+            const isAtStart = preRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0;
+
+            if (isAtStart) {
+                e.preventDefault();
+                let prevNode = snippetWrapper.previousSibling;
+                const newRange = document.createRange();
+                if (prevNode && prevNode.nodeType === 3) {
+                    newRange.setStart(prevNode, prevNode.length);
+                } else if (prevNode) {
+                    newRange.setStartAfter(prevNode);
+                } else {
+                    newRange.setStartBefore(snippetWrapper);
+                }
+                newRange.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(newRange);
+                return true;
+            }
+        } else if (e.key === 'ArrowRight') {
+            const postRange = range.cloneRange();
+            postRange.selectNodeContents(snippetText);
+            postRange.setStart(range.endContainer, range.endOffset);
+            const isAtEnd = postRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0;
+
+            if (isAtEnd) {
+                e.preventDefault();
+                let nextNode = snippetWrapper.nextSibling;
+                const newRange = document.createRange();
+                if (nextNode && nextNode.nodeType === 3) {
+                    newRange.setStart(nextNode, 0);
+                } else if (nextNode) {
+                    newRange.setStartBefore(nextNode);
+                } else {
+                    newRange.setStartAfter(snippetWrapper);
+                }
+                newRange.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(newRange);
+                return true;
+            }
+        }
+
+        return false;
+    },
 
     /**
      * SNIPPET SHIFT SELECTION (Estensione Selezione Multi-Riga)
@@ -86,8 +157,8 @@ Object.assign(Editor, {
 
     /**
      * SNIPPET VERTICAL ESCAPE (Raycast Engine)
-     * Previene il bug del browser nativo che fa rimbalzare il cursore in un loop infinito 
-     * dentro/fuori lo snippet copiabile quando si preme ArrowUp o ArrowDown.
+     * Previene il blocco del cursore quando si preme ArrowUp o ArrowDown
+     * all'interno o nei pressi di uno snippet copiabile.
      */
     _handleSnippetVerticalEscape: (e) => {
         if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false;
@@ -125,10 +196,10 @@ Object.assign(Editor, {
         }
 
         const currentX = caretRect.left;
-        // Spostamento Y: Facciamo un balzo di 20 pixel (circa un'interlinea) sopra o sotto
+        // Spostamento Y: balzo di 20 pixel sopra o sotto
         const currentY = e.key === 'ArrowDown' ? caretRect.bottom + 20 : caretRect.top - 20;
 
-        // 2. RAYCASTING: Chiediamo al browser cosa c'è a quelle specifiche coordinate
+        // 2. RAYCASTING: Identifica l'elemento alle coordinate calcolate
         let targetNode = null;
         let targetOffset = 0;
 
@@ -152,7 +223,6 @@ Object.assign(Editor, {
 
         // 3. Verifica se abbiamo colpito qualcosa di valido nell'editor
         if (targetNode && editor.contains(targetNode)) {
-            // Fix: targetNode potrebbe essere un nodo di testo, che non ha .closest()
             const checkNode = targetNode.nodeType === 3 ? targetNode.parentNode : targetNode;
             
             if (!checkNode.closest('.adv-widget-shell:not(.adv-inline-shell)')) {
@@ -166,9 +236,7 @@ Object.assign(Editor, {
             }
         }
 
-        // 4. FALLBACK DI SICUREZZA
-        // Se il raycast fallisce (es. la riga sotto è troppo corta o siamo a fine blocco),
-        // usiamo la logica dei blocchi per non restare mai bloccati.
+        // 4. FALLBACK DI SICUREZZA: Navigazione a blocchi
         const currentBlock = parent.closest('p, div, li, h1, h2, h3, h4, h5, h6');
         if (!currentBlock || currentBlock.id === 'noteContent') return false;
 
@@ -207,15 +275,27 @@ Object.assign(Editor, {
     },
 
     /**
-     * GESTORE DI NAVIGAZIONE TABELLE (Matrice 2D)
-     * Ignora le regole logiche del browser per imporre spostamenti fisici su griglia (X,Y)
-     * e supporta le micro-navigazioni all'interno della singola cella.
+     * GESTORE DI NAVIGAZIONE TABELLE E WIDGET (Matrice 2D e Frecce)
+     * Governa gli spostamenti geometrici tra celle, gestisce l'escape orizzontale/verticale
+     * dai widget e rilascia la selezione widget attiva.
      */
     handleTableNavigation: (e) => {
         if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return false;
-        
-        // Prima di controllare le tabelle, diamo priorità allo scudo anti-rimbalzo per gli snippet
-        if (Editor._handleSnippetVerticalEscape(e)) return true;
+
+        // Rilascia l'eventuale selezione attiva di un intero widget
+        if (typeof Editor.clearWidgetSelection === 'function' && Editor.selectedWidget) {
+            Editor.clearWidgetSelection();
+        }
+
+        // Gestione escape orizzontale dagli snippet
+        if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+            if (Editor._handleSnippetHorizontalEscape(e)) return true;
+        }
+
+        // Gestione escape verticale dagli snippet
+        if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+            if (Editor._handleSnippetVerticalEscape(e)) return true;
+        }
 
         if (e.shiftKey) return false; // Non interferire con la selezione multipla nativa (Shift+Arrow)
 
@@ -232,8 +312,7 @@ Object.assign(Editor, {
         const table = row.closest('table');
         if (!table) return false;
 
-        // 1. COSTRUZIONE MATRICE 2D DELLA TABELLA (Risolve il problema dei Rowspan/Colspan)
-        // Creiamo una rappresentazione virtuale della tabella dove ogni cella "fusa" occupa più posti.
+        // 1. COSTRUZIONE MATRICE 2D DELLA TABELLA (Risolve Rowspan/Colspan)
         const grid = [];
         let maxCols = 0;
         let currGeo = null;
@@ -288,35 +367,27 @@ Object.assign(Editor, {
             const hasMoved = newRange && (newNode !== startContainer || newRange.startOffset !== startOffset);
 
             if (isStillInSameCell && hasMoved) {
-                // Il cursore si è spostato con successo alla riga successiva dentro la stessa cella
                 e.preventDefault();
                 return true;
             }
 
-            // Altrimenti eravamo già sull'ultima riga della cella (o la cella è a riga singola):
-            // Ripristiniamo la posizione originale e scendiamo alla cella inferiore
             sel.removeAllRanges();
             sel.addRange(origRange);
             intent = 'down';
 
         } else if (e.key === 'ArrowUp') {
-            // Proviamo a muovere il cursore all'indietro di una linea con il comando nativo del browser
             sel.modify("move", "backward", "line");
             const newRange = sel.rangeCount > 0 ? sel.getRangeAt(0) : null;
             let newNode = newRange ? newRange.startContainer : null;
 
-            // Se il cursore è ancora nella stessa cella ed è arretrato su un nodo o offset differente
             const isStillInSameCell = newNode && cell.contains(newNode.nodeType === 3 ? newNode.parentNode : newNode);
             const hasMoved = newRange && (newNode !== startContainer || newRange.startOffset !== startOffset);
 
             if (isStillInSameCell && hasMoved) {
-                // Il cursore si è spostato con successo alla riga precedente dentro la stessa cella
                 e.preventDefault();
                 return true;
             }
 
-            // Altrimenti eravamo già sulla prima riga della cella (o la cella è a riga singola):
-            // Ripristiniamo la posizione originale e saliamo alla cella superiore
             sel.removeAllRanges();
             sel.addRange(origRange);
             intent = 'up';
@@ -374,7 +445,7 @@ Object.assign(Editor, {
             targetCell.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'nearest' });
             return true;
         } else {
-            // FUORIUSCITA: Genera un paragrafo vuoto fuori dalla tabella se l'utente tenta di uscirne e non ci sono altri blocchi.
+            // Fuoriuscita pulita dalla tabella con inserimento di paragrafo se assente
             const wrapper = table.closest('.simple-table-wrapper, .adv-table-wrapper') || table;
             const isExitingUp = intent === 'up' || (intent === 'left' && targetX < 0);
             let pNode = isExitingUp ? wrapper.previousElementSibling : wrapper.nextElementSibling;
@@ -417,11 +488,10 @@ Object.assign(Editor, {
         if (preNode) {
             Editor.saveSnapshot();
             
-            // Caso A (Selezione Singola senza Shift): Usa l'API nativa per velocità ed eludere parsing complessi
+            // Caso A (Selezione Singola senza Shift): Usa l'API nativa per velocità
             if (selection.isCollapsed && !e.shiftKey) {
                 document.execCommand('insertText', false, '    ');
                 if (typeof CodeManager !== 'undefined') {
-                    // Calcolo esatto post-inserimento prima di richiamare l'Highlighter
                     const pos = Editor._getCodeOffset(preNode, selection.anchorNode, selection.anchorOffset);
                     CodeManager.highlightBlock(preNode, true);
                     Editor._setCodeOffset(preNode, pos, pos);
@@ -430,7 +500,7 @@ Object.assign(Editor, {
                 return;
             }
             
-            // Caso B (Selezione Multi-Linea o Shift+Tab): Applica logica di indentazione/outdentazione stringa
+            // Caso B (Selezione Multi-Linea o Shift+Tab): Indent/outdent riga per riga
             const range = selection.getRangeAt(0);
             
             let startOffset = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
@@ -453,7 +523,7 @@ Object.assign(Editor, {
 
             // Mappatura delle coordinate verticali e orizzontali (Linee e Colonne)
             for (let i = 0; i < lines.length; i++) {
-                let lineLength = lines[i].length + 1; // +1 per il \n
+                let lineLength = lines[i].length + 1; // +1 per \n
                 if (startLineIdx === -1 && (currentPos + lineLength > startOffset || currentPos + lines[i].length >= startOffset)) startLineIdx = i;
                 if (endLineIdx === -1 && (currentPos + lineLength > endOffset || currentPos + lines[i].length >= endOffset)) endLineIdx = i;
                 currentPos += lineLength;
@@ -467,7 +537,6 @@ Object.assign(Editor, {
 
             for (let i = startLineIdx; i <= endLineIdx; i++) {
                 if (e.shiftKey) {
-                    // Outdent (Rimuove fino a 4 spazi iniziali)
                     const match = lines[i].match(/^[ \t]{1,4}/);
                     if (match) {
                         lines[i] = lines[i].substring(match[0].length);
@@ -475,7 +544,6 @@ Object.assign(Editor, {
                         if (i === startLineIdx) charsAddedBeforeStart -= match[0].length;
                     }
                 } else {
-                    // Indent (Aggiunge 4 spazi)
                     lines[i] = '    ' + lines[i];
                     charsAddedTotal += 4;
                     if (i === startLineIdx) charsAddedBeforeStart += 4;
@@ -485,7 +553,6 @@ Object.assign(Editor, {
             preNode.textContent = lines.join('\n');
             if (typeof CodeManager !== 'undefined') CodeManager.highlightBlock(preNode, true);
 
-            // Ricalcolo del offset finale
             let newStart = Math.max(0, startOffset + charsAddedBeforeStart);
             let newEnd = Math.max(0, endOffset + charsAddedTotal);
             
@@ -601,14 +668,13 @@ Object.assign(Editor, {
 
     /**
      * GESTORE DI ESCAPE FORMATTAZIONE (Smart Exit)
-     * Rileva quando il cursore si sta incastrando ai confini di uno span (grassetto, link, ecc.)
-     * o di una cella editabile e lo forza ad uscire.
+     * Rileva quando il cursore si trova ai confini di uno span (grassetto, link, ecc.)
+     * o di una cella editabile e consente di proseguire la scrittura in testo normale.
      */
     handleFormatEscape: (e) => {
         if (!AppState.isEditMode) return;
         
         // 1. ESCAPE DA AREE EDITABILI (WIDGETS)
-        // Se l'utente usa frecce direzionali in una zona confinata, tentiamo di farlo evadere verso il basso.
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             const sel = window.getSelection();
             if (!sel.isCollapsed || !sel.rangeCount) return;
@@ -617,7 +683,6 @@ Object.assign(Editor, {
             let container = range.startContainer;
             let offset = range.startOffset;
 
-            // Se il cursore si trova alla fine estrema del nodo testuale
             if ((container.nodeType === Node.TEXT_NODE && offset === container.length) ||
                 (container.nodeType !== Node.TEXT_NODE && offset === container.childNodes.length)) {
                 
@@ -670,7 +735,7 @@ Object.assign(Editor, {
             let offset = range.startOffset;
 
             if (container.nodeType === Node.TEXT_NODE) {
-                if (offset < container.length) return; // Non siamo alla fine della parola
+                if (offset < container.length) return;
                 container = container.parentNode;
             } else if (container.childNodes.length > 0 && offset < container.childNodes.length) {
                 return; 
@@ -684,7 +749,6 @@ Object.assign(Editor, {
                 container.className.includes('fs-')
             );
 
-            // Disabilita lo stile e fa uscire il cursore dallo span
             if (formatTags.includes(container.tagName) || isFormatSpan) {
                 if (e.key === 'ArrowRight') {
                     e.preventDefault();
@@ -693,7 +757,6 @@ Object.assign(Editor, {
                     newRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(newRange);
-                    // Rimuove i comandi nativi se persistono
                     document.execCommand('bold', false, false);
                     document.execCommand('italic', false, false);
                     document.execCommand('underline', false, false);

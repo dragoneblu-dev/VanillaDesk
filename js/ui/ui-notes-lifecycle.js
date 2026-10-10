@@ -9,9 +9,12 @@
  * RISOLUZIONE ACCESSO FANTASMA: Azzerata la mutazione parassita di updatedAt e l'autosave incondizionato al cambio nota.
  * JIT COMPONENT RECONCILIATION: Esecuzione di Store.syncWidgetsForNote prima del montaggio del DOM.
  * SINCRONISMO STATO ATTIVO: Assegnazione immediata di AppState.currentNoteId e disattivazione del banner di pericolo al ripristino.
- * FIX JUMP TO WIDGET & SCROLL POSITION: jumpToWidget trasmette il refId del widget a selectNote impedendo la sovrascrittura di _lastScroll e atterrando direttamente sull'elemento target.
- * REFACTOR DRY HEADER PROPERTIES: Riciclo integrale di AdvancedTable.renderCell(..., false) per il rendering di sola lettura;
- * corretta gestione di array/relazioni nell'helper isFieldEmpty ed esclusione automatica di tutti i campi vuoti.
+ * JUMP TO WIDGET & SCROLL POSITION: jumpToWidget trasmette il refId del widget a selectNote impedendo la sovrascrittura di _lastScroll e atterrando direttamente sull'elemento target.
+ * SEARCH COUNTER: Formato a due numeri (attuale/totale nella nota).
+ * BADGE CONTATORI: Calcolo allineato di checkAndUpdatePropertiesIcon e updateNoteInfoIcon su selectNote e goHome.
+ * HEADER PROPERTIES I18N: Rendering integrato dei chip delle proprietà pagina e campi record internazionalizzati.
+ * RECORD NOTE TITLE PROPAGATION: Propagazione immediata e ridisegno reattivo della tabella quando il titolo della record_note viene modificato.
+ * RESET TOC COLLAPSE ON ACCESS: Ripristino automatico dell'indice dei capitoli quando si seleziona e apre la nota.
  */
 
 Object.assign(UI, {
@@ -89,6 +92,8 @@ Object.assign(UI, {
 
                     if (chipsHtml) {
                         const dbTitle = UI.escapeHTML(dbState.title || I18n.t('editor.database'));
+                        const recordBadgeLabel = I18n.t('notes_utils.header_record_badge');
+                        const openTableTitle = I18n.t('notes_utils.header_record_open_table');
 
                         htmlBlocks += `
                             <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
@@ -96,10 +101,10 @@ Object.assign(UI, {
                                     <div style="display:flex; align-items:center; gap:6px;">
                                         <span style="display:inline-flex; color:var(--accent-color);">${Icons.tableDatabase}</span>
                                         <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
-                                            RECORD: <b style="color:var(--accent-color);">${dbTitle}</b>
+                                            ${recordBadgeLabel} <b style="color:var(--accent-color);">${dbTitle}</b>
                                         </span>
                                     </div>
-                                    <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="UI.jumpToWidget('${realTableId}')" title="Apri Tabella Database">↗</button>
+                                    <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="UI.jumpToWidget('${realTableId}')" title="${openTableTitle}">↗</button>
                                 </div>
                                 <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                                     ${chipsHtml}
@@ -147,16 +152,19 @@ Object.assign(UI, {
                 });
 
                 if (pagePropsChipsHtml) {
+                    const pagePropsBadgeLabel = I18n.t('notes_utils.header_page_props_badge');
+                    const editPropsTitle = I18n.t('notes_utils.header_page_props_edit');
+
                     htmlBlocks += `
                         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                                 <div style="display:flex; align-items:center; gap:6px;">
                                     <span style="display:inline-flex; color:var(--accent-color);">${Icons.tag}</span>
                                     <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
-                                        PROPRIETÀ E TAG PAGINA
+                                        ${pagePropsBadgeLabel}
                                     </span>
                                 </div>
-                                <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="AdvancedTable.openRecordView('SYS_PROPERTIES_DB', 'sys_r_${note.id}')" title="Modifica Proprietà Pagina">⚙️</button>
+                                <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="AdvancedTable.openRecordView('SYS_PROPERTIES_DB', 'sys_r_${note.id}')" title="${editPropsTitle}">⚙️</button>
                             </div>
                             <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                                 ${pagePropsChipsHtml}
@@ -177,6 +185,7 @@ Object.assign(UI, {
     },
 
     promptNoteConflict: (localNote, diskNote) => {
+        // Pulizia preventiva di qualsiasi overlay di conflitto orfano
         const oldOverlay = document.getElementById('advNoteConflictOverlay');
         if (oldOverlay) oldOverlay.remove();
 
@@ -257,6 +266,7 @@ Object.assign(UI, {
             UI.closeDrawer();
             const note = Store.getNote(noteId);
             if (note) {
+                // Sincronizza immediatamente il banner e l'interfaccia di modifica prima di avviare il reload della pagina
                 UI._updateTrashedNoteUI(note);
             }
             UI.selectNote(noteId);
@@ -516,7 +526,7 @@ Object.assign(UI, {
                 }
             }
 
-            // 2. JIT COMPONENT RECONCILIATION
+            // 2. JIT COMPONENT RECONCILIATION: Allinea i database e widget referenziati all'accesso della nota
             if (typeof Store.syncWidgetsForNote === 'function' && note.content) {
                 await Store.syncWidgetsForNote(note.content);
             }
@@ -627,7 +637,9 @@ Object.assign(UI, {
             };
         }
         
+        // Calcolo e aggiornamento atomico dei badge dell'header all'apertura della nota
         UI.checkAndUpdatePropertiesIcon(id);
+        UI.updateNoteInfoIcon(id);
 
         const contentEl = document.getElementById('noteContent');
         if (contentEl) {
@@ -646,15 +658,16 @@ Object.assign(UI, {
             if (AppState.searchFilter && AppState.searchFilter.length > 0) {
                 if (typeof Editor !== 'undefined') Editor.applyHighlight(contentEl, AppState.searchFilter);
             }
-
-            if (typeof Editor !== 'undefined' && Editor.saveSnapshot) Editor.saveSnapshot();
         }
-
-        // RENDERING PROPRIETÀ NELL'HEADER
-        UI.renderPageHeaderProperties(note);
 
         // Aggiornamento interfaccia per note cestinate o attive
         UI._updateTrashedNoteUI(note);
+
+        // Rendering delle proprietà del record o tag della pagina in cima alla nota
+        if (typeof UI.renderPageHeaderProperties === 'function') {
+            UI.renderPageHeaderProperties(note);
+        }
+
         UI.renderInlineFootnotes();
         UI.updateBreadcrumb(note);
         UI.updateMarkBtn(note.isMarked);
@@ -792,14 +805,16 @@ Object.assign(UI, {
 
         document.querySelectorAll('.node-content').forEach(el => el.classList.remove('active'));
 
+        // Reset badge e proprietà
+        UI.checkAndUpdatePropertiesIcon(null);
+        UI.updateNoteInfoIcon(null);
+
+        if (typeof UI.renderPageHeaderProperties === 'function') {
+            UI.renderPageHeaderProperties(null);
+        }
+
         UI._updateTrashedNoteUI(null);
         UI.showEditor(false);
-
-        const headerProps = document.getElementById('noteHeaderProperties');
-        if (headerProps) {
-            headerProps.style.display = 'none';
-            headerProps.innerHTML = '';
-        }
 
         if (typeof UI.Minimap !== 'undefined') UI.Minimap.sync(); 
         
@@ -860,12 +875,36 @@ Object.assign(UI, {
             if (note.isRecordNote && note.linkedTableId && note.linkedRowId) {
                 if (typeof AdvancedTable !== 'undefined') {
                     AdvancedTable.touchRecordUpdate(note.linkedTableId, note.linkedRowId);
+
+                    // PROPAGAZIONE TITOLO NOTA RECORD ALLA TABELLA COLLEGATA
+                    const realTableId = AdvancedTable._resolveSourceId(note.linkedTableId);
+                    const dbState = AdvancedTable.getState(realTableId);
+                    if (dbState && Array.isArray(dbState.columns)) {
+                        const recCol = dbState.columns.find(c => c.type === 'record_note');
+                        const row = (dbState.rows || []).find(r => r.id === note.linkedRowId);
+                        if (row && recCol) {
+                            if (typeof AdvancedTable.buildVirtualRow === 'function') {
+                                const vRow = AdvancedTable.buildVirtualRow(realTableId, row, dbState);
+                                row.virtualCells = vRow.virtualCells;
+                            }
+                        }
+                    }
+                    AdvancedTable.updateDependentViews(realTableId);
+                    const tableEl = document.getElementById(note.linkedTableId);
+                    if (tableEl && typeof AdvancedTable.renderTable === 'function') {
+                        AdvancedTable.renderTable(note.linkedTableId);
+                    }
                 }
             }
 
             if (note.isRecordNote && note.linkedTableId && typeof AdvancedAutomations !== 'undefined') {
                 if (note.title !== note._oldTitle) {
-                    AdvancedAutomations.triggerFromNoteChange(note.linkedTableId, note.linkedRowId, 'TITLE', note._oldTitle, note.title);
+                    const realTableId = typeof AdvancedTable !== 'undefined' ? AdvancedTable._resolveSourceId(note.linkedTableId) : note.linkedTableId;
+                    const dbState = typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+                    const recCol = dbState && dbState.columns ? dbState.columns.find(c => c.type === 'record_note') : null;
+                    const colField = recCol ? `${recCol.id}_TITLE` : 'TITLE';
+
+                    AdvancedAutomations.triggerFromNoteChange(note.linkedTableId, note.linkedRowId, colField, note._oldTitle, note.title);
                     note._oldTitle = note.title;
                 }
             }
@@ -880,7 +919,7 @@ Object.assign(UI, {
         const note = Store.getNote(AppState.currentNoteId);
         if (!note || note.deletedAt) return;
 
-        if (!confirm(I18n.t('notes_utils.confirm_move_trash'))) return;
+        if (!confirm(I18n.t('notes_utils.confirm_move_trash'))) return; 
         
         const parentIdToReturn = note.parentId;
 
@@ -960,7 +999,12 @@ Object.assign(UI, {
                 if (note.content !== note._oldContent) {
                     const oldPlain = UI.extractSearchableText(note._oldContent);
                     const newPlain = UI.extractSearchableText(note.content);
-                    AdvancedAutomations.triggerFromNoteChange(note.linkedTableId, note.linkedRowId, 'CONTENT', oldPlain, newPlain);
+                    const realTableId = typeof AdvancedTable !== 'undefined' ? AdvancedTable._resolveSourceId(note.linkedTableId) : note.linkedTableId;
+                    const dbState = typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+                    const recCol = dbState && dbState.columns ? dbState.columns.find(c => c.type === 'record_note') : null;
+                    const colField = recCol ? `${recCol.id}_CONTENT` : 'CONTENT';
+
+                    AdvancedAutomations.triggerFromNoteChange(note.linkedTableId, note.linkedRowId, colField, oldPlain, newPlain);
                     note._oldContent = note.content;
                 }
             }

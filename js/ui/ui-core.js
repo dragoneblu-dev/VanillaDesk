@@ -11,6 +11,16 @@ window.UI = {
     tooltipTimeout: null,
     _drawerCloseTimer: null,
 
+    escapeHTML: (str) => {
+        if (str === null || str === undefined) return '';
+        return String(str)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    },
+
     toggleMinimap: () => {
         if (typeof UI.Minimap !== 'undefined') {
             UI.Minimap.toggle();

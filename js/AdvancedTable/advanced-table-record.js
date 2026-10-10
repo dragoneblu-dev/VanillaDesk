@@ -5,13 +5,12 @@
  * FIX UX: Rinominato "Elimina Record" in "Elimina Definitivamente".
  * FIX MULTI-SELECT: I valori (Tag) vengono ora sempre visualizzati in ordine alfabetico crescente.
  * FIX TIPI DATO: La cella "Number" ora invia il dato in formato Float e non String.
- * FIX RELAZIONI FORMULE: Assicura che i nomi delle relazioni nel Drawer passino
- * per la decodifica delle Virtual Row se la colonna bersaglio è una Formula JS. (Sostituito con metodo del Core).
- * FEAT: Rendering e navigazione della colonna 'note_link' (Collegamento a Nota) sia in Edit che in Read-Only.
- * FIX COMPATIBILITÀ MODULARE: Verifica l'esistenza di AdvancedTable.renderTable prima dell'invocazione.
- * FIX VALUE EXTRACTION: Utilizzo universale di AdvancedTable.getFormatDisplayValue per formule/rollup/numeri
- * preservando l'accesso diretto a row.createdAt e row.updatedAt per i timestamp di sistema.
- * FEAT DUPLICATE RECORD (CLONE ROW): Aggiunto pulsante 'Duplica Record' nel footer del drawer.
+ * FIX RELAZIONI FORMULE: Risoluzione corretta tramite il metodo del Core.
+ * FEAT: Rendering e navigazione della colonna 'note_link' (Collegamento a Nota).
+ * FIX VALUE EXTRACTION: Utilizzo universale di AdvancedTable.getFormatDisplayValue.
+ * FEAT DUPLICATE RECORD (CLONE ROW): Pulsante 'Duplica Record' nel footer del drawer.
+ * FEAT CONTEXT HEADER & BANNER: Intestazione drawer arricchita con il Titolo del Database di appartenenza
+ * e banner informativo esplicito quando si visualizza un record collegato proveniente da un'altra tabella.
  */
 
 Object.assign(AdvancedTable, {
@@ -72,6 +71,28 @@ Object.assign(AdvancedTable, {
 
         let html = '<div style="display:flex; flex-direction:column; gap:10px; width:100%;">';
 
+        // BANNER CONTESTUALE QUANDO IL RECORD PROVIENE DA UN ALTRO DATABASE COLLEGATO
+        if (relationCtx && relationCtx.srcTable && relationCtx.srcTable !== tableId) {
+            const realSrcId = AdvancedTable._resolveSourceId(relationCtx.srcTable);
+            const srcDbState = AdvancedTable.getState(realSrcId);
+            const srcDbName = srcDbState ? srcDbState.title : I18n.t('editor.database');
+            const targetDbName = state.title || I18n.t('editor.database');
+
+            const bannerText = I18n.t('adv_record.external_nav_banner', { targetDb: UI.escapeHTML(targetDbName), srcDb: UI.escapeHTML(srcDbName) });
+
+            html += `
+                <div style="background: rgba(37, 99, 235, 0.06); border: 1px solid rgba(37, 99, 235, 0.25); border-radius: 6px; padding: 10px 14px; margin-bottom: 5px; display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                    <div style="font-size: 0.82rem; color: var(--text-primary); line-height: 1.45;">
+                        <span style="color: var(--accent-color); font-weight: bold; margin-right: 4px;">🔗</span>
+                        ${bannerText}
+                    </div>
+                    <button class="btn" style="padding: 3px 8px; font-size: 0.75rem; flex-shrink: 0;" onclick="UI.closeDrawer(); setTimeout(() => UI.jumpToWidget('${tableId}'), 100);" title="Vai a questo database">
+                        Vai a DB ↗
+                    </button>
+                </div>
+            `;
+        }
+
         // BANNER CONTESTUALE DI CONFERMA CLONAZIONE
         if (isClonedCopy) {
             html += `
@@ -92,7 +113,6 @@ Object.assign(AdvancedTable, {
             let val = vRow.virtualCells[col.id];
             let displayVal = '';
 
-            // Se siamo nel DB di sistema, la colonna di collegamento alla nota è sempre in sola lettura
             const isCellEdit = isEdit && !isBacklink && !isSysNoteLink;
 
             if (isCellEdit) {
@@ -107,7 +127,7 @@ Object.assign(AdvancedTable, {
                     displayVal = `<span style="opacity:0.6; font-family:monospace; font-size:0.9rem;">${displayValToUse || '-'}</span>`;
                 }
                 else if (col.type === 'checkbox') {
-                    displayVal = `<input type="checkbox" ${val ? 'checked' : ''} style="transform: scale(1.2); cursor:pointer;" onchange="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.checked); AdvancedTable.openRecordView('${tableId}', '${rowId}');">`;
+                    displayVal = `<input type="checkbox" ${val ? 'checked' : ''} style="transform: scale(1.2); cursor:pointer;" onchange="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.checked); AdvancedTable.openRecordView('${tableId}', '${rowId}', ${relationCtx ? JSON.stringify(relationCtx) : 'null'});">`;
                 }
                 else if (col.type === 'date' || col.type === 'datetime' || col.type === 'time') {
                     const inputType = col.type === 'datetime' ? 'datetime-local' : col.type === 'date' ? 'date' : 'time';
@@ -139,7 +159,6 @@ Object.assign(AdvancedTable, {
                     const formattedVal = AdvancedTable.formatDecimal(rawVal, col.decimals);
                     const decAttr = col.decimals !== undefined ? col.decimals : 'default';
                     
-                    // FIX TIPI DATO: onblur invia a updateData il vero numero `n`, non la stringa formattata
                     const blurScript = `let v = this.value.trim(); let n = v === '' ? '' : parseFloat(v.replace(',', '.')); n = isNaN(n) ? '' : n; this.setAttribute('data-raw-value', n); this.type='text'; this.value=AdvancedTable.formatDecimal(n, this.getAttribute('data-decimals')); AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', n);`;
 
                     displayVal = `
@@ -155,7 +174,6 @@ Object.assign(AdvancedTable, {
                 }
                 else if (col.type === 'select' || col.type === 'multi-select') {
                     let content = '';
-                    // Clonazione sicura dell'array per non sporcare il JSON
                     let vals = Array.isArray(val) ? [...val] : (val ? [val] : []);
                     
                     // Ordinamento alfabetico solo per il Multi-Select
@@ -437,7 +455,6 @@ Object.assign(AdvancedTable, {
             const labelId = `drawer-prop-${col.id}`;
             const clickMenu = isEdit && !isSysNoteLink ? `id="${labelId}" onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
 
-            // FIX ETICHETTA NASCOSTA: Basata sul reale stato visivo per non confondere l'utente.
             html += `
                 <div style="display:flex; ${isLongText ? 'flex-direction:column; align-items:flex-start;' : 'align-items:center;'} gap:6px; padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px;">
                     <div style="${labelStyle}" ${clickMenu}>${col.name} ${isColCurrentlyHidden ? `<span style="opacity:0.5; font-weight:normal; text-transform:none;">${I18n.t('adv_record.hidden_badge')}</span>` : ''}</div>
@@ -494,7 +511,12 @@ Object.assign(AdvancedTable, {
 
         html += '</div>';
 
-        const titlePrefix = isSysDB ? I18n.t('adv_record.title_system') : I18n.t('adv_record.title_record');
+        // TITOLO DRAWER DINAMICO CON SPECIFICA DEL DATABASE
+        const dbTitleName = state.title || I18n.t('editor.database');
+        const titlePrefix = isSysDB 
+            ? I18n.t('adv_record.title_system') 
+            : I18n.t('adv_record.title_record_db', { dbTitle: UI.escapeHTML(dbTitleName) });
+
         UI.openDrawer(titlePrefix, html, null);
 
         setTimeout(() => {
@@ -518,7 +540,7 @@ Object.assign(AdvancedTable, {
 // Listener Evento BACK di ritorno da un Sottomenu del Drawer
 document.addEventListener('drawer-restored', (e) => {
     const titleText = e.detail.titleText || '';
-    if (titleText.includes('Record') || titleText.includes('Proprietà') || titleText.includes('Eigenschaften') || titleText.includes('Propiedades')) { // Intercetta 'Dettaglio Record' e 'Tag e Proprietà'
+    if (titleText.includes('Record') || titleText.includes('Proprietà') || titleText.includes('Eigenschaften') || titleText.includes('Propiedades')) {
         if (AdvancedTable.activeTableId && AdvancedTable.activeRecordId) {
             AdvancedTable.openRecordView(AdvancedTable.activeTableId, AdvancedTable.activeRecordId);
         }

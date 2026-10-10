@@ -4,8 +4,8 @@
  * Funzioni di supporto, formattazione, Breadcrumb e segnalibri della Nota (Utilities).
  * Integrazione del badge Cestino nel breadcrumb per le note eliminate e marcatura dirty su toggle preferiti.
  * Aggiunta voce "Modifica Sorgente HTML..." nel menu contestuale della nota.
- * FEAT HEADER PROPERTIES INDEPENDENT TOGGLES: Voci nel menu Opzioni Nota gestite tramite I18n.t
- * per abilitare/disabilitare indipendentemente i Campi del Record e le Proprietà Pagina.
+ * FEAT BADGE CONTATORI HEADER: Calcolo e rendering pillole [N] per Proprietà (🏷️) e Backlinks (ℹ️).
+ * FEAT HEADER PROPERTIES TOGGLE: Voci di menu contestuali per mostrare/nascondere le proprietà in cima alla pagina.
  */
 
 Object.assign(UI, {
@@ -15,28 +15,78 @@ Object.assign(UI, {
         if (!btn) return;
         
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
-        let hasProps = false;
+        let count = 0;
         
-        if (propsDb && propsDb.rows) {
-            const sysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === noteId);
-            if (sysRow) {
+        if (propsDb && propsDb.rows && noteId) {
+            const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === noteId);
+            if (sysRow && propsDb.columns) {
                 for (const col of propsDb.columns) {
                     if (col.id === 'sys_c_note') continue;
                     const val = sysRow.cells[col.id];
                     
-                    if (val === true) { hasProps = true; break; }
-                    if (Array.isArray(val) && val.length > 0) { hasProps = true; break; }
-                    if (typeof val === 'string' && val.trim() !== '') { hasProps = true; break; }
-                    if (typeof val === 'number') { hasProps = true; break; }
-                    if (typeof val === 'object' && val !== null && val.start) { hasProps = true; break; }
+                    if (val === true) count++;
+                    else if (Array.isArray(val) && val.length > 0) count++;
+                    else if (typeof val === 'string' && val.trim() !== '') count++;
+                    else if (typeof val === 'number') count++;
+                    else if (typeof val === 'object' && val !== null && (val.start || val.end)) count++;
                 }
             }
         }
-        
-        if (hasProps) {
+
+        // Rimuove eventuale vecchio badge residuo
+        const oldBadge = btn.querySelector('.header-counter-badge');
+        if (oldBadge) oldBadge.remove();
+
+        if (count > 0) {
             btn.classList.add('active');
+            btn.title = I18n.t('toolbar.page_properties_count', { count });
+            const badge = document.createElement('span');
+            badge.className = 'header-counter-badge';
+            badge.textContent = count;
+            btn.appendChild(badge);
         } else {
             btn.classList.remove('active');
+            btn.title = I18n.t('toolbar.page_properties');
+        }
+    },
+
+    updateNoteInfoIcon: (noteId) => {
+        const btn = document.getElementById('btnNoteInfo');
+        if (!btn) return;
+
+        // Rimuove eventuale badge precedente
+        const oldBadge = btn.querySelector('.header-counter-badge');
+        if (oldBadge) oldBadge.remove();
+
+        if (!noteId || !AppState.notes) {
+            btn.classList.remove('active');
+            btn.title = I18n.t('toolbar.page_info');
+            return;
+        }
+
+        // Calcolo rapido eseguito solo all'apertura della nota (zero carico durante la digitazione)
+        const noteIdStr = `data-note-id="${noteId}"`;
+        const refNoteStr = `data-ref-note="${noteId}"`;
+        let backlinkCount = 0;
+
+        for (let i = 0; i < AppState.notes.length; i++) {
+            const n = AppState.notes[i];
+            if (n.deletedAt || n.id === noteId) continue;
+            if (n.content && (n.content.includes(noteIdStr) || n.content.includes(refNoteStr))) {
+                backlinkCount++;
+            }
+        }
+
+        if (backlinkCount > 0) {
+            btn.classList.add('active');
+            btn.title = I18n.t('toolbar.page_info_count', { count: backlinkCount });
+            const badge = document.createElement('span');
+            badge.className = 'header-counter-badge';
+            badge.textContent = backlinkCount;
+            btn.appendChild(badge);
+        } else {
+            btn.classList.remove('active');
+            btn.title = I18n.t('toolbar.page_info');
         }
     },
 
@@ -96,8 +146,8 @@ Object.assign(UI, {
                 const isPagePropsEnabled = dbState ? dbState.showHeaderPageProps === true : false;
                 const chkProps = isPagePropsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
 
-                const labelRecordFields = I18n.t('notes_utils.menu_header_record_fields') || "Campi Record Database in Cima";
-                const labelPageProps = I18n.t('notes_utils.menu_header_page_props') || "Proprietà / Tag Pagina in Cima";
+                const labelRecordFields = I18n.t('notes_utils.menu_header_record_fields');
+                const labelPageProps = I18n.t('notes_utils.menu_header_page_props');
 
                 items.push({
                     icon: Icons.tableDatabase,
@@ -135,7 +185,7 @@ Object.assign(UI, {
                 const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
                 const isPropsEnabled = propsDb ? propsDb.showHeaderOnNotes === true : false;
                 const chk = isPropsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
-                const labelPageProps = I18n.t('notes_utils.menu_header_page_props') || "Proprietà / Tag Pagina in Cima";
+                const labelPageProps = I18n.t('notes_utils.menu_header_page_props');
 
                 items.push({
                     icon: Icons.tag,
@@ -160,7 +210,7 @@ Object.assign(UI, {
             items.push({ type: 'divider' });
             items.push({
                 icon: typeof Icons !== 'undefined' ? Icons.code : '</>',
-                label: I18n.t('notes_utils.menu_raw_html') || 'Modifica Sorgente HTML...',
+                label: I18n.t('notes_utils.menu_raw_html'),
                 onClick: () => {
                     if (typeof Editor !== 'undefined' && typeof Editor.openRawHtmlEditor === 'function') {
                         Editor.openRawHtmlEditor();

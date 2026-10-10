@@ -235,7 +235,6 @@ const EventsGlobal = {
                 dragScrollTimer = null;
             }
         };
-        // =========================================================================
 
         const hideDropIndicator = () => {
             const ind = document.getElementById('adv-drop-indicator');
@@ -582,7 +581,8 @@ const EventsGlobal = {
 
             if (typeof Editor !== 'undefined') {
                 if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
-                    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                    // Navigazione completa su griglie e widget per tutte e 4 le direzioni
+                    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                         if (typeof Editor.handleTableNavigation === 'function') {
                             if (Editor.handleTableNavigation(e)) return;
                         }
@@ -604,11 +604,11 @@ const EventsGlobal = {
             }
 
             if (isCtrlOrCmd && AppState.isEditMode) {
-                // FORMATTAZIONI STANDARD DI TESTO
-                if (key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
-                if (key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
-                if (key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
-                if (key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
+                // FORMATTAZIONI STANDARD DI TESTO (SOLO SE SHIFT NON È PREMUTO per non confliggere con scorciatoie come Ctrl+Shift+B)
+                if (!e.shiftKey && key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
+                if (!e.shiftKey && key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
+                if (!e.shiftKey && key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
+                if (!e.shiftKey && key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
                 
                 // MULTI-CURSORE
                 if (key === 'd') { 

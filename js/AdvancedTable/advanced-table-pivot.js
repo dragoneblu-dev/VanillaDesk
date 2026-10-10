@@ -487,7 +487,7 @@ const AdvancedPivot = {
                                 htmlVal = content || '<span class="adv-select-empty">Vuoto</span>';
                             }
                         }
-                        html += `<td style="${isGroup ? 'font-weight:bold; background: rgba(0,0,0,0.01);' : ''} width: ${col.width}px; max-width: ${col.width}px; word-wrap: break-word;" title="Colonna: ${safeColName}" data-col-name="${safeColName}">${htmlVal}</td>`;
+                        html += `<td style="${isGroup ? 'font-weight:bold; background: rgba(0,0,0,0.01);' : ''} width: ${col.width}px; max-width: ${col.width}px; word-wrap: break-word;" data-col-name="${safeColName}">${htmlVal}</td>`;
                     });
                     html += `</tr>`;
                 });

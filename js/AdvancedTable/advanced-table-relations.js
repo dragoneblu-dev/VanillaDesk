@@ -5,11 +5,9 @@
  * - Configurazione guidata tramite Drawer (openRelationConfig, openRollupConfig)
  * - Selettore interattivo dei record collegati con ricerca e lazy-rendering incrementale (openRelationSelector)
  * - Controllo e blocco matematico dei cicli ricorsivi (checkCircularRelation)
- * - Scollegamento chirurgico tra entità relazionate (unlinkRelation)
- * - FEAT SECONDARY FIELD DISAMBIGUATION: Tendina "Dettaglio" nel Drawer di selezione relazionale
- *   per disambiguare record omonimi mostrando una colonna secondaria su layout monoriga con troncamento (Ellipsis).
- * - FEAT WBS SEMANTIC AUTO-SETUP: Inizializzazione automatica di col.treeDirection ('parent' o 'children')
- *   quando una relazione punta alla tabella stessa (auto-relazione).
+ * - Scollegamento chirurgico tra entità relazionate con invalidazione cache e ridisegno bidirezionale (unlinkRelation)
+ * - Tendina "Dettaglio" nel Drawer di selezione relazionale per disambiguare record omonimi su layout monoriga
+ * - Inizializzazione automatica di col.treeDirection ('parent' o 'children') per auto-relazioni WBS
  */
 
 Object.assign(AdvancedTable, {
@@ -19,13 +17,18 @@ Object.assign(AdvancedTable, {
     unlinkRelation: (srcTableId, srcRowId, srcColId, targetIdToUnlink, isBacklink) => {
         const realSrcTable = AdvancedTable._resolveSourceId(srcTableId);
         const srcState = AdvancedTable.getState(realSrcTable);
+        if (!srcState) return;
+
         const srcCol = srcState.columns.find(c => c.id === srcColId);
+        if (!srcCol) return;
 
         if (isBacklink) {
-            const targetDbId = srcCol.linkedTableId;
+            // Stiamo visualizzando un record di A (targetIdToUnlink) aperto da un backlink in B (realSrcTable).
+            // Dobbiamo rimuovere il record di B (srcRowId) dal campo relazione di A (targetColId).
+            const targetDbId = AdvancedTable._resolveSourceId(srcCol.linkedTableId);
             const targetColId = srcCol.linkedColId;
             const targetState = AdvancedTable.getState(targetDbId);
-            const targetRow = targetState.rows.find(r => r.id === targetIdToUnlink);
+            const targetRow = targetState ? targetState.rows.find(r => r.id === targetIdToUnlink) : null;
             
             if (targetRow) {
                 let vals = targetRow.cells[targetColId];
@@ -33,7 +36,16 @@ Object.assign(AdvancedTable, {
                 vals = vals.filter(id => id !== srcRowId);
                 AdvancedTable.updateData(targetDbId, targetIdToUnlink, targetColId, vals);
             }
+
+            // Svuota le cache virtuali e aggiorna reattivamente la tabella B (e tutte le sue viste collegate)
+            delete srcState._renderCache;
+            AdvancedTable.updateDependentViews(realSrcTable);
+            const srcDom = document.getElementById(srcTableId);
+            if (srcDom && typeof AdvancedTable.renderTable === 'function') {
+                AdvancedTable.renderTable(srcTableId);
+            }
         } else {
+            // Relazione diretta: rimuoviamo targetIdToUnlink dal record locale srcRowId
             const srcRow = srcState.rows.find(r => r.id === srcRowId);
             if (srcRow) {
                 let vals = srcRow.cells[srcColId];
@@ -41,11 +53,28 @@ Object.assign(AdvancedTable, {
                 vals = vals.filter(id => id !== targetIdToUnlink);
                 AdvancedTable.updateData(realSrcTable, srcRowId, srcColId, vals);
             }
+
+            // Aggiorna anche l'eventuale database bersaglio collegato
+            if (srcCol.targetTableId) {
+                const targetDbId = AdvancedTable._resolveSourceId(srcCol.targetTableId);
+                AdvancedTable.updateDependentViews(targetDbId);
+            }
+
+            delete srcState._renderCache;
+            AdvancedTable.updateDependentViews(realSrcTable);
+            const srcDom = document.getElementById(srcTableId);
+            if (srcDom && typeof AdvancedTable.renderTable === 'function') {
+                AdvancedTable.renderTable(srcTableId);
+            }
         }
+
+        Store.triggerAutoSave();
 
         if (typeof UI !== 'undefined') {
             UI.closeDrawer();
-            UI.showToast(I18n.t('adv_actions.unlink_success'), "info");
+            if (typeof UI.showToast === 'function') {
+                UI.showToast(I18n.t('adv_actions.unlink_success'), "info");
+            }
         }
     },
 
@@ -472,7 +501,7 @@ Object.assign(AdvancedTable, {
                 ${Icons.link} ${I18n.t('adv_actions.connected_to')} <b style="color:var(--accent-color); cursor:pointer;" onclick="UI.closeDrawer(); setTimeout(() => UI.jumpToWidget('${targetDbId}'), 150)" title="${I18n.t('adv_actions.go_to_source_db')}">${targetTabName}</b> ➔ ${I18n.t('adv_actions.field_label')} <b>${targetColName}</b>
             </div>
             
-            <!-- Barra Ricerca e Selettore Dettaglio Monoriga Compatto (Regola 1) -->
+            <!-- Barra Ricerca e Selettore Dettaglio Monoriga Compatto -->
             <div style="display:flex; gap:8px; margin-bottom:12px; align-items:center;">
                 <input type="text" id="relSelectSearch" class="modern-input" style="flex:1; margin:0;" placeholder="${I18n.t('adv_actions.search_value_placeholder')}" oninput="AdvancedTable.filterRelationOptions(this.value)">
                 <select id="relSecondaryColSelect" class="modern-input" style="flex:0 0 170px; margin:0; padding:6px 8px; font-size:0.8rem; font-weight:500;" onchange="AdvancedTable.changeRelationSecondaryCol(this.value)">
@@ -523,8 +552,6 @@ Object.assign(AdvancedTable, {
     filterRelationOptions: (val) => {
         clearTimeout(AdvancedTable._relSearchTimer);
         AdvancedTable._relSearchTimer = setTimeout(() => {
-            // Se l'utente digita una nuova stringa di ricerca, resettiamo il limitatore a 50 
-            // per evitare di calcolare a vuoto migliaia di DOM nodes con il nuovo filtro
             if (AdvancedTable._pendingRelSelect) AdvancedTable._pendingRelSelect.currentLimit = 50;
             AdvancedTable.renderRelationOptions(val);
         }, 250); 
@@ -560,29 +587,23 @@ Object.assign(AdvancedTable, {
             const tRow = targetState.rows[i];
             const isSelected = currentVals.includes(tRow.id);
 
-            // EARLY BREAK / LAZY EVALUATION (Ottimizzazione CPU)
-            // Se NON c'è filtro attivo, analizziamo solo fino a `currentLimit`. 
-            // Ciononostante, permettiamo sempre il transito agli elementi GIA' SELEZIONATI 
-            // affinché appaiano in cima alla lista a prescindere dal limite della pagina.
+            // EARLY BREAK / LAZY EVALUATION
             if (!filter && matchCount >= currentLimit && !isSelected) {
-                totalCount++; // Ma li contiamo, per mostrare il numerino "Rimanenti: X" sul pulsante
+                totalCount++;
                 continue;
             }
 
             let rawVal;
             if (isCalculatedCol) {
-                // Calcola la riga virtuale per far girare le formule e avere il vero nome
                 const vRow = AdvancedTable.buildVirtualRow(targetDbId, tRow, targetState, renderCache);
                 rawVal = vRow.virtualCells[displayColId];
             } else {
                 rawVal = tRow.cells[displayColId];
             }
 
-            // Usa l'estrattore per gestire Date e Record Note
             let displayVal = AdvancedTable.getFormatDisplayValue(targetColDef, rawVal, renderCache);
             if (!displayVal) displayVal = I18n.t('editor.untitled');
 
-            // Calcolo valore secondario di disambiguazione se attivo (Regola 1)
             let secondaryDisplayVal = '';
             if (secondaryColDef) {
                 let rawSecVal;
@@ -625,7 +646,6 @@ Object.assign(AdvancedTable, {
             return a.displayVal.localeCompare(b.displayVal, undefined, { numeric: true, sensitivity: 'base' });
         });
 
-        // Applichiamo la sforbiciata all'array finale per sicurezza (In caso di Filtri che restituiscono 10,000 risultati)
         const itemsToShow = itemsToRender.slice(0, currentLimit);
 
         let html = '';
@@ -670,7 +690,6 @@ Object.assign(AdvancedTable, {
     },
 
     checkCircularRelation: (sourceTableId, sourceRowId, targetTableId, targetRowId, colId = null, visited = new Set()) => {
-        // Auto-riferimento riflessivo diretto (un record non può essere padre o dipendente di se stesso)
         if (sourceTableId === targetTableId && sourceRowId === targetRowId) return true;
 
         const visitKey = `${targetTableId}_${targetRowId}`;
