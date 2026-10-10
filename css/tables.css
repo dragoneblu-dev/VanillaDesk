@@ -34,7 +34,7 @@
 /* FIX SELEZIONE CELLE: Uso box-shadow al posto di background-color per mantenere intatto il colore nativo della cella */
 .editor-content td.adv-cell-selected,
 .editor-content th.adv-cell-selected {
-    box-shadow: inset 0 0 0 1px var(--accent-color), inset 0 0 0 1000px rgba(37, 99, 235, 0.10) !important;
+    box-shadow: inset 0 0 0 1px var(--accent-color) !important;
     outline: none;
 }
 
@@ -84,13 +84,13 @@
 .text-center { text-align: center !important; }
 .text-right { text-align: right !important; }
 
-.editor-content table.table-striped tr:nth-child(even) td {
-    box-shadow: inset 0 0 0 9999px rgba(0, 0, 0, 0.02);
+.editor-content table.table-striped tbody tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.02);
 }
 
-[data-theme="dark"] .editor-content table.table-striped tr:nth-child(even) td,
-[data-theme="notion-dark"] .editor-content table.table-striped tr:nth-child(even) td {
-    box-shadow: inset 0 0 0 9999px rgba(255, 255, 255, 0.03);
+[data-theme="dark"] .editor-content table.table-striped tbody tr:nth-child(even),
+[data-theme="notion-dark"] .editor-content table.table-striped tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.03);
 }
 
 /* --- TRIGGERS (Pulsanti attivazione menu) --- */

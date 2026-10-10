@@ -322,7 +322,6 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 
 .adv-copy-snippet.snippet-masked {
     border-color: rgba(234, 179, 8, 0.4);
-    background: rgba(234, 179, 8, 0.05);
     transition: width 0.15s ease, background-color 0.15s ease;
 }
 

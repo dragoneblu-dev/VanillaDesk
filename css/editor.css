@@ -232,7 +232,7 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
     color: var(--text-primary); 
     
     /* Trasparenza adattiva ridotta per garantire nitidezza e contrasto immediati */
-    opacity: 0.7;
+    opacity: 0.8;
     transition: opacity 0.2s ease, box-shadow 0.2s ease;
 }
 

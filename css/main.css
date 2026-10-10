@@ -192,9 +192,11 @@ header.header-unsaved .btn:not(.btn-primary):hover {
     padding: 5px;
     cursor: pointer;
     border-radius: 4px;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
+    position: relative;
+    white-space: nowrap;
 }
 
 .icon-btn:hover {
@@ -214,6 +216,24 @@ header.header-unsaved .btn:not(.btn-primary):hover {
 
 .adv-icon-btn.danger {
     color: var(--danger-color);
+}
+
+/* --- BADGE CONTATORE HEADER PER PROPRIETÀ E BACKLINK --- */
+.header-counter-badge {
+    font-size: 0.65rem;
+    font-weight: 700;
+    line-height: 1;
+    padding: 2px 5px;
+    border-radius: 10px;
+    margin-left: 4px;
+    background-color: var(--item-active);
+    color: var(--accent-color);
+    border: 1px solid var(--border-color);
+    pointer-events: none;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .btn {

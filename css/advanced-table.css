@@ -1,183 +1,89 @@
 /* Wrapper isolato: Overflow orizzontale reale */
-.adv-table-wrapper {
-    position: relative;
-    margin: 15px 0;
-    width: 100%;
-    max-width: 100%;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-    user-select: none;
-    background: transparent;
-    clear: both; /* Impedisce compenetrazioni con immagini o elementi flottanti precedenti */
+.adv-table-wrapper { position: relative; margin: 15px 0; width: 100%; max-width: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; user-select: none; background: transparent; clear: both; /* Impedisce compenetrazioni con immagini o elementi flottanti precedenti */
 }
 
 /* Intestazione e Footer */
-.adv-table-header {
-    display: flex;
-    justify-content: flex-start;
-    align-items: center;
-    padding: 5px 0 10px 0;
-    gap: 8px;
-    background: transparent;
+.adv-table-header { display: flex; justify-content: flex-start; align-items: center; padding: 5px 0 10px 0; gap: 8px; background: transparent;
 }
 
-.adv-table-footer-controls {
-    padding: 10px 5px 5px 5px;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    background: transparent;
-    margin-top: 5px;
+.adv-table-footer-controls { padding: 10px 5px 5px 5px; display: flex; justify-content: space-between; align-items: center; background: transparent; margin-top: 5px;
 }
 
 .adv-footer-left { display: flex; gap: 10px; }
 .adv-footer-right { display: flex; align-items: center; gap: 5px; position: relative; }
 
-.widget-drag-handle, .adv-drag-handle {
-    color: var(--text-secondary);
-    cursor: grab;
-    padding: 2px 6px;
-    border-radius: 4px;
-    opacity: 0.5;
-    display: flex;
-    align-items: center;
+.widget-drag-handle, .adv-drag-handle { color: var(--text-secondary); cursor: grab; padding: 2px 6px; border-radius: 4px; opacity: 0.5; display: flex; align-items: center;
 }
 
-.widget-drag-handle:active, .adv-drag-handle:active {
-    cursor: grabbing;
+.widget-drag-handle:active, .adv-drag-handle:active { cursor: grabbing;
 }
 
-.widget-drag-handle:hover, .adv-drag-handle:hover {
-    background: var(--item-hover);
-    opacity: 1;
-    color: var(--text-primary);
+.widget-drag-handle:hover, .adv-drag-handle:hover { background: var(--item-hover); opacity: 1; color: var(--text-primary);
 }
 
-.widget-options-btn {
-    color: var(--text-secondary);
-    cursor: pointer;
-    padding: 2px 6px;
-    border-radius: 4px;
-    opacity: 0.5;
-    display: flex;
-    align-items: center;
+.widget-options-btn { color: var(--text-secondary); cursor: pointer; padding: 2px 6px; border-radius: 4px; opacity: 0.5; display: flex; align-items: center;
 }
 
-.widget-options-btn:hover {
-    background: var(--item-hover);
-    opacity: 1;
-    color: var(--text-primary);
+.widget-options-btn:hover { background: var(--item-hover); opacity: 1; color: var(--text-primary);
 }
 
-.adv-table-title {
-    font-size: 1.2rem;
-    font-weight: 700;
-    color: var(--text-primary);
-    border: 1px solid transparent;
-    padding: 2px 5px;
-    border-radius: 4px;
-    outline: none;
-    min-width: 100px;
+.adv-table-title { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); border: 1px solid transparent; padding: 2px 5px; border-radius: 4px; outline: none; min-width: 100px;
 }
 
 .adv-table-title:focus,
-.adv-table-title:hover {
-    border-color: var(--border-color);
-    background: var(--item-hover);
+.adv-table-title:hover { border-color: var(--border-color); background: var(--item-hover);
 }
 
-.adv-tools {
-    display: flex;
-    gap: 4px;
-    margin-left: auto !important;
+.adv-tools { display: flex; gap: 4px; margin-left: auto !important;
 }
 
-.adv-tool-btn {
-    background: transparent;
-    border: none;
-    color: var(--text-secondary);
-    font-size: 0.85rem;
-    cursor: pointer;
-    padding: 4px 8px;
-    border-radius: 4px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
+.adv-tool-btn { background: transparent; border: none; color: var(--text-secondary); font-size: 0.85rem; cursor: pointer; padding: 4px 8px; border-radius: 4px; display: flex; align-items: center; gap: 4px;
 }
 
-.adv-tool-btn:hover {
-    background: var(--item-hover);
-    color: var(--text-primary);
+.adv-tool-btn:hover { background: var(--item-hover); color: var(--text-primary);
 }
 
-.adv-tool-btn.active {
-    color: var(--accent-color);
-    background: rgba(37, 99, 235, 0.1);
+.adv-tool-btn.active { color: var(--accent-color); background: rgba(37, 99, 235, 0.1);
 }
 
 /* Contenitore a scorrimento orizzontale */
-.adv-scroll-container {
-    width: 100%;
-    overflow-x: auto;
-    padding-bottom: 5px;
+.adv-scroll-container { width: 100%; overflow-x: auto; padding-bottom: 5px;
 }
 
 /* TABELLA DATABASE PRINCIPALE */
-.adv-table {
-    border-collapse: collapse;
-    table-layout: fixed;
-    width: max-content;
+.adv-table { border-collapse: collapse; table-layout: fixed; width: max-content;
 }
 
 .adv-table-full-width { width: 100% !important; }
 
 .adv-table th,
-.adv-table td {
-    border: 1px solid var(--border-color);
-    padding: 6px 10px;
-    vertical-align: top;
-    position: relative;
-    font-size: 0.85rem;
-    color: var(--text-primary);
+.adv-table td { border: 1px solid var(--border-color); padding: 6px 10px; vertical-align: top; position: relative; font-size: 0.85rem; color: var(--text-primary); transition: box-shadow 0.12s ease, background-color 0.12s ease;
 }
 
 .adv-table td { word-wrap: break-word; }
 
-.adv-table th {
-    background: rgba(0, 0, 0, 0.02);
-    font-weight: 600;
-    text-align: left;
-    color: var(--text-secondary);
-    white-space: nowrap;
+.adv-table th { background: rgba(0, 0, 0, 0.02); font-weight: 600; text-align: left; color: var(--text-secondary); white-space: nowrap;
 }
 
 [data-theme="dark"] .adv-table th,
-[data-theme="notion-dark"] .adv-table th {
-    background: rgba(255, 255, 255, 0.04);
+[data-theme="notion-dark"] .adv-table th { background: rgba(255, 255, 255, 0.04);
 }
 
 .adv-table th:hover { background: var(--item-hover); }
+
+/* STATO EDITING/FOCUS CELLA (Feedback visivo senza alterazione layout) */
+.adv-table td:not(.adv-action-cell):focus-within { 
+box-shadow: inset 0 0 0 2px var(--accent-color) !important; 
+outline: none; 
+z-index: 2;
+}
 
 /* Evidenziazione Riga Selezionata */
 .adv-table tr.adv-row-selected td { background-color: rgba(239, 68, 68, 0.1) !important; }
 .adv-table tr.adv-row-selected { box-shadow: inset 0 0 0 1px var(--danger-color); }
 
 /* SELETTORE RIGA GLOBALE */
-#adv-global-row-selector {
-    position: fixed; 
-    width: 24px;
-    height: 24px;
-    background: var(--bg-color); 
-    border: 1px solid var(--border-color);
-    border-radius: 6px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.15s, transform 0.1s, background 0.2s;
-    z-index: 400; 
-    box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
+#adv-global-row-selector { position: fixed;  width: 24px; height: 24px; background: var(--bg-color);  border: 1px solid var(--border-color); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.1s, background 0.2s; z-index: 400;  box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
 }
 
 #adv-global-row-selector.visible { opacity: 1; pointer-events: auto; }
@@ -195,14 +101,7 @@
 .adv-cell-layout-long { flex-direction: column; align-items: flex-start; }
 .adv-cell-label { font-weight: bold; color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; }
 
-.adv-col-resizer {
-    position: absolute;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 5px;
-    cursor: col-resize;
-    z-index: 10;
+.adv-col-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10;
 }
 .adv-col-resizer:hover, .adv-col-resizer.resizing { background-color: var(--accent-color); opacity: 0.5; }
 
@@ -291,47 +190,19 @@ body.is-panning * { user-select: none !important; pointer-events: none !importan
    STILI TABELLA GERARCHICA AD ALBERO (TREE TABLE / WBS)
    ========================================================================= */
 
-.adv-tree-row {
-    transition: background-color 0.15s ease;
+.adv-tree-row { transition: background-color 0.15s ease;
 }
 
-.adv-tree-cell-wrapper {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    width: 100%;
-    min-height: 24px;
-    position: relative;
-    box-sizing: border-box;
+.adv-tree-cell-wrapper { display: flex; align-items: center; gap: 6px; width: 100%; min-height: 24px; position: relative; box-sizing: border-box;
 }
 
-.adv-tree-toggle {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    border-radius: 4px;
-    cursor: pointer;
-    transition: transform 0.15s ease, background 0.1s ease, color 0.1s ease;
-    flex-shrink: 0;
-    user-select: none;
+.adv-tree-toggle { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 4px; cursor: pointer; transition: transform 0.15s ease, background 0.1s ease, color 0.1s ease; flex-shrink: 0; user-select: none;
 }
 
-.adv-tree-toggle:hover {
-    background: var(--item-hover);
-    filter: brightness(1.15);
+.adv-tree-toggle:hover { background: var(--item-hover); filter: brightness(1.15);
 }
 
-.adv-tree-leaf-bullet {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 18px;
-    height: 18px;
-    font-size: 14px;
-    flex-shrink: 0;
-    user-select: none;
+.adv-tree-leaf-bullet { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; font-size: 14px; flex-shrink: 0; user-select: none;
 }
 
 /* Differenziazione cromatica per livelli gerarchici (0..4) */
@@ -342,53 +213,17 @@ body.is-panning * { user-select: none !important; pointer-events: none !importan
 .adv-tree-level-4 { color: var(--tx-c7) !important; }
 
 /* Micro-badge conteggio sotto-task su rami collassati */
-.adv-tree-badge-count {
-    font-size: 0.7rem;
-    font-family: monospace;
-    font-weight: bold;
-    padding: 1px 5px;
-    border-radius: 10px;
-    background: var(--item-active);
-    color: var(--text-secondary);
-    border: 1px solid var(--border-color);
-    margin-right: 2px;
-    line-height: 1.2;
-    user-select: none;
+.adv-tree-badge-count { font-size: 0.7rem; font-family: monospace; font-weight: bold; padding: 1px 5px; border-radius: 10px; background: var(--item-active); color: var(--text-secondary); border: 1px solid var(--border-color); margin-right: 2px; line-height: 1.2; user-select: none;
 }
 
-.adv-tree-quick-add {
-    opacity: 0;
-    visibility: hidden;
-    background: transparent;
-    border: 1px solid var(--border-color);
-    border-radius: 4px;
-    color: var(--accent-color);
-    cursor: pointer;
-    font-size: 11px;
-    font-weight: bold;
-    width: 18px;
-    height: 18px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    padding: 0;
-    margin-left: auto;
-    flex-shrink: 0;
-    transition: opacity 0.15s ease, background 0.15s ease;
+.adv-tree-quick-add { opacity: 0; visibility: hidden; background: transparent; border: 1px solid var(--border-color); border-radius: 4px; color: var(--accent-color); cursor: pointer; font-size: 11px; font-weight: bold; width: 18px; height: 18px; display: inline-flex; align-items: center; justify-content: center; padding: 0; margin-left: auto; flex-shrink: 0; transition: opacity 0.15s ease, background 0.15s ease;
 }
 
-.adv-tree-row:hover .adv-tree-quick-add {
-    opacity: 0.7;
-    visibility: visible;
+.adv-tree-row:hover .adv-tree-quick-add { opacity: 0.7; visibility: visible;
 }
 
-.adv-tree-quick-add:hover {
-    opacity: 1 !important;
-    background: var(--item-hover);
-    border-color: var(--accent-color);
+.adv-tree-quick-add:hover { opacity: 1 !important; background: var(--item-hover); border-color: var(--accent-color);
 }
 
-.tree-ancestor-dimmed {
-    opacity: 0.55;
-    font-style: italic;
+.tree-ancestor-dimmed { opacity: 0.55; font-style: italic;
 }
