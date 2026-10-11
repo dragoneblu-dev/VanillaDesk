@@ -2,10 +2,10 @@
  * tests/test-advanced-table-context.js
  * Suite Modulare di Collaudo Unitario e di Integrazione ad Altissima Copertura (100%).
  * Modulo testato: advanced-table-context & sandbox formule
- * Conteggio test case: 55
+ * Conteggio test case: 57
  */
 
-describe("AdvancedTable Context: Virtual Rows, Rollup, Sandbox Helpers & Cross-DB Resolution (55 Test)", () => {
+describe("AdvancedTable Context: Virtual Rows, Rollup, Sandbox Helpers & Cross-DB Resolution (57 Test)", () => {
 
     test("Virtual Row: estrazione automatica timestamp di sistema", () => {
         const state = {
@@ -714,7 +714,6 @@ describe("AdvancedTable Context: Virtual Rows, Rollup, Sandbox Helpers & Cross-D
         Assert.isTrue(valStr.includes('Circolare') || !isNaN(Number(valStr)), "Il motore non deve andare in stack overflow");
     });
 
-    // NUOVI TEST CASE HELPER FORMULE NATIVE SANDBOX (13 Test Aggiuntivi)
     test("Sandbox Helper: SE() condizionale logico", () => {
         const formula = 'SE(10 > 5, "Vero", "Falso")';
         const res = AdvancedTable.evaluateFormula(formula, { cells: {} }, [], 'tbl', 'T');
@@ -772,7 +771,6 @@ describe("AdvancedTable Context: Virtual Rows, Rollup, Sandbox Helpers & Cross-D
     });
 
     test("Sandbox Helper: DATA_DIFF() attraverso anno bisestile", () => {
-        // Anno 2024 è bisestile (29 giorni a febbraio)
         const formula = 'DATA_DIFF("2024-03-01", "2024-02-01", "giorni")';
         Assert.strictEqual(Number(AdvancedTable.evaluateFormula(formula, { cells: {} }, [], 'tbl', 'T')), 29);
     });
@@ -784,9 +782,7 @@ describe("AdvancedTable Context: Virtual Rows, Rollup, Sandbox Helpers & Cross-D
     });
 
     test("Sandbox Helper: GIORNO_SETTIMANA() restituisce 1 per Lunedì e 7 per Domenica", () => {
-        // 2026-05-04 è un Lunedì (1)
         Assert.strictEqual(Number(AdvancedTable.evaluateFormula('GIORNO_SETTIMANA("2026-05-04")', { cells: {} }, [], 'tbl', 'T')), 1);
-        // 2026-05-10 è una Domenica (7)
         Assert.strictEqual(Number(AdvancedTable.evaluateFormula('GIORNO_SETTIMANA("2026-05-10")', { cells: {} }, [], 'tbl', 'T')), 7);
     });
 
@@ -831,6 +827,60 @@ describe("AdvancedTable Context: Virtual Rows, Rollup, Sandbox Helpers & Cross-D
         AppState.databases['db_empty_probe'] = { title: 'Probe', columns: [], rows: [{ cells: {} }] };
         const formulaNonExistentCol = 'tabella["Probe"][0]["ColonnaFantasma"]';
         Assert.strictEqual(AdvancedTable.evaluateFormula(formulaNonExistentCol, { cells: {} }, [], 'tbl', 'T'), '');
+    });
+
+    test("Indice O(1): resolveRelationDetails risolve le entità target tramite getRow in tempo costante", () => {
+        const targetDbId = 'db_rel_fast_lookup';
+        AppState.databases[targetDbId] = {
+            id: targetDbId,
+            title: 'Clienti Veloci',
+            columns: [{ id: 'c_nome', name: 'Nome', type: 'text' }],
+            rows: [
+                { id: 'cli_fast_1', cells: { c_nome: 'Azienda Alfa' } },
+                { id: 'cli_fast_2', cells: { c_nome: 'Azienda Beta' } }
+            ]
+        };
+
+        const relCol = {
+            id: 'r_client',
+            type: 'relation',
+            targetTableId: targetDbId,
+            targetColId: 'c_nome'
+        };
+
+        const details = AdvancedTable.resolveRelationDetails(relCol, ['cli_fast_1', 'cli_fast_2']);
+        Assert.strictEqual(details.length, 2);
+        Assert.strictEqual(details[0].name, 'Azienda Alfa');
+        Assert.strictEqual(details[1].name, 'Azienda Beta');
+    });
+
+    test("Indice O(1): buildVirtualRow con rollup sfrutta getRow per estrarre dati remoti senza scansioni lineari", () => {
+        const targetDbId = 'db_rollup_fast_src';
+        const hostDbId = 'db_rollup_fast_host';
+
+        AppState.databases[targetDbId] = {
+            id: targetDbId,
+            columns: [{ id: 'p_qty', name: 'Quantita', type: 'number' }],
+            rows: [
+                { id: 'prod_1', cells: { p_qty: 42 } },
+                { id: 'prod_2', cells: { p_qty: 18 } }
+            ]
+        };
+
+        const hostState = {
+            id: hostDbId,
+            columns: [
+                { id: 'c_rel', type: 'relation', targetTableId: targetDbId },
+                { id: 'c_roll', type: 'rollup', relationColId: 'c_rel', targetTableId: targetDbId, targetColId: 'p_qty' }
+            ],
+            rows: [
+                { id: 'order_1', cells: { c_rel: ['prod_1', 'prod_2'] } }
+            ]
+        };
+        AppState.databases[hostDbId] = hostState;
+
+        const vRow = AdvancedTable.buildVirtualRow(hostDbId, hostState.rows[0], hostState, {});
+        Assert.strictEqual(vRow.virtualCells['c_roll'], '42, 18');
     });
 
 });

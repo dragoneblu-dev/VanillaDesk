@@ -1,12 +1,13 @@
 /**
  * AdvancedTableConditionalColors.js
- * Menu e UI Builder per la colorazione condizionale delle righe nel Database.
+ * Menu e UI Builder per la colorazione condizionale delle righe e singole celle nel Database.
  * FIX REFACTORING: Reintegrate le variabili di stato interne (_tempCondRules e _draggedRuleIdx).
  * FEAT UX: Aggiunto un selettore esplicito per passare dall'Opacità Fissa all'Opacità Dinamica (Formula).
  * FIX LAYOUT: Il controllo dell'Opacità è stato spostato su una riga dedicata a larghezza intera per permettere la stesura di Formule lunghe.
  * FIX DRAG&DROP INFALLIBILE: L'attributo draggable="true" è ora staticamente confinato SOLO all'icona della maniglia.
  * L'immagine fantasma del trascinamento (setDragImage) è stata riprogrammata per mostrare l'intera Card.
- * Questo elimina le race-condition dei browser e sblocca perfettamente la selezione del testo.
+ * FEAT CELL-LEVEL RULES: Supporto all'ambito per cella singola (targetScope: 'row' | 'cell') con selezione colonna bersaglio.
+ * FIX DEFENSIVE I18N: Fallback sicuro per le label di traduzione per prevenire la visualizzazione delle chiavi raw.
  */
 
 const AdvancedTableConditionalColors = {
@@ -70,8 +71,44 @@ const AdvancedTableConditionalColors = {
                     opInputHtml = `<input type="text" class="modern-input" style="padding:4px; font-family:monospace; color:var(--accent-color); flex:1;" value="${safeOpVal}" placeholder="es: riga['Num']" oninput="AdvancedTableConditionalColors._updateCondOpacity('${tableId}', ${idx}, this.value)">`;
                 }
 
+                // CONFIGURAZIONE AMBITO (INTERA RIGA VS CELLA SPECIFICA CON FALLBACK DIFENSIVI)
+                const targetScope = rule.targetScope || 'row';
+                const targetColId = rule.targetColId || (state.columns.length > 0 ? state.columns[0].id : '');
+
+                const scopeLabel = (typeof I18n !== 'undefined' && I18n.t('adv_cond_colors.scope_label') !== 'adv_cond_colors.scope_label') ? I18n.t('adv_cond_colors.scope_label') : 'Ambito:';
+                const scopeRow = (typeof I18n !== 'undefined' && I18n.t('adv_cond_colors.scope_row') !== 'adv_cond_colors.scope_row') ? I18n.t('adv_cond_colors.scope_row') : 'Intera Riga';
+                const scopeCell = (typeof I18n !== 'undefined' && I18n.t('adv_cond_colors.scope_cell') !== 'adv_cond_colors.scope_cell') ? I18n.t('adv_cond_colors.scope_cell') : 'Cella Specifica';
+
+                let targetColSelectHtml = '';
+                if (targetScope === 'cell') {
+                    let colOptionsHtml = '';
+                    state.columns.forEach(c => {
+                        const sel = c.id === targetColId ? 'selected' : '';
+                        colOptionsHtml += `<option value="${c.id}" ${sel}>${UI.escapeHTML(c.name)}</option>`;
+                    });
+                    targetColSelectHtml = `
+                        <select class="modern-input" style="padding:4px; font-size:0.8rem; flex:1;" onchange="AdvancedTableConditionalColors._updateCondTargetCol('${tableId}', ${idx}, this.value)">
+                            ${colOptionsHtml}
+                        </select>
+                    `;
+                }
+
+                let scopeConfigHtml = `
+                    <div style="display:flex; align-items:center; gap:10px;">
+                        <span style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); width: 85px;">${scopeLabel}</span>
+                        <div style="display:flex; gap:8px; align-items:center; background:var(--item-hover); padding:6px 10px; border-radius:6px; border:1px solid var(--border-color); flex:1;">
+                            <select class="modern-input" style="padding:4px; font-size:0.8rem; width: 130px;" onchange="AdvancedTableConditionalColors._updateCondScope('${tableId}', ${idx}, this.value)">
+                                <option value="row" ${targetScope === 'row' ? 'selected' : ''}>${scopeRow}</option>
+                                <option value="cell" ${targetScope === 'cell' ? 'selected' : ''}>${scopeCell}</option>
+                            </select>
+                            ${targetColSelectHtml}
+                        </div>
+                    </div>
+                `;
+
                 let resultConfigHTML = `
                     <div style="display:flex; flex-direction:column; gap:8px; cursor:default;" onmousedown="event.stopPropagation()">
+                        ${scopeConfigHtml}
                         <div style="display:flex; align-items:center; gap:10px;">
                             <span style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); width: 85px;">${I18n.t('adv_cond_colors.bg_label')}</span>
                             <div style="display:flex; gap:6px; flex-wrap:wrap; background:var(--item-hover); padding:5px; border-radius:6px; border:1px solid var(--border-color); flex:1;">
@@ -145,6 +182,11 @@ const AdvancedTableConditionalColors = {
                     });
                 }
 
+                const targetColDef = targetScope === 'cell' ? state.columns.find(c => c.id === targetColId) : null;
+                const scopeBadgeText = targetScope === 'cell' 
+                    ? `[Cella: ${UI.escapeHTML(targetColDef ? targetColDef.name : 'Colonna')}]` 
+                    : `[Riga]`;
+
                 // DRAG INFALLIBILE: Solo la maniglia ⠿ ha draggable="true"
                 listHTML += `
                     <div class="drag-item" id="cond-rule-${idx}"
@@ -160,7 +202,7 @@ const AdvancedTableConditionalColors = {
                                       ondragstart="AdvancedTableConditionalColors._onCondDragStart(event, ${idx})"
                                       ondragend="AdvancedTableConditionalColors._onCondDragEnd(event, ${idx})"
                                       title="${I18n.t('adv_cond_colors.drag_handle_title')}">⠿</span>
-                                ${I18n.t('adv_cond_colors.rule_title', { index: idx + 1 })}
+                                ${I18n.t('adv_cond_colors.rule_title', { index: idx + 1 })} <span style="font-size:0.75rem; color:var(--accent-color); font-weight:normal; margin-left:4px;">${scopeBadgeText}</span>
                             </span>
                             <div style="display:flex; gap:10px; align-items:center;">
                                 <label style="display:flex; align-items:center; gap:5px; font-size:0.8rem; cursor:pointer; background: ${isActive ? 'rgba(34, 197, 94, 0.1)' : 'var(--item-hover)'}; color: ${isActive ? '#166534' : 'var(--text-secondary)'}; padding: 4px 8px; border-radius: 12px; font-weight: bold;">
@@ -201,6 +243,24 @@ const AdvancedTableConditionalColors = {
         UI.openDrawer(I18n.t('adv_cond_colors.panel_title'), bodyHTML, footerHTML);
     },
 
+    _updateCondScope: (tableId, idx, scope) => {
+        const rule = AdvancedTableConditionalColors._tempCondRules[idx];
+        if (!rule) return;
+        rule.targetScope = scope;
+        if (scope === 'cell' && !rule.targetColId) {
+            const state = AdvancedTable.getState(tableId);
+            rule.targetColId = state.columns.length > 0 ? state.columns[0].id : '';
+        }
+        AdvancedTableConditionalColors._renderConditionalBuilder(tableId);
+    },
+
+    _updateCondTargetCol: (tableId, idx, colId) => {
+        const rule = AdvancedTableConditionalColors._tempCondRules[idx];
+        if (!rule) return;
+        rule.targetColId = colId;
+        AdvancedTableConditionalColors._renderConditionalBuilder(tableId);
+    },
+
     _updateCondOpacityType: (tableId, idx, type) => {
         AdvancedTableConditionalColors._tempCondRules[idx].opacityType = type;
         AdvancedTableConditionalColors._tempCondRules[idx].opacity = type === 'fixed' ? '100' : 'riga[""]';
@@ -220,6 +280,8 @@ const AdvancedTableConditionalColors = {
             color: 'hl-c4',
             opacityType: 'fixed',
             opacity: '100',
+            targetScope: 'row',
+            targetColId: firstColId,
             conditions: [{ colId: firstColId, operator: '=', value: '', dateMode: 'exact', dateShift: 0 }]
         });
         AdvancedTableConditionalColors._renderConditionalBuilder(tableId);

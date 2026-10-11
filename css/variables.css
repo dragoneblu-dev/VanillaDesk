@@ -2,6 +2,7 @@
     /* Layout Colors (Tema Default - Crema) */
     --bg-color: #f3f4f6;
     --sidebar-bg: #f9f8f3;
+    --box-bg: #00000006;
     --editor-bg: #f9f8f3;
     --text-primary: #000000;
     --text-secondary: #566172;
@@ -68,6 +69,7 @@
 [data-theme="white"] {
     --bg-color: #f9fafb;
     --sidebar-bg: #ffffff;
+    --box-bg: #00000005;
     --editor-bg: #ffffff;
     --text-primary: #000000;
     --text-secondary: #6b7280;
@@ -85,6 +87,7 @@
 [data-theme="dark"] {
     --bg-color: #212732;
     --sidebar-bg: #272c34;
+    --box-bg: #00000006;
     --editor-bg: #272c34;
     --text-primary: #f9fafb;
     --text-secondary: #9ca3af;
@@ -141,6 +144,7 @@
 [data-theme="notion-dark"] {
     --bg-color: #191919;
     --sidebar-bg: #202020;
+    --box-bg: #FFFFFF06;
     --editor-bg: #191919;
     --text-primary: #FFFFFF;
     --text-secondary: rgba(255, 255, 255, 0.64);
@@ -197,6 +201,7 @@
 [data-theme="pastel"] {
     --bg-color: #F8FAF9;
     --sidebar-bg: #EDF2F0;
+    --box-bg: #00000006;
     --editor-bg: #F8FAF9;
     --text-primary: #101010;
     --text-secondary: #566172;

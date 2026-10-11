@@ -11,6 +11,7 @@
  * Titolo (tabella["..."]) che per ID Immutabile (tabella["adv_tbl_..."]) e convergenza ciclica stabilizzata a 2 passaggi.
  * FEAT QUICK SEARCH: Motore universale di ricerca full-text integrato nello stato (quickSearch, showQuickSearch).
  * PERF QUICK SEARCH: Gestione sincrona del focus/cursore senza timeout intermedi e correzione 'event.key' su Escape.
+ * PERF INVERTED INDEX O(1): Struttura volatile in memoria _rowIndices e lookup atomico getRow() per relazioni e rollup.
  */
 
 const AdvancedTable = {
@@ -21,6 +22,48 @@ const AdvancedTable = {
     pillColors: ['', 'hl-c1', 'hl-c2', 'hl-c3', 'hl-c4', 'hl-c5', 'hl-c6', 'hl-c7', 'hl-c8', 'hl-c9', 'hl-c10'],
     panState: null,
     _quickSearchTimer: null,
+    _rowIndices: new Map(),
+
+    // =========================================================================
+    // INDICE INVERTITO IN MEMORIA (O(1)) PER RECORD LOOKUP E RELAZIONI
+    // =========================================================================
+    getRow: (tableId, rowId) => {
+        if (!tableId || !rowId) return null;
+        const realTableId = (typeof AdvancedTable._resolveSourceId === 'function')
+            ? AdvancedTable._resolveSourceId(tableId)
+            : tableId.split('_cited_')[0];
+        const state = AdvancedTable.getTableState(realTableId);
+        if (!state || !Array.isArray(state.rows)) return null;
+
+        if (!AdvancedTable._rowIndices) AdvancedTable._rowIndices = new Map();
+        let tableIndex = AdvancedTable._rowIndices.get(realTableId);
+
+        // Ricostruisci solo se il riferimento dell'array o il numero di elementi divergono
+        if (!tableIndex || tableIndex._sourceRows !== state.rows || tableIndex._count !== state.rows.length) {
+            tableIndex = new Map();
+            for (let i = 0; i < state.rows.length; i++) {
+                const r = state.rows[i];
+                if (r && r.id) tableIndex.set(r.id, r);
+            }
+            tableIndex._sourceRows = state.rows;
+            tableIndex._count = state.rows.length;
+            AdvancedTable._rowIndices.set(realTableId, tableIndex);
+        }
+
+        const row = tableIndex.get(rowId);
+        if (row) return row;
+
+        // Fallback protettivo
+        return state.rows.find(r => r && r.id === rowId) || null;
+    },
+
+    invalidateRowIndex: (tableId) => {
+        if (!tableId || !AdvancedTable._rowIndices) return;
+        const realTableId = (typeof AdvancedTable._resolveSourceId === 'function')
+            ? AdvancedTable._resolveSourceId(tableId)
+            : tableId.split('_cited_')[0];
+        AdvancedTable._rowIndices.delete(realTableId);
+    },
 
     // =========================================================================
     // MOTORE RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
@@ -146,6 +189,7 @@ const AdvancedTable = {
                 updatedAt: Date.now(),
                 cells: { 'sys_c_note': noteId, 'sys_c_tags': [] }
             });
+            AdvancedTable.invalidateRowIndex('SYS_PROPERTIES_DB');
         }
     },
 
@@ -157,12 +201,14 @@ const AdvancedTable = {
             return;
         }
         db.rows = db.rows.filter(r => r && r.cells && r.cells['sys_c_note'] !== noteId);
+        AdvancedTable.invalidateRowIndex('SYS_PROPERTIES_DB');
     },
 
     destroy: (id) => {
         if (typeof AdvancedTable.deleteTable === 'function') {
             AdvancedTable.deleteTable(id, true);
         }
+        AdvancedTable.invalidateRowIndex(id);
     },
 
     closeDropdowns: (force = false) => {

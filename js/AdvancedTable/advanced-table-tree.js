@@ -15,6 +15,9 @@
  * - PERF REUSE VIRTUALCELLS & DOM SEARCH PRESERVATION: Riuso delle virtualCells già calcolate in memoria su 10.000 righe.
  * - PRESERVAZIONE LINEARE STRUTTURA: Mantenuta la riga canonica html += renderQuickSearchBar senza over-engineering.
  * - FIX SUBTASK AUTOMATIONS: addSubtask ora esegue evaluate e triggerCrossDB al salvataggio per far scattare le regole su nuove righe.
+ * - PERF INVERTED INDEX O(1): Mantenimento atomico di AdvancedTable._rowIndices in addSubtask.
+ * - FEAT CELL-LEVEL CONDITIONAL STYLING: Applicazione di classi e sfondi diretti sui tag <td> per regole cell-scope nella vista WBS.
+ * - FIX DEFENSIVE STATE: Inizializzazione difensiva di sorts, filters e selectedRows per prevenire TypeError su find().
  */
 
 const AdvancedTree = {
@@ -112,7 +115,7 @@ const AdvancedTree = {
 
         const relColId = state.treeRelationColId;
         const direction = state.treeRelationDirection || 'children';
-        const parentRow = state.rows.find(r => r.id === parentRowId);
+        const parentRow = parentRowId ? (AdvancedTable.getRow(realTableId, parentRowId) || state.rows.find(r => r.id === parentRowId)) : null;
         if (!parentRow) return;
 
         if (typeof Editor !== 'undefined' && Editor.saveSnapshot) Editor.saveSnapshot();
@@ -141,6 +144,11 @@ const AdvancedTree = {
         }
 
         state.rows.push(newRow);
+
+        // Aggiorna l'indice hash O(1) in memoria
+        if (AdvancedTable._rowIndices && AdvancedTable._rowIndices.has(realTableId)) {
+            AdvancedTable._rowIndices.get(realTableId).set(newRowId, newRow);
+        }
 
         // Se il genitore era collassato, espandilo per mostrare il nuovo subtask
         if (state.treeCollapsedNodes) {
@@ -204,6 +212,14 @@ const AdvancedTree = {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         const isSysDB = realTableId === 'SYS_PROPERTIES_DB';
 
+        // Normalizzazione difensiva completa dello stato per prevenire TypeError sui metodi nativi
+        if (!state.rows) state.rows = [];
+        if (!state.columns) state.columns = [];
+        if (!state.sorts) state.sorts = [];
+        if (!state.filters) state.filters = {};
+        if (!state.selectedRows) state.selectedRows = [];
+        if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
+
         // Inizializzazione difensiva dei timestamp per tutte le righe
         const now = Date.now();
         state.rows.forEach(r => {
@@ -234,8 +250,6 @@ const AdvancedTree = {
         const colDefForDir = (state.columns || []).find(c => c.id === relColId);
         const direction = state.treeRelationDirection || (colDefForDir && colDefForDir.treeDirection) || (colDefForDir && colDefForDir.singleRecord ? 'parent' : 'children');
         state.treeRelationDirection = direction;
-
-        if (!state.treeCollapsedNodes) state.treeCollapsedNodes = [];
 
         // 2. Toolbar Tools
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
@@ -547,11 +561,20 @@ const AdvancedTree = {
 
                 let rowColorClass = row.color && row.color !== 'none' ? row.color : '';
                 let rowOpacity = row.opacity !== undefined ? row.opacity : '100';
+                const cellStyles = {};
+                let rowRuleMatched = false;
 
-                // Valutazione regole condizionali
+                // Valutazione regole condizionali (con separazione riga vs cella)
                 if (state.conditionalColors && state.conditionalColors.length > 0) {
                     for (const rule of state.conditionalColors) {
                         if (!rule.active || !rule.conditions || rule.conditions.length === 0) continue;
+
+                        const isCellScope = rule.targetScope === 'cell';
+                        const targetColId = rule.targetColId;
+
+                        if (!isCellScope && rowRuleMatched) continue;
+                        if (isCellScope && (!targetColId || cellStyles[targetColId])) continue;
+
                         let allMatch = true;
                         for (const cond of rule.conditions) {
                             const colDef = state.columns.find(c => c.id === cond.colId);
@@ -567,14 +590,32 @@ const AdvancedTree = {
                             }
                         }
                         if (allMatch) {
-                            rowColorClass = rule.color && rule.color !== 'none' ? rule.color : '';
+                            let ruleColorClass = rule.color && rule.color !== 'none' ? rule.color : '';
                             let opVal = rule.opacity !== undefined ? rule.opacity : '100';
-                            if (rule.opacityType === 'formula' || (typeof opVal === 'string' && opVal.startsWith('='))) {
-                                let fStr = String(opVal).replace(/^=/, '');
-                                opVal = AdvancedTable.evaluateFormula(fStr, row, state.columns, tableId, state.title, row.virtualCells, renderCache);
+                            if (rule.opacityType === 'formula') {
+                                opVal = AdvancedTable.evaluateFormula(opVal, row, state.columns, tableId, state.title, row.virtualCells, renderCache);
+                            } else if (typeof opVal === 'string' && opVal.startsWith('=')) {
+                                opVal = AdvancedTable.evaluateFormula(opVal.substring(1), row, state.columns, tableId, state.title, row.virtualCells, renderCache);
                             }
-                            rowOpacity = opVal;
-                            break;
+
+                            let pOp = parseFloat(opVal);
+                            if (isNaN(pOp)) pOp = 100;
+                            pOp = Math.max(0, Math.min(100, pOp));
+
+                            if (isCellScope && targetColId) {
+                                let cellBgStyle = '';
+                                if (ruleColorClass && pOp < 100) {
+                                    cellBgStyle = `background-color: color-mix(in srgb, var(--${ruleColorClass}) ${pOp}%, transparent) !important;`;
+                                    ruleColorClass = '';
+                                } else if (ruleColorClass) {
+                                    cellBgStyle = `background-color: var(--${ruleColorClass}) !important;`;
+                                }
+                                cellStyles[targetColId] = { colorClass: ruleColorClass, inlineBgStyle: cellBgStyle };
+                            } else if (!rowRuleMatched) {
+                                rowColorClass = ruleColorClass;
+                                rowOpacity = opVal;
+                                rowRuleMatched = true;
+                            }
                         }
                     }
                 }
@@ -597,6 +638,10 @@ const AdvancedTree = {
                     const isTitle = (col.id === titleCol.id);
                     const val = row.virtualCells[col.id] !== undefined ? row.virtualCells[col.id] : '';
                     const safeColName = String(col.name || '').replace(/"/g, '&quot;');
+
+                    const cellStyleObj = cellStyles[col.id];
+                    const cellColorClass = cellStyleObj ? (cellStyleObj.colorClass || '') : '';
+                    const cellInlineBg = cellStyleObj ? (cellStyleObj.inlineBgStyle || '') : '';
 
                     if (isTitle) {
                         const indentPx = Math.max(8, 8 + (item.level * 22));
@@ -624,7 +669,7 @@ const AdvancedTree = {
                         const cellRendererHtml = AdvancedTable.renderCell(tableId, row, col, val, state, isEdit);
 
                         html += `
-                            <td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; padding-left: 0 !important;" data-col-name="${safeColName}">
+                            <td class="${cellColorClass}" style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; padding-left: 0 !important; ${cellInlineBg}" data-col-name="${safeColName}">
                                 <div class="adv-tree-cell-wrapper" style="padding-left: ${indentPx}px;">
                                     ${toggleHtml}
                                     <div class="adv-tree-content-inner" style="flex: 1; min-width: 0;">
@@ -635,7 +680,7 @@ const AdvancedTree = {
                             </td>
                         `;
                     } else {
-                        html += `<td style="width: ${col.width || 150}px; max-width: ${col.width || 150}px;" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
+                        html += `<td class="${cellColorClass}" style="width: ${col.width || 150}px; max-width: ${col.width || 150}px; ${cellInlineBg}" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                     }
                 });
 
@@ -649,7 +694,7 @@ const AdvancedTree = {
         // Footer Controls con indicatore conteggio totale record
         const totalStoredRows = state.rows ? state.rows.length : 0;
         const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-        const recordCountHtml = `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
+        const recordCountHtml = `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
 
         if (!state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0)) {
             html += `<div class="adv-table-footer-controls">`;

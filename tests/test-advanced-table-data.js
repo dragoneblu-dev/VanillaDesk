@@ -2,10 +2,10 @@
  * tests/test-advanced-table-data.js
  * Suite Modulare di Collaudo Unitario e di Integrazione ad Altissima Copertura (100%).
  * Modulo testato: advanced-table-data
- * Conteggio test case: 35
+ * Conteggio test case: 40
  */
 
-describe("AdvancedTable Data: CRUD, Date Ranges, Filtri Matematici, Soft-Delete & Selezione (35 Test)", () => {
+describe("AdvancedTable Data: CRUD, Date Ranges, Filtri Matematici, Soft-Delete & Selezione (40 Test)", () => {
 
     test("Filter: testo singolo case-insensitive", () => {
         const state = {
@@ -499,7 +499,6 @@ describe("AdvancedTable Data: CRUD, Date Ranges, Filtri Matematici, Soft-Delete 
         Assert.strictEqual(row.virtualCells.c_dt.end, '2026-01-10', "virtualCells deve riflettere la nuova data di fine");
     });
 
-    // NUOVI TEST CASE COMPLETI (Overlapping, Full Text Search su Note e Multi-Sort)
     test("TableData: filterRows con algebra sovrapposizione intervalli (= valuta intersezione)", () => {
         const state = {
             columns: [{ id: 'c_rng', name: 'Intervallo', type: 'date', hasEndDate: true }],
@@ -551,14 +550,14 @@ describe("AdvancedTable Data: CRUD, Date Ranges, Filtri Matematici, Soft-Delete 
 
         const rows = [
             { id: 'r1', virtualCells: { c_date: '2026-05-01', c_amt: 100 } },
-            { id: 'r2', virtualCells: { c_date: '2026-05-01', c_amt: 500 } }, // Stessa data, importo maggiore -> deve precedere r1
+            { id: 'r2', virtualCells: { c_date: '2026-05-01', c_amt: 500 } },
             { id: 'r3', virtualCells: { c_date: '2026-04-01', c_amt: 50 } }
         ];
 
         const sorted = AdvancedTable.sortRows(rows, state);
-        Assert.strictEqual(sorted[0].id, 'r3'); // 2026-04-01
-        Assert.strictEqual(sorted[1].id, 'r2'); // 2026-05-01, 500
-        Assert.strictEqual(sorted[2].id, 'r1'); // 2026-05-01, 100
+        Assert.strictEqual(sorted[0].id, 'r3');
+        Assert.strictEqual(sorted[1].id, 'r2');
+        Assert.strictEqual(sorted[2].id, 'r1');
     });
 
     test("TableData: filterRows confronto lessicografico naturale (< e >) su testo", () => {
@@ -589,6 +588,98 @@ describe("AdvancedTable Data: CRUD, Date Ranges, Filtri Matematici, Soft-Delete 
 
         AdvancedTable.clearSelectedRows(tId);
         Assert.strictEqual(AppState.databases[tId].selectedRows.length, 0);
+    });
+
+    test("Indice O(1): addRow aggiorna istantaneamente la mappa _rowIndices", () => {
+        const tId = 'db_add_index_sync';
+        AppState.databases[tId] = {
+            id: tId,
+            columns: [{ id: 'c1', type: 'text' }],
+            rows: []
+        };
+
+        AdvancedTable.addRow(null, tId);
+        const newRow = AppState.databases[tId].rows[0];
+        Assert.isNotNull(newRow);
+
+        const indexedRow = AdvancedTable.getRow(tId, newRow.id);
+        Assert.strictEqual(indexedRow, newRow);
+    });
+
+    test("Indice O(1): duplicateRecord indicizza il record duplicato in _rowIndices", async () => {
+        const tId = 'db_dup_index_sync';
+        AppState.databases[tId] = {
+            id: tId,
+            columns: [{ id: 'c1', type: 'text' }],
+            rows: [{ id: 'r_orig', cells: { c1: 'Dato Originale' } }]
+        };
+
+        await AdvancedTable.duplicateRecord(tId, 'r_orig');
+        Assert.strictEqual(AppState.databases[tId].rows.length, 2);
+        const clonedRow = AppState.databases[tId].rows[1];
+
+        const indexedCloned = AdvancedTable.getRow(tId, clonedRow.id);
+        Assert.strictEqual(indexedCloned, clonedRow);
+        Assert.strictEqual(indexedCloned.cells.c1, 'Dato Originale');
+    });
+
+    test("Indice O(1): deleteRecord rimuove il puntatore da _rowIndices", () => {
+        const tId = 'db_del_index_sync';
+        AppState.databases[tId] = {
+            id: tId,
+            columns: [{ id: 'c1', type: 'text' }],
+            rows: [{ id: 'r_target_del', cells: { c1: 'Eliminami' } }]
+        };
+
+        const r = AdvancedTable.getRow(tId, 'r_target_del');
+        Assert.isNotNull(r);
+
+        const origConfirm = window.confirm;
+        window.confirm = () => true;
+        try {
+            AdvancedTable.deleteRecord(tId, 'r_target_del');
+            const deadLookup = AdvancedTable.getRow(tId, 'r_target_del');
+            Assert.strictEqual(deadLookup, null);
+        } finally {
+            window.confirm = origConfirm;
+        }
+    });
+
+    test("Indice O(1): deleteSelectedRows rimuove in blocco tutti i record selezionati da _rowIndices", () => {
+        const tId = 'db_batch_del_index';
+        AppState.databases[tId] = {
+            id: tId,
+            columns: [{ id: 'c1', type: 'text' }],
+            rows: [
+                { id: 'r_b1', cells: { c1: '1' } },
+                { id: 'r_b2', cells: { c1: '2' } },
+                { id: 'r_b3', cells: { c1: '3' } }
+            ],
+            selectedRows: ['r_b1', 'r_b3']
+        };
+
+        AdvancedTable.getRow(tId, 'r_b1');
+        AdvancedTable.deleteSelectedRows(tId, true);
+
+        Assert.strictEqual(AdvancedTable.getRow(tId, 'r_b1'), null);
+        Assert.isNotNull(AdvancedTable.getRow(tId, 'r_b2'));
+        Assert.strictEqual(AdvancedTable.getRow(tId, 'r_b3'), null);
+    });
+
+    test("Indice O(1): updateData modifica le celle preservando la referenza in getRow", async () => {
+        const tId = 'db_update_ref_index';
+        AppState.databases[tId] = {
+            id: tId,
+            columns: [{ id: 'c_text', type: 'text' }],
+            rows: [{ id: 'r_up_1', cells: { c_text: 'Prima' }, updatedAt: 0 }]
+        };
+
+        const rowBefore = AdvancedTable.getRow(tId, 'r_up_1');
+        await AdvancedTable.updateData(tId, 'r_up_1', 'c_text', 'Dopo');
+        const rowAfter = AdvancedTable.getRow(tId, 'r_up_1');
+
+        Assert.strictEqual(rowBefore, rowAfter);
+        Assert.strictEqual(rowAfter.cells.c_text, 'Dopo');
     });
 
 });

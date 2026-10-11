@@ -20,6 +20,7 @@
  * tramite ID Immutabile (es. adv_tbl_*, c_*) o Titolo/Nome colonna, rendendo le query immuni a qualsiasi rinomina.
  * Calcolo dinamico in tempo reale dei Backlink (relation_backlink) con normalizzazione
  * a sempre-array dei valori sorgente e invalidazione sistematica della cache su mutazioni.
+ * PERF INVERTED INDEX O(1): Risoluzione istantanea relazioni e rollup tramite AdvancedTable.getRow().
  */
 
 Object.assign(AdvancedTable, {
@@ -128,7 +129,8 @@ Object.assign(AdvancedTable, {
         const isCalculatedCol = displayColDef && ['formula', 'rollup', 'relation_backlink'].includes(displayColDef.type);
 
         return vals.map(tId => {
-            const tRow = (targetState.rows || []).find(r => r.id === tId);
+            // LOOKUP O(1) TRAMITE INDICE INVERTITO IN MEMORIA
+            const tRow = AdvancedTable.getRow(targetDbId, tId) || (targetState.rows || []).find(r => r.id === tId);
             if (!tRow) return { id: tId, name: 'Orfano' };
             
             let val;
@@ -579,7 +581,7 @@ Object.assign(AdvancedTable, {
                             }
                             targetRows = renderCache.backlinks[cacheKey][row.id] || [];
                         } else {
-                            // Relazione uscente classica
+                            // Relazione uscente classica: LOOKUP O(1) TRAMITE INDICE INVERTITO IN MEMORIA
                             targetTableId = relColDef.targetTableId;
                             let relationVals = (row.cells || {})[col.relationColId];
                             if (!Array.isArray(relationVals)) relationVals = relationVals ? [relationVals] : [];
@@ -588,17 +590,10 @@ Object.assign(AdvancedTable, {
                                 return;
                             }
 
-                            if (!renderCache.rowIndexes) renderCache.rowIndexes = {};
-                            if (!renderCache.rowIndexes[targetTableId]) {
-                                renderCache.rowIndexes[targetTableId] = {};
-                                const ts = AdvancedTable.getTableState(targetTableId);
-                                if (ts && Array.isArray(ts.rows)) ts.rows.forEach(r => renderCache.rowIndexes[targetTableId][r.id] = { state: ts, row: r });
-                            }
-
                             relationVals.forEach(tId => {
-                                const cacheRef = renderCache.rowIndexes[targetTableId] ? renderCache.rowIndexes[targetTableId][tId] : null;
-                                if (cacheRef && cacheRef.row) {
-                                    targetRows.push(cacheRef.row);
+                                const tRow = AdvancedTable.getRow(targetTableId, tId);
+                                if (tRow) {
+                                    targetRows.push(tRow);
                                 }
                             });
                         }

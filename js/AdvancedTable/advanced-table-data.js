@@ -26,6 +26,8 @@
  * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() per la pulizia delle relazioni orfane.
  * FEAT DUPLICATE RECORD UX: Clonazione fedele al 100% (senza suffissi arbitrari 'Copia') con transizione
  * immediata del Drawer sulla nuova riga duplicata e visualizzazione del banner informativo.
+ * PERF INVERTED INDEX O(1): Mantenimento atomico di AdvancedTable._rowIndices e getRow() nei metodi CRUD.
+ * FIX RIGHE ORFANE ADDCOLUMN: Rimozione del refuso di assegnazione non dichiarata (newRowCellsEmpty).
  */
 
 Object.assign(AdvancedTable, {
@@ -38,7 +40,7 @@ Object.assign(AdvancedTable, {
             const parts = str.split(' ');
             const dParts = parts[0].split('/');
             if (dParts.length === 3) {
-                const iso = `${dParts[2]}-${dParts[1].padStart(2, '0')}-${dParts[0].padStart(2, '0')}` + (parts[1] ? `T${parts[1]}` : '');
+                const iso = `${dParts[2]}-${dParts[1]}-${dParts[0]}` + (parts[1] ? `T${parts[1]}` : '');
                 const d = new Date(iso);
                 if (!isNaN(d.getTime())) return d.getTime();
             }
@@ -104,7 +106,7 @@ Object.assign(AdvancedTable, {
         let state = AdvancedTable.getState(realTableId);
         if (!state || state.isPivot) return;
 
-        const row = state.rows.find(r => r.id === rowId);
+        const row = AdvancedTable.getRow(realTableId, rowId) || state.rows.find(r => r.id === rowId);
         if (row) {
             row.updatedAt = Date.now();
             AdvancedTable.setState(realTableId, state);
@@ -123,7 +125,7 @@ Object.assign(AdvancedTable, {
         let state = AdvancedTable.getState(realTableId);
         if (!state || state.isPivot) return;
 
-        const row = state.rows.find(r => r.id === rowId);
+        const row = AdvancedTable.getRow(realTableId, rowId) || state.rows.find(r => r.id === rowId);
         if (!row) return;
 
         // Se il dato non è cambiato, non tocchiamo il DOM
@@ -187,7 +189,7 @@ Object.assign(AdvancedTable, {
         let state = AdvancedTable.getState(realTableId);
         if (!state || state.isPivot) return;
 
-        const row = state.rows.find(r => r.id === rowId);
+        const row = AdvancedTable.getRow(realTableId, rowId) || state.rows.find(r => r.id === rowId);
         if (!row) return;
 
         let current = row.cells[colId];
@@ -293,6 +295,11 @@ Object.assign(AdvancedTable, {
         });
         state.rows.push(newRow);
 
+        // Aggiorna l'indice hash O(1) in memoria
+        if (AdvancedTable._rowIndices && AdvancedTable._rowIndices.has(realTableId)) {
+            AdvancedTable._rowIndices.get(realTableId).set(newRow.id, newRow);
+        }
+
         const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, state);
         newRow.virtualCells = freshVRow.virtualCells;
         AdvancedTable.setState(realTableId, state);
@@ -379,6 +386,11 @@ Object.assign(AdvancedTable, {
         // Inserimento della riga duplicata subito sotto quella di partenza
         state.rows.splice(srcIdx + 1, 0, newRow);
 
+        // Aggiorna l'indice hash O(1) in memoria
+        if (AdvancedTable._rowIndices && AdvancedTable._rowIndices.has(realTableId)) {
+            AdvancedTable._rowIndices.get(realTableId).set(newRowId, newRow);
+        }
+
         const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, state);
         newRow.virtualCells = freshVRow.virtualCells;
         AdvancedTable.setState(realTableId, state);
@@ -451,7 +463,7 @@ Object.assign(AdvancedTable, {
         let state = AdvancedTable.getState(realTableId);
         if(!state) return;
 
-        const row = state.rows.find(r => r.id === rowId);
+        const row = AdvancedTable.getRow(realTableId, rowId) || state.rows.find(r => r.id === rowId);
         if (row) {
             const nowTime = Date.now();
             state.columns.filter(c => c.type === 'record_note').forEach(c => {
@@ -469,6 +481,11 @@ Object.assign(AdvancedTable, {
         state.rows = state.rows.filter(r => r.id !== rowId);
         if (state.selectedRows) {
             state.selectedRows = state.selectedRows.filter(id => id !== rowId);
+        }
+
+        // Rimuove la chiave dall'indice hash O(1)
+        if (AdvancedTable._rowIndices && AdvancedTable._rowIndices.has(realTableId)) {
+            AdvancedTable._rowIndices.get(realTableId).delete(rowId);
         }
 
         // Pulizia referenziale delle relazioni orfane in tutti i database
@@ -556,6 +573,11 @@ Object.assign(AdvancedTable, {
         });
         
         sourceState.rows.push(newRow);
+
+        if (AdvancedTable._rowIndices && AdvancedTable._rowIndices.has(realTableId)) {
+            AdvancedTable._rowIndices.get(realTableId).set(newRow.id, newRow);
+        }
+
         const freshVRow = AdvancedTable.buildVirtualRow(realTableId, newRow, sourceState);
         newRow.virtualCells = freshVRow.virtualCells;
         AdvancedTable.setState(realTableId, sourceState);
@@ -630,7 +652,7 @@ Object.assign(AdvancedTable, {
         const nowTime = Date.now();
         state.columns.filter(c => c.type === 'record_note').forEach(c => {
             viewState.selectedRows.forEach(rowId => {
-                const row = state.rows.find(r => r.id === rowId);
+                const row = AdvancedTable.getRow(realTableId, rowId) || state.rows.find(r => r.id === rowId);
                 if (row && row.cells[c.id] && typeof Store !== 'undefined') {
                     const noteId = row.cells[c.id];
                     const linkedNote = Store.getNote(noteId);
@@ -645,6 +667,10 @@ Object.assign(AdvancedTable, {
         const deletedIdsSet = new Set(viewState.selectedRows);
         state.rows = state.rows.filter(r => !deletedIdsSet.has(r.id));
         viewState.selectedRows = [];
+
+        if (AdvancedTable._rowIndices && AdvancedTable._rowIndices.has(realTableId)) {
+            deletedIdsSet.forEach(id => AdvancedTable._rowIndices.get(realTableId).delete(id));
+        }
 
         AdvancedTable._cascadeDeleteRecordReferences(realTableId, deletedIdsSet);
 
@@ -759,6 +785,7 @@ Object.assign(AdvancedTable, {
             }
         }
 
+        AdvancedTable.invalidateRowIndex(realTableId);
         AdvancedTable.updateDependentViews(realTableId);
         if (typeof AdvancedPivot !== 'undefined') AdvancedPivot.updateDependent(realTableId);
 

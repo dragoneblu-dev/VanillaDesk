@@ -96,15 +96,14 @@ Object.assign(UI, {
                         const openTableTitle = I18n.t('notes_utils.header_record_open_table');
 
                         htmlBlocks += `
-                            <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
+                            <div style="background:var(--box-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                                     <div style="display:flex; align-items:center; gap:6px;">
-                                        <span style="display:inline-flex; color:var(--accent-color);">${Icons.tableDatabase}</span>
                                         <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
                                             ${recordBadgeLabel} <b style="color:var(--accent-color);">${dbTitle}</b>
                                         </span>
                                     </div>
-                                    <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="UI.jumpToWidget('${realTableId}')" title="${openTableTitle}">↗</button>
+                                    <button class="adv-icon-btn" style="padding:2px 6px;" onclick="UI.jumpToWidget('${realTableId}')" title="${openTableTitle}"><span style="display:inline-flex; color:var(--accent-color);">${Icons.tableDatabase}</span></button>
                                 </div>
                                 <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                                     ${chipsHtml}
@@ -156,15 +155,14 @@ Object.assign(UI, {
                     const editPropsTitle = I18n.t('notes_utils.header_page_props_edit');
 
                     htmlBlocks += `
-                        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
+                        <div style="background:var(--box-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                                 <div style="display:flex; align-items:center; gap:6px;">
-                                    <span style="display:inline-flex; color:var(--accent-color);">${Icons.tag}</span>
                                     <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
                                         ${pagePropsBadgeLabel}
                                     </span>
                                 </div>
-                                <button class="adv-icon-btn" style="padding:2px 6px; font-size:0.75rem;" onclick="AdvancedTable.openRecordView('SYS_PROPERTIES_DB', 'sys_r_${note.id}')" title="${editPropsTitle}">⚙️</button>
+                                <button class="adv-icon-btn" style="padding:2px 6px;" onclick="AdvancedTable.openRecordView('SYS_PROPERTIES_DB', 'sys_r_${note.id}')" title="${editPropsTitle}"><span style="display:inline-flex; color:var(--accent-color);">${Icons.tag}</span></button>
                             </div>
                             <div style="display:flex; flex-wrap:wrap; gap:6px; align-items:center;">
                                 ${pagePropsChipsHtml}

@@ -13,7 +13,7 @@
  * Andare a capo su un campo di testo apre automaticamente il drawer a tutta altezza.
  * PERF LAZY VIRTUAL RESOLUTION: In assenza di filtri/ordinamenti attivi, risolve solo le righe
  * paginate visibili (10 o 25 righe), riducendo a <1ms l'apertura di tabelle con oltre 20.000 record.
- * PROFILING: Monitoraggio temporale integrato delle singole fasi di rendering.
+ * FEAT CELL-LEVEL CONDITIONAL STYLING: Applicazione di classi e sfondi diretti sui tag <td> per regole cell-scope.
  */
 
 Object.assign(AdvancedTable, {
@@ -103,6 +103,7 @@ Object.assign(AdvancedTable, {
         const editor = document.getElementById('noteContent');
         if (!editor || !AppState.currentNoteId) {
             floatBar.style.display = 'none';
+            floatBar.dataset.activeTableId = '';
             return;
         }
 
@@ -279,9 +280,6 @@ Object.assign(AdvancedTable, {
         const rowCount = state.rows ? state.rows.length : 0;
         const tblTitle = state.title || tableId;
 
-        // GRUPPO APERTO DI DEFAULT PER PROFILING IMMEDIATO
-        //console.group(`📊 [PERF TABLE] Render "${tblTitle}" (${rowCount} righe, id: ${tableId})`);
-
         const isCited = tableId.includes('_cited_');
         const isEdit = AppState.isEditMode && !isCited;
         
@@ -315,7 +313,6 @@ Object.assign(AdvancedTable, {
                     <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="AdvancedTable.deleteTable('${tableId}', true)"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${I18n.t('adv_render.remove_view')}</span></button>
                 </div>
             `;
-            //console.groupEnd();
             return;
         }
 
@@ -354,7 +351,6 @@ Object.assign(AdvancedTable, {
         // In assenza di filtri e sort, elabora ESCLUSIVAMENTE le righe a video (es. 25).
         // =========================================================================
         if (!hasActiveFilterOrQuick && !hasActiveSort) {
-            const tVirtualStart = performance.now();
             totalRows = state.rows.length;
             totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 
@@ -372,15 +368,8 @@ Object.assign(AdvancedTable, {
                 r.virtualCells = vRow.virtualCells;
                 pagedRows.push(vRow);
             });
-
-            const tVirtualElapsed = (performance.now() - tVirtualStart).toFixed(2);
-            //console.log(`[PERF TABLE] 1. Calcolo VirtualRows (LAZY: sole ${pagedRows.length} righe visibili): ${tVirtualElapsed}ms`);
-            //console.log(`[PERF TABLE] 2. Filtraggio: bypassato (nessun filtro attivo)`);
-            //console.log(`[PERF TABLE] 3. Ordinamento: bypassato (nessun sort attivo)`);
-
         } else {
             // Pipeline completa (eseguita solo se sono richiesti filtri o ordinamenti)
-            const tVirtualStart = performance.now();
             let viewRows = [];
             const renderCache = {};
             state.rows.forEach(r => {
@@ -388,18 +377,9 @@ Object.assign(AdvancedTable, {
                 r.virtualCells = vRow.virtualCells;
                 viewRows.push(vRow);
             });
-            const tVirtualElapsed = (performance.now() - tVirtualStart).toFixed(2);
-            //console.log(`[PERF TABLE] 1. Calcolo VirtualRows (${rowCount} righe): ${tVirtualElapsed}ms`);
 
-            const tFilterStart = performance.now();
             viewRows = AdvancedTable.filterRows(viewRows, state);
-            const tFilterElapsed = (performance.now() - tFilterStart).toFixed(2);
-            //console.log(`[PERF TABLE] 2. Filtraggio (${viewRows.length} righe): ${tFilterElapsed}ms`);
-
-            const tSortStart = performance.now();
             viewRows = AdvancedTable.sortRows(viewRows, state);
-            const tSortElapsed = (performance.now() - tSortStart).toFixed(2);
-            //console.log(`[PERF TABLE] 3. Ordinamento: ${tSortElapsed}ms`);
 
             totalRows = viewRows.length;
             totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
@@ -459,10 +439,8 @@ Object.assign(AdvancedTable, {
             });
         }
 
-        // FASE 4: GENERAZIONE STRINGA HTML (PROFILING DEDICATO SULLE RIGHE PAGINATE)
-        const tHtmlStart = performance.now();
+        // FASE 4: GENERAZIONE STRINGA HTML
         let html = '';
-        
         html += AdvancedTable.renderQuickSearchBar(tableId, state);
 
         const zebraClass = (state.striped !== false) ? 'table-striped' : '';
@@ -558,11 +536,21 @@ Object.assign(AdvancedTable, {
                 
                 let rowColorClass = row.color && row.color !== 'none' ? row.color : '';
                 let rowOpacity = row.opacity !== undefined ? row.opacity : '100';
+                const cellStyles = {};
+                let rowRuleMatched = false;
 
                 if (state.conditionalColors && state.conditionalColors.length > 0) {
                     for (const rule of state.conditionalColors) {
                         if (!rule.active || !rule.conditions || rule.conditions.length === 0) continue;
                         
+                        const isCellScope = rule.targetScope === 'cell';
+                        const targetColId = rule.targetColId;
+
+                        // Se una regola per riga ha già trovato corrispondenza, salta le successive per riga;
+                        // per le celle, salta se quella specifica cella ha già una regola applicata
+                        if (!isCellScope && rowRuleMatched) continue;
+                        if (isCellScope && (!targetColId || cellStyles[targetColId])) continue;
+
                         let allMatch = true;
                         for (const cond of rule.conditions) {
                             const colDef = state.columns.find(c => c.id === cond.colId);
@@ -582,7 +570,7 @@ Object.assign(AdvancedTable, {
                         }
                         
                         if (allMatch) {
-                            rowColorClass = rule.color && rule.color !== 'none' ? rule.color : '';
+                            let ruleColorClass = rule.color && rule.color !== 'none' ? rule.color : '';
                             
                             let opVal = rule.opacity !== undefined ? rule.opacity : '100';
                             if (rule.opacityType === 'formula') {
@@ -590,9 +578,25 @@ Object.assign(AdvancedTable, {
                             } else if (typeof opVal === 'string' && opVal.startsWith('=')) {
                                 opVal = AdvancedTable.evaluateFormula(opVal.substring(1), row, state.columns, tableId, state.title, row.virtualCells);
                             }
-                            rowOpacity = opVal;
-                            
-                            break; 
+
+                            let pOp = parseFloat(opVal);
+                            if (isNaN(pOp)) pOp = 100;
+                            pOp = Math.max(0, Math.min(100, pOp));
+
+                            if (isCellScope && targetColId) {
+                                let cellBgStyle = '';
+                                if (ruleColorClass && pOp < 100) {
+                                    cellBgStyle = `background-color: color-mix(in srgb, var(--${ruleColorClass}) ${pOp}%, transparent) !important;`;
+                                    ruleColorClass = '';
+                                } else if (ruleColorClass) {
+                                    cellBgStyle = `background-color: var(--${ruleColorClass}) !important;`;
+                                }
+                                cellStyles[targetColId] = { colorClass: ruleColorClass, inlineBgStyle: cellBgStyle };
+                            } else if (!rowRuleMatched) {
+                                rowColorClass = ruleColorClass;
+                                rowOpacity = opVal;
+                                rowRuleMatched = true;
+                            }
                         }
                     }
                 }
@@ -621,7 +625,12 @@ Object.assign(AdvancedTable, {
                     const val = row.virtualCells[col.id] !== undefined ? row.virtualCells[col.id] : '';
                     const safeColName = String(col.name || '').replace(/"/g, '&quot;');
                     
-                    html += `<td style="width: ${col.width}px; max-width: ${col.width}px;" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
+                    // FORMATTAZIONE CELL-LEVEL DEDICATA
+                    const cellStyleObj = cellStyles[col.id];
+                    const cellColorClass = cellStyleObj ? (cellStyleObj.colorClass || '') : '';
+                    const cellInlineBg = cellStyleObj ? (cellStyleObj.inlineBgStyle || '') : '';
+
+                    html += `<td class="${cellColorClass}" style="width: ${col.width}px; max-width: ${col.width}px; ${cellInlineBg}" data-col-name="${safeColName}">${AdvancedTable.renderCell(tableId, row, col, val, state, isEdit)}</td>`;
                 });
 
                 let actionCell = `<button class="adv-icon-btn" title="${I18n.t('adv_render.options')}" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
@@ -672,11 +681,6 @@ Object.assign(AdvancedTable, {
             html += `</div></div>`;
         }
 
-        const tHtmlElapsed = (performance.now() - tHtmlStart).toFixed(2);
-        //console.log(`[PERF TABLE] 4. Generazione Stringa HTML (${pagedRows.length} righe a video): ${tHtmlElapsed}ms`);
-
-        // FASE 5: INIEZIONE NEL DOM ED EVENTI (PROFILING DEDICATO)
-        const tDomStart = performance.now();
         bodyContainer.innerHTML = html;
 
         if (isEdit && typeof AdvancedTable.attachCellEvents !== 'undefined') {
@@ -699,11 +703,6 @@ Object.assign(AdvancedTable, {
                 }
             });
         }
-        const tDomElapsed = (performance.now() - tDomStart).toFixed(2);
-        //console.log(`[PERF TABLE] 5. Iniezione DOM & Eventi: ${tDomElapsed}ms`);
-
-        //console.log(`📊 [PERF TABLE] TEMPO TOTALE RENDER TABELLA: ${(performance.now() - perfTableStart).toFixed(2)}ms`);
-        //console.groupEnd();
     },
 
     attachCellEvents: (wrapper, tableId) => {
