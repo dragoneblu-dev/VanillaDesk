@@ -3,7 +3,10 @@
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: editor-keyboard-mutations
  * Conteggio test case: 20
- * Generato automaticamente il: 2026-09-25 11:19:11
+ * Allineato alle specifiche di sicurezza VanillaDesk:
+ * - Salvaguardia dei widget complessi da cancellazione accidentale da tastiera.
+ * - Verifica del flash rosso di avviso (adv-widget-protected-flash) su Backspace e Canc.
+ * - Preservazione delle righe di separazione adiacenti ai blocchi protetti.
  */
 
 describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)", () => {
@@ -75,7 +78,7 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
 
             let confirmCalled = false;
             const origConfirm = window.confirm;
-            window.confirm = () => { confirmCalled = true; return false; }; // Rifiuta
+            window.confirm = () => { confirmCalled = true; return false; };
 
             try {
                 Editor.safeDeleteWidget(dummy);
@@ -152,7 +155,7 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
 
             let confirmCalled = false;
             const origConfirm = window.confirm;
-            window.confirm = () => { confirmCalled = true; return false; }; // Rifiuta
+            window.confirm = () => { confirmCalled = true; return false; };
 
             try {
                 const res = Editor.handleBulkWidgetDeletion();
@@ -218,7 +221,7 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
     test("Editor.handleEnterKey: in blocco pre.code-content preserva l'indentazione della riga", () => {
             const pre = document.createElement('pre');
             pre.className = 'code-content';
-            pre.textContent = '    let x = 10;'; // 4 spazi iniziali
+            pre.textContent = '    let x = 10;';
             document.body.appendChild(pre);
 
             const sel = window.getSelection();
@@ -231,7 +234,6 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             const ev = { shiftKey: false, preventDefault: () => {} };
             Editor.handleEnterKey(ev);
 
-            // Verifica attraverso il rawText del motore dell'editor che l'indentazione sia preservata
             const raw = Editor._getRawText(pre);
             Assert.isTrue(raw.includes('\n    '));
             pre.remove();
@@ -315,7 +317,7 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             Assert.isNull(editor.querySelector('#p_with_inline'));
         });
 
-    test("Editor.handleBackspaceKey: su inizio riga vuota adiacente a widget protetto rimuove la riga e sposta il cursore", () => {
+    test("Editor.handleBackspaceKey: su inizio riga vuota adiacente a widget protetto preserva la riga e attiva il flash rosso", () => {
             let editor = document.getElementById('noteContent');
             editor.innerHTML = `
                 <div id="adv_tbl_wall" class="adv-widget-shell widget-type-database"></div>
@@ -333,11 +335,13 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             const ev = { preventDefault: () => {} };
             Editor.handleBackspaceKey(ev);
 
-            Assert.isNull(editor.querySelector('#p_empty'), "Il paragrafo vuoto deve essere rimosso");
-            Assert.isNotNull(editor.querySelector('#adv_tbl_wall'), "Il database non deve essere toccato");
+            Assert.isNotNull(editor.querySelector('#p_empty'), "Il paragrafo vuoto tra i widget non deve essere distrutto");
+            const widget = editor.querySelector('#adv_tbl_wall');
+            Assert.isNotNull(widget, "Il database non deve essere toccato");
+            Assert.isTrue(widget.classList.contains('adv-widget-protected-flash'), "Il widget protetto deve ricevere il bordo rosso temporaneo");
         });
 
-    test("Editor.handleBackspaceKey: su inizio riga con testo contro widget seleziona il widget (.adv-widget-selected)", () => {
+    test("Editor.handleBackspaceKey: su inizio riga con testo contro widget preserva il widget e attiva il flash rosso", () => {
             let editor = document.getElementById('noteContent');
             editor.innerHTML = `
                 <div id="adv_tbl_wall2" class="adv-widget-shell widget-type-database"></div>
@@ -356,13 +360,14 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             Editor.handleBackspaceKey(ev);
 
             const widget = editor.querySelector('#adv_tbl_wall2');
-            Assert.isTrue(widget.classList.contains('adv-widget-selected'), "Il widget deve essere evidenziato come selezionato al primo backspace");
+            Assert.isTrue(widget.classList.contains('adv-widget-protected-flash'), "Il widget protetto deve ricevere il contorno rosso di avviso (500ms)");
+            Assert.isNotNull(editor.querySelector('#p_text'));
         });
 
-    test("Editor.handleBackspaceKey: seconda pressione su widget già selezionato lo elimina", () => {
+    test("Editor.handleBackspaceKey: seconda pressione consecutiva preserva comunque il widget protetto", () => {
             let editor = document.getElementById('noteContent');
             editor.innerHTML = `
-                <div id="adv_tbl_wall3" class="adv-widget-shell widget-type-database adv-widget-selected"></div>
+                <div id="adv_tbl_wall3" class="adv-widget-shell widget-type-database adv-widget-protected-flash"></div>
                 <p id="p_text2">Testo</p>
             `;
 
@@ -374,16 +379,9 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             r.collapse(true);
             sel.addRange(r);
 
-            const origConfirm = window.confirm;
-            window.confirm = () => true;
-
-            try {
-                const ev = { preventDefault: () => {} };
-                Editor.handleBackspaceKey(ev);
-                Assert.isNull(editor.querySelector('#adv_tbl_wall3'), "Al secondo colpo il widget deve essere eliminato");
-            } finally {
-                window.confirm = origConfirm;
-            }
+            const ev = { preventDefault: () => {} };
+            Editor.handleBackspaceKey(ev);
+            Assert.isNotNull(editor.querySelector('#adv_tbl_wall3'), "I widget non possono essere eliminati impulsivamente da tastiera con Backspace");
         });
 
     test("Editor.handleDeleteKey: a fine riga davanti a blocco con inline shell esegue manual merge", () => {
@@ -408,7 +406,7 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             Assert.isNotNull(p1.querySelector('.adv-inline-shell'));
         });
 
-    test("Editor.handleDeleteKey: se il nodo successivo è un widget protetto lo seleziona (.adv-widget-selected)", () => {
+    test("Editor.handleDeleteKey: se il nodo successivo è un widget protetto preserva la riga e attiva il flash rosso", () => {
             let editor = document.getElementById('noteContent');
             editor.innerHTML = `
                 <p id="p_top_del">Testo</p>
@@ -427,7 +425,8 @@ describe("Editor Keyboard Mutations: Backspace, Delete & Bulk Deletion (20 Test)
             Editor.handleDeleteKey(ev);
 
             const widget = editor.querySelector('#adv_tbl_next');
-            Assert.isTrue(widget.classList.contains('adv-widget-selected'));
+            Assert.isTrue(widget.classList.contains('adv-widget-protected-flash'), "Premere Canc verso un widget protetto deve mostrare il flash rosso e preservare i dati");
+            Assert.isNotNull(editor.querySelector('#p_top_del'));
         });
 
 });

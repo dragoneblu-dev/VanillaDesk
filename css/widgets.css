@@ -105,6 +105,13 @@
     transition: box-shadow 0.2s ease;
 }
 
+/* FEEDBACK DI PROTEZIONE WIDGET: Flash rosso temporaneo (500ms) su tentativo di cancellazione con Backspace/Canc */
+.adv-widget-protected-flash {
+    box-shadow: 0 0 0 3px var(--danger-color), 0 0 20px rgba(239, 68, 68, 0.4) !important;
+    border-radius: 6px;
+    transition: box-shadow 0.25s ease !important;
+}
+
 /* --- CITAZIONI (TRANSCLUSION) --- */
 .adv-widget-shell.block-citation { 
     border-left: 4px solid var(--accent-color); 

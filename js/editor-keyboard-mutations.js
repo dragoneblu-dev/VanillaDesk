@@ -2,18 +2,32 @@
  * editor-keyboard-mutations.js
  * Sottomodulo di Editor.
  * Responsabilità: Intercettazione di tasti che distruggono o creano nodi complessi
- * Cancellazione protetta dei widget interni: permette l'uso dei tasti Canc e Backspace
- * all'interno delle aree editabili (es. Colonne), impedendo la distruzione accidentale
- * dei widget soprastanti/sottostanti quando il blocco corrente contiene testo.
- * Fusione protetta dei blocchi in presenza di widget inline tramite rimozione atomica uniforme
- * per snippet, note nascoste e segnalibri, salvaguardando la struttura del documento.
- * Cancellazione atomica e lineare degli elementi inline su Backspace/Canc con supporto
- * immediato al ripristino da Undo (Ctrl+Z).
- * Cancellazione diretta di <hr> se precede il blocco su Backspace o se segue su Canc.
- * Salvaguardia del blocco unico minimo (<p><br></p>) a svuotamento integrale dell'editor.
+ * FIX CANCELLAZIONE WIDGET INTERNI: Aggiunto controllo di identità tra widget corrente 
+ * e widget bersaglio per permettere l'uso dei tasti Canc e Backspace all'interno delle aree editabili (Es. Colonne).
+ * FIX MERGE INLINE WIDGETS: Intercettazione chirurgica della fusione dei paragrafi tramite Backspace/Canc
+ * utilizzando un DOM TreeWalker assoluto per scavalcare correttamente i confini delle liste (UL/OL) 
+ * proteggendo gli appunti inline e gli snippet copiabili dalla distruzione nativa del browser.
+ * CANCELLAZIONE SNIPPET LINEARE: Eliminazione atomica e fluida dello snippet copiabile su Backspace/Canc
+ * senza popup bloccanti o over-engineering, con pieno supporto al ripristino istantaneo tramite Undo (Ctrl+Z).
+ * CANCELLAZIONE DIRETTA HR: Cancellazione immediata di <hr> se precede il blocco su Backspace o se segue su Canc.
+ * SALVAGUARDIA WIDGET DA TASTIERA & FLASH BORDO ROSSO (500ms): Impedisce l'eliminazione accidentale dei widget
+ * complessi tramite Backspace e Canc e preserva le righe vuote di separazione, mostrando un contorno rosso animato
+ * sul widget protetto che scompare automaticamente dopo mezzo secondo.
+ * SALVAGUARDIA BLOCCO MINIMO: Impedisce lo svuotamento totale dell'editor su cancellazione dell'ultimo blocco vuoto.
+ * RESET EREDITÀ FORMATTAZIONE: Disattivazione automatica del comando bold residuo all'uscita dai titoli H1..H6 con Invio.
  */
 
 Object.assign(Editor, {
+
+    flashWidgetProtectedBorder: (widgetEl) => {
+        if (!widgetEl) return;
+        widgetEl.classList.add('adv-widget-protected-flash');
+        setTimeout(() => {
+            if (widgetEl && document.body.contains(widgetEl)) {
+                widgetEl.classList.remove('adv-widget-protected-flash');
+            }
+        }, 500);
+    },
 
     safeDeleteWidget: (widgetNode) => {
         const type = widgetNode.getAttribute('data-widget-type');
@@ -250,12 +264,16 @@ Object.assign(Editor, {
                     newRange.collapse(true);
                     selection.removeAllRanges();
                     selection.addRange(newRange);
+
+                    // RESET EREDITÀ FORMATTAZIONE: Impedisce al browser di ereditare il grassetto dal titolo
+                    if (document.queryCommandState('bold')) {
+                        try { document.execCommand('bold', false, null); } catch (err) {}
+                    }
                 }
 
                 Store.triggerAutoSave();
                 return;
             } else {
-                // Invio in mezzo al titolo: scatta uno snapshot prima della divisione nativa
                 Editor.saveSnapshot();
             }
         }
@@ -548,14 +566,31 @@ Object.assign(Editor, {
                 }
             }
 
-            // Se il blocco è l'unico rimasto nell'editor ed è vuoto, impedisci lo svuotamento assoluto del documento
+            // Se il blocco precedente è un widget protetto: BLOCCA SEMPRE la distruzione sia della riga che del widget,
+            // e fai lampeggiare il widget precedente con il contorno rosso per 500ms
+            if (prevNode && WidgetManager.isProtectedBlock(prevNode)) {
+                const targetWidget = prevNode.closest('.adv-widget-shell');
+                if (currentWidget && targetWidget && currentWidget === targetWidget) {
+                    return; 
+                }
+
+                e.preventDefault();
+                
+                const shell = targetWidget || prevNode;
+                if (shell) {
+                    Editor.flashWidgetProtectedBorder(shell);
+                }
+                return; 
+            }
+
+            // Se il blocco è l'unico rimasto nell'editor ed è vuoto, impedisce lo svuotamento assoluto del documento
             if (editorRoot && editorRoot.children.length === 1 && editorRoot.firstElementChild === block && isEmptyBlock) {
                 e.preventDefault();
                 block.innerHTML = '<br>';
                 return;
             }
 
-            // Se il blocco precedente è vuoto: rimuovilo senza spostare il cursore a fine riga
+            // Se il blocco precedente è vuoto (tra testi normali): rimuovilo senza spostare il cursore a fine riga
             if (prevNode && !WidgetManager.isProtectedBlock(prevNode) && cleanText(prevNode.textContent) === '') {
                 e.preventDefault();
                 Editor.saveSnapshot();
@@ -564,7 +599,7 @@ Object.assign(Editor, {
                 return;
             }
 
-            // Se il blocco corrente è vuoto: rimuovilo e posiziona il cursore sul blocco precedente
+            // Se il blocco corrente è vuoto (tra testi normali): rimuovilo e posiziona il cursore sul blocco precedente
             if (isEmptyBlock && prevNode && !WidgetManager.isProtectedBlock(prevNode) && !block.closest('li, table, .adv-widget-shell')) {
                 e.preventDefault();
                 Editor.saveSnapshot();
@@ -609,35 +644,6 @@ Object.assign(Editor, {
                  marker.remove();
                  Store.triggerAutoSave();
                  return;
-            }
-
-            // Gestione sicura davanti a widget protetti: se la riga corrente contiene testo, impedisce la fusione errata
-            // senza selezionare né distruggere inaspettatamente il widget soprastante.
-            if (prevNode && WidgetManager.isProtectedBlock(prevNode)) {
-                const targetWidget = prevNode.closest('.adv-widget-shell');
-                if (currentWidget && targetWidget && currentWidget === targetWidget) {
-                    return; 
-                }
-
-                e.preventDefault();
-                
-                if (isEmptyBlock) {
-                    Editor.saveSnapshot();
-
-                    const sel = window.getSelection();
-                    const newRange = document.createRange();
-                    newRange.setStartAfter(prevNode);
-                    newRange.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
-
-                    block.remove();
-                    Store.triggerAutoSave();
-                    return;
-                }
-
-                // Se la riga attuale contiene testo, arresta semplicemente l'arretramento
-                return; 
             }
         }
     },
@@ -772,6 +778,22 @@ Object.assign(Editor, {
                     }
                 }
 
+                // SALVAGUARDIA WIDGET PROTETTO CON CANC: Impedisce la distruzione della riga e del widget, mostrando il flash rosso per 500ms
+                if (nextNode && WidgetManager.isProtectedBlock(nextNode)) {
+                    const targetWidget = nextNode.closest('.adv-widget-shell');
+                    if (currentWidget && targetWidget && currentWidget === targetWidget) {
+                        return; 
+                    }
+
+                    e.preventDefault();
+                    
+                    const shell = targetWidget || nextNode;
+                    if (shell) {
+                        Editor.flashWidgetProtectedBorder(shell);
+                    }
+                    return; 
+                }
+
                 // Se il nodo successivo contiene un widget inline (come un appunto o snippet),
                 // il merge nativo del browser distruggerebbe i tag contenteditable=false. Lo uniamo manualmente!
                 if (nextNode && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextNode.tagName) && nextNode.querySelector('.adv-inline-shell')) {
@@ -804,34 +826,6 @@ Object.assign(Editor, {
                     
                     Store.triggerAutoSave();
                     return;
-                }
-
-                // Gestione sicura con Canc davanti a widget protetti sottostanti
-                if (nextNode && WidgetManager.isProtectedBlock(nextNode)) {
-                    const targetWidget = nextNode.closest('.adv-widget-shell');
-                    if (currentWidget && targetWidget && currentWidget === targetWidget) {
-                        return; 
-                    }
-
-                    e.preventDefault();
-                    
-                    if (isEmptyBlock) {
-                        Editor.saveSnapshot();
-
-                        const sel = window.getSelection();
-                        const newRange = document.createRange();
-                        newRange.setStartBefore(nextNode);
-                        newRange.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(newRange);
-
-                        block.remove();
-                        Store.triggerAutoSave();
-                        return;
-                    }
-
-                    // Se il blocco contiene testo: impedisce la fusione errata del widget nel testo
-                    return; 
                 }
             }
         }

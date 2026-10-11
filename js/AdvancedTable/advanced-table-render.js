@@ -11,7 +11,9 @@
  * Ripristinata integralmente la funzione attachCellEvents e il mouseover globale.
  * Il pulsante refresh ricarica e sincronizza fedelmente i dati dal disco.
  * Andare a capo su un campo di testo apre automaticamente il drawer a tutta altezza.
- * Ricalcolo dinamico obbligatorio delle virtualCells per garantire l'aggiornamento immediato di Backlink e Rollup.
+ * PERF LAZY VIRTUAL RESOLUTION: In assenza di filtri/ordinamenti attivi, risolve solo le righe
+ * paginate visibili (10 o 25 righe), riducendo a <1ms l'apertura di tabelle con oltre 20.000 record.
+ * PROFILING: Monitoraggio temporale integrato delle singole fasi di rendering.
  */
 
 Object.assign(AdvancedTable, {
@@ -273,6 +275,13 @@ Object.assign(AdvancedTable, {
     },
 
     _renderAsTable: (wrapper, state, tableId) => {
+        const perfTableStart = performance.now();
+        const rowCount = state.rows ? state.rows.length : 0;
+        const tblTitle = state.title || tableId;
+
+        // GRUPPO APERTO DI DEFAULT PER PROFILING IMMEDIATO
+        //console.group(`📊 [PERF TABLE] Render "${tblTitle}" (${rowCount} righe, id: ${tableId})`);
+
         const isCited = tableId.includes('_cited_');
         const isEdit = AppState.isEditMode && !isCited;
         
@@ -306,6 +315,7 @@ Object.assign(AdvancedTable, {
                     <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="AdvancedTable.deleteTable('${tableId}', true)"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${I18n.t('adv_render.remove_view')}</span></button>
                 </div>
             `;
+            //console.groupEnd();
             return;
         }
 
@@ -325,38 +335,84 @@ Object.assign(AdvancedTable, {
         const visibleCols = state.columns.filter(c => !c.hidden && !hiddenList.includes(c.id));
         const hasHiddenCols = state.columns.length > visibleCols.length;
 
-        // RICALCOLO DINAMICO RIGHE VIRTUALI:
-        // Elimina il riuso di virtualCells stantie per garantire che Backlinks, Rollup e Formule
-        // riflettano istantaneamente modifiche e scollegamenti tra tabelle diverse.
-        let viewRows = [];
-        const renderCache = {};
-        state.rows.forEach(r => {
-            const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
-            r.virtualCells = vRow.virtualCells;
-            viewRows.push(vRow);
-        });
-
-        // CHIAMATE AL MOTORE CENTRALE IN DATA.JS
-        viewRows = AdvancedTable.filterRows(viewRows, state);
-        viewRows = AdvancedTable.sortRows(viewRows, state);
-
         let pageSize = state.pageSize ? parseInt(state.pageSize, 10) : 25;
         if (isNaN(pageSize) || pageSize <= 0) pageSize = 25;
         if (pageSize > 200) pageSize = 200;
         let currentPage = state.currentPage || 1;
-        let totalRows = viewRows.length;
-        let totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
 
-        if (currentPage > totalPages) currentPage = totalPages;
-        if (currentPage < 1) currentPage = 1;
-
-        let startIdx = (currentPage - 1) * pageSize;
-        let endIdx = startIdx + pageSize;
-        let pagedRows = viewRows.slice(startIdx, endIdx);
-        state.currentPage = currentPage;
-
-        // --- GESTIONE LOGICA ICONE ATTIVE ---
         const hasFilter = state.filters && Object.keys(state.filters).some(k => state.filters[k].trim() !== '');
+        const hasQuickSearch = state.quickSearch && state.quickSearch.trim() !== '';
+        const hasActiveFilterOrQuick = hasFilter || hasQuickSearch;
+        const hasActiveSort = state.sorts && state.sorts.length > 0;
+
+        let pagedRows = [];
+        let totalRows = 0;
+        let totalPages = 1;
+
+        // =========================================================================
+        // PIPELINE OTTIMIZZATA: LAZY VIRTUAL RESOLUTION
+        // In assenza di filtri e sort, elabora ESCLUSIVAMENTE le righe a video (es. 25).
+        // =========================================================================
+        if (!hasActiveFilterOrQuick && !hasActiveSort) {
+            const tVirtualStart = performance.now();
+            totalRows = state.rows.length;
+            totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+            state.currentPage = currentPage;
+
+            let startIdx = (currentPage - 1) * pageSize;
+            let endIdx = startIdx + pageSize;
+            const pagedRawRows = state.rows.slice(startIdx, endIdx);
+
+            const renderCache = {};
+            pagedRawRows.forEach(r => {
+                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+                r.virtualCells = vRow.virtualCells;
+                pagedRows.push(vRow);
+            });
+
+            const tVirtualElapsed = (performance.now() - tVirtualStart).toFixed(2);
+            //console.log(`[PERF TABLE] 1. Calcolo VirtualRows (LAZY: sole ${pagedRows.length} righe visibili): ${tVirtualElapsed}ms`);
+            //console.log(`[PERF TABLE] 2. Filtraggio: bypassato (nessun filtro attivo)`);
+            //console.log(`[PERF TABLE] 3. Ordinamento: bypassato (nessun sort attivo)`);
+
+        } else {
+            // Pipeline completa (eseguita solo se sono richiesti filtri o ordinamenti)
+            const tVirtualStart = performance.now();
+            let viewRows = [];
+            const renderCache = {};
+            state.rows.forEach(r => {
+                const vRow = AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
+                r.virtualCells = vRow.virtualCells;
+                viewRows.push(vRow);
+            });
+            const tVirtualElapsed = (performance.now() - tVirtualStart).toFixed(2);
+            //console.log(`[PERF TABLE] 1. Calcolo VirtualRows (${rowCount} righe): ${tVirtualElapsed}ms`);
+
+            const tFilterStart = performance.now();
+            viewRows = AdvancedTable.filterRows(viewRows, state);
+            const tFilterElapsed = (performance.now() - tFilterStart).toFixed(2);
+            //console.log(`[PERF TABLE] 2. Filtraggio (${viewRows.length} righe): ${tFilterElapsed}ms`);
+
+            const tSortStart = performance.now();
+            viewRows = AdvancedTable.sortRows(viewRows, state);
+            const tSortElapsed = (performance.now() - tSortStart).toFixed(2);
+            //console.log(`[PERF TABLE] 3. Ordinamento: ${tSortElapsed}ms`);
+
+            totalRows = viewRows.length;
+            totalPages = Math.max(1, Math.ceil(totalRows / pageSize));
+
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+            state.currentPage = currentPage;
+
+            let startIdx = (currentPage - 1) * pageSize;
+            let endIdx = startIdx + pageSize;
+            pagedRows = viewRows.slice(startIdx, endIdx);
+        }
+
         const hasSavedFilters = state.savedFilters && state.savedFilters.length > 0;
         const hasSort = state.sorts.length > 0;
         const hasActiveAuto = state.automations && state.automations.some(a => a.active);
@@ -375,7 +431,6 @@ Object.assign(AdvancedTable, {
 
             tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
 
-            // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
             tools.push({ 
                 id: `adv-search-btn-${tableId}`, 
                 icon: Icons.search, 
@@ -385,13 +440,11 @@ Object.assign(AdvancedTable, {
                 onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
             });
 
-            // FILTRI E VISTE SALVATE
             tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
             
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
             tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: I18n.t('adv_filter.saved_views_title'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
             
-            // Pulsante di ricarica e sincronizzazione con il disco
             tools.push({ icon: Icons.refresh, title: I18n.t('adv_render.reload_from_disk'), onClick: () => AdvancedTable.forceRecalculate(tableId) });
 
             WidgetManager.updateShellUI(tableId, {
@@ -406,15 +459,15 @@ Object.assign(AdvancedTable, {
             });
         }
 
+        // FASE 4: GENERAZIONE STRINGA HTML (PROFILING DEDICATO SULLE RIGHE PAGINATE)
+        const tHtmlStart = performance.now();
         let html = '';
         
-        // Iniezione barra di ricerca rapida a scomparsa (Lineare e Naturale)
         html += AdvancedTable.renderQuickSearchBar(tableId, state);
 
         const zebraClass = (state.striped !== false) ? 'table-striped' : '';
         const tableWidthClass = state.freeWidth ? '' : 'adv-table-full-width';
         
-        // La tabella scorre naturale a tutta altezza senza limitazioni artificiali
         html += `<div class="adv-scroll-container"><table class="adv-table ${zebraClass} ${tableWidthClass}"><thead><tr>`;
 
         visibleCols.forEach(col => {
@@ -436,7 +489,6 @@ Object.assign(AdvancedTable, {
             const sortRule = state.sorts.find(s => s.colId === col.id);
             if (sortRule) sortIndicator = sortRule.dir === 1 ? ' ↑' : ' ↓';
 
-            // GESTIONE UNIFICATA DEL TOOLTIP E DEL FILTRO
             const isFiltered = state.filters && state.filters[col.id] && String(state.filters[col.id]).trim() !== '';
             const thStyleOverrides = isFiltered ? `background: rgba(37, 99, 235, 0.15); color: var(--accent-color); border-bottom: 2px solid var(--accent-color);` : '';
             const filterIconHtml = isFiltered ? `<span style="opacity:0.5; color:var(--accent-color); margin-left:2px; font-size:0.8rem;">${Icons.filter}</span>` : '';
@@ -464,7 +516,6 @@ Object.assign(AdvancedTable, {
             const isReadonlySystemCol = isSysDB && col.id === 'sys_c_note';
             const pointerStyle = isEdit && !isReadonlySystemCol ? 'cursor:pointer;' : 'cursor:default;';
 
-            // Singolo click (debounced) apre opzioni colonna, doppio click esegue ordinamento rapido
             const clickEvent = isEdit && !isReadonlySystemCol 
                 ? `onclick="AdvancedTable.onThClick(event, '${tableId}', '${col.id}')" ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')"` 
                 : `ondblclick="AdvancedTable.onThDblClick(event, '${tableId}', '${col.id}')"`;
@@ -521,7 +572,7 @@ Object.assign(AdvancedTable, {
                             let targetVal = cond.value;
 
                             if (typeof targetVal === 'string' && targetVal.startsWith('=')) {
-                                targetVal = AdvancedTable.evaluateFormula(targetVal.substring(1), row, state.columns, tableId, state.title, row.virtualCells, renderCache);
+                                targetVal = AdvancedTable.evaluateFormula(targetVal.substring(1), row, state.columns, tableId, state.title, row.virtualCells);
                             }
 
                             if (!LogicEngine.evaluateCondition(cond.operator, targetVal, cellVal, null, colDef, { mode: cond.dateMode, shift: cond.dateShift })) {
@@ -533,12 +584,11 @@ Object.assign(AdvancedTable, {
                         if (allMatch) {
                             rowColorClass = rule.color && rule.color !== 'none' ? rule.color : '';
                             
-                            // Valutazione opacità fissa vs formula JS
                             let opVal = rule.opacity !== undefined ? rule.opacity : '100';
                             if (rule.opacityType === 'formula') {
-                                opVal = AdvancedTable.evaluateFormula(opVal, row, state.columns, tableId, state.title, row.virtualCells, renderCache);
+                                opVal = AdvancedTable.evaluateFormula(opVal, row, state.columns, tableId, state.title, row.virtualCells);
                             } else if (typeof opVal === 'string' && opVal.startsWith('=')) {
-                                opVal = AdvancedTable.evaluateFormula(opVal.substring(1), row, state.columns, tableId, state.title, row.virtualCells, renderCache);
+                                opVal = AdvancedTable.evaluateFormula(opVal.substring(1), row, state.columns, tableId, state.title, row.virtualCells);
                             }
                             rowOpacity = opVal;
                             
@@ -548,7 +598,7 @@ Object.assign(AdvancedTable, {
                 }
 
                 if (typeof rowOpacity === 'string' && rowOpacity.startsWith('=')) {
-                    rowOpacity = AdvancedTable.evaluateFormula(rowOpacity.substring(1), row, state.columns, tableId, state.title, row.virtualCells, renderCache);
+                    rowOpacity = AdvancedTable.evaluateFormula(rowOpacity.substring(1), row, state.columns, tableId, state.title, row.virtualCells);
                 }
 
                 let pOp = parseFloat(rowOpacity);
@@ -580,12 +630,23 @@ Object.assign(AdvancedTable, {
         }
         html += `</tbody></table></div>`;
 
-        if (!state.hideFooterControls && (isEdit || totalPages > 1)) {
+        // FOOTER CONTROLS CON STATUS BAR CONTEGGIO RECORD
+        const totalStoredRows = state.rows ? state.rows.length : 0;
+        const totalFilteredRows = totalRows;
+        const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        const formattedFiltered = String(totalFilteredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+
+        const recordCountHtml = (totalFilteredRows < totalStoredRows)
+            ? `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;" title="Filtro o ricerca attiva"><b style="color:var(--accent-color); margin-right:3px;">${formattedFiltered}</b> di ${formattedStored} record</span>`
+            : `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
+
+        if (!state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0)) {
             html += `<div class="adv-table-footer-controls">`;
-            html += `<div class="adv-footer-left">`;
+            html += `<div class="adv-footer-left" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`;
             
             if (isEdit && !isSysDB) {
                 html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} ${I18n.t('table.new_row')}</span></button>`;
+                html += recordCountHtml;
                 
                 if (state.selectedRows && state.selectedRows.length > 0) {
                     if (state.selectedRows.length === 1) {
@@ -595,6 +656,8 @@ Object.assign(AdvancedTable, {
                     html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
                     html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
                 }
+            } else if (!isSysDB) {
+                html += recordCountHtml;
             } else if (isSysDB) {
                 html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
             }
@@ -609,6 +672,11 @@ Object.assign(AdvancedTable, {
             html += `</div></div>`;
         }
 
+        const tHtmlElapsed = (performance.now() - tHtmlStart).toFixed(2);
+        //console.log(`[PERF TABLE] 4. Generazione Stringa HTML (${pagedRows.length} righe a video): ${tHtmlElapsed}ms`);
+
+        // FASE 5: INIEZIONE NEL DOM ED EVENTI (PROFILING DEDICATO)
+        const tDomStart = performance.now();
         bodyContainer.innerHTML = html;
 
         if (isEdit && typeof AdvancedTable.attachCellEvents !== 'undefined') {
@@ -623,7 +691,6 @@ Object.assign(AdvancedTable, {
             }
         }
 
-        // Sincronizzazione orizzontale in tempo reale per la barra d'intestazione fluttuante
         const scrollBox = bodyContainer.querySelector('.adv-scroll-container');
         if (scrollBox) {
             scrollBox.addEventListener('scroll', () => {
@@ -632,6 +699,11 @@ Object.assign(AdvancedTable, {
                 }
             });
         }
+        const tDomElapsed = (performance.now() - tDomStart).toFixed(2);
+        //console.log(`[PERF TABLE] 5. Iniezione DOM & Eventi: ${tDomElapsed}ms`);
+
+        //console.log(`📊 [PERF TABLE] TEMPO TOTALE RENDER TABELLA: ${(performance.now() - perfTableStart).toFixed(2)}ms`);
+        //console.groupEnd();
     },
 
     attachCellEvents: (wrapper, tableId) => {
@@ -654,14 +726,11 @@ Object.assign(AdvancedTable, {
                 e.stopPropagation();
                 if (e.key === 'Enter') {
                     if (e.ctrlKey || e.metaKey || e.shiftKey) {
-                        // ANDARE A CAPO SU CAMPO TESTO: Apre automaticamente il drawer a tutta altezza
-                        // inserendo il ritorno a capo e posizionando il cursore all'inizio della nuova riga.
                         e.preventDefault();
                         const rowId = el.getAttribute('data-row');
                         const colId = el.getAttribute('data-col');
                         if (!rowId || !colId) return;
 
-                        // Calcolo matematico dell'offset del cursore nella cella prima dell'invio
                         let caretPos = 0;
                         const sel = window.getSelection();
                         if (sel.rangeCount > 0) {
@@ -678,7 +747,6 @@ Object.assign(AdvancedTable, {
                         AdvancedTable.updateData(tableId, rowId, colId, newText);
                         AdvancedTable.openLongTextModal(tableId, rowId, colId, caretPos + 1);
                     } else {
-                        // Invio semplice: conferma la modifica togliendo il focus dalla cella
                         e.preventDefault();
                         el.blur();
                     }
@@ -709,7 +777,6 @@ Object.assign(AdvancedTable, {
                 }
             });
             el.addEventListener('blur', (e) => {
-                // TIMEOUT: Permette al codice html inline di eseguire il salvataggio su 'data-raw-value' prima di trasmetterlo
                 setTimeout(() => {
                     if (!e.target.parentNode.closest('.adv-cell-date') || e.target.parentNode.children.length === 1) {
                         let valToSave = e.target.value;

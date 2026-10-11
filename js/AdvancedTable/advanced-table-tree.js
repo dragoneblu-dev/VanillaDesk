@@ -646,13 +646,18 @@ const AdvancedTree = {
 
         html += `</tbody></table></div>`;
 
-        // 12. Footer Controls (Paginazione per sole Radici)
-        if (!state.hideFooterControls && (isEdit || totalPages > 1)) {
+        // Footer Controls con indicatore conteggio totale record
+        const totalStoredRows = state.rows ? state.rows.length : 0;
+        const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+        const recordCountHtml = `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
+
+        if (!state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0)) {
             html += `<div class="adv-table-footer-controls">`;
-            html += `<div class="adv-footer-left">`;
+            html += `<div class="adv-footer-left" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`;
 
             if (isEdit && !isSysDB) {
                 html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova Attività Radice</span></button>`;
+                html += recordCountHtml;
 
                 if (state.selectedRows && state.selectedRows.length > 0) {
                     if (state.selectedRows.length === 1) {
@@ -662,6 +667,8 @@ const AdvancedTree = {
                     html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
                     html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
                 }
+            } else if (!isSysDB) {
+                html += recordCountHtml;
             } else if (isSysDB) {
                 html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
             }

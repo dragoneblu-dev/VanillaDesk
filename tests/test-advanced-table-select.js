@@ -3,7 +3,8 @@
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: advanced-table-select
  * Conteggio test case: 12
- * Generato automaticamente il: 2026-09-25 11:19:11
+ * Aggiornato alle specifiche attuali di VanillaDesk:
+ * - Le deselezioni si eseguono tramite toggle nativo su toggleSelectValue (Notion style).
  */
 
 describe("AdvancedTable Select: Pillole, Ordinamento A-Z & Colori (12 Test)", () => {
@@ -48,7 +49,6 @@ describe("AdvancedTable Select: Pillole, Ordinamento A-Z & Colori (12 Test)", ()
 
             AdvancedTable.renameSelectOption(null, tId, 'c1', 'VecchioZeta', 'AlfaRinominato');
 
-            // 'AlfaRinominato' deve trovarsi all'indice 0 (prima di 'Beta')
             Assert.deepEqual(AppState.databases[tId].selectOptions.c1, ['AlfaRinominato', 'Beta']);
             Assert.strictEqual(AppState.databases[tId].selectColors.c1['AlfaRinominato'], 'hl-c4');
             Assert.strictEqual(AppState.databases[tId].rows[0].cells.c1, 'AlfaRinominato');
@@ -135,7 +135,7 @@ describe("AdvancedTable Select: Pillole, Ordinamento A-Z & Colori (12 Test)", ()
             Assert.deepEqual(AppState.databases[tId].rows[0].cells.c1, ['B']);
         });
 
-    test("Select: clearSelect svuota la cella (stringa vuota per select, array vuoto per multi-select)", () => {
+    test("Select: toggleSelectValue svuota la cella tramite toggle nativo (Notion style)", () => {
             const tId = 'db_sel_clr';
             AppState.databases[tId] = {
                 id: tId,
@@ -146,10 +146,13 @@ describe("AdvancedTable Select: Pillole, Ordinamento A-Z & Colori (12 Test)", ()
                 rows: [{ id: 'r1', cells: { c_s: 'Valore', c_m: ['A', 'B'] } }]
             };
 
-            AdvancedTable.clearSelect(tId, 'r1', 'c_s');
+            // Toggle su select singola già attiva: svuota a stringa vuota
+            AdvancedTable.toggleSelectValue(tId, 'r1', 'c_s', 'Valore');
             Assert.strictEqual(AppState.databases[tId].rows[0].cells.c_s, '');
 
-            AdvancedTable.clearSelect(tId, 'r1', 'c_m');
+            // Toggle sui valori multi-select: toglie entrambi gli elementi portando ad array vuoto
+            AdvancedTable.toggleSelectValue(tId, 'r1', 'c_m', 'A');
+            AdvancedTable.toggleSelectValue(tId, 'r1', 'c_m', 'B');
             Assert.deepEqual(AppState.databases[tId].rows[0].cells.c_m, []);
         });
 
@@ -187,7 +190,6 @@ describe("AdvancedTable Select: Pillole, Ordinamento A-Z & Colori (12 Test)", ()
         });
 
     test("Select: createSelectOptionFromInput svuota l'input e crea l'opzione", () => {
-            // Pulizia difensiva da eventuali dropdown orfani lasciati da test precedenti
             document.querySelectorAll('#advCreateSelectInput').forEach(el => el.remove());
 
             const dummyInput = document.createElement('input');
