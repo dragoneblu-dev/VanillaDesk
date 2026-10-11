@@ -7,9 +7,11 @@
  * - Copertura capillare di TUTTI gli 11 Capitoli Reali dell'applicazione.
  * - Parser intelligente a 2 livelli: rileva sia intestazioni (h3/h4/h5) che punti elenco (li > b).
  * - Ancoraggio millimetrico a oltre 60 sotto-argomenti con feedback visivo temporaneo al click.
+ * - Esposizione centralizzata e chiara del numero di versione applicativa (version badge).
  */
 
 const Manual = {
+    version: '0.9.0',
     isInitialized: false,
     sections: [], 
 
@@ -27,10 +29,13 @@ const Manual = {
             return numA - numB;
         });
 
-        // 1. Introduzione
+        // 1. Introduzione con Badge di Versione Ufficiale
         let welcomeHTML = `
             <div style="background: rgba(37, 99, 235, 0.05); padding: 20px; border-left: 4px solid var(--accent-color); border-radius: 4px; margin-bottom: 25px;">
-                <h2 style="margin-top:0; color: var(--accent-color);">Benvenuto nel tuo "Secondo Cervello"</h2>
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; flex-wrap:wrap; gap:8px;">
+                    <h2 style="margin:0; color: var(--accent-color);">Benvenuto nel tuo "Secondo Cervello"</h2>
+                    <span style="background: var(--accent-color); color: white; font-size: 0.75rem; font-weight: bold; padding: 2px 8px; border-radius: 12px; font-family: monospace; letter-spacing: 0.5px;">v${Manual.version}</span>
+                </div>
                 Questa applicazione non è un semplice blocco note. È un ambiente ibrido che unisce un <b>elaboratore di testi avanzato</b> a un potente <b>motore di database relazionale e automazioni</b>. Il tutto funziona <em>esclusivamente all'interno del tuo browser</em>: i tuoi dati non vengono mai inviati a server esterni, garantendo una privacy totale, sicurezza assoluta e una velocità di esecuzione istantanea.
             </div>
         `;
@@ -149,14 +154,17 @@ const Manual = {
             `;
         });
 
-        // 5. Generazione Modale Completa
+        // 5. Generazione Modale Completa con Badge di Versione nell'Header
         const modalHTML = `
         <div id="manualModal" class="link-modal-overlay hidden" style="z-index: 5000;">
             <div class="link-modal" style="width: 1050px; max-width: 95vw; height: 90vh; display: flex; flex-direction: column;">
                 
                 <div class="link-modal-header" style="background: var(--sidebar-bg); border-bottom: 1px solid var(--border-color); flex-shrink: 0;">
                     <div class="link-modal-title">
-                        <span style="display:flex; align-items:center; gap:8px; font-size: 1.15rem;">📖 Manuale d'Uso: Guida a VanillaDesk</span>
+                        <span style="display:flex; align-items:center; gap:8px; font-size: 1.15rem;">
+                            📖 Manuale d'Uso: Guida a VanillaDesk
+                            <span style="background: rgba(37, 99, 235, 0.1); color: var(--accent-color); border: 1px solid var(--accent-color); font-size: 0.72rem; padding: 2px 8px; border-radius: 10px; font-weight: bold; font-family: monospace;">v${Manual.version}</span>
+                        </span>
                         <button class="close-modal-btn" onclick="Manual.close()" title="Chiudi Manuale">✕</button>
                     </div>
                 </div>

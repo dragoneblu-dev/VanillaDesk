@@ -17,9 +17,141 @@
  * FEAT CONVERSIONE ELENCHI WORD/DOCS: Parser semantico per convertire i paragrafi MsoList (Word) e le righe
  * numerate/puntate in veri elenchi nativi HTML (<ol> e <ul>) con rimozione dei marcatori testuali duplicati.
  * FIX LINK VANILLADESK: Preservazione integrale di link interni, file link, link esterni e descrizioni personalizzate (data-link-note).
+ * FEAT INCOLLA TABELLE EXCEL/SPREADSHEET: Riconoscimento intelligente tramite metadati e TSV con conversione
+ * diretta e istantanea in componente nativo Tabella Semplice (simple-table-wrapper).
  */
 
 Object.assign(Editor, {
+
+    // Helper per verificare se i dati negli appunti provengono da Excel o da un foglio di calcolo
+    _isExcelOrSpreadsheetPaste: (pastedHTML, pastedText) => {
+        if (!pastedHTML && !pastedText) return false;
+
+        // 1. Riconoscimento tramite metadati Microsoft Excel (Desktop e Web) o Google Sheets
+        if (pastedHTML) {
+            const lowerHTML = pastedHTML.toLowerCase();
+            const hasExcelMeta = lowerHTML.includes('progid="excel.sheet"') || 
+                                 lowerHTML.includes('progid=excel.sheet') || 
+                                 lowerHTML.includes('generator" content="microsoft excel') ||
+                                 lowerHTML.includes('xmlns:x="urn:schemas-microsoft-com:office:excel"') ||
+                                 lowerHTML.includes('mso-number-format') ||
+                                 lowerHTML.includes('excelworkbook');
+
+            const hasSheetsMeta = lowerHTML.includes('data-sheets-root') || 
+                                  lowerHTML.includes('google-sheets-html-origin') ||
+                                  lowerHTML.includes('data-sheets-value');
+
+            if ((hasExcelMeta || hasSheetsMeta) && lowerHTML.includes('<table')) {
+                return true;
+            }
+
+            // Tabella HTML accompagnata da struttura a colonne TSV (\t) in text/plain
+            if (lowerHTML.includes('<table') && pastedText && pastedText.includes('\t')) {
+                return true;
+            }
+        }
+
+        // 2. Riconoscimento dati tabulari puri in text/plain (TSV)
+        if (pastedText && pastedText.includes('\t')) {
+            const lines = pastedText.trim().split(/\r\n|\n|\r/);
+            if (lines.length >= 1 && lines.some(l => l.includes('\t'))) {
+                return true;
+            }
+        }
+
+        return false;
+    },
+
+    // Genera il markup nativo di una Tabella Semplice (simple-table-wrapper) da dati Excel/Spreadsheet
+    _createSimpleTableFromExcel: (pastedHTML, pastedText) => {
+        const stblId = 'stbl_' + (typeof Store !== 'undefined' ? Store.generateId() : Date.now());
+        let tableHTML = `<div class="adv-widget-shell simple-table-wrapper" data-widget-type="simple-table" id="${stblId}" contenteditable="false">`;
+        tableHTML += `<table class="table-striped" style="width:100%; table-layout:auto;"><tbody>`;
+
+        let rowsParsed = false;
+        let totalCellCount = 0;
+
+        // Canale A: Parsing da HTML strutturato (mantiene stili inline, link, colspan e rowspan)
+        if (pastedHTML && pastedHTML.toLowerCase().includes('<table')) {
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(pastedHTML, 'text/html');
+                const srcTable = doc.querySelector('table');
+
+                if (srcTable) {
+                    const rows = Array.from(srcTable.rows);
+                    if (rows.length > 0) {
+                        rows.forEach((tr, rIdx) => {
+                            tableHTML += '<tr>';
+                            const cells = Array.from(tr.cells);
+                            cells.forEach(c => {
+                                totalCellCount++;
+                                const tag = rIdx === 0 ? 'th' : 'td';
+                                const rs = c.getAttribute('rowspan');
+                                const cs = c.getAttribute('colspan');
+
+                                let spanAttrs = '';
+                                if (rs && parseInt(rs, 10) > 1) spanAttrs += ` rowspan="${parseInt(rs, 10)}"`;
+                                if (cs && parseInt(cs, 10) > 1) spanAttrs += ` colspan="${parseInt(cs, 10)}"`;
+
+                                let content = c.innerHTML;
+
+                                // Srotola <p> e <div> interni inseriti da Excel
+                                content = content.replace(/<\/?(p|div)[^>]*>/gi, '<br>');
+                                content = content.replace(/(<br\s*\/?>\s*)+/gi, '<br>');
+                                content = content.replace(/^<br\s*\/?>|<br\s*\/?>$/gi, '');
+
+                                // Rimuove tag e stili spuri proprietari di Microsoft Office
+                                content = content.replace(/<\/?(font|o:[a-z]+)[^>]*>/gi, '');
+                                content = content.replace(/<!--[\s\S]*?-->/g, '');
+
+                                const cleanText = content.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                                if (!cleanText && !content.includes('<img')) {
+                                    content = '<br>';
+                                }
+
+                                tableHTML += `<${tag} contenteditable="true"${spanAttrs}>${content}</${tag}>`;
+                            });
+                            tableHTML += '</tr>';
+                        });
+                        rowsParsed = true;
+                    }
+                }
+            } catch (err) {
+                console.warn("[EXCEL PASTE] Fallback su TSV:", err);
+                rowsParsed = false;
+            }
+        }
+
+        // Canale B: Parsing da TSV plain text (se l'HTML non è presente o non contiene una tabella valida)
+        if (!rowsParsed && pastedText && pastedText.includes('\t')) {
+            const lines = pastedText.trim().split(/\r\n|\n|\r/);
+            lines.forEach((line, rIdx) => {
+                if (!line && lines.length > 1) return;
+                const cols = line.split('\t');
+                const tag = rIdx === 0 ? 'th' : 'td';
+
+                tableHTML += '<tr>';
+                cols.forEach(colVal => {
+                    totalCellCount++;
+                    let text = colVal.trim();
+                    text = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                    if (!text) text = '<br>';
+                    tableHTML += `<${tag} contenteditable="true">${text}</${tag}>`;
+                });
+                tableHTML += '</tr>';
+            });
+            rowsParsed = true;
+        }
+
+        // Regola UX: se è stata copiata solo 1 singola cella, non creare una tabella 1x1, lascia passare il testo
+        if (totalCellCount <= 1) {
+            return null;
+        }
+
+        tableHTML += `</tbody></table></div><p><br></p>`;
+        return rowsParsed ? tableHTML : null;
+    },
 
     // Helper per convertire testo puro in HTML valido preservando spaziature, tab, caratteri speciali ed elenchi
     _formatPlainTextForHTML: (text) => {
@@ -300,49 +432,101 @@ Object.assign(Editor, {
 
         const pastedText = clipboardData.getData('text/plain');
         const pastedHTML = clipboardData.getData('text/html');
-        
-        const items = Array.from((e.clipboardData || e.originalEvent.clipboardData).items);
-        let isImage = false;
 
-        // 1. GESTIONE IMMAGINI INCOLLATE (Clipboard File)
-        for (let item of items) {
-            if (item.kind === 'file' && item.type.includes('image/')) {
+        const sel = window.getSelection();
+        if (!sel.rangeCount) return;
+        
+        let targetNode = sel.anchorNode;
+        if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
+
+        // Controllo contesti protetti ed editor dedicati (Note Inline e Commenti Segnalibri)
+        const isInsideWidget = WidgetManager.isProtectedBlock(targetNode) || WidgetManager.isProtectedInline(targetNode);
+        const codeWrapper = targetNode.closest('[data-widget-type="code"]');
+        const snippetText = targetNode.closest('.snippet-text');
+
+        // =========================================================================
+        // PRIORITÀ ASSOLUTA TABELLE EXCEL / GOOGLE SHEETS / TSV:
+        // Excel inserisce contemporaneamente nella clipboard sia l'HTML tabulare che un'immagine bitmap PNG di fallback.
+        // Se intercettiamo una tabella di Excel, IGNORIAMO il bitmap PNG di fallback e creiamo direttamente la Tabella Semplice nativa!
+        // =========================================================================
+        const isSpreadsheetData = !isInsideWidget && Editor._isExcelOrSpreadsheetPaste(pastedHTML, pastedText);
+
+        if (isSpreadsheetData) {
+            const tableHTML = Editor._createSimpleTableFromExcel(pastedHTML, pastedText);
+            if (tableHTML) {
                 e.preventDefault();
                 Editor.saveSnapshot();
-                isImage = true;
-                
-                const blob = item.getAsFile();
 
-                // Controllo peso per tutela prestazioni: Avvisa se > 200KB
-                if (blob.size > 204800) {
-                    if (typeof UI !== 'undefined' && UI.showToast) {
-                        UI.showToast("Consiglio: L'immagine è pesante. Usa 'Inserisci > Collegamento (link) > Immagine Esterna' o comprimila per non rallentare l'App.", "warning");
-                    }
+                const currentRange = sel.getRangeAt(0);
+                let blockUnderCursor = currentRange.startContainer.nodeType === 3 ? currentRange.startContainer.parentNode : currentRange.startContainer;
+                blockUnderCursor = blockUnderCursor.closest ? blockUnderCursor.closest('p, div, h1, h2, h3, h4, h5, h6') : null;
+
+                const isBlockEmpty = blockUnderCursor && blockUnderCursor.id !== 'noteContent' &&
+                                     blockUnderCursor.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' &&
+                                     !blockUnderCursor.querySelector('img, audio, iframe, .adv-widget-shell');
+
+                if (isBlockEmpty && blockUnderCursor.parentNode) {
+                    currentRange.setStartBefore(blockUnderCursor);
+                    currentRange.collapse(true);
+                    blockUnderCursor.remove();
+                    sel.removeAllRanges();
+                    sel.addRange(currentRange);
                 }
 
-                const reader = new FileReader();
-                reader.onload = (ev) => {
-                    const img = new Image();
-                    img.onload = () => {
-                        const MAX_WIDTH = 1600;
-                        let width = img.width; let height = img.height;
-                        if (width > MAX_WIDTH) { height = Math.round((height * MAX_WIDTH) / width); width = MAX_WIDTH; }
-                        const canvas = document.createElement('canvas');
-                        canvas.width = width; canvas.height = height;
-                        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                        document.execCommand('insertHTML', false, `<img src="${canvas.toDataURL('image/webp', 0.85)}"><p><br></p>`);
-                    };
-                    img.src = ev.target.result;
-                };
-                reader.readAsDataURL(blob);
+                document.execCommand('insertHTML', false, tableHTML);
+                Editor._ensureLastLineBreak(document.getElementById('noteContent'));
+
+                if (typeof WidgetManager !== 'undefined') {
+                    WidgetManager.mountAll();
+                }
+                if (typeof Store !== 'undefined') {
+                    Store.triggerAutoSave();
+                }
                 return;
             }
         }
 
-        if (isImage) return;
+        const items = Array.from((e.clipboardData || e.originalEvent.clipboardData).items);
+        let isImage = false;
 
-        const sel = window.getSelection();
-        if (!sel.rangeCount) return;
+        // 1. GESTIONE IMMAGINI INCOLLATE (Clipboard File reale, non proveniente da tabella Excel)
+        if (!isSpreadsheetData) {
+            for (let item of items) {
+                if (item.kind === 'file' && item.type.includes('image/')) {
+                    e.preventDefault();
+                    Editor.saveSnapshot();
+                    isImage = true;
+                    
+                    const blob = item.getAsFile();
+
+                    // Controllo peso per tutela prestazioni: Avvisa se > 200KB
+                    if (blob.size > 204800) {
+                        if (typeof UI !== 'undefined' && UI.showToast) {
+                            UI.showToast("Consiglio: L'immagine è pesante. Usa 'Inserisci > Collegamento (link) > Immagine Esterna' o comprimila per non rallentare l'App.", "warning");
+                        }
+                    }
+
+                    const reader = new FileReader();
+                    reader.onload = (ev) => {
+                        const img = new Image();
+                        img.onload = () => {
+                            const MAX_WIDTH = 1600;
+                            let width = img.width; let height = img.height;
+                            if (width > MAX_WIDTH) { height = Math.round((height * MAX_WIDTH) / width); width = MAX_WIDTH; }
+                            const canvas = document.createElement('canvas');
+                            canvas.width = width; canvas.height = height;
+                            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                            document.execCommand('insertHTML', false, `<img src="${canvas.toDataURL('image/webp', 0.85)}"><p><br></p>`);
+                        };
+                        img.src = ev.target.result;
+                    };
+                    reader.readAsDataURL(blob);
+                    return;
+                }
+            }
+        }
+
+        if (isImage) return;
         
         // Muro di Sicurezza Anti-Zombie: Se l'utente sta incollando su una selezione multipla,
         // verifichiamo che non stia distruggendo un intero database visivo.
@@ -354,14 +538,6 @@ Object.assign(Editor, {
                 }
             }
         }
-
-        let targetNode = sel.anchorNode;
-        if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
-
-        // Controllo contesti protetti ed editor dedicati (Note Inline e Commenti Segnalibri)
-        const isInsideWidget = WidgetManager.isProtectedBlock(targetNode) || WidgetManager.isProtectedInline(targetNode);
-        const codeWrapper = targetNode.closest('[data-widget-type="code"]');
-        const snippetText = targetNode.closest('.snippet-text');
 
         const isHeavyLoad = pastedText.length > 15000 || (pastedHTML && pastedHTML.length > 30000);
         e.preventDefault();
