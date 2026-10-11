@@ -44,7 +44,7 @@ L'applicazione è una vera Single Page Application (SPA) serverless.
 2. Fai doppio click su `index.html` per aprirlo nel tuo browser.
 3. Clicca su **"Crea Nuovo Workspace"** per inizializzare la cartella di lavoro sul tuo PC.
 
-⚠️ **Compatibilità Browser:** Poiché VanillaDesk sfrutta la moderna *File System Access API* per scrivere fisicamente i file sul tuo hard disk, è necessario utilizzare un browser basato su Chromium (**Google Chrome, Microsoft Edge, Brave, Opera**). Browser come Safari o Firefox non supportano ancora pienamente queste API in modo nativo.
+⚠️ **Compatibilità Browser:** Poiché VanillaDesk sfrutta la moderna *File System Access API* per scrivere fisicamente i file sul tuo hard disk, è necessario utilizzare un browser basato su Chromium (**Google Chrome, Microsoft Edge, Opera**). Browser come Safari o Firefox non supportano ancora pienamente queste API in modo nativo.
 
 ## Lavoriamo Insieme / Consulenza
 Ho pubblicato questo progetto open-source per condividere uno strumento utile con altri colleghi del settore IT e per dimostrare le mie competenze architetturali e di sviluppo.
