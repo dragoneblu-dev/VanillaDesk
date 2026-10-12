@@ -9,7 +9,8 @@
  * 5. JIT Component Sync: Riconciliazione in lettura al volo per database e frammenti prima dell'apertura nota (syncWidgetsForNote, syncNoteFromDisk).
  * 6. Gestione Asset Fisici & GC su Richiesta: Streaming di immagini/audio e potatura directory (_loadAssetsIntoRAM, executePhysicalGarbageCollection).
  * 7. BroadcastChannel Multi-Scheda: Sincronizzazione in tempo reale isolata per workspaceId.
- * FIX SYNC JIT LOCAL DRAFT: syncNoteFromDisk non scambia mai per eliminata una nota creata localmente non ancora scritta su disco (!Store._diskHashes.notes[noteId]).
+ * Scrittura concorrente controllata in batch con notifica di progresso in tempo reale.
+ * Preservazione dello stato di visualizzazione locale (expanded, _tocCollapsed, _lastScroll) nel sync multi-scheda e JIT.
  */
 
 Object.assign(Store, {
@@ -453,8 +454,15 @@ Object.assign(Store, {
                 Editor.saveSnapshot();
             }
 
-            // 2. Allinea la nota in RAM con la copia del disco
+            // 2. Allinea la nota in RAM con la copia del disco preservando lo stato UI
+            const currentExpanded = localNote.expanded;
+            const currentTocCollapsed = localNote._tocCollapsed;
+            const currentLastScroll = localNote._lastScroll;
             Object.assign(localNote, diskNote);
+            if (currentExpanded !== undefined) localNote.expanded = currentExpanded;
+            if (currentTocCollapsed !== undefined) localNote._tocCollapsed = currentTocCollapsed;
+            if (currentLastScroll !== undefined) localNote._lastScroll = currentLastScroll;
+
             localNote._baseRevId = diskNote.revId || Store.generateId();
             localNote.revId = localNote._baseRevId;
             localNote._isDirty = false;
@@ -480,11 +488,11 @@ Object.assign(Store, {
                         if (typeof CitationManager !== 'undefined') CitationManager.renderLiveCitations();
                     }
                     if (typeof UI !== 'undefined') {
-                    UI.updateBreadcrumb(localNote);
-                    UI.renderInlineFootnotes();
+                        UI.updateBreadcrumb(localNote);
+                        UI.renderInlineFootnotes();
                         if (typeof UI.renderTree === 'function') UI.renderTree();
                         if (typeof UI.showToast === 'function') {
-                    UI.showToast(I18n.t('conflict.toast_reloaded'), "info");
+                            UI.showToast(I18n.t('conflict.toast_reloaded'), "info");
                         }
                     }
                 } finally {
@@ -500,7 +508,7 @@ Object.assign(Store, {
         }
     },
 
-    saveToFile: async () => {
+    saveToFile: async (onProgress = null) => {
         // Se un salvataggio è già in corso o se stiamo aspettando la scelta sul pop-up di conflitto, non procedere
         if (Store._isSavingFile || Store._isConflictResolving) { 
             Store._saveQueuePending = true; 
@@ -570,99 +578,118 @@ Object.assign(Store, {
                 }
             }
 
-            // 2. SALVATAGGIO DATABASE CON 3-WAY FIELD-LEVEL MERGE
-            let syncedDatabasesCount = 0;
-
+            // 2. SALVATAGGIO DATABASE CON 3-WAY FIELD-LEVEL MERGE E NOTIFICA DI PROGRESSO
+            const dbsToWrite = [];
             for (const [dbId, ramState] of Object.entries(AppState.databases || {})) {
                 let currentRamHash = Store._hashObj(ramState, cryptoPrefix);
-
-                // FAST-PATH: se lo stato in RAM non è mutato, salta senza fare calcoli
                 if (!Store._diskHashes.databases[dbId] || Store._diskHashes.databases[dbId] !== currentRamHash) {
-                    const diskResult = await Store._readFragmentFromDisk(dbDir, `${dbId}.json`);
-                    let finalStateToWrite = ramState;
-
-                    if (diskResult.status === 'error') {
-                        hasWriteErrors = true;
-                        continue;
-                    } 
-                    else if (diskResult.status === 'success') {
-                        if (!diskResult.data.startsWith('PRONOTES_ENC_V1|') || AppState.documentPassword) {
-                            try {
-                                const diskState = JSON.parse(diskResult.data);
-                                const currentDiskHash = Store._hashObj(diskState, cryptoPrefix);
-                                
-                                // Conflitto reale: il file sul disco è stato alterato da un'altra sessione
-                                if (Store._diskHashes.databases[dbId] && currentDiskHash !== Store._diskHashes.databases[dbId]) {
-                                    finalStateToWrite = Store._mergeDatabaseStates(dbId, diskState, ramState);
-                                    AppState.databases[dbId] = finalStateToWrite;
-                                    syncedDatabasesCount++;
-
-                                    if (typeof AdvancedTable !== 'undefined') {
-                                        AdvancedTable.updateDependentViews(dbId);
-                                        if (AdvancedTable.activeRecordId) {
-                                            const activeTId = AdvancedTable.activeTableId || dbId;
-                                            AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
-                                        }
-                                    }
-                                }
-                            } catch(e) { 
-                                console.error(`[SYNC ERROR] Impossibile fondere il DB ${dbId}:`, e); 
-                            }
-                        }
-                    }
-
-                    try {
-                        const finalJsonStr = JSON.stringify(finalStateToWrite, null, 2);
-                        let dataToWrite = AppState.documentPassword 
-                            ? await CryptoUtils.encrypt(finalJsonStr, AppState.documentPassword, workspaceSalt) 
-                            : finalJsonStr;
-                        await Store._safeWriteFile(dbDir, `${dbId}.json`, dataToWrite);
-                        Store._diskHashes.databases[dbId] = Store._hashObj(finalStateToWrite, cryptoPrefix);
-                        Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(finalStateToWrite));
-
-                        // Notifica broadcast isolata dal workspaceId
-                        if (Store._syncChannel && AppState.workspaceId) {
-                            Store._syncChannel.postMessage({ 
-                                workspaceId: AppState.workspaceId,
-                                type: 'db_saved', 
-                                tableId: dbId 
-                            });
-                        }
-                    } catch (writeErr) {
-                        console.error(`Errore scrittura DB ${dbId}.json:`, writeErr);
-                        hasWriteErrors = true;
-                    }
+                    dbsToWrite.push({ dbId, ramState });
                 }
             }
 
-            if (syncedDatabasesCount > 0 && UI.showToast) {
-                UI.showToast(`Sincronizzazione: Fusi ${syncedDatabasesCount} database concorrenti a livello di cella.`, "info");
+            const totalDbsToWrite = dbsToWrite.length;
+            let currentDbWritten = 0;
+
+            for (const { dbId, ramState } of dbsToWrite) {
+                currentDbWritten++;
+                if (onProgress) {
+                    onProgress({
+                        phase: 'databases',
+                        current: currentDbWritten,
+                        total: totalDbsToWrite,
+                        message: `Scrittura componenti/database (${currentDbWritten}/${totalDbsToWrite})...`
+                    });
+                }
+
+                const diskResult = await Store._readFragmentFromDisk(dbDir, `${dbId}.json`);
+                let finalStateToWrite = ramState;
+
+                if (diskResult.status === 'error') {
+                    hasWriteErrors = true;
+                    continue;
+                } 
+                else if (diskResult.status === 'success') {
+                    if (!diskResult.data.startsWith('PRONOTES_ENC_V1|') || AppState.documentPassword) {
+                        try {
+                            const diskState = JSON.parse(diskResult.data);
+                            const currentDiskHash = Store._hashObj(diskState, cryptoPrefix);
+                            
+                            if (Store._diskHashes.databases[dbId] && currentDiskHash !== Store._diskHashes.databases[dbId]) {
+                                finalStateToWrite = Store._mergeDatabaseStates(dbId, diskState, ramState);
+                                AppState.databases[dbId] = finalStateToWrite;
+
+                                if (typeof AdvancedTable !== 'undefined') {
+                                    AdvancedTable.updateDependentViews(dbId);
+                                    if (AdvancedTable.activeRecordId) {
+                                        const activeTId = AdvancedTable.activeTableId || dbId;
+                                        AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
+                                    }
+                                }
+                            }
+                        } catch(e) { 
+                            console.error(`[SYNC ERROR] Impossibile fondere il DB ${dbId}:`, e); 
+                        }
+                    }
+                }
+
+                try {
+                    const finalJsonStr = JSON.stringify(finalStateToWrite, null, 2);
+                    let dataToWrite = AppState.documentPassword 
+                        ? await CryptoUtils.encrypt(finalJsonStr, AppState.documentPassword, workspaceSalt) 
+                        : finalJsonStr;
+                    await Store._safeWriteFile(dbDir, `${dbId}.json`, dataToWrite);
+                    Store._diskHashes.databases[dbId] = Store._hashObj(finalStateToWrite, cryptoPrefix);
+                    Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(finalStateToWrite));
+
+                    if (Store._syncChannel && AppState.workspaceId) {
+                        Store._syncChannel.postMessage({ 
+                            workspaceId: AppState.workspaceId,
+                            type: 'db_saved', 
+                            tableId: dbId 
+                        });
+                    }
+                } catch (writeErr) {
+                    console.error(`Errore scrittura DB ${dbId}.json:`, writeErr);
+                    hasWriteErrors = true;
+                }
             }
 
-            // 3. SALVATAGGIO NOTE (GESTIONE CONFLITTI TRAMITE REVISION TOKEN revId)
+            // 3. SALVATAGGIO NOTE (CON SCANSIONE O(1) E SCRITTURA IN BATCH CONCORRENTI CONTROLLATI)
+            const notesToWrite = [];
+
             for (const note of AppState.notes) {
+                // BYPASS ISTANTANEO: Se la nota non ha subito modifiche in RAM ed è già sincronizzata su disco, salta
+                if (!note._isDirty && !note._isDraft && Store._diskHashes.notes[note.id]) {
+                    continue;
+                }
+
                 const cleanNote = { ...note };
                 Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
                 const currentHash = Store._hashObj(cleanNote, cryptoPrefix);
 
                 if (note._isDirty || !Store._diskHashes.notes[note.id] || Store._diskHashes.notes[note.id] !== currentHash) {
-                    
-                    // Verifica Conflitto Concorrente al Pre-Save (circoscritta alla nota attiva per prevenire prompt multipli)
-                    if (!note._isDraft && !note.deletedAt) {
+                    notesToWrite.push({ note, cleanNote, currentHash });
+                }
+            }
+
+            const totalNotesToWrite = notesToWrite.length;
+            let writtenNotesCount = 0;
+
+            const BATCH_SIZE = 10;
+            for (let i = 0; i < notesToWrite.length; i += BATCH_SIZE) {
+                const batch = notesToWrite.slice(i, i + BATCH_SIZE);
+
+                await Promise.all(batch.map(async ({ note, cleanNote, currentHash }) => {
+                    if (!note._isDraft && !note.deletedAt && Store._diskHashes.notes[note.id]) {
                         const diskRes = await Store._readFragmentFromDisk(notesDir, `${note.id}.json`);
                         if (diskRes.status === 'success') {
                             try {
                                 const diskNote = JSON.parse(diskRes.data);
-                                
-                                // Rilevamento conflitto tramite divergenza del Revision Token
                                 if (diskNote.revId && note._baseRevId && diskNote.revId !== note._baseRevId) {
                                     if (AppState.currentNoteId === note.id) {
                                         const resolution = await Store.handleNoteConflict(note, diskNote);
-                                        if (resolution === 'reload') {
-                                            continue; 
-                                        }
+                                        if (resolution === 'reload') return; 
                                     } else {
-                                        // Nota in background: allinea la base per prevenire blocchi fantasma
                                         note._baseRevId = diskNote.revId;
                                     }
                                 }
@@ -672,7 +699,6 @@ Object.assign(Store, {
                         }
                     }
 
-                    // Genera nuovo token di revisione per questo salvataggio
                     const nextRevId = Store.generateId();
                     note.revId = nextRevId;
                     cleanNote.revId = nextRevId;
@@ -689,7 +715,6 @@ Object.assign(Store, {
                         note._isDirty = false;
                         delete note._isDraft;
 
-                        // Notifica broadcast isolata dal workspaceId
                         if (Store._syncChannel && AppState.workspaceId) {
                             Store._syncChannel.postMessage({ 
                                 workspaceId: AppState.workspaceId,
@@ -701,10 +726,20 @@ Object.assign(Store, {
                         console.error(`Errore scrittura nota ${note.id}.json:`, writeErr);
                         hasWriteErrors = true;
                     }
+                }));
+
+                writtenNotesCount += batch.length;
+                if (onProgress) {
+                    onProgress({
+                        phase: 'notes',
+                        current: writtenNotesCount,
+                        total: totalNotesToWrite,
+                        message: `Scrittura note su disco (${writtenNotesCount}/${totalNotesToWrite})...`
+                    });
                 }
             }
 
-            // 4. GARBAGE COLLECTION FISICA (Eseguita solo se vi sono state cancellazioni effettive di file/entità)
+            // 4. GARBAGE COLLECTION FISICA
             if (hasWriteErrors) {
                 Store.isDirty = true;
                 UI.showStatus("error");
@@ -716,6 +751,15 @@ Object.assign(Store, {
 
                 Store.isDirty = false;
                 UI.showStatus("saved");
+
+                if (onProgress) {
+                    onProgress({
+                        phase: 'complete',
+                        current: totalNotesToWrite,
+                        total: totalNotesToWrite,
+                        message: "Completato!"
+                    });
+                }
             }
 
         } catch (err) {
@@ -768,7 +812,7 @@ Object.assign(Store, {
             AppState.workspaceHandle = dirHandle;
             AppState.fileName = dirHandle.name;
 
-            UI.showStatus("saving"); 
+            UI.showStatus("loading"); 
 
             // Mount Cartelle
             try { AppState.assetsHandle = await dirHandle.getDirectoryHandle('assets', { create: true }); } catch (e) {}
@@ -1158,7 +1202,7 @@ Object.assign(Store, {
                 while ((match = audRegex.exec(contentHTML)) !== null) {
                     const filename = match[1];
                     if (Editor.audioCache[filename]) {
-                        contentHTML = contentHTML.replace(new RegExp(`src=["'][^"']*["']\\s*data-audio-ref=["']${filename}["']`, 'g'), `src="${Editor.audioCache[filename]}" data-audio-ref="${filename}"`);
+                        contentHTML = contentHTML.replace(new RegExp(`src=["'][^"']*["']\\s*data-audio-ref=["']${filename}["']`, 'g'), `src="${Editor.audioCache[filename]}" data-image-ref="${filename}"`);
                     }
                 }
                 note.content = contentHTML;
@@ -1215,7 +1259,13 @@ if (typeof BroadcastChannel !== 'undefined') {
                         const existingNote = Store.getNote(noteId);
                         if (existingNote) {
                             if (!existingNote._isDirty) {
+                                const curExp = existingNote.expanded;
+                                const curToc = existingNote._tocCollapsed;
+                                const curScroll = existingNote._lastScroll;
                                 Object.assign(existingNote, syncRes.note);
+                                if (curExp !== undefined) existingNote.expanded = curExp;
+                                if (curToc !== undefined) existingNote._tocCollapsed = curToc;
+                                if (curScroll !== undefined) existingNote._lastScroll = curScroll;
                                 existingNote._baseRevId = syncRes.note.revId || existingNote.revId;
                                 existingNote._isDirty = false;
                             }
@@ -1239,7 +1289,13 @@ if (typeof BroadcastChannel !== 'undefined') {
                     if (currentNote && !currentNote._isDirty) {
                         const syncRes = await Store.syncNoteFromDisk(noteId);
                         if (syncRes.status === 'success' && syncRes.note) {
+                            const curExp = currentNote.expanded;
+                            const curToc = currentNote._tocCollapsed;
+                            const curScroll = currentNote._lastScroll;
                             Object.assign(currentNote, syncRes.note);
+                            if (curExp !== undefined) currentNote.expanded = curExp;
+                            if (curToc !== undefined) currentNote._tocCollapsed = curToc;
+                            if (curScroll !== undefined) currentNote._lastScroll = curScroll;
                             currentNote._baseRevId = syncRes.note.revId || currentNote.revId;
                             currentNote._isDirty = false;
 

@@ -293,7 +293,7 @@ hr { border: none; border-top: 1px dotted var(--text-primary); }
     padding: 20px;
     border: 1px dashed var(--border-color);
     border-radius: 6px;
-    background: rgba(0,0,0,0.01);
+    background: var(--box-bg); /*rgba(0,0,0,0.01);*/
     user-select: none;
     flex-shrink: 0;
     max-width: var(--page-max-width);
@@ -360,4 +360,15 @@ img[data-broken="true"] {
 [data-theme="dark"] img.broken-image,
 [data-theme="notion-dark"] img.broken-image {
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+
+/* Stile semantico per hashtag inline stile Obsidian */
+.tag-hash {
+    color: var(--accent-color, #2563eb);
+    font-weight: 500;
+    background: rgba(37, 99, 235, 0.08);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.9em;
+    user-select: text;
 }

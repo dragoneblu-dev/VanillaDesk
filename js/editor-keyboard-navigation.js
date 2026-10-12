@@ -757,9 +757,22 @@ Object.assign(Editor, {
                     newRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(newRange);
-                    document.execCommand('bold', false, false);
-                    document.execCommand('italic', false, false);
-                    document.execCommand('underline', false, false);
+
+                    // FIX: Disattiva ESCLUSIVAMENTE gli stili che risultano attivi
+                    // Evita l'inversione accidentale di execCommand('italic') o ('underline')
+                    if (document.queryCommandState('bold')) {
+                        try { document.execCommand('bold', false, null); } catch(err) {}
+                    }
+                    if (document.queryCommandState('italic')) {
+                        try { document.execCommand('italic', false, null); } catch(err) {}
+                    }
+                    if (document.queryCommandState('underline')) {
+                        try { document.execCommand('underline', false, null); } catch(err) {}
+                    }
+                    if (document.queryCommandState('strikeThrough')) {
+                        try { document.execCommand('strikeThrough', false, null); } catch(err) {}
+                    }
+
                     Editor.updateToolbarFormatting();
                 } else if (e.key === ' ') {
                     e.preventDefault();
@@ -768,6 +781,7 @@ Object.assign(Editor, {
                     newRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(newRange);
+                    
                     document.execCommand('removeFormat', false, null);
                     document.execCommand('insertText', false, ' ');
                     Editor.updateToolbarFormatting();

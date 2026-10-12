@@ -66,6 +66,15 @@ Object.assign(UI, {
                 onClick: () => PackageManager.importModpack()
             },
             {
+                icon: Icons.import || '📥',
+                label: I18n.t('menu.import_obsidian') || "Importa Vault Obsidian...",
+                onClick: () => {
+                    if (typeof ObsidianImporter !== 'undefined') {
+                        ObsidianImporter.openModal();
+                    }
+                }
+            },
+            {
                 icon: Icons.file,
                 label: I18n.t('menu.import_markdown'),
                 onClick: () => ExportManager.importMarkdown()

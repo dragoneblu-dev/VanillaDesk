@@ -7,6 +7,7 @@
  * 3. Scanner Centralizzato Risorse: Scansione transitiva dipendenze e pulizia RAM (scanActiveEntities, cleanOrphanedRAMCaches).
  * 4. Orchestrazione Autosave: Gestione timer di debounce e segnalazione modifiche fisiche (triggerAutoSave, markNeedsPhysicalGC).
  * 5. Crash Recovery & Snapshot Standalone: Persistenza di emergenza su IndexedDB e import/export di file JSON monolitici.
+ * Ottimizzazione O(1) di hasUnsavedChanges per prevenire blocchi computazionali su collezioni con 1000+ note.
  */
 
 const DB_NAME = 'ProNotesDB';
@@ -66,7 +67,7 @@ const Store = {
         Store._needsPhysicalGC = true;
     },
 
-    // Verifica se esistono mutazioni non salvate effettive rispetto a disco, RAM e DOM vivo
+    // Verifica se esistono mutazioni non salvate effettive rispetto a disco, RAM e DOM vivo (ottimizzato O(1) per 1000+ note)
     hasUnsavedChanges: () => {
         if (Store.isDirty) return true;
 
@@ -84,21 +85,17 @@ const Store = {
 
         const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
         
-        // 2. Verifica note con modifiche non salvate (o nuove note non ancora su disco)
+        // 2. Verifica rapida O(1) note con modifiche non salvate (o nuove note non ancora su disco)
         for (const note of (AppState.notes || [])) {
             if (note._isDirty || note._isDraft) return true;
-            const cleanNote = { ...note };
-            Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
-            const currentHash = Store._hashObj(cleanNote, cryptoPrefix);
-            if (!Store._diskHashes.notes[note.id] || Store._diskHashes.notes[note.id] !== currentHash) {
-                return true;
-            }
+            if (!Store._diskHashes.notes[note.id]) return true;
         }
 
         // 3. Verifica database e blocchi codice con modifiche non salvate (o nuovi componenti non ancora su disco)
         for (const [dbId, ramState] of Object.entries(AppState.databases || {})) {
+            if (!Store._diskHashes.databases[dbId]) return true;
             const currentRamHash = Store._hashObj(ramState, cryptoPrefix);
-            if (!Store._diskHashes.databases[dbId] || Store._diskHashes.databases[dbId] !== currentRamHash) {
+            if (Store._diskHashes.databases[dbId] !== currentRamHash) {
                 return true;
             }
         }

@@ -43,6 +43,29 @@ const AdvancedTableColumnMenus = {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         let state = AdvancedTable.getState(realTableId);
         const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
+
+        // CONTROLLO DI SICUREZZA PREVENTIVO SE SI ATTIVA IL VINCOLO (da false a true)
+        if (!col.singleRecord) {
+            let multipleCount = 0;
+            let excessLinksCount = 0;
+
+            state.rows.forEach(r => {
+                if (Array.isArray(r.cells[colId]) && r.cells[colId].length > 1) {
+                    multipleCount++;
+                    excessLinksCount += (r.cells[colId].length - 1);
+                }
+            });
+
+            if (multipleCount > 0) {
+                const confirmMsg = I18n.t('adv_col_menu.confirm_single_record_loss', { rows: multipleCount, excess: excessLinksCount });
+
+                if (!confirm(confirmMsg)) {
+                    AdvancedTable.closeDropdowns(true);
+                    return;
+                }
+            }
+        }
         
         col.singleRecord = !col.singleRecord;
 
@@ -50,8 +73,10 @@ const AdvancedTableColumnMenus = {
             state.rows.forEach(r => {
                 if (Array.isArray(r.cells[colId]) && r.cells[colId].length > 1) {
                     r.cells[colId] = [r.cells[colId][0]];
+                    r.updatedAt = Date.now();
                 }
             });
+            delete state._renderCache;
         }
 
         AdvancedTable.setState(realTableId, state);

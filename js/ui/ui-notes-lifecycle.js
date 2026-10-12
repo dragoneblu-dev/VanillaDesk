@@ -96,7 +96,7 @@ Object.assign(UI, {
                         const openTableTitle = I18n.t('notes_utils.header_record_open_table');
 
                         htmlBlocks += `
-                            <div style="background:var(--box-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
+                            <div style="background:var(--box-bg); border:1px dashed var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
                                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                                     <div style="display:flex; align-items:center; gap:6px;">
                                         <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
@@ -155,7 +155,7 @@ Object.assign(UI, {
                     const editPropsTitle = I18n.t('notes_utils.header_page_props_edit');
 
                     htmlBlocks += `
-                        <div style="background:var(--box-bg); border:1px solid var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
+                        <div style="background:var(--box-bg); border:1px dashed var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
                             <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px;">
                                 <div style="display:flex; align-items:center; gap:6px;">
                                     <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px;">
@@ -517,7 +517,13 @@ Object.assign(UI, {
                     return;
                 } else if (syncRes.status === 'success' && syncRes.note) {
                     if (!note._isDirty) {
+                        const currentExpanded = note.expanded;
+                        const currentTocCollapsed = note._tocCollapsed;
+                        const currentLastScroll = note._lastScroll;
                         Object.assign(note, syncRes.note);
+                        if (currentExpanded !== undefined) note.expanded = currentExpanded;
+                        if (currentTocCollapsed !== undefined) note._tocCollapsed = currentTocCollapsed;
+                        if (currentLastScroll !== undefined) note._lastScroll = currentLastScroll;
                         note._baseRevId = syncRes.note.revId || note.revId || Store.generateId();
                         note._isDirty = false;
                     }

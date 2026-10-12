@@ -174,7 +174,7 @@
                 </div>
 
                 <div id="homeDocumentView" class="hidden"
-                    style="width: 100%; max-width: 900px; display:flex; flex-direction:column; gap:15px; margin: 0 auto;">
+                    style="width: 100%; max-width: 900px; display:flex; flex-direction:column; gap:15px; margin: 0 auto; padding-bottom: 40px;">
                     <div
                         style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border-color); padding-bottom:15px;">
                         <h2 style="margin:0;"><script>document.write(I18n.t('home_dashboard.title'))</script></h2>
@@ -183,6 +183,9 @@
                     <div id="homeCitationsContainer"
                         style="width:100%; display:flex; flex-direction:column; gap:10px; text-align:left;">
                     </div>
+                    
+                    <!-- Riquadro Globale Informazioni & Statistiche Workspace (in coda alle citazioni) -->
+                    <div id="homeWorkspaceStatsContainer" style="width:100%; margin-top:20px;"></div>
                 </div>
 
                 <div id="readModeView" class="hidden" style="text-align:center; max-width:600px; margin-top: 50px;">
@@ -445,6 +448,7 @@
     <script src="js/template-manager.js"></script>
     <script src="js/button-manager-core.js"></script>
     <script src="js/button-manager-ui.js"></script>
+    <script src="js/obsidian-importer.js"></script>
 
     <!-- Nuovo Modulo Manuale in Sottocartella -->
     <script src="js/manual/manual-core.js"></script>

@@ -94,6 +94,9 @@ window.UI = {
         } else if (state === 'saving') {
             el.textContent = I18n.t('common.saving');
             el.classList.add('status-saving');
+        } else if (state === 'loading') {
+            el.textContent = I18n.t('common.loading');
+            el.classList.add('status-saving');
         } else if (state === 'saved') {
             el.textContent = I18n.t('common.saved');
             el.classList.add('status-saved');

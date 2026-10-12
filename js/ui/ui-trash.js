@@ -2,6 +2,7 @@
  * ui-trash.js
  * Modulo dedicato alla gestione del Cestino e alla Garbage Collection.
  * Impostazione del flag _isDirty su ripristino per consentire a saveToFile di propagare la rimozione di deletedAt.
+ * Elaborazione atomica in batch per svuotamento massivo (2000+ note) senza deadlock di I/O su File System Access API.
  */
 
 Object.assign(UI, {
@@ -63,7 +64,7 @@ Object.assign(UI, {
             }
 
             if (typeof Store !== 'undefined') Store.triggerAutoSave();
-            if (typeof UI.renderTree !== 'undefined') UI.renderTree();
+            if (typeof UI !== 'undefined' && UI.renderTree) UI.renderTree();
             UI.Trash.open();
             UI.showToast(I18n.t('trash.restore_toast', { title: note.title || I18n.t('editor.untitled') }), "success");
         },
@@ -93,19 +94,53 @@ Object.assign(UI, {
             if (typeof Editor !== 'undefined' && Editor.cleanOrphanedCaches) {
                 Editor.cleanOrphanedCaches();
             }
+
+            // Segnalazione atomica per Garbage Collection fisica coordinata da saveToFile
             if (typeof Store !== 'undefined') {
-                Store.executePhysicalGarbageCollection();
-                Store.triggerAutoSave();
+                Store.markNeedsPhysicalGC();
+                Store.triggerAutoSave(true);
             }
         },
 
-        empty: () => {
+        empty: async () => {
             if (!confirm(I18n.t('trash.confirm_empty'))) return;
-            
-            const notesToDelete = AppState.notes.filter(n => n.deletedAt).map(n => n.id);
-            notesToDelete.forEach(id => UI.Trash.forceHardDeleteRecursive(id));
-            
+
+            const trashedNotes = AppState.notes.filter(n => n.deletedAt);
+            if (trashedNotes.length === 0) return;
+
+            // 1. Raccoglie in un unico set atomico tutti gli ID da eliminare
+            const toDelete = new Set();
+            const traverse = (parentId) => {
+                toDelete.add(parentId);
+                AppState.notes.filter(c => c.parentId === parentId).forEach(c => traverse(c.id));
+            };
+            trashedNotes.forEach(n => traverse(n.id));
+
+            // 2. Eliminazione atomica in RAM in un solo ciclo
+            AppState.notes = AppState.notes.filter(n => !toDelete.has(n.id));
+
+            // 3. Rimozione dei riferimenti dal database di sistema delle proprietà
+            if (typeof AdvancedTable !== 'undefined') {
+                toDelete.forEach(noteId => AdvancedTable.deleteSystemPropertiesRow(noteId));
+            }
+
+            // 4. Pulizia centralizzata delle cache RAM
+            if (typeof Editor !== 'undefined' && Editor.cleanOrphanedCaches) {
+                Editor.cleanOrphanedCaches();
+            }
+
+            // 5. Esecuzione coordinata della rimozione fisica dei file su disco senza deadlock
+            if (typeof Store !== 'undefined') {
+                Store.markNeedsPhysicalGC();
+                await Store.saveToFile();
+            }
+
+            if (typeof UI.renderTree !== 'undefined') UI.renderTree();
             UI.Trash.open();
+            
+            if (typeof UI.showToast !== 'undefined') {
+                UI.showToast("Cestino svuotato ed eliminazione fisica completata.", "success");
+            }
         }
     }
 });

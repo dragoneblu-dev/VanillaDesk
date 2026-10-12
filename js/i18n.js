@@ -34,6 +34,7 @@ dict: {
             session_recovered: "Sessione Ripristinata (Senza Workspace)"
         },
         menu: {
+            import_obsidian: "Importa Vault Obsidian...",
             configure: "Configura",
             language: "Lingua / Language",
             new_workspace: "Nuovo Workspace...",
@@ -59,6 +60,18 @@ dict: {
             theme_notion_dark: "Notte stellata",
             font_zoom: "Zoom Testo",
             manual: "Manuale d'Uso"
+        },
+        obsidian_importer: {
+            drawer_title: "Importa Vault Obsidian",
+            alert_no_workspace: "Devi prima aprire o creare un Workspace in cui importare il Vault.",
+            banner_desc: "Questa procedura importerà l'intero Vault di Obsidian direttamente nel tuo Workspace VanillaDesk attuale.",
+            feature_folders: "Struttura delle cartelle preservata come note genitore/figlio.",
+            feature_links: "Conversione automatica dei collegamenti interni ([[Wikilinks]] e alias).",
+            feature_assets: "Copia automatica di immagini e audio nella cartella assets/.",
+            feature_tags: "Estrazione automatica dei tag YAML nelle proprietà di pagina.",
+            opt_wrap_root: "Raggruppa tutte le note importate in una cartella radice con il nome del Vault",
+            btn_select_and_import: "Seleziona Cartella Vault ed Avvia",
+            toast_success: "Vault importato con successo: {notes} note, {folders} cartelle e {assets} allegati!"
         },
         editor: {
             untitled: "Senza Titolo",
@@ -283,6 +296,7 @@ dict: {
             clear: "Azzera ricerca"
         },
         adv_col_menu: {
+            confirm_single_record_loss: "⚠️ ATTENZIONE: Ci sono {rows} record con assegnazioni multiple ({excess} collegamenti in eccesso).\nAttivando il vincolo \"Limita a 1 solo record\", verrà conservato solo il primo collegamento per ciascuna riga e tutti gli altri verranno rimossi definitivamente.\n\nVuoi procedere comunque con la rimozione automatica?\n(Premi Annulla per interrompere e rimuovere manualmente le assegnazioni).",
             rename_placeholder: "Rinomina e premi Invio...",
             comment_edit: "Modifica Commento...",
             comment_add: "Aggiungi Commento...",
@@ -1074,7 +1088,16 @@ audio: {
         },
         home_dashboard: {
             title: "Dashboard Workspace",
-            add_citation: "Aggiungi Citazione Live in Home"
+            add_citation: "Aggiungi Citazione Live in Home",
+            ws_stats_title: "PANORAMICA E STATISTICHE WORKSPACE",
+            stat_active_notes: "Note Attive",
+            stat_trash: "Nel Cestino",
+            stat_databases: "Database Relazionali",
+            stat_views: "Viste / Dashboard",
+            stat_security: "Sicurezza Disco",
+            stat_encrypted: "Protetto AES-GCM 256-bit",
+            stat_plain: "In Chiaro (Nessuna Password)",
+            stat_templates: "Template Salvati"
         },
         formula_editor: {
             drawer_title: "Modifica Formula: {colName}",
@@ -1313,6 +1336,7 @@ audio: {
             session_recovered: "Recovered Session (No Workspace)"
         },
         menu: {
+            import_obsidian: "Import Obsidian Vault...",
             configure: "Configure",
             language: "Language / Lingua",
             new_workspace: "New Workspace...",
@@ -1338,6 +1362,18 @@ audio: {
             theme_notion_dark: "Starry Night",
             font_zoom: "Text Zoom",
             manual: "User Manual"
+        },
+        obsidian_importer: {
+            drawer_title: "Import Obsidian Vault",
+            alert_no_workspace: "You must first open or create a Workspace before importing a Vault.",
+            banner_desc: "This process will import your entire Obsidian Vault directly into your current VanillaDesk Workspace.",
+            feature_folders: "Folder hierarchy preserved as parent/child notes.",
+            feature_links: "Automatic conversion of internal [[Wikilinks]] and aliases.",
+            feature_assets: "Automatic copying of images and audio files to assets/.",
+            feature_tags: "Automatic extraction of YAML frontmatter tags into page properties.",
+            opt_wrap_root: "Group all imported notes inside a root note named after the Vault",
+            btn_select_and_import: "Select Vault Folder & Start",
+            toast_success: "Vault successfully imported: {notes} notes, {folders} folders, and {assets} attachments!"
         },
         editor: {
             untitled: "Untitled",
@@ -1562,6 +1598,7 @@ audio: {
             clear: "Clear search"
         },
         adv_col_menu: {
+            confirm_single_record_loss: "⚠️ WARNING: There are {rows} records with multiple assignments ({excess} excess links).\nEnabling \"Limit to 1 record\" will keep only the first linked record per row and permanently remove the rest.\n\nDo you want to proceed with this destructive action?\n(Click Cancel to abort and manually adjust the records first).",
             rename_placeholder: "Rename and press Enter...",
             comment_edit: "Edit Comment...",
             comment_add: "Add Comment...",
@@ -2352,7 +2389,16 @@ audio: {
         },
         home_dashboard: {
             title: "Workspace Dashboard",
-            add_citation: "Add Live Transclusion to Home"
+            add_citation: "Add Live Transclusion to Home",
+            ws_stats_title: "WORKSPACE OVERVIEW AND STATISTICS",
+            stat_active_notes: "Active Notes",
+            stat_trash: "In Trash",
+            stat_databases: "Relational Databases",
+            stat_views: "Views / Dashboards",
+            stat_security: "Disk Security",
+            stat_encrypted: "AES-GCM 256-bit Protected",
+            stat_plain: "Plain Text (No Password)",
+            stat_templates: "Saved Templates"
         },
         formula_editor: {
             drawer_title: "Edit Formula: {colName}",
@@ -2591,6 +2637,7 @@ audio: {
             session_recovered: "Sesión Recuperada (Sin Espacio)"
         },
         menu: {
+            import_obsidian: "Importar Vault de Obsidian...",
             configure: "Configurar",
             language: "Idioma / Language",
             new_workspace: "Nuevo Espacio de Trabajo...",
@@ -2616,6 +2663,18 @@ audio: {
             theme_notion_dark: "Noche Estrellada",
             font_zoom: "Zoom de Texto",
             manual: "Manual de Usuario"
+        },
+        obsidian_importer: {
+            drawer_title: "Importar Vault de Obsidian",
+            alert_no_workspace: "Primero debes abrir o crear un Workspace antes de importar un Vault.",
+            banner_desc: "Este proceso importará todo tu Vault de Obsidian directamente en tu Workspace actual de VanillaDesk.",
+            feature_folders: "Estructura de carpetas preservada como notas padre/hijo.",
+            feature_links: "Conversión automática de enlaces internos ([[Wikilinks]] y alias).",
+            feature_assets: "Copia automática de imágenes y audios a la carpeta assets/.",
+            feature_tags: "Extracción automática de etiquetas YAML a propiedades de página.",
+            opt_wrap_root: "Agrupar todas las notas importadas en una nota raíz con el nombre del Vault",
+            btn_select_and_import: "Seleccionar carpeta del Vault e iniciar",
+            toast_success: "¡Vault importado con éxito: {notes} notas, {folders} carpetas y {assets} archivos adjuntos!"
         },
         editor: {
             untitled: "Sin Título",
@@ -2840,6 +2899,7 @@ audio: {
             clear: "Borrar búsqueda"
         },
         adv_col_menu: {
+            confirm_single_record_loss: "⚠️ ATENCIÓN: Hay {rows} registros con asignaciones múltiples ({excess} enlaces en exceso).\nAl activar \"Limitar a 1 solo registro\", solo se conservará el primer enlace por fila y los demás se eliminarán permanentemente.\n\n¿Deseas continuar con la eliminación automática?\n(Haz clic en Cancelar para abortar y ajustar los registros manualmente primero).",
             rename_placeholder: "Renombrar y presionar Enter...",
             comment_edit: "Editar Comentario...",
             comment_add: "Añadir Comentario...",
@@ -3630,7 +3690,16 @@ audio: {
         },
         home_dashboard: {
             title: "Panel del Espacio de Trabajo",
-            add_citation: "Añadir Cita Dinámica al Inicio"
+            add_citation: "Añadir Cita Dinámica al Inicio",
+            ws_stats_title: "RESUMEN Y ESTADÍSTICAS DEL WORKSPACE",
+            stat_active_notes: "Notas Activas",
+            stat_trash: "En la Papelera",
+            stat_databases: "Bases de Datos Relacionales",
+            stat_views: "Vistas / Dashboards",
+            stat_security: "Seguridad de Disco",
+            stat_encrypted: "Protegido con AES-GCM 256-bit",
+            stat_plain: "Texto Plano (Sin Contraseña)",
+            stat_templates: "Plantillas Guardadas"
         },
         formula_editor: {
             drawer_title: "Modificar Fórmula: {colName}",
@@ -3869,6 +3938,7 @@ audio: {
             session_recovered: "Wiederhergestellte Sitzung (Ohne Arbeitsbereich)"
         },
         menu: {
+            import_obsidian: "Obsidian-Vault importieren...",
             configure: "Konfigurieren",
             language: "Sprache / Language",
             new_workspace: "Neuer Arbeitsbereich...",
@@ -3894,6 +3964,18 @@ audio: {
             theme_notion_dark: "Sternennacht",
             font_zoom: "Textzoom",
             manual: "Benutzerhandbuch"
+        },
+        obsidian_importer: {
+            drawer_title: "Obsidian-Vault importieren",
+            alert_no_workspace: "Sie müssen zuerst einen Workspace öffnen oder erstellen, bevor Sie einen Vault importieren.",
+            banner_desc: "Dieser Vorgang importiert Ihren gesamten Obsidian-Vault direkt in Ihren aktuellen VanillaDesk-Workspace.",
+            feature_folders: "Ordnerstruktur bleibt als Eltern-/Kind-Notizen erhalten.",
+            feature_links: "Automatische Konvertierung von internen [[Wikilinks]] und Aliasen.",
+            feature_assets: "Automatisches Kopieren von Bildern und Audiodateien in den Ordner assets/.",
+            feature_tags: "Automatische Extraktion von YAML-Frontmatter-Tags in Seiteneigenschaften.",
+            opt_wrap_root: "Alle importierten Notizen in einer Stammnotiz mit dem Namen des Vaults gruppieren",
+            btn_select_and_import: "Vault-Ordner auswählen und starten",
+            toast_success: "Vault erfolgreich importiert: {notes} Notizen, {folders} Ordner und {assets} Anhänge!"
         },
         editor: {
             untitled: "Ohne Titel",
@@ -4118,6 +4200,7 @@ audio: {
             clear: "Borrar búsqueda"
         },
         adv_col_menu: {
+            confirm_single_record_loss: "⚠️ ACHTUNG: Es gibt {rows} Datensätze mit Mehrfachverknüpfungen ({excess} überzählige Verknüpfungen).\nWenn Sie \"Auf 1 Datensatz beschränken\" aktivieren, bleibt pro Zeile nur die erste Verknüpfung erhalten und alle weiteren werden dauerhaft entfernt.\n\nMöchten Sie wirklich fortfahren?\n(Klicken Sie auf Abbrechen, um manuell Anpassungen vorzunehmen).",
             rename_placeholder: "Umbenennen und Enter drücken...",
             comment_edit: "Kommentar bearbeiten...",
             comment_add: "Kommentar hinzufügen...",
@@ -4909,7 +4992,16 @@ audio: {
         },
         home_dashboard: {
             title: "Arbeitsbereich-Dashboard",
-            add_citation: "Live-Zitat auf Startseite hinzufügen"
+            add_citation: "Live-Zitat auf Startseite hinzufügen",
+            ws_stats_title: "WORKSPACE-ÜBERSICHT UND STATISTIKEN",
+            stat_active_notes: "Aktive Notizen",
+            stat_trash: "Im Papierkorb",
+            stat_databases: "Relationale Datenbanken",
+            stat_views: "Ansichten / Dashboards",
+            stat_security: "Festplattensicherheit",
+            stat_encrypted: "AES-GCM 256-Bit geschützt",
+            stat_plain: "Klartext (Kein Passwort)",
+            stat_templates: "Gespeicherte Vorlagen"
         },
         formula_editor: {
             drawer_title: "Formel bearbeiten: {colName}",
