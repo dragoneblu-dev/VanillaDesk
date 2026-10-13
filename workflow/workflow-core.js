@@ -11,6 +11,7 @@
  * FIX PERSISTENZA: Salvataggio automatico nativo su assets/workflow/{dbId}.json con architettura multi-layout.
  * FEAT TITLE COLUMN: Supporto per la selezione dinamica della colonna usata come titolo primario dei nodi (titleColId).
  * FEAT UNDO/REDO: Stack di cronologia completo (Ctrl+Z / Ctrl+Y) per posizioni nodi, connessioni e layout sul canvas.
+ * FEAT REACTIVE GRAPH UPDATE: Metodo onDatabaseModified per aggiornare e sincronizzare il canvas a seguito di mutazioni da Drawer.
  */
 
 window.WorkflowApp = {
@@ -64,6 +65,63 @@ window.WorkflowApp = {
         if (!col) return 'successor';
         const dir = col.treeDirection || (col.singleRecord ? 'parent' : 'children');
         return dir === 'parent' ? 'predecessor' : 'successor';
+    },
+
+    // Notifica reattiva quando il database subisce una mutazione dal Drawer di modifica record
+    onDatabaseModified: (dbId) => {
+        if (!dbId || dbId !== WorkflowApp.currentDbId) return;
+        const db = AppState.databases[dbId];
+        if (!db) return;
+        WorkflowApp.currentDbState = db;
+
+        // Gestione di eventuali nuovi record (es. record duplicati dal drawer)
+        let maxY = 0;
+        let refX = 72;
+        Object.keys(WorkflowApp.layout.nodes || {}).forEach(k => {
+            const pos = WorkflowApp.layout.nodes[k];
+            if (pos && pos.y > maxY) {
+                maxY = pos.y;
+                refX = pos.x;
+            }
+        });
+
+        (db.rows || []).forEach(r => {
+            if (!WorkflowApp.layout.nodes[r.id]) {
+                WorkflowApp.layout.nodes[r.id] = {
+                    x: refX,
+                    y: WorkflowApp.snapToGrid(maxY + 120)
+                };
+                maxY += 120;
+            }
+        });
+
+        // Rimozione dal layout di eventuali record eliminati
+        const validRowIds = new Set((db.rows || []).map(r => r.id));
+        Object.keys(WorkflowApp.layout.nodes || {}).forEach(k => {
+            if (!validRowIds.has(k)) {
+                delete WorkflowApp.layout.nodes[k];
+            }
+        });
+
+        WorkflowApp.buildNodesDOM();
+        (db.rows || []).forEach(r => {
+            const pos = WorkflowApp.layout.nodes[r.id];
+            const el = document.getElementById(`wf_node_${r.id}`);
+            if (pos && el) {
+                el.style.left = `${pos.x}px`;
+                el.style.top = `${pos.y}px`;
+            }
+        });
+
+        WorkflowApp.renderConnections();
+        WorkflowApp.renderClusters();
+        WorkflowApp.updateMinimap();
+        WorkflowApp.saveWorkflowAuto();
+
+        // Se un nodo era focalizzato per ramo, ripristina la visualizzazione evidenziata
+        if (WorkflowApp.selectedNodeId && validRowIds.has(WorkflowApp.selectedNodeId)) {
+            WorkflowApp.focusBranch(WorkflowApp.selectedNodeId);
+        }
     },
 
     // =========================================================================
@@ -446,6 +504,16 @@ window.WorkflowApp = {
         viewport.addEventListener('mousedown', (e) => {
             if (typeof UI !== 'undefined' && UI.Menu) {
                 UI.Menu.closeAll(true);
+            }
+
+            // Chiusura automatica del drawer al click sullo sfondo del canvas
+            const drawer = document.getElementById('advGlobalDrawer');
+            if (drawer && drawer.classList.contains('open') && !e.target.closest('.adv-drawer')) {
+                const footer = document.getElementById('advDrawerFooter');
+                const hasSaveBtn = footer && footer.style.display !== 'none' && footer.querySelector('.btn-primary');
+                if (!hasSaveBtn) {
+                    UI.closeDrawer();
+                }
             }
 
             if (e.target.closest('.wf-node') || 

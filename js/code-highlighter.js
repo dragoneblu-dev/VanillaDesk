@@ -6,12 +6,106 @@
  * FIX CITAZIONI: Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
  * FEAT DOWNLOAD: Aggiunto pulsante nell'header per scaricare il codice in un file fisico con estensione dinamica.
  * FIX REFACTORING: Integrata la lingua "formula" per unificare l'evidenziazione sintattica dei database.
+ * FEAT AUTO-DETECT: Analizzatore euristico a punteggio (detectLanguage) per rilevare automaticamente
+ * il linguaggio su blocchi appena creati o su incolla, con rispetto assoluto del testo semplice.
  */
 
 const CodeManager = {
     activePre: null,
     _preCache: new WeakMap(), 
     _typingTimer: null,
+
+    // Rilevatore Euristico a Punteggio di Confidenza (Rule-based Heuristic Scorer)
+    detectLanguage: (rawText) => {
+        if (!rawText || typeof rawText !== 'string') return 'none';
+        const text = rawText.trim();
+        if (text.length < 4) return 'none';
+
+        // 1. Validazione certa JSON
+        if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+            try {
+                JSON.parse(text);
+                return 'json';
+            } catch (_) {}
+        }
+
+        // 2. Firme categoriche univoche
+        if (/^<\?php/i.test(text)) return 'php';
+        if (/^<!DOCTYPE\s+html/i.test(text) || /^<html[\s>]/i.test(text)) return 'html';
+        if (/^<\?xml\s/i.test(text)) return 'xml';
+        if (/^#!\/bin\/(bash|sh|zsh)/i.test(text)) return 'bash';
+
+        // 3. Tabella punteggi di rilevamento
+        const scores = {
+            sql: 0,
+            js: 0,
+            python: 0,
+            html: 0,
+            css: 0,
+            bash: 0,
+            ps1: 0,
+            csharp: 0,
+            yaml: 0,
+            formula: 0
+        };
+
+        // SQL
+        if (/\bSELECT\s+.+\s+FROM\b/i.test(text)) scores.sql += 60;
+        if (/\b(INSERT\s+INTO|CREATE\s+TABLE|ALTER\s+TABLE|DELETE\s+FROM|DROP\s+TABLE)\b/i.test(text)) scores.sql += 50;
+        if (/\b(WHERE|JOIN|GROUP\s+BY|ORDER\s+BY|HAVING)\b/i.test(text)) scores.sql += 20;
+
+        // Python
+        if (/\bdef\s+[a-zA-Z_]\w*\s*\(.*\)\s*:/m.test(text)) scores.python += 50;
+        if (/^\s*(import\s+\w+|from\s+\w+\s+import)/m.test(text)) scores.python += 35;
+        if (/\b(elif|print\(|__init__|self\.)\b/.test(text)) scores.python += 25;
+
+        // JavaScript / TypeScript
+        if (/\b(const|let|var)\s+[a-zA-Z_$]\w*\s*=/m.test(text)) scores.js += 35;
+        if (/(=>\s*\{|console\.(log|warn|error)\(|document\.|window\.)/.test(text)) scores.js += 35;
+        if (/\b(function\s*\w*\(|export\s+(default|const)|import\s+.+\s+from)/m.test(text)) scores.js += 30;
+
+        // HTML
+        if (/<\/?[a-z][a-z0-9]*\b[^>]*>/i.test(text)) scores.html += 40;
+        if (/\b(class=|id=|style=|href=|src=)/i.test(text)) scores.html += 20;
+
+        // CSS
+        if (/[.#]?[a-zA-Z0-9_\-:]+\s*\{\s*[^}]*:[^}]*;\s*\}/m.test(text)) scores.css += 50;
+        if (/\b(margin|padding|background|display|flex|color|border-radius)\s*:\s*[^;]+;/i.test(text)) scores.css += 30;
+
+        // Bash
+        if (/\b(sudo\s+|chmod\s+|chown\s+|curl\s+-|wget\s+|apt\s+install)/i.test(text)) scores.bash += 40;
+        if (/^\s*(if\s+\[|fi$|echo\s+["'])/m.test(text)) scores.bash += 30;
+
+        // PowerShell
+        if (/\b(Write-Host|Get-ChildItem|Get-Item|Set-Location|\$PSScriptRoot)\b/i.test(text)) scores.ps1 += 50;
+
+        // C# / Java
+        if (/\b(public\s+class|private\s+void|using\s+System;|namespace\s+\w+)/m.test(text)) scores.csharp += 50;
+
+        // YAML
+        if (/^---\s*$/m.test(text) && /^[a-zA-Z0-9_\-]+:\s*.+$/m.test(text)) scores.yaml += 40;
+
+        // Formula VanillaDesk
+        if (/\b(riga\[|tabella\[|NOTA_CORRENTE\(\)|DATA_DIFF\(|OGGI\(\))/i.test(text)) scores.formula += 60;
+
+        // Identificazione del punteggio vincente
+        let bestLang = 'none';
+        let maxScore = 0;
+
+        for (const [lang, score] of Object.entries(scores)) {
+            if (score > maxScore) {
+                maxScore = score;
+                bestLang = lang;
+            }
+        }
+
+        // Soglia di confidenza minima rigorosa: se non supera 30 punti, è considerato Testo Semplice (none)
+        if (maxScore >= 30) {
+            return bestLang;
+        }
+
+        return 'none';
+    },
 
     // Forza il salvataggio sincrono di tutti i blocchi codice dal DOM vivo alla RAM
     forceSyncAll: () => {
@@ -167,6 +261,33 @@ const CodeManager = {
 
     init: () => {
         CodeManager._typingTimer = null;
+
+        // Rilevamento automatico su incolla (paste) all'interno di blocchi con sintassi ancora non impostata (none)
+        document.addEventListener('paste', (e) => {
+            const pre = e.target && e.target.closest ? e.target.closest('pre.code-content') : null;
+            if (!pre) return;
+
+            const wrapper = pre.closest('.code-wrapper, [data-widget-type="code"]');
+            if (!wrapper) return;
+
+            const currentLang = pre.getAttribute('data-language') || 'none';
+            // Scatta solo se il blocco è ancora sul default non formattato (none)
+            if (currentLang !== 'none') return;
+
+            const pastedText = (e.clipboardData || window.clipboardData)?.getData('text/plain');
+            if (!pastedText) return;
+
+            const detected = CodeManager.detectLanguage(pastedText);
+            if (detected && detected !== 'none') {
+                setTimeout(() => {
+                    CodeManager.setLanguage(wrapper.id, detected, true);
+                    if (typeof UI !== 'undefined' && UI.showToast) {
+                        UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }) || `Sintassi rilevata: ${detected.toUpperCase()}`, "info");
+                    }
+                }, 50);
+            }
+        }, false);
+
         document.addEventListener('input', (e) => {
             if (e.target && e.target.tagName === 'PRE' && e.target.classList.contains('code-content')) {
                 const wrapper = e.target.closest('.code-wrapper, [data-widget-type="code"]');
@@ -213,6 +334,23 @@ const CodeManager = {
         });
     },
 
+    autoDetectLanguage: (wrapperId) => {
+        const wrapper = document.getElementById(wrapperId);
+        if (!wrapper) return;
+
+        const trueId = wrapper.id.split('_cited_')[0];
+        const state = (AppState.databases && AppState.databases[trueId]) ? AppState.databases[trueId] : null;
+        const text = state?.content || wrapper.querySelector('pre')?.innerText || '';
+
+        const detected = CodeManager.detectLanguage(text);
+        CodeManager.setLanguage(wrapperId, detected);
+
+        if (typeof UI !== 'undefined' && UI.showToast) {
+            const langLabel = detected === 'none' ? I18n.t('code_widget.lang_plain') : detected.toUpperCase();
+            UI.showToast(I18n.t('code_widget.detected_toast', { lang: langLabel }) || `Sintassi rilevata: ${langLabel}`, "info");
+        }
+    },
+
     openOptionsMenu: (e, id) => {
         if (e) e.stopPropagation();
         UI.Menu.closeAll(true);
@@ -241,11 +379,19 @@ const CodeManager = {
             { id: 'ps1', label: 'PowerShell' },
             { id: 'formula', label: 'Formula (VanillaDesk)' }
         ];
-        
-        const langSubmenu = langs.map(l => ({
-            label: l.label + (currentLang === l.id ? ' <span style="color:var(--accent-color);font-weight:bold;float:right;">✓</span>' : ''),
-            onClick: () => CodeManager.setLanguage(wrapper.id, l.id)
-        }));
+
+        const langSubmenu = [
+            {
+                icon: Icons.lightning || '✨',
+                label: I18n.t('code_widget.auto_detect') || "Rileva Automaticamente (Auto)",
+                onClick: () => CodeManager.autoDetectLanguage(wrapper.id)
+            },
+            { type: 'divider' },
+            ...langs.map(l => ({
+                label: l.label + (currentLang === l.id ? ' <span style="color:var(--accent-color);font-weight:bold;float:right;">✓</span>' : ''),
+                onClick: () => CodeManager.setLanguage(wrapper.id, l.id)
+            }))
+        ];
         
         UI.Menu.buildContextMenu(`adv-opt-btn-${id}`, [
             { icon: Icons.down, label: I18n.t('code_widget.insert_line_below'), onClick: () => WidgetManager.insertLineBreakAfter(wrapper.id) },
@@ -256,11 +402,14 @@ const CodeManager = {
         ]);
     },
 
-    setLanguage: (wrapperId, langId) => {
-        if (!CodeManager.activePre) return;
-        CodeManager.activePre.setAttribute('data-language', langId);
-        CodeManager.highlightBlock(CodeManager.activePre, true); 
-        UI.Menu.closeAll(true);
+    setLanguage: (wrapperId, langId, silent = false) => {
+        const wrapper = document.getElementById(wrapperId);
+        const pre = wrapper ? wrapper.querySelector('pre') : CodeManager.activePre;
+        if (!pre) return;
+
+        pre.setAttribute('data-language', langId);
+        CodeManager.highlightBlock(pre, true); 
+        if (!silent && typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
         
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         
@@ -273,7 +422,6 @@ const CodeManager = {
         
         Store.triggerAutoSave();
         
-        const wrapper = document.getElementById(wrapperId);
         if (wrapper) {
             CodeManager._updateShell(wrapperId, langId, wrapper.classList.contains('collapsed'), state.title);
         }

@@ -369,6 +369,13 @@ const AdvancedTable = {
                 AdvancedTable.updateDependentViews(id, visitedCounts);
             }
         });
+
+        // Sincronizzazione in tempo reale per Workflow Studio
+        if (typeof WorkflowApp !== 'undefined' && WorkflowApp.currentDbId && (WorkflowApp.currentDbId === targetTrueId || dependentIds.includes(WorkflowApp.currentDbId))) {
+            if (typeof WorkflowApp.onDatabaseModified === 'function') {
+                WorkflowApp.onDatabaseModified(WorkflowApp.currentDbId);
+            }
+        }
     },
 
     getTableState: (targetId) => {

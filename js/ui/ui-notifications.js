@@ -1,6 +1,7 @@
 /**
  * ui-notifications.js
- * Modulo UI per i popup (Toast) temporanei e il Sintetizzatore Audio (Allarmi).
+ * Modulo UI per i popup (Toast) temporanei, il Sintetizzatore Audio (Allarmi)
+ * e la finestra modale di avanzamento sincrono su disco (UI.ProgressModal).
  * Gestione dello Snooze resiliente per i promemoria da segnalibro tramite registro dati sicuro.
  */
 
@@ -70,6 +71,88 @@ Object.assign(UI, {
         }
 
         return toastId; 
+    },
+
+    // =========================================================================
+    // MODALE DI AVANZAMENTO SINCRONO SU DISCO (Anti-Chiusura Intempestiva)
+    // =========================================================================
+    ProgressModal: {
+        _overlay: null,
+
+        show: (title, message, current = 0, total = 100) => {
+            UI.ProgressModal.hide();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'adv-progress-modal-overlay';
+            overlay.className = 'link-modal-overlay';
+            overlay.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(0, 0, 0, 0.75);
+                z-index: 10005;
+                backdrop-filter: blur(2px);
+            `;
+
+            const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const safeTitle = UI.escapeHTML(title);
+            const safeMsg = UI.escapeHTML(message);
+
+            overlay.innerHTML = `
+                <div class="link-modal modal-animate" style="width: 460px; max-width: 90vw; padding: 25px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: center;">
+                    <div style="margin-bottom: 15px; display: inline-flex; color: var(--accent-color); transform: scale(1.4);">
+                        ${typeof Icons !== 'undefined' ? Icons.hourglass : '⏳'}
+                    </div>
+                    <h3 id="advProgressModalTitle" style="margin: 0 0 10px 0; font-size: 1.15rem; color: var(--text-primary);">
+                        ${safeTitle}
+                    </h3>
+                    <div id="advProgressModalMsg" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.45;">
+                        ${safeMsg}
+                    </div>
+
+                    <div style="width: 100%; height: 10px; background: rgba(0, 0, 0, 0.08); border-radius: 5px; overflow: hidden; margin-bottom: 8px; border: 1px solid var(--border-color);">
+                        <div id="advProgressModalBar" style="width: ${pct}%; height: 100%; background: var(--accent-color); transition: width 0.15s ease;"></div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">
+                        <span id="advProgressModalCounter">${current} / ${total}</span>
+                        <span id="advProgressModalPct">${pct}%</span>
+                    </div>
+
+                    <div style="margin-top: 15px; font-size: 0.75rem; color: var(--danger-color); font-weight: 600;">
+                        ⚠️ ${I18n.t('progress.do_not_close') || "Non chiudere la finestra del browser fino al termine dell'operazione."}
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(overlay);
+            UI.ProgressModal._overlay = overlay;
+        },
+
+        update: (message, current, total) => {
+            const overlay = UI.ProgressModal._overlay || document.getElementById('adv-progress-modal-overlay');
+            if (!overlay) return;
+
+            const msgEl = overlay.querySelector('#advProgressModalMsg');
+            const barEl = overlay.querySelector('#advProgressModalBar');
+            const counterEl = overlay.querySelector('#advProgressModalCounter');
+            const pctEl = overlay.querySelector('#advProgressModalPct');
+
+            const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+
+            if (msgEl && message) msgEl.innerText = message;
+            if (barEl) barEl.style.width = `${pct}%`;
+            if (counterEl) counterEl.innerText = `${current} / ${total}`;
+            if (pctEl) pctEl.innerText = `${pct}%`;
+        },
+
+        hide: () => {
+            const overlay = UI.ProgressModal._overlay || document.getElementById('adv-progress-modal-overlay');
+            if (overlay) {
+                overlay.remove();
+                UI.ProgressModal._overlay = null;
+            }
+        }
     },
 
     Alarm: {

@@ -15,6 +15,7 @@
  * HEADER PROPERTIES I18N: Rendering integrato dei chip delle proprietà pagina e campi record internazionalizzati.
  * RECORD NOTE TITLE PROPAGATION: Propagazione immediata e ridisegno reattivo della tabella quando il titolo della record_note viene modificato.
  * RESET TOC COLLAPSE ON ACCESS: Ripristino automatico dell'indice dei capitoli quando si seleziona e apre la nota.
+ * FEAT BATCH TRASH PROGRESS: Segnalazione visiva dell'avanzamento reale su disco durante l'eliminazione ricorsiva di rami con molte sotto-note.
  */
 
 Object.assign(UI, {
@@ -917,7 +918,7 @@ Object.assign(UI, {
         }, 500);
     },
 
-    deleteCurrentNote: () => {
+    deleteCurrentNote: async () => {
         if (!AppState.currentNoteId) return; 
         
         const note = Store.getNote(AppState.currentNoteId);
@@ -926,6 +927,7 @@ Object.assign(UI, {
         if (!confirm(I18n.t('notes_utils.confirm_move_trash'))) return; 
         
         const parentIdToReturn = note.parentId;
+        const targetId = AppState.currentNoteId;
 
         if (note && note.isRecordNote && note.linkedTableId && note.linkedRowId && typeof AdvancedTable !== 'undefined') {
             let dbState = AdvancedTable.getState(note.linkedTableId);
@@ -941,19 +943,46 @@ Object.assign(UI, {
         }
 
         const now = Date.now();
+        const affectedNotes = [];
         const traverse = (id) => { 
             const n = Store.getNote(id);
             if (n) {
                 n.deletedAt = now;
                 n._isDirty = true;
+                affectedNotes.push(n);
                 if (typeof AdvancedTable !== 'undefined') AdvancedTable.deleteSystemPropertiesRow(id);
                 AppState.notes.filter(child => child.parentId === id).forEach(child => traverse(child.id));
             }
         };
-        traverse(AppState.currentNoteId);
+        traverse(targetId);
         
         if (typeof UI.renderTree !== 'undefined') UI.renderTree(); 
-        if (typeof Store !== 'undefined') Store.triggerAutoSave();
+
+        // Se l'operazione coinvolge molte sotto-note (> 3), mostra all'utente il progresso reale della scrittura su disco
+        const showBatchModal = affectedNotes.length > 3 && AppState.workspaceHandle;
+        if (showBatchModal) {
+            UI.ProgressModal.show(
+                I18n.t('progress.moving_to_trash') || "Spostamento nel Cestino in corso...",
+                I18n.t('progress.do_not_close') || "Scrittura modifiche su disco. Non chiudere l'applicazione...",
+                0,
+                affectedNotes.length
+            );
+        }
+
+        try {
+            if (typeof Store !== 'undefined') {
+                await Store.saveToFile((p) => {
+                    if (showBatchModal) {
+                        UI.ProgressModal.update(p.message, p.current, p.total);
+                    }
+                });
+            }
+        } finally {
+            if (showBatchModal) {
+                UI.ProgressModal.hide();
+            }
+        }
+
         UI.showToast(I18n.t('notes_utils.toast_moved_trash'), "warning");
 
         if (parentIdToReturn && Store.getNote(parentIdToReturn) && !Store.getNote(parentIdToReturn).deletedAt) {

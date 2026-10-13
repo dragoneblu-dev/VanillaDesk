@@ -3,6 +3,7 @@
  * Modulo per l'importazione, la gestione e il rendering di file Audio locali.
  * REFACTOR WORKSPACE: I file non vengono più codificati in Base64 ma passati 
  * a Store.js per il salvataggio diretto come Blob nativi su disco fisso.
+ * FEAT LAZY LOADING: Idratazione su richiesta da disco in mountAll tramite Editor.loadAssetOnDemand.
  */
 
 const AudioManager = {
@@ -80,7 +81,7 @@ const AudioManager = {
         input.value = '';
     },
 
-    downloadAudio: (widgetId) => {
+    downloadAudio: async (widgetId) => {
         const wrapper = document.getElementById(widgetId);
         if (!wrapper) return;
         
@@ -93,6 +94,8 @@ const AudioManager = {
         if (!src || !src.startsWith('blob:')) {
             if (ref && Editor.audioCache && Editor.audioCache[ref]) {
                 src = Editor.audioCache[ref];
+            } else if (ref && typeof Editor.loadAssetOnDemand === 'function') {
+                src = await Editor.loadAssetOnDemand(ref, 'aud');
             }
         }
         
@@ -160,8 +163,17 @@ const AudioManager = {
             const audioEl = wrapper.querySelector('audio');
             if (audioEl) {
                 const ref = audioEl.getAttribute('data-audio-ref');
-                if (ref && Editor.audioCache && Editor.audioCache[ref]) {
-                    audioEl.src = Editor.audioCache[ref];
+                if (ref) {
+                    if (Editor.audioCache && Editor.audioCache[ref]) {
+                        audioEl.src = Editor.audioCache[ref];
+                    } else if (typeof Editor.loadAssetOnDemand === 'function') {
+                        // Idratazione su richiesta asincrona per il player audio
+                        Editor.loadAssetOnDemand(ref, 'aud').then(url => {
+                            if (url && document.body.contains(audioEl)) {
+                                audioEl.src = url;
+                            }
+                        });
+                    }
                 }
             }
 

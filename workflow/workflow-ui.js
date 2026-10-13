@@ -5,7 +5,8 @@
  * - Cassetto laterale unificato per la Personalizzazione Colori (Sfondo Canvas & Bordi Schede).
  * - Sincronizzazione delle classi di contrasto (.canvas-dark-theme / .canvas-light-theme).
  * - Cassetti laterali per Filtri Colonne Visibili e Dettaglio Record.
- * - Delega nativa ad AdvancedTable.openRecordView per il Dettaglio Record (Sola Lettura).
+ * - Delega nativa ad AdvancedTable.openRecordView per il Dettaglio Record (Modifica Interattiva abilitata).
+ * - Chiusura automatica del pannello laterale (Drawer) al click esterno con protezione da click sui nodi/controlli.
  * - Ricerca istantanea Like con suggerimenti e navigazione nodi.
  * - Esportazione del Grafo in formato Vettoriale SVG (Fedele 1:1, risoluzione infinita).
  * - FEAT MULTI-RELATION MENU: Selezione del campo relazione attivo direttamente dal menu ad hamburger.
@@ -622,6 +623,34 @@ Object.assign(WorkflowApp, {
         }
     }
 });
+
+// CHIUSURA AUTOMATICA DEL DRAWER AL CLICK ESTERNO (COERENTE CON VANILLADESK)
+document.addEventListener('click', (e) => {
+    const drawer = document.getElementById('advGlobalDrawer');
+    if (drawer && drawer.classList.contains('open') &&
+        !e.target.closest('.adv-drawer') && !e.target.closest('.adv-icon-btn') &&
+        !e.target.closest('.adv-dropdown') && !e.target.closest('.adv-dropdown-item') &&
+        !e.target.closest('.inline-note-marker') && !e.target.closest('.btn-color-swatch') &&
+        !e.target.closest('.toolbar button') && 
+        !e.target.closest('.wf-node [onclick*="openRecordDrawer"]')) {
+
+        const footer = document.getElementById('advDrawerFooter');
+        const hasSaveBtn = footer && footer.style.display !== 'none' && footer.querySelector('.btn-primary');
+
+        if (hasSaveBtn) {
+            drawer.style.boxShadow = 'inset 0 0 0 2px var(--danger-color), 0 0 20px rgba(239, 68, 68, 0.4)';
+            setTimeout(() => drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)', 300);
+            return;
+        }
+        UI.closeDrawer();
+    }
+
+    if (!e.target.closest('.adv-dropdown') && !e.target.closest('.adv-context-menu') && !e.target.closest('#btnHamburgerMenu')) {
+        if (typeof UI !== 'undefined' && UI.Menu) {
+            UI.Menu.closeAll(true);
+        }
+    }
+}, true);
 
 // INIZIALIZZAZIONE SICURA: Esegue solo dopo il caricamento completo di tutti i moduli
 document.addEventListener('DOMContentLoaded', WorkflowApp.init);

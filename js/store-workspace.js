@@ -11,6 +11,8 @@
  * 7. BroadcastChannel Multi-Scheda: Sincronizzazione in tempo reale isolata per workspaceId.
  * Scrittura concorrente controllata in batch con notifica di progresso in tempo reale.
  * Preservazione dello stato di visualizzazione locale (expanded, _tocCollapsed, _lastScroll) nel sync multi-scheda e JIT.
+ * PERF LAZY ASSETS LOADING: Apertura workspace istantanea (<50ms) con zero blob caricati in RAM all'avvio e revoca pulita ObjectURL.
+ * FEAT PHYSICAL DELETION FEEDBACK: Monitoraggio ed emissione del progresso reale su disco durante l'eliminazione fisica dei file.
  */
 
 Object.assign(Store, {
@@ -58,27 +60,23 @@ Object.assign(Store, {
         }
     },
 
+    // Azzeramento cache di sessione all'avvio con revoca pulita dei blob precedenti: nessun precaricamento preventivo in RAM
     _loadAssetsIntoRAM: async () => {
-        if (!AppState.assetsHandle) return;
+        if (Editor.imageCache) {
+            Object.values(Editor.imageCache).forEach(url => {
+                try { if (url && url.startsWith('blob:')) URL.revokeObjectURL(url); } catch (_) {}
+            });
+        }
+        if (Editor.audioCache) {
+            Object.values(Editor.audioCache).forEach(url => {
+                try { if (url && url.startsWith('blob:')) URL.revokeObjectURL(url); } catch (_) {}
+            });
+        }
         Editor.imageCache = {}; 
         Editor.audioCache = {};
-        try {
-            for await (const entry of AppState.assetsHandle.values()) {
-                if (entry.kind === 'file') {
-                    const fileHandle = await AppState.assetsHandle.getFileHandle(entry.name);
-                    const file = await fileHandle.getFile();
-                    const url = URL.createObjectURL(file);
-                    
-                    if (entry.name.startsWith('img_')) Editor.imageCache[entry.name] = url;
-                    if (entry.name.startsWith('aud_')) Editor.audioCache[entry.name] = url;
-                }
-            }
-        } catch(e) {
-            console.warn("Impossibile leggere la cartella assets", e);
-        }
     },
 
-    executePhysicalGarbageCollection: async () => {
+    executePhysicalGarbageCollection: async (onProgress = null) => {
         // Reset del flag di richiesta GC fisica: viene sempre consumato alla chiamata
         Store._needsPhysicalGC = false;
 
@@ -111,13 +109,37 @@ Object.assign(Store, {
         try {
             const notesDir = await AppState.workspaceHandle.getDirectoryHandle('notes', { create: false });
             
+            // 1. Censimento preventivo dei file di note da eliminare fisicamente dal disco
+            const notesToDelete = [];
             for await (const entry of notesDir.values()) {
                 if (entry.kind === 'file' && entry.name.endsWith('.json')) {
                     const noteId = entry.name.replace('.json', '');
                     if (!validNoteIds.has(noteId)) {
-                        await notesDir.removeEntry(entry.name);
-                        delete Store._diskHashes.notes[noteId];
+                        notesToDelete.push(entry.name);
                     }
+                }
+            }
+
+            const totalNotesToDelete = notesToDelete.length;
+            let currentNoteDeleted = 0;
+
+            for (const fileName of notesToDelete) {
+                const noteId = fileName.replace('.json', '');
+                await notesDir.removeEntry(fileName);
+                delete Store._diskHashes.notes[noteId];
+                currentNoteDeleted++;
+
+                if (onProgress) {
+                    onProgress({
+                        phase: 'deleting_notes',
+                        current: currentNoteDeleted,
+                        total: totalNotesToDelete,
+                        message: I18n.t('progress.deleting_disk', {
+                            current: currentNoteDeleted,
+                            total: totalNotesToDelete,
+                            pct: Math.round((currentNoteDeleted / (totalNotesToDelete || 1)) * 100)
+                        }) || `Eliminazione file dal disco: ${currentNoteDeleted} di ${totalNotesToDelete}`
+                    });
                 }
             }
 
@@ -133,7 +155,9 @@ Object.assign(Store, {
                     }
                 }
             }
-        } catch(e) {}
+        } catch (e) {
+            console.warn("[GC] Eccezione durante la potatura fisica:", e);
+        }
     },
 
     _readFragmentFromDisk: async (dirHandle, fileName) => {
@@ -734,7 +758,11 @@ Object.assign(Store, {
                         phase: 'notes',
                         current: writtenNotesCount,
                         total: totalNotesToWrite,
-                        message: `Scrittura note su disco (${writtenNotesCount}/${totalNotesToWrite})...`
+                        message: I18n.t('progress.updating_disk', {
+                            current: writtenNotesCount,
+                            total: totalNotesToWrite,
+                            pct: Math.round((writtenNotesCount / (totalNotesToWrite || 1)) * 100)
+                        }) || `Sincronizzazione file su disco: ${writtenNotesCount} di ${totalNotesToWrite}...`
                     });
                 }
             }
@@ -746,7 +774,7 @@ Object.assign(Store, {
                 console.error("[STORE] Salvataggio completato con errori di I/O.");
             } else {
                 if (Store._needsPhysicalGC) {
-                    await Store.executePhysicalGarbageCollection();
+                    await Store.executePhysicalGarbageCollection(onProgress);
                 }
 
                 Store.isDirty = false;
@@ -757,7 +785,7 @@ Object.assign(Store, {
                         phase: 'complete',
                         current: totalNotesToWrite,
                         total: totalNotesToWrite,
-                        message: "Completato!"
+                        message: I18n.t('progress.completed') || "Completato!"
                     });
                 }
             }
@@ -814,7 +842,7 @@ Object.assign(Store, {
 
             UI.showStatus("loading"); 
 
-            // Mount Cartelle
+            // Mount Cartelle (Senza precaricamento preventivo degli asset in RAM)
             try { AppState.assetsHandle = await dirHandle.getDirectoryHandle('assets', { create: true }); } catch (e) {}
             await Store._loadAssetsIntoRAM();
 

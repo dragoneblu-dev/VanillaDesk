@@ -73,6 +73,14 @@ dict: {
             btn_select_and_import: "Seleziona Cartella Vault ed Avvia",
             toast_success: "Vault importato con successo: {notes} note, {folders} cartelle e {assets} allegati!"
         },
+        progress: {
+            moving_to_trash: "Spostamento nel Cestino in corso...",
+            deleting_files: "Eliminazione fisica dei file in corso...",
+            updating_disk: "Sincronizzazione file su disco: {current} di {total} ({pct}%)",
+            deleting_disk: "Eliminazione file dal disco: {current} di {total} ({pct}%)",
+            do_not_close: "Non chiudere la finestra del browser fino al termine dell'operazione.",
+            completed: "Operazione completata con successo!"
+        },
         editor: {
             untitled: "Senza Titolo",
             note_title_placeholder: "Titolo della nota",
@@ -1017,7 +1025,9 @@ code_widget: {
     copied: "Copiato!",
     empty_block_warning: "Il blocco di codice è vuoto.",
     file_downloaded_toast: "File \"{filename}\" scaricato.",
-    lang_plain: "Testo Semplice"
+    lang_plain: "Testo Semplice",
+    auto_detect: "Rileva Automaticamente (Auto)",
+    detected_toast: "Sintassi rilevata: {lang}"
 },
 audio: {
             alert_no_workspace: "Devi prima creare un Workspace per poter allegare file fisici.",
@@ -1374,6 +1384,14 @@ audio: {
             opt_wrap_root: "Group all imported notes inside a root note named after the Vault",
             btn_select_and_import: "Select Vault Folder & Start",
             toast_success: "Vault successfully imported: {notes} notes, {folders} folders, and {assets} attachments!"
+        },
+        progress: {
+            moving_to_trash: "Moving to Trash...",
+            deleting_files: "Permanently deleting files...",
+            updating_disk: "Syncing files to disk: {current} of {total} ({pct}%)",
+            deleting_disk: "Deleting files from disk: {current} of {total} ({pct}%)",
+            do_not_close: "Do not close the browser window until the operation is complete.",
+            completed: "Operation completed successfully!"
         },
         editor: {
             untitled: "Untitled",
@@ -2318,7 +2336,9 @@ code_widget: {
     copied: "Copied!",
     empty_block_warning: "Code block is empty.",
     file_downloaded_toast: "File \"{filename}\" downloaded.",
-    lang_plain: "Plain Text"
+    lang_plain: "Plain Text",
+    auto_detect: "Auto Detect Syntax",
+    detected_toast: "Detected syntax: {lang}"
 },
 audio: {
             alert_no_workspace: "You must create or open a Workspace before attaching audio files.",
@@ -2675,6 +2695,14 @@ audio: {
             opt_wrap_root: "Agrupar todas las notas importadas en una nota raíz con el nombre del Vault",
             btn_select_and_import: "Seleccionar carpeta del Vault e iniciar",
             toast_success: "¡Vault importado con éxito: {notes} notas, {folders} carpetas y {assets} archivos adjuntos!"
+        },
+        progress: {
+            moving_to_trash: "Moviendo a la Papelera...",
+            deleting_files: "Eliminando archivos permanentemente...",
+            updating_disk: "Sincronizando archivos en el disco: {current} de {total} ({pct}%)",
+            deleting_disk: "Eliminando archivos del disco: {current} de {total} ({pct}%)",
+            do_not_close: "No cierre la ventana del navegador hasta que finalice la operación.",
+            completed: "¡Operación completada con éxito!"
         },
         editor: {
             untitled: "Sin Título",
@@ -3619,7 +3647,9 @@ code_widget: {
     copied: "¡Copiado!",
     empty_block_warning: "El bloque de código está vacío.",
     file_downloaded_toast: "Archivo \"{filename}\" descargado.",
-    lang_plain: "Texto Plano"
+    lang_plain: "Texto Plano",
+    auto_detect: "Detectar Automáticamente (Auto)",
+    detected_toast: "Sintaxis detectada: {lang}"
 },
 audio: {
             alert_no_workspace: "Debes crear o abrir un espacio de trabajo antes de adjuntar archivos de audio.",
@@ -3976,6 +4006,14 @@ audio: {
             opt_wrap_root: "Alle importierten Notizen in einer Stammnotiz mit dem Namen des Vaults gruppieren",
             btn_select_and_import: "Vault-Ordner auswählen und starten",
             toast_success: "Vault erfolgreich importiert: {notes} Notizen, {folders} Ordner und {assets} Anhänge!"
+        },
+        progress: {
+            moving_to_trash: "Wird in den Papierkorb verschoben...",
+            deleting_files: "Dateien werden endgültig gelöscht...",
+            updating_disk: "Dateien werden auf der Festplatte synchronisiert: {current} von {total} ({pct}%)",
+            deleting_disk: "Dateien werden von der Festplatte gelöscht: {current} von {total} ({pct}%)",
+            do_not_close: "Schließen Sie das Browserfenster nicht, bis der Vorgang abgeschlossen ist.",
+            completed: "Vorgang erfolgreich abgeschlossen!"
         },
         editor: {
             untitled: "Ohne Titel",
@@ -4921,7 +4959,9 @@ code_widget: {
     copied: "Kopiert!",
     empty_block_warning: "Der Code-Block ist leer.",
     file_downloaded_toast: "Datei \"{filename}\" heruntergeladen.",
-    lang_plain: "Klartext"
+    lang_plain: "Klartext",
+    auto_detect: "Automatisch erkennen (Auto)",
+    detected_toast: "Erkannte Syntax: {lang}"
 },
 audio: {
             alert_no_workspace: "Du musst zuerst einen Arbeitsbereich erstellen oder öffnen, bevor du Audiodateien anhängen kannst.",

@@ -3,6 +3,7 @@
  * Modulo dedicato alla gestione del Cestino e alla Garbage Collection.
  * Impostazione del flag _isDirty su ripristino per consentire a saveToFile di propagare la rimozione di deletedAt.
  * Elaborazione atomica in batch per svuotamento massivo (2000+ note) senza deadlock di I/O su File System Access API.
+ * FEAT PHYSICAL DELETION PROGRESS: Notifica all'utente della cancellazione fisica da disco tramite UI.ProgressModal.
  */
 
 Object.assign(UI, {
@@ -69,14 +70,14 @@ Object.assign(UI, {
             UI.showToast(I18n.t('trash.restore_toast', { title: note.title || I18n.t('editor.untitled') }), "success");
         },
 
-        hardDelete: (id, force = false) => {
+        hardDelete: async (id, force = false) => {
             if (!force && !confirm(I18n.t('trash.confirm_hard_delete'))) return;
             
-            UI.Trash.forceHardDeleteRecursive(id);
+            await UI.Trash.forceHardDeleteRecursive(id);
             if (!force) UI.Trash.open(); 
         },
 
-        forceHardDeleteRecursive: (id) => {
+        forceHardDeleteRecursive: async (id) => {
             if (!id) return;
             const toDelete = new Set();
             const traverse = (parentId) => {
@@ -85,6 +86,7 @@ Object.assign(UI, {
             };
             traverse(id);
 
+            const count = toDelete.size;
             AppState.notes = AppState.notes.filter(n => !toDelete.has(n.id));
             
             if (typeof AdvancedTable !== 'undefined') {
@@ -98,7 +100,28 @@ Object.assign(UI, {
             // Segnalazione atomica per Garbage Collection fisica coordinata da saveToFile
             if (typeof Store !== 'undefined') {
                 Store.markNeedsPhysicalGC();
-                Store.triggerAutoSave(true);
+                
+                const showModal = count > 3 && AppState.workspaceHandle;
+                if (showModal) {
+                    UI.ProgressModal.show(
+                        I18n.t('progress.deleting_files') || "Eliminazione definitiva file...",
+                        I18n.t('progress.do_not_close') || "Rimozione fisica dal disco fisso. Non chiudere l'applicazione...",
+                        0,
+                        count
+                    );
+                }
+
+                try {
+                    await Store.saveToFile((p) => {
+                        if (showModal) {
+                            UI.ProgressModal.update(p.message, p.current, p.total);
+                        }
+                    });
+                } finally {
+                    if (showModal) {
+                        UI.ProgressModal.hide();
+                    }
+                }
             }
         },
 
@@ -116,6 +139,8 @@ Object.assign(UI, {
             };
             trashedNotes.forEach(n => traverse(n.id));
 
+            const totalCount = toDelete.size;
+
             // 2. Eliminazione atomica in RAM in un solo ciclo
             AppState.notes = AppState.notes.filter(n => !toDelete.has(n.id));
 
@@ -129,10 +154,31 @@ Object.assign(UI, {
                 Editor.cleanOrphanedCaches();
             }
 
-            // 5. Esecuzione coordinata della rimozione fisica dei file su disco senza deadlock
+            // 5. Esecuzione coordinata della rimozione fisica dei file su disco con feedback visivo reale
             if (typeof Store !== 'undefined') {
                 Store.markNeedsPhysicalGC();
-                await Store.saveToFile();
+                
+                const showModal = totalCount > 3 && AppState.workspaceHandle;
+                if (showModal) {
+                    UI.ProgressModal.show(
+                        I18n.t('progress.deleting_files') || "Svuotamento Cestino...",
+                        I18n.t('progress.do_not_close') || "Rimozione fisica dei file dal disco. Non chiudere l'applicazione...",
+                        0,
+                        totalCount
+                    );
+                }
+
+                try {
+                    await Store.saveToFile((p) => {
+                        if (showModal) {
+                            UI.ProgressModal.update(p.message, p.current, p.total);
+                        }
+                    });
+                } finally {
+                    if (showModal) {
+                        UI.ProgressModal.hide();
+                    }
+                }
             }
 
             if (typeof UI.renderTree !== 'undefined') UI.renderTree();

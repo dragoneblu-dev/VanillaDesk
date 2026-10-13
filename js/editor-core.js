@@ -15,6 +15,7 @@
  * FEAT BROKEN IMAGES: Generazione di un segnaposto visivo vettoriale chiaro ed evidente per immagini rimosse dal disco o non trovate.
  * FEAT RAW HTML SOURCE EDITOR: Editor a tutto schermo del codice sorgente liofilizzato per modifiche massive esterne (Ctrl+Shift+E).
  * FIX RAW HTML SOURCE CODING: Popolamento esplicito di ta.value e corretta codifica delle entità HTML senza decodifiche spurie.
+ * FEAT LAZY LOADING ASSETS: Caricamento on-demand asincrono degli asset (loadAssetOnDemand e hydrateMedia) per RAM zero all'avvio e zero race conditions.
  */
 
 const Editor = {
@@ -24,6 +25,7 @@ const Editor = {
 
     audioCache: {}, 
     imageCache: {},
+    _pendingAssetPromises: new Map(),
 
     // Helper per estrarre il testo esattamente come lo legge il motore delle coordinate (_getCodeOffset),
     // bypassando i problemi del getter nativo 'innerText' dei browser sui tag <br> annidati negli span.
@@ -285,16 +287,77 @@ const Editor = {
         orphanNodes.forEach(n => n.remove());
     },
 
+    // Caricamento asincrono on-demand (JIT) di singoli asset da disco senza precaricamento preventivo del Workspace
+    // e con deduplicazione delle Promise per evitare memory leak di ObjectURL concorrenti
+    loadAssetOnDemand: async (ref, type) => {
+        if (!ref) return null;
+        if (type === 'img' && Editor.imageCache[ref]) return Editor.imageCache[ref];
+        if (type === 'aud' && Editor.audioCache[ref]) return Editor.audioCache[ref];
+
+        if (!AppState.assetsHandle) return null;
+
+        const cacheKey = `${type}:${ref}`;
+        if (Editor._pendingAssetPromises.has(cacheKey)) {
+            return Editor._pendingAssetPromises.get(cacheKey);
+        }
+
+        const promise = (async () => {
+            try {
+                const fileHandle = await AppState.assetsHandle.getFileHandle(ref, { create: false });
+                const file = await fileHandle.getFile();
+                const url = URL.createObjectURL(file);
+
+                if (type === 'img') Editor.imageCache[ref] = url;
+                if (type === 'aud') Editor.audioCache[ref] = url;
+
+                return url;
+            } catch (err) {
+                console.warn(`[LAZY ASSET] Asset ${ref} non trovato su disco:`, err);
+                return null;
+            } finally {
+                Editor._pendingAssetPromises.delete(cacheKey);
+            }
+        })();
+
+        Editor._pendingAssetPromises.set(cacheKey, promise);
+        return promise;
+    },
+
     hydrateMedia: (container) => {
-        container.querySelectorAll('img[data-image-ref]').forEach(img => {
+        if (!container) return;
+
+        const imgElements = container.querySelectorAll('img[data-image-ref]');
+        const audElements = container.querySelectorAll('audio[data-audio-ref]');
+
+        // FAST-PATH: Se la nota non contiene immagini o audio con riferimenti, esce istantaneamente senza mutare il DOM
+        if (imgElements.length === 0 && audElements.length === 0) {
+            return;
+        }
+
+        imgElements.forEach(img => {
             const ref = img.getAttribute('data-image-ref');
-            if (ref && Editor.imageCache && Editor.imageCache[ref]) {
+            if (!ref) return;
+
+            // Se l'asset è già presente nella cache volatile della sessione, assegna subito l'URL
+            if (Editor.imageCache && Editor.imageCache[ref]) {
                 img.setAttribute('src', Editor.imageCache[ref]);
                 img.classList.remove('broken-image');
                 img.removeAttribute('data-broken');
                 img.removeAttribute('title');
             } else {
-                Editor.markImageBroken(img, ref);
+                // Caricamento on-demand asincrono dal disco (solo per questa immagine)
+                Editor.loadAssetOnDemand(ref, 'img').then(url => {
+                    if (url) {
+                        if (document.body.contains(img)) {
+                            img.setAttribute('src', url);
+                            img.classList.remove('broken-image');
+                            img.removeAttribute('data-broken');
+                            img.removeAttribute('title');
+                        }
+                    } else {
+                        Editor.markImageBroken(img, ref);
+                    }
+                });
             }
         });
 
@@ -306,10 +369,19 @@ const Editor = {
             }
         });
 
-        container.querySelectorAll('audio[data-audio-ref]').forEach(aud => {
+        audElements.forEach(aud => {
             const ref = aud.getAttribute('data-audio-ref');
-            if (ref && Editor.audioCache && Editor.audioCache[ref]) {
+            if (!ref) return;
+
+            if (Editor.audioCache && Editor.audioCache[ref]) {
                 aud.setAttribute('src', Editor.audioCache[ref]);
+            } else {
+                // Caricamento on-demand asincrono dal disco (solo per questa traccia audio)
+                Editor.loadAssetOnDemand(ref, 'aud').then(url => {
+                    if (url && document.body.contains(aud)) {
+                        aud.setAttribute('src', url);
+                    }
+                });
             }
         });
     },
@@ -967,4 +1039,4 @@ const Editor = {
             UI.showToast(I18n.t('notes_utils.raw_html_success_toast') || "Codice HTML applicato e pagina reidratata con successo!", "success");
         }
     }
-};
+};6

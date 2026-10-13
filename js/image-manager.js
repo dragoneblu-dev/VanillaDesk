@@ -4,6 +4,7 @@
  * ridimensionamento visivo dinamico tramite Drag Handles (Maniglie) e Allineamento.
  * FIX UX CURSORE: Inibizione forzata dei menu tabella (TableManager) se l'utente
  * seleziona un'immagine posta all'interno della griglia, dando priorità al Resizer.
+ * FEAT LAZY LOADING: Apertura e visualizzazione a pieno schermo con recupero on-demand tramite Editor.loadAssetOnDemand.
  */
 
 const ImageManager = {
@@ -271,16 +272,22 @@ const ImageManager = {
         if (existing) existing.remove();
     },
 
-    openImage: (img) => {
+    openImage: async (img) => {
         if (!img) return;
         ImageManager.hideFloatingMenu();
         ImageManager.hideResizerOverlay();
 
         let src = img.src;
-        if (!src || src.trim() === '') {
+        let isPlaceholder = src && src.startsWith('data:image/svg');
+
+        if (!src || src.trim() === '' || isPlaceholder) {
             const imgId = img.getAttribute('data-image-ref');
-            if (imgId && Editor.imageCache && Editor.imageCache[imgId]) {
-                src = Editor.imageCache[imgId];
+            if (imgId) {
+                if (Editor.imageCache && Editor.imageCache[imgId]) {
+                    src = Editor.imageCache[imgId];
+                } else if (typeof Editor.loadAssetOnDemand === 'function') {
+                    src = await Editor.loadAssetOnDemand(imgId, 'img');
+                }
             }
         }
 

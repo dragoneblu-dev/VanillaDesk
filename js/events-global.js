@@ -402,9 +402,9 @@ const EventsGlobal = {
             document.body.style.cursor = '';
         });
 
-        // BLINDO SALVATAGGIO IN USCITA: Supporto Workspace a cartelle e avviso nativo anti-perdita dati
+        // BLINDO SALVATAGGIO IN USCITA: Blocco chiusura accidentale della scheda se una scrittura massiva è in corso
         window.addEventListener('beforeunload', (e) => {
-            if (Store.isDirty) {
+            if (Store.isDirty || Store._isSavingFile) {
                 if (AppState.workspaceHandle) {
                     Store.saveToFile();
                 } else {
@@ -977,7 +977,7 @@ const EventsGlobal = {
             hideDropIndicator();
             AppState.draggedBlockId = null;
             AppState.draggedBlockType = null;
-            document.querySelectorAll('.node-content').forEach(el => el.classList.remove('drag-top', 'drag-bottom', 'drag-middle'));
+            document.querySelectorAll('.node-content').forEach(el => { el.classList.remove('drag-top', 'drag-bottom', 'drag-middle'); }); 
             const tc = document.getElementById('treeContainer');
             if (tc) tc.classList.remove('drag-over-root'); 
             

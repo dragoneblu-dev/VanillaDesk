@@ -22,10 +22,16 @@ Object.assign(AdvancedTable, {
         let isReadOnlyForced = false;
         
         const isSysDB = tableId === 'SYS_PROPERTIES_DB';
+        const isWorkflowStudio = typeof WorkflowApp !== 'undefined' && WorkflowApp.currentDbId === tableId;
 
         const wrapper = document.getElementById(tableId);
         if (wrapper) {
             state = AdvancedTable.getState(tableId);
+        } else if (isWorkflowStudio) {
+            state = AdvancedTable.getState(tableId) || WorkflowApp.currentDbState;
+            if (WorkflowApp.layout && WorkflowApp.layout.locked) {
+                isReadOnlyForced = true;
+            }
         } else {
             state = AdvancedTable.getTableState(tableId);
             // Se non c'è il wrapper a schermo forza il ReadOnly, 
@@ -66,7 +72,9 @@ Object.assign(AdvancedTable, {
         AdvancedTable.activeTableId = tableId;
 
         let vRow = AdvancedTable.buildVirtualRow(tableId, row, state);
-        const isEdit = AppState.isEditMode && !isReadOnlyForced && !state.isPivot;
+        const isEdit = isWorkflowStudio
+            ? (!WorkflowApp.layout.locked && !state.isPivot)
+            : (AppState.isEditMode && !isReadOnlyForced && !state.isPivot);
         const pointerEvent = !isEdit ? 'pointer-events: auto; cursor: pointer;' : '';
 
         let html = '<div style="display:flex; flex-direction:column; gap:10px; width:100%;">';
@@ -532,6 +540,8 @@ Object.assign(AdvancedTable, {
             // il test sul fatto che sia una function serve per poter richiamare la funzione anche quando la si invoca dall'applicazione/estensione Workflow
             if (el && typeof AdvancedTable.renderTable === 'function') {
                 AdvancedTable.renderTable(tableId);
+            } else if (isWorkflowStudio && typeof WorkflowApp.onDatabaseModified === 'function') {
+                WorkflowApp.onDatabaseModified(tableId);
             }
         }, 50);
     }
