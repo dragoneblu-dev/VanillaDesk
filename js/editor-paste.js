@@ -3,56 +3,72 @@
  * Modulo isolato per la gestione degli eventi Copia, Taglia e Incolla.
  * FIX COPIA TABELLE: Eliminato l'algoritmo ridondante 2D a cicli quadrupli su stringa per il fallback plainText;
  * serializzazione TSV lineare e pulizia della classe adv-cell-selected dall'HTML copiato.
- * FIX PASTE BR to P: I <br> isolati nel testo diventano <p> preservando tabelle, liste e span protetti.
+ * FIX PASTE BR to P: Preserva la struttura a paragrafi nativa evitando la generazione di righe vuote superflue.
  * FIX SNIPPET & INLINE WIDGETS: Protezione assoluta dalle andate a capo (\n) negli snippet e
  * prevenzione dello split del DOM nativo del browser tramite BR-Shielding.
  * PURIFICAZIONE ISTANTANEA ALL'INCOLLA: Intercettore in fase di cattura su #inlineNoteInput e #bookmarkCommentInput
  * che applica immediatamente la funzione unica Editor.sanitizeMiniText.
- * FIX CELLE TABELLA GOOGLE DOCS: Srotolamento di <p> interni a <td>/<th> e singolo <br> su celle vuote,
- * azzerando i doppi a capo (<p></p><p></p>).
+ * FIX CELLE TABELLA GOOGLE DOCS & WORD: Srotolamento di <p> interni a <td>/<th>, purificazione degli stili
+ * inline non conformi e pulizia spazi/BR orfani a inizio e fine cella.
  * FIX INCOLLA TITOLI SU NOTA VUOTA: Rimozione del paragrafo vuoto target per evitare fusioni del browser,
  * con garanzia del paragrafo libero finale se il testo termina con un'intestazione o tabella.
- * FIX SPAZI DETERMINISTICI: Riallineamento millimetrico degli spazi iniziali e finali con pastedText,
- * eliminando lo spostamento e l'iniezione indebita di spazi bianchi.
+ * FIX SPAZI DETERMINISTICI: Riallineamento millimetrico degli spazi iniziali e finali con pastedText.
  * FEAT CONVERSIONE ELENCHI WORD/DOCS: Parser semantico per convertire i paragrafi MsoList (Word) e le righe
  * numerate/puntate in veri elenchi nativi HTML (<ol> e <ul>) con rimozione dei marcatori testuali duplicati.
  * FIX LINK VANILLADESK: Preservazione integrale di link interni, file link, link esterni e descrizioni personalizzate (data-link-note).
- * FEAT INCOLLA TABELLE EXCEL/SPREADSHEET: Riconoscimento intelligente tramite metadati e TSV con conversione
- * diretta e istantanea in componente nativo Tabella Semplice (simple-table-wrapper).
+ * FIX WORD 365 PARASITE CLEANUP: Utilizzo diretto di Editor.cleanDOMTree (motore Gomma Formattazioni) per eliminare
+ * tutte le classi parassite (MsoNormal), gli stili (-webkit, margin, padding, user-select) e gli elementi proprietari Office.
+ * FIX WORD 365 DOUBLE EMPTY LINES: Rimozione preventiva dei tag <o:p>, pulizia whitespace tra blocchi, estirpazione
+ * dei trailing <br> a fine paragrafo e abolizione della sostituzione indiscriminata di <br> con </p><p>.
+ * FIX SPREADSHEET DEEP SANITIZE: Sanificazione approfondita delle singole celle in _createSimpleTableFromExcel tramite Editor.cleanDOMTree.
  */
 
 Object.assign(Editor, {
 
-    // Helper per verificare se i dati negli appunti provengono da Excel o da un foglio di calcolo
+    // Helper per verificare se i dati negli appunti provengono da un foglio di calcolo isolato (e non da un documento Word/Docs)
     _isExcelOrSpreadsheetPaste: (pastedHTML, pastedText) => {
         if (!pastedHTML && !pastedText) return false;
 
-        // 1. Riconoscimento tramite metadati Microsoft Excel (Desktop e Web) o Google Sheets
         if (pastedHTML) {
             const lowerHTML = pastedHTML.toLowerCase();
-            const hasExcelMeta = lowerHTML.includes('progid="excel.sheet"') || 
-                                 lowerHTML.includes('progid=excel.sheet') || 
-                                 lowerHTML.includes('generator" content="microsoft excel') ||
-                                 lowerHTML.includes('xmlns:x="urn:schemas-microsoft-com:office:excel"') ||
-                                 lowerHTML.includes('mso-number-format') ||
-                                 lowerHTML.includes('excelworkbook');
+            if (!lowerHTML.includes('<table')) return false;
 
-            const hasSheetsMeta = lowerHTML.includes('data-sheets-root') || 
-                                  lowerHTML.includes('google-sheets-html-origin') ||
-                                  lowerHTML.includes('data-sheets-value');
+            try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(pastedHTML, 'text/html');
 
-            if ((hasExcelMeta || hasSheetsMeta) && lowerHTML.includes('<table')) {
-                return true;
-            }
+                // Se sono presenti blocchi di testo strutturato (paragrafi, titoli, liste) fuori dalle tabelle,
+                // si tratta di un documento Word o Google Docs e NON di una selezione di sole celle di foglio di calcolo!
+                const nonTableBlocks = Array.from(doc.body.querySelectorAll('p, h1, h2, h3, h4, h5, h6, ul, ol, blockquote'))
+                    .filter(el => !el.closest('table'));
 
-            // Tabella HTML accompagnata da struttura a colonne TSV (\t) in text/plain
-            if (lowerHTML.includes('<table') && pastedText && pastedText.includes('\t')) {
-                return true;
-            }
+                if (nonTableBlocks.length > 0) {
+                    return false;
+                }
+
+                const hasExcelMeta = lowerHTML.includes('progid="excel.sheet"') || 
+                                     lowerHTML.includes('progid=excel.sheet') || 
+                                     lowerHTML.includes('generator" content="microsoft excel') ||
+                                     lowerHTML.includes('xmlns:x="urn:schemas-microsoft-com:office:excel"') ||
+                                     lowerHTML.includes('excelworkbook');
+
+                const hasSheetsMeta = lowerHTML.includes('data-sheets-root') || 
+                                      lowerHTML.includes('google-sheets-html-origin') ||
+                                      lowerHTML.includes('data-sheets-value');
+
+                if (hasExcelMeta || hasSheetsMeta) {
+                    return true;
+                }
+
+                // Tabella HTML isolata accompagnata da struttura a colonne TSV (\t) in text/plain
+                if (pastedText && pastedText.includes('\t')) {
+                    return true;
+                }
+            } catch (_) {}
         }
 
-        // 2. Riconoscimento dati tabulari puri in text/plain (TSV)
-        if (pastedText && pastedText.includes('\t')) {
+        // Riconoscimento dati tabulari puri in text/plain (TSV senza HTML)
+        if (!pastedHTML && pastedText && pastedText.includes('\t')) {
             const lines = pastedText.trim().split(/\r\n|\n|\r/);
             if (lines.length >= 1 && lines.some(l => l.includes('\t'))) {
                 return true;
@@ -71,7 +87,7 @@ Object.assign(Editor, {
         let rowsParsed = false;
         let totalCellCount = 0;
 
-        // Canale A: Parsing da HTML strutturato (mantiene stili inline, link, colspan e rowspan)
+        // Canale A: Parsing da HTML strutturato (mantiene stili inline essenziali, link, colspan e rowspan)
         if (pastedHTML && pastedHTML.toLowerCase().includes('<table')) {
             try {
                 const parser = new DOMParser();
@@ -93,6 +109,11 @@ Object.assign(Editor, {
                                 let spanAttrs = '';
                                 if (rs && parseInt(rs, 10) > 1) spanAttrs += ` rowspan="${parseInt(rs, 10)}"`;
                                 if (cs && parseInt(cs, 10) > 1) spanAttrs += ` colspan="${parseInt(cs, 10)}"`;
+
+                                // Sanificazione profonda immediata della singola cella tramite il motore condiviso
+                                if (typeof Editor.cleanDOMTree === 'function') {
+                                    Editor.cleanDOMTree(c);
+                                }
 
                                 let content = c.innerHTML;
 
@@ -445,9 +466,8 @@ Object.assign(Editor, {
         const snippetText = targetNode.closest('.snippet-text');
 
         // =========================================================================
-        // PRIORITÀ ASSOLUTA TABELLE EXCEL / GOOGLE SHEETS / TSV:
-        // Excel inserisce contemporaneamente nella clipboard sia l'HTML tabulare che un'immagine bitmap PNG di fallback.
-        // Se intercettiamo una tabella di Excel, IGNORIAMO il bitmap PNG di fallback e creiamo direttamente la Tabella Semplice nativa!
+        // PRIORITÀ TABELLE EXCEL / GOOGLE SHEETS ISOLATE:
+        // Riconosce ed estrae tabelle pure di fogli di calcolo SOLO SE non si tratta di un intero documento Word/Docs
         // =========================================================================
         const isSpreadsheetData = !isInsideWidget && Editor._isExcelOrSpreadsheetPaste(pastedHTML, pastedText);
 
@@ -473,7 +493,30 @@ Object.assign(Editor, {
                     sel.addRange(currentRange);
                 }
 
-                document.execCommand('insertHTML', false, tableHTML);
+                // Inserimento pulito tramite Range nativo
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = tableHTML;
+
+                // Sanificazione preventiva immediata del frammento prima dell'iniezione nel DOM
+                if (typeof Editor.cleanDOMTree === 'function') {
+                    Editor.cleanDOMTree(tempDiv);
+                }
+
+                const frag = document.createDocumentFragment();
+                while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+
+                const lastNode = frag.lastChild;
+                currentRange.deleteContents();
+                currentRange.insertNode(frag);
+
+                if (lastNode) {
+                    const newRange = document.createRange();
+                    newRange.setStartAfter(lastNode);
+                    newRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                }
+
                 Editor._ensureLastLineBreak(document.getElementById('noteContent'));
 
                 if (typeof WidgetManager !== 'undefined') {
@@ -516,7 +559,22 @@ Object.assign(Editor, {
                             const canvas = document.createElement('canvas');
                             canvas.width = width; canvas.height = height;
                             canvas.getContext('2d').drawImage(img, 0, 0, width, height);
-                            document.execCommand('insertHTML', false, `<img src="${canvas.toDataURL('image/webp', 0.85)}"><p><br></p>`);
+
+                            const imgNode = document.createElement('img');
+                            imgNode.src = canvas.toDataURL('image/webp', 0.85);
+                            const pNode = document.createElement('p');
+                            pNode.innerHTML = '<br>';
+
+                            const curRange = sel.getRangeAt(0);
+                            curRange.deleteContents();
+                            curRange.insertNode(pNode);
+                            curRange.insertNode(imgNode);
+
+                            const newRange = document.createRange();
+                            newRange.setStart(pNode, 0);
+                            newRange.collapse(true);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
                         };
                         img.src = ev.target.result;
                     };
@@ -560,7 +618,15 @@ Object.assign(Editor, {
                         cleanTextWithBrs = cleanTextWithBrs.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
                         cleanTextWithBrs = cleanTextWithBrs.replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length));
                         cleanTextWithBrs = cleanTextWithBrs.replace(/\r\n|\n|\r/g, '<br>');
-                        document.execCommand('insertHTML', false, cleanTextWithBrs);
+
+                        const curRange = sel.getRangeAt(0);
+                        curRange.deleteContents();
+                        const spanTemp = document.createElement('span');
+                        spanTemp.innerHTML = cleanTextWithBrs;
+                        const frag = document.createDocumentFragment();
+                        while (spanTemp.firstChild) frag.appendChild(spanTemp.firstChild);
+                        curRange.insertNode(frag);
+
                         Store.triggerAutoSave();
                         return;
                     }
@@ -574,13 +640,11 @@ Object.assign(Editor, {
                         const selection = window.getSelection();
                         let targetCaretPos = 0;
                         
-                        // Calcoliamo l'offset matematico futuro prima di rompere il DOM
                         if (selection.rangeCount > 0 && typeof Editor._getCodeOffset === 'function') {
                             const startPos = Editor._getCodeOffset(preNode, selection.anchorNode, selection.anchorOffset);
                             const focusPos = Editor._getCodeOffset(preNode, selection.focusNode, selection.focusOffset);
                             const minPos = Math.min(startPos, focusPos);
                             
-                            // La nuova posizione del cursore sarà dove eravamo + la lunghezza della stringa incollata
                             targetCaretPos = minPos + cleanText.length;
                             const range = selection.getRangeAt(0);
                             range.deleteContents(); 
@@ -600,7 +664,14 @@ Object.assign(Editor, {
                             formattedCellText = formattedCellText.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
                             formattedCellText = formattedCellText.replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length));
                             formattedCellText = formattedCellText.replace(/\r\n|\n|\r/g, '<br>');
-                            document.execCommand('insertHTML', false, formattedCellText);
+
+                            const curRange = sel.getRangeAt(0);
+                            curRange.deleteContents();
+                            const spanTemp = document.createElement('span');
+                            spanTemp.innerHTML = formattedCellText;
+                            const frag = document.createDocumentFragment();
+                            while (spanTemp.firstChild) frag.appendChild(spanTemp.firstChild);
+                            curRange.insertNode(frag);
                         } else {
                             document.execCommand('insertText', false, cleanText);
                         }
@@ -614,50 +685,62 @@ Object.assign(Editor, {
                     if (!targetNode.closest('td, th, li, pre')) {
                         const formattedHTML = Editor._formatPlainTextForHTML(pastedText);
                         if (!pastedText.includes('\n')) {
-                            // Testo inline a riga singola: inserimento puro senza spezzare i paragrafi
                             document.execCommand('insertText', false, pastedText);
                         } else {
-                            document.execCommand('insertHTML', false, formattedHTML);
+                            const curRange = sel.getRangeAt(0);
+                            curRange.deleteContents();
+                            const tempDiv = document.createElement('div');
+                            tempDiv.innerHTML = formattedHTML;
+                            const frag = document.createDocumentFragment();
+                            while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+                            const lastChild = frag.lastChild;
+                            curRange.insertNode(frag);
+                            if (lastChild) {
+                                const newRange = document.createRange();
+                                newRange.setStartAfter(lastChild);
+                                newRange.collapse(true);
+                                sel.removeAllRanges();
+                                sel.addRange(newRange);
+                            }
                         }
                     } else if (targetNode.closest('td, th, li')) {
                         let escaped = pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
                         escaped = escaped.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
                         escaped = escaped.replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length));
                         escaped = escaped.replace(/\r\n|\n|\r/g, '<br>');
-                        document.execCommand('insertHTML', false, escaped);
+                        const curRange = sel.getRangeAt(0);
+                        curRange.deleteContents();
+                        const tempDiv = document.createElement('div');
+                        tempDiv.innerHTML = escaped;
+                        const frag = document.createDocumentFragment();
+                        while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+                        curRange.insertNode(frag);
                     } else {
                         document.execCommand('insertText', false, pastedText);
                     }
                     return;
                 }
 
-                // GESTIONE INCOLLA HTML (RICH TEXT)
-                const allowedTags = ['B', 'I', 'U', 'S', 'A', 'P', 'DIV', 'SPAN', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'BR', 'IMG', 'SVG', 'PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE', 'INPUT'];
-                const allowedPrefixes = ['hl-', 'tx-', 'bg-', 'text-', 'ff-', 'fs-'];
-                
-                const allowedClasses = [
-                    'internal-link', 'file-link', 'highlighted-text', 'search-highlight', 'active-highlight',
-                    'adv-widget-shell', 'adv-inline-shell', 'widget-header', 'adv-table-header', 'widget-drag-handle', 'adv-drag-handle', 'widget-options-btn', 'widget-icon', 'widget-title', 'adv-table-title', 'widget-tools', 'adv-tools', 'widget-body', 'widget-editable-area',
-                    'widget-type-database', 'widget-type-pivot', 'widget-type-journal', 'widget-type-code', 'widget-type-buttonbar', 'widget-type-citation', 'widget-type-columns', 'widget-type-simple-table', 'widget-type-audio', 'widget-type-video',
-                    'adv-table-wrapper', 'table-striped', 'adv-col-resizer',
-                    'simple-table-wrapper', 'table-row-trigger', 'table-col-trigger', 'table-move-trigger',
-                    'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon', 'bookmark-comment-data',
-                    'adv-checklist', 'adv-checklist-item', 'adv-checklist-cb', 'checklist-text',
-                    'adv-journal-wrapper', 'adv-journal-list', 'journal-date-node', 'journal-date-header', 'journal-toggle', 'journal-date-label', 'journal-time-list', 'journal-time-node', 'journal-time-label', 'journal-content', 'hidden-time',
-                    'code-wrapper', 'code-action-bar', 'code-action-btn', 'code-content', 'code-action-lang', 'code-action-copy', 'code-copy-btn', 
-                    'adv-copy-snippet', 'snippet-text', 'snippet-copy-btn', 'snippet-masked',
-                    'block-citation', 'citation-body', 'citation-header',
-                    'adv-columns-container-wrap', 'adv-columns-continuous', 'adv-columns-independent', 'col-box', 'col-resizer'
-                ];
-                
-                // Whitelist rigorosa per attributi Data: include data-link-note per preservare le descrizioni dei link di VanillaDesk
-                const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-link-note', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
+                // GESTIONE INCOLLA HTML (RICH TEXT: WORD, GOOGLE DOCS, SITI WEB)
+
+                // PRE-PULIZIA ARTEFATTI WORD: Rimuove commenti condizionali MSO prima del parsing DOM
+                const cleanRawHTML = pastedHTML
+                    .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
+                    .replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, '');
 
                 const parser = new DOMParser();
-                const doc = parser.parseFromString(pastedHTML, 'text/html');
+                const doc = parser.parseFromString(cleanRawHTML, 'text/html');
 
-                // FASE 0: RIMOZIONE CONTENITORI FITTIZI DI GOOGLE DOCS E TAG INTRUSIVI
-                doc.querySelectorAll('script, style, meta, link, iframe, object, embed, noscript').forEach(el => el.remove());
+                // FASE 0: RIMOZIONE CONTENITORI FITTIZI DI GOOGLE DOCS, TAG INTRUSIVI E TAG PROPRIETARI OFFICE
+                doc.querySelectorAll('script, style, meta, link, iframe, object, embed, noscript, o\\:p, o-p, w\\:sdt').forEach(el => el.remove());
+
+                // Rimozione difensiva basata su tagName per garantire compatibilità con tutti i motori browser
+                Array.from(doc.body.querySelectorAll('*')).forEach(el => {
+                    const t = el.tagName.toUpperCase();
+                    if (t.startsWith('O:') || t.startsWith('W:') || t.startsWith('M:') || t === 'O-P') {
+                        el.remove();
+                    }
+                });
 
                 // Rimuove i commenti invisibili inseriti da Chrome/Word (es. <!--StartFragment-->)
                 const iter = doc.createNodeIterator(doc.body, NodeFilter.SHOW_COMMENT, null, false);
@@ -666,8 +749,7 @@ Object.assign(Editor, {
                 while ((commentNode = iter.nextNode())) commentsToRemove.push(commentNode);
                 commentsToRemove.forEach(c => c.remove());
 
-                // Google Docs avvolge sistematicamente il contenuto in:
-                // <b style="font-weight:normal;" id="docs-internal-guid-..."> o <strong style="font-weight:normal;">
+                // Google Docs avvolge sistematicamente il contenuto in b/strong guid
                 doc.querySelectorAll('b, strong').forEach(bEl => {
                     const styleStr = (bEl.getAttribute('style') || '').toLowerCase();
                     const isNormal = bEl.style.fontWeight === 'normal' || bEl.style.fontWeight === '400' || /font-weight\s*:\s*(normal|[1-4]00)/.test(styleStr);
@@ -710,11 +792,11 @@ Object.assign(Editor, {
                     wrapper.innerHTML = ''; 
                 });
 
-                // FASE 1: CONVERSIONE SEMANTICA DEGLI STILI INLINE (Word, Google Docs, LibreOffice)
+                // FASE 1: CONVERSIONE SEMANTICA PULITA (Bold, Italic, Underline, Strike)
                 const allElements = Array.from(doc.body.querySelectorAll('*')).reverse();
 
                 allElements.forEach(el => {
-                    if (WidgetManager.isProtectedBlock(el) || el.closest('.adv-widget-shell, .simple-table-wrapper, .adv-inline-shell')) {
+                    if (WidgetManager.isProtectedBlock(el) || (el.closest && el.closest('.adv-widget-shell, .adv-inline-shell'))) {
                         return;
                     }
 
@@ -730,6 +812,14 @@ Object.assign(Editor, {
                     const hasItalicStyle = (el.style && (el.style.fontStyle === 'italic' || el.style.fontStyle === 'oblique')) ||
                                            /font-style\s*:\s*(italic|oblique)/i.test(rawStyle);
 
+                    // Rilevamento semantico unificato di Sottolineato
+                    const hasUnderlineStyle = (el.style && el.style.textDecoration && el.style.textDecoration.includes('underline')) ||
+                                              /text-decoration\s*:\s*[^;]*underline/i.test(rawStyle);
+
+                    // Rilevamento semantico unificato di Barrato
+                    const hasStrikeStyle = (el.style && el.style.textDecoration && el.style.textDecoration.includes('line-through')) ||
+                                           /text-decoration\s*:\s*[^;]*line-through/i.test(rawStyle);
+
                     if (tag === 'STRONG') {
                         const b = doc.createElement('b');
                         while (el.firstChild) b.appendChild(el.firstChild);
@@ -742,16 +832,34 @@ Object.assign(Editor, {
                         el.parentNode.replaceChild(i, el);
                         return;
                     }
+                    if (tag === 'DEL') {
+                        const s = doc.createElement('s');
+                        while (el.firstChild) s.appendChild(el.firstChild);
+                        el.parentNode.replaceChild(s, el);
+                        return;
+                    }
 
                     if (tag === 'SPAN' || tag === 'FONT') {
                         const needB = hasBoldWeight && tag !== 'B';
                         const needI = hasItalicStyle && tag !== 'I';
+                        const needU = hasUnderlineStyle && tag !== 'U';
+                        const needS = hasStrikeStyle && tag !== 'S';
 
-                        if (needB || needI) {
+                        if (needB || needI || needU || needS) {
                             const frag = doc.createDocumentFragment();
                             while (el.firstChild) frag.appendChild(el.firstChild);
 
                             let wrapperTag = frag;
+                            if (needS) {
+                                const sTag = doc.createElement('s');
+                                sTag.appendChild(wrapperTag);
+                                wrapperTag = sTag;
+                            }
+                            if (needU) {
+                                const uTag = doc.createElement('u');
+                                uTag.appendChild(wrapperTag);
+                                wrapperTag = uTag;
+                            }
                             if (needI) {
                                 const iTag = doc.createElement('i');
                                 iTag.appendChild(wrapperTag);
@@ -762,7 +870,7 @@ Object.assign(Editor, {
                                 bTag.appendChild(wrapperTag);
                                 wrapperTag = bTag;
                             }
-                            el.appendChild(wrapperTag);
+                            el.parentNode.replaceChild(wrapperTag, el);
                         }
                     }
 
@@ -790,20 +898,7 @@ Object.assign(Editor, {
                     }
                 });
 
-                // FASE 2: NORMALIZZAZIONE DEI NODI DI TESTO E INDENTAZIONI DI WORD
-                const textWalker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_TEXT, null, false);
-                let textNode;
-                while ((textNode = textWalker.nextNode())) {
-                    if (textNode.parentNode && textNode.parentNode.closest('pre')) continue;
-
-                    let str = textNode.nodeValue;
-                    if (str.includes('\r') || str.includes('\n')) {
-                        str = str.replace(/[\r\n]+/g, ' ');
-                    }
-                    textNode.nodeValue = str;
-                }
-
-                // FASE 3: SROTOLAMENTO STRUTTURALE DI <P> DENTRO <LI> (Google Docs clean-up)
+                // FASE 2: SROTOLAMENTO STRUTTURALE DI <P> DENTRO <LI> (Google Docs clean-up)
                 doc.querySelectorAll('li > p').forEach(pInsideLi => {
                     const li = pInsideLi.parentNode;
                     if (li && li.tagName === 'LI' && li.children.length === 1) {
@@ -812,7 +907,7 @@ Object.assign(Editor, {
                     }
                 });
 
-                // FASE 3.1: NORMALIZZAZIONE CELLE TABELLE (PULIZIA DI <P> E SINGOLO <BR> PER CELLE VUOTE)
+                // FASE 3: NORMALIZZAZIONE TOTALE CELLE TABELLE
                 doc.querySelectorAll('td, th').forEach(cell => {
                     cell.querySelectorAll('p, div').forEach(b => {
                         const parent = b.parentNode;
@@ -820,109 +915,135 @@ Object.assign(Editor, {
                         if (b.nextSibling) parent.insertBefore(doc.createElement('br'), b.nextSibling);
                         b.remove();
                     });
+
+                    // Rimozione di qualsiasi attributo legacy di presentazione
+                    ['border', 'cellpadding', 'cellspacing', 'width', 'height', 'align', 'valign', 'bgcolor', 'background'].forEach(attr => {
+                        cell.removeAttribute(attr);
+                    });
+
+                    const rawStyle = (cell.getAttribute('style') || '').toLowerCase();
+                    const alignMatch = rawStyle.match(/text-align\s*:\s*(center|right|left)/i);
+                        
+                    if (alignMatch) {
+                        cell.setAttribute('style', `text-align: ${alignMatch[1].toLowerCase()};`);
+                    } else {
+                        cell.removeAttribute('style');
+                    }
+
+                    let html = cell.innerHTML.trim();
+                    html = html.replace(/^(?:&nbsp;|\s|<br\s*\/?>)+/i, '');
+                    html = html.replace(/(?:&nbsp;|\s|<br\s*\/?>)+$/i, '');
+                    cell.innerHTML = html.trim();
+
                     const cellCleanText = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
                     if (!cellCleanText && !cell.querySelector('img, audio, input, svg')) {
                         cell.innerHTML = '<br>';
                     }
                 });
 
-                // FASE 4: SROTOLAMENTO DIV ESTERNI E PURIFICAZIONE ATTRIBUTI
-                const cleanNode = (node) => {
-                    if (node.nodeType === 3) return;
+                // FASE 3.2: INCAPSULAMENTO TABELLE WORD/DOCS IN COMPONENTI NATIVI (.simple-table-wrapper)
+                doc.querySelectorAll('table').forEach(tbl => {
+                    if (tbl.closest('.adv-widget-shell, .simple-table-wrapper')) return;
 
-                    if (node.nodeType === 1) {
-                        let tag = node.tagName.toUpperCase();
-                        const isInternalWidget = node.closest('.adv-widget-shell, .simple-table-wrapper, .adv-inline-shell');
+                    ['border', 'cellpadding', 'cellspacing', 'width', 'height', 'align', 'valign', 'bgcolor', 'background'].forEach(attr => {
+                        tbl.removeAttribute(attr);
+                    });
+                    tbl.removeAttribute('style');
 
-                        // Tag non ammessi (siti esterni)
-                        if (!allowedTags.includes(tag)) {
-                            const frag = doc.createDocumentFragment();
-                            while (node.firstChild) frag.appendChild(node.firstChild);
-                            node.parentNode.replaceChild(frag, node);
-                            return;
-                        }
+                    tbl.querySelectorAll('tr').forEach(tr => {
+                        ['align', 'valign', 'bgcolor', 'style', 'height'].forEach(attr => tr.removeAttribute(attr));
+                    });
 
-                        // Srotolamento DIV/HEADER/ASIDE esterni in paragrafi <p>
-                        if (!isInternalWidget && (tag === 'DIV' || tag === 'HEADER' || tag === 'FOOTER' || tag === 'ASIDE')) {
-                            const p = doc.createElement('p');
-                            while (node.firstChild) p.appendChild(node.firstChild);
-                            node.parentNode.replaceChild(p, node);
-                            node = p;
-                            tag = 'P';
-                        }
+                    const stblId = 'stbl_' + (typeof Store !== 'undefined' ? Store.generateId() : Date.now());
+                    const wrapper = doc.createElement('div');
+                    wrapper.className = 'adv-widget-shell simple-table-wrapper';
+                    wrapper.setAttribute('data-widget-type', 'simple-table');
+                    wrapper.id = stblId;
+                    wrapper.contentEditable = 'false';
 
-                        // Purificazione chirurgica degli attributi: elimina dir, role, aria-*, style, color, face
-                        const attrs = Array.from(node.attributes);
-                        attrs.forEach(attr => {
-                            if (tag === 'SVG' && ['viewBox', 'width', 'height', 'fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin'].includes(attr.name)) return;
-                            if (['PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'].includes(tag) && ['d', 'points', 'x1', 'y1', 'x2', 'y2', 'x', 'y', 'width', 'height', 'cx', 'cy', 'r', 'rx', 'ry'].includes(attr.name)) return;
-                            if (attr.name === 'href' && tag === 'A') return;
-                            if (attr.name === 'target' && tag === 'A') return;
-                            if (attr.name === 'src' && (tag === 'IMG' || tag === 'AUDIO')) return;
-                            if (attr.name === 'controls' && tag === 'AUDIO') return;
-                            if (attr.name === 'type' && ['UL', 'OL', 'INPUT'].includes(tag)) return;
-                            if (attr.name === 'start' && tag === 'OL') return;
-                            if ((attr.name === 'colspan' || attr.name === 'rowspan') && (tag === 'TD' || tag === 'TH')) return;
-                            if (attr.name === 'contenteditable') return;
-                            if (attr.name === 'id' && isInternalWidget) return;
+                    tbl.parentNode.insertBefore(wrapper, tbl);
+                    wrapper.appendChild(tbl);
 
-                            if (attr.name === 'class') {
-                                const classes = attr.value.split(/\s+/).filter(cls => allowedClasses.includes(cls) || allowedPrefixes.some(p => cls.startsWith(p)));
-                                if (classes.length > 0) node.setAttribute('class', classes.join(' '));
-                                else node.removeAttribute('class');
-                            }
-                            else if (attr.name === 'style') {
-                                if ((node.classList.contains('inline-note-data') || node.classList.contains('bookmark-comment-data')) && attr.value.includes('none')) {
-                                    node.setAttribute('style', 'display: none;');
-                                } else if (isInternalWidget) {
-                                    return;
-                                } else {
-                                    node.removeAttribute('style'); 
-                                }
-                            }
-                            else if (attr.name.startsWith('data-')) {
-                                if (allowedDataAttrs.includes(attr.name)) return;
-                                node.removeAttribute(attr.name);
-                            }
-                            else {
-                                node.removeAttribute(attr.name);
-                            }
-                        });
+                    tbl.classList.add('table-striped');
+                    tbl.style.width = '100%';
+                    tbl.style.tableLayout = 'auto';
 
-                        // Srotola SPAN e FONT privi di classi/attributi rimasti dopo la pulizia
-                        if ((tag === 'SPAN' || tag === 'FONT') && !isInternalWidget) {
-                            if (node.attributes.length === 0) {
-                                const frag = doc.createDocumentFragment();
-                                while (node.firstChild) frag.appendChild(node.firstChild);
-                                node.parentNode.replaceChild(frag, node);
-                                return;
-                            }
-                        }
-                    }
+                    tbl.querySelectorAll('th, td').forEach(c => {
+                        c.setAttribute('contenteditable', 'true');
+                    });
+                });
 
-                    // Scansione Bottom-Up per evitare di saltare nodi
-                    let child = node.lastChild;
-                    while (child) {
-                        const prev = child.previousSibling;
-                        cleanNode(child);
-                        child = prev;
-                    }
-                };
-
-                // Avvia la purificazione partendo dalla coda
-                let currNode = doc.body.lastChild;
-                while (currNode) {
-                    let prevNode = currNode.previousSibling;
-                    cleanNode(currNode);
-                    currNode = prevNode;
+                // FASE 4: SANIFICAZIONE PROFONDA UNIFICATA TRAMITE LA GOMMA FORMATTAZIONI (Editor.cleanDOMTree)
+                // Rimuove tutte le classi parassite (MsoNormal, ecc.) e gli stili inline (-webkit-*, margin, padding, user-select, font, colori inline) sia nel testo che nelle celle di tabella
+                if (typeof Editor !== 'undefined' && typeof Editor.cleanDOMTree === 'function') {
+                    Editor.cleanDOMTree(doc.body);
                 }
 
-                const lastBodyChild = doc.body.lastElementChild;
-                if (lastBodyChild && ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE'].includes(lastBodyChild.tagName)) {
-                    const p = doc.createElement('p');
-                    p.innerHTML = '<br>';
-                    doc.body.appendChild(p);
+                // FASE 5: RISOLUZIONE RIGHE VUOTE SPURIE DI WORD 365
+                
+                // 5.1 Rimuove i nodi di testo di whitespace (\r, \n, spazi) direttamente figli del body tra blocchi
+                Array.from(doc.body.childNodes).forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE && node.nodeValue.replace(/[\r\n\t\s]/g, '') === '') {
+                        node.remove();
+                    }
+                });
+
+                // 5.2 Rimuove i trailing whitespace e <br> parassiti posti alla fine dei paragrafi/blocchi di testo
+                doc.body.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, td, th').forEach(block => {
+                    while (block.lastChild && block.childNodes.length > 1) {
+                        if (block.lastChild.nodeType === Node.TEXT_NODE && !block.lastChild.nodeValue.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '')) {
+                            block.lastChild.remove();
+                        } else if (block.lastChild.nodeName === 'BR') {
+                            block.lastChild.remove();
+                        } else {
+                            break;
+                        }
+                    }
+                });
+
+                // 5.3 Normalizzazione e compressione dei paragrafi vuoti consecutivi di Word 365
+                let prevWasEmpty = false;
+                Array.from(doc.body.children).forEach(child => {
+                    const isBlock = ['P', 'DIV'].includes(child.tagName);
+                    if (isBlock) {
+                        const text = child.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
+                        const hasMedia = child.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
+                        const isEmpty = !text && !hasMedia;
+
+                        if (isEmpty) {
+                            if (prevWasEmpty) {
+                                child.remove();
+                            } else {
+                                child.innerHTML = '<br>';
+                                prevWasEmpty = true;
+                            }
+                        } else {
+                            prevWasEmpty = false;
+                        }
+                    } else {
+                        prevWasEmpty = false;
+                    }
+                });
+
+                // 5.4 Rimuove paragrafi vuoti isolati all'inizio e alla fine del frammento incollato
+                while (doc.body.firstElementChild && ['P', 'DIV'].includes(doc.body.firstElementChild.tagName) && doc.body.children.length > 1) {
+                    const first = doc.body.firstElementChild;
+                    const text = first.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
+                    const hasMedia = first.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
+                    if (!text && !hasMedia) first.remove();
+                    else break;
                 }
+                while (doc.body.lastElementChild && ['P', 'DIV'].includes(doc.body.lastElementChild.tagName) && doc.body.children.length > 1) {
+                    const last = doc.body.lastElementChild;
+                    const text = last.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
+                    const hasMedia = last.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
+                    if (!text && !hasMedia) last.remove();
+                    else break;
+                }
+
+                // 5.5 Se il documento ha già blocchi nativi (<p>, <h1>..<h6>, <table>, <ul>, <ol>), NON sostituire <br> con </p><p>!
+                const existingBlocks = doc.body.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, table, ul, ol');
+                const hasExistingBlocks = existingBlocks.length > 0;
 
                 let finalHTML = doc.body.innerHTML;
 
@@ -930,12 +1051,10 @@ Object.assign(Editor, {
                 finalHTML = finalHTML.replace(/^[\r\n\t]+|[\r\n\t]+$/g, '');
                 // Conversione fedele degli spazi non comprimibili generati dai browser su copia
                 finalHTML = finalHTML.replace(/<span[^>]*class="Apple-converted-space"[^>]*>.*?<\/span>/gi, '&nbsp;');
-
                 // Rimozione di link vuoti privi di testo o icone creati accidentalmente da siti web
                 finalHTML = finalHTML.replace(/<a(?![^>]*class=["'][^"']*(internal-link|file-link)[^"']*["'])[^>]*>\s*(<br\s*\/?>)?\s*<\/a>/gi, '');
 
-                // Converte i <br> isolati del testo ordinario in blocchi di paragrafo preservando tabelle, liste e span protetti
-                if (!targetNode.closest('td, th, li, pre')) {
+                if (!hasExistingBlocks && !targetNode.closest('td, th, li, pre')) {
                     let tempWrapper = document.createElement('div');
                     tempWrapper.innerHTML = finalHTML;
                     tempWrapper.querySelectorAll('.adv-inline-shell, .inline-note-data, .bookmark-comment-data, .snippet-text, table, ul, ol').forEach(el => {
@@ -946,25 +1065,26 @@ Object.assign(Editor, {
                     finalHTML = finalHTML.replace(/<br\s*\/?>/gi, '</p><p>');
                     finalHTML = finalHTML.replace(/<p>\s*<\/p>/gi, '<p><br></p>');
 
-                    // Ripristino fedele dei <br> protetti dentro le celle delle tabelle e gli span
                     finalHTML = finalHTML.replace(/%%%BR_SAFE%%%/g, '<br>');
+                }
+
+                // Ottimizzazione inline: Se l'utente ha copiato una singola riga o parola priva di a capo, srotola il tag <p> esterno
+                const isSingleLinePaste = !pastedText.includes('\n') && !pastedText.includes('\r');
+                if (isSingleLinePaste && hasExistingBlocks && existingBlocks.length === 1 && doc.body.firstElementChild && doc.body.firstElementChild.tagName === 'P') {
+                    finalHTML = doc.body.firstElementChild.innerHTML;
                 }
 
                 // =========================================================================
                 // CORREZIONE RADICE SPAZI: RIALLINEAMENTO DETERMINISTICO CON PASTEDTEXT
-                // Elimina l'aggiunta o sottrazione di spazi causata dal wrapping HTML di Word/Docs
                 // =========================================================================
                 const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|blockquote|pre)>/i.test(finalHTML);
 
                 if (!hasBlockTags) {
-                    // Per testo o formattazioni inline, ripulisce i margini parassiti e ripristina fedelmente gli spazi originali
                     finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
-
                     const leadingSpaces = pastedText.match(/^[ \t]*/)[0];
                     const trailingSpaces = pastedText.match(/[ \t]*$/)[0];
                     finalHTML = leadingSpaces + finalHTML + trailingSpaces;
                 } else {
-                    // Per blocchi complessi (es. documenti con tabelle da Word), elimina solo gli spazi parassiti prima e dopo i tag esterni
                     finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
                 }
 
@@ -985,11 +1105,53 @@ Object.assign(Editor, {
                         blockUnderCursor.remove();
                         currentSel.removeAllRanges();
                         currentSel.addRange(currentRange);
+                    } else if (hasBlockTags && blockUnderCursor && blockUnderCursor.id !== 'noteContent' && !isBlockEmpty) {
+                        // Split ordinato del paragrafo contenitore al punto del cursore per evitare annidamenti illegali <p><p>
+                        const postRange = currentRange.cloneRange();
+                        postRange.selectNodeContents(blockUnderCursor);
+                        postRange.setStart(currentRange.endContainer, currentRange.endOffset);
+                        const postContent = postRange.extractContents();
+
+                        currentRange.setStartAfter(blockUnderCursor);
+                        currentRange.collapse(true);
+
+                        if (postContent.textContent.trim() !== '' || postContent.querySelector('img, audio, input, svg')) {
+                            const nextBlock = document.createElement(blockUnderCursor.tagName);
+                            nextBlock.appendChild(postContent);
+                            blockUnderCursor.parentNode.insertBefore(nextBlock, blockUnderCursor.nextSibling);
+                        }
                     }
                 }
 
-                document.execCommand('insertHTML', false, finalHTML);
+                // =========================================================================
+                // INSERIMENTO PULITO TRAMITE DOM RANGE (Elimina -webkit, color, line-height)
+                // =========================================================================
+                const curRange = currentSel.getRangeAt(0);
+                curRange.deleteContents();
+
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = finalHTML;
+
+                const frag = document.createDocumentFragment();
+                while (tempDiv.firstChild) {
+                    frag.appendChild(tempDiv.firstChild);
+                }
+
+                const lastNode = frag.lastChild;
+                curRange.insertNode(frag);
+
+                if (lastNode) {
+                    const newRange = document.createRange();
+                    newRange.setStartAfter(lastNode);
+                    newRange.collapse(true);
+                    currentSel.removeAllRanges();
+                    currentSel.addRange(newRange);
+                }
+
                 Editor._ensureLastLineBreak(document.getElementById('noteContent'));
+                if (typeof Editor.healFontArtifacts === 'function') {
+                    Editor.healFontArtifacts(document.getElementById('noteContent'));
+                }
 
                 if (typeof WidgetManager !== 'undefined') {
                     WidgetManager.mountAll();
@@ -1009,9 +1171,7 @@ Object.assign(Editor, {
     }
 });
 
-// INTERCETTORE DIRETTO E ISTANTANEO INCOLLA PER NOTE INLINE E SEGNALIBRI:
-// Pulisce l'HTML al momento esatto del paste tramite la procedura unica Editor.sanitizeMiniText,
-// impedendo che l'utente veda anche solo temporaneamente testo sporco o formattazioni aliene a video.
+// INTERCETTORE DIRETTO E ISTANTANEO INCOLLA PER NOTE INLINE E SEGNALIBRI
 document.addEventListener('paste', (e) => {
     let target = e.target;
     if (target && target.nodeType === 3) target = target.parentNode;
@@ -1042,7 +1202,24 @@ document.addEventListener('paste', (e) => {
 
     const cleanHTML = typeof Editor.sanitizeMiniText === 'function'
         ? Editor.sanitizeMiniText(textToClean)
-        : pastedText.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        : pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-    document.execCommand('insertHTML', false, cleanHTML);
+    const sel = window.getSelection();
+    if (sel && sel.rangeCount > 0) {
+        const range = sel.getRangeAt(0);
+        range.deleteContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = cleanHTML;
+        const frag = document.createDocumentFragment();
+        while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+        const lastChild = frag.lastChild;
+        range.insertNode(frag);
+        if (lastChild) {
+            const newRange = document.createRange();
+            newRange.setStartAfter(lastChild);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+        }
+    }
 }, true);

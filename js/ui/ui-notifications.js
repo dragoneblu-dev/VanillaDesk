@@ -3,6 +3,8 @@
  * Modulo UI per i popup (Toast) temporanei, il Sintetizzatore Audio (Allarmi)
  * e la finestra modale di avanzamento sincrono su disco (UI.ProgressModal).
  * Gestione dello Snooze resiliente per i promemoria da segnalibro tramite registro dati sicuro.
+ * FIX LAYOUT PROGRESS MODAL: Forzatura esplicita di layout a colonna flessibile per centrare
+ * stabilmente l'icona della clessidra all'interno del riquadro modale.
  */
 
 Object.assign(UI, {
@@ -99,14 +101,14 @@ Object.assign(UI, {
             const safeMsg = UI.escapeHTML(message);
 
             overlay.innerHTML = `
-                <div class="link-modal modal-animate" style="width: 460px; max-width: 90vw; padding: 25px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: center;">
-                    <div style="margin-bottom: 15px; display: inline-flex; color: var(--accent-color); transform: scale(1.4);">
+                <div class="link-modal modal-animate" style="width: 460px; max-width: 90vw; padding: 25px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box;">
+                    <div style="margin-bottom: 15px; display: flex; align-items: center; justify-content: center; width: 100%; color: var(--accent-color); transform: scale(1.4);">
                         ${typeof Icons !== 'undefined' ? Icons.hourglass : '⏳'}
                     </div>
-                    <h3 id="advProgressModalTitle" style="margin: 0 0 10px 0; font-size: 1.15rem; color: var(--text-primary);">
+                    <h3 id="advProgressModalTitle" style="margin: 0 0 10px 0; font-size: 1.15rem; color: var(--text-primary); text-align: center; width: 100%;">
                         ${safeTitle}
                     </h3>
-                    <div id="advProgressModalMsg" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.45;">
+                    <div id="advProgressModalMsg" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.45; text-align: center; width: 100%;">
                         ${safeMsg}
                     </div>
 
@@ -114,12 +116,12 @@ Object.assign(UI, {
                         <div id="advProgressModalBar" style="width: ${pct}%; height: 100%; background: var(--accent-color); transition: width 0.15s ease;"></div>
                     </div>
 
-                    <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">
+                    <div style="display: flex; justify-content: space-between; width: 100%; font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">
                         <span id="advProgressModalCounter">${current} / ${total}</span>
                         <span id="advProgressModalPct">${pct}%</span>
                     </div>
 
-                    <div style="margin-top: 15px; font-size: 0.75rem; color: var(--danger-color); font-weight: 600;">
+                    <div style="margin-top: 15px; font-size: 0.75rem; color: var(--danger-color); font-weight: 600; text-align: center; width: 100%;">
                         ⚠️ ${I18n.t('progress.do_not_close') || "Non chiudere la finestra del browser fino al termine dell'operazione."}
                     </div>
                 </div>
@@ -209,7 +211,7 @@ Object.assign(UI, {
                 }
 
                 if (!UI.Alarm.beepInterval) {
-                    UI.Alarm.beepInterval = setInterval(() => {
+                    setInterval(() => {
                         const osc = UI.Alarm.audioCtx.createOscillator();
                         const gain = UI.Alarm.audioCtx.createGain();
                         

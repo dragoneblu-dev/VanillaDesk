@@ -13,7 +13,7 @@
  * Parser YAML multilinea deterministico per tags e hashtag inline con salvataggio in SYS_PROPERTIES_DB.
  * Parser gerarchico ad albero per liste, sotto-liste e checklist con preservazione dell'indentazione reale.
  * Pulizia e separazione dei blocchi per prevenire l'infiltrazione di <br> all'interno di <ol> e <ul>.
- * Gestione hashtag inline stile Obsidian tramite classe semantica .tag-hash.
+ * Gestione hashtag nativa: gli hashtag rimangono testo naturale nel DOM ed evidenziati dal motore CSS Custom Highlight.
  * Normalizzazione preventiva dei contenuti HTML importati con Editor.minifyHTMLForStorage e inizializzazione expanded: true.
  * FIX INLINE FOOTNOTES: Ripristinata la generazione corretta del marcatore standard ^[...] per appunti inline in htmlToMarkdown.
  * FIX CHECKLIST NESTING: Wrapping flessibile (flex-wrap: wrap) e larghezza piena (width: 100%) sulle sotto-liste annidate sotto checklist.
@@ -1043,18 +1043,6 @@ const ExportManager = {
         return t || '<br>';
     },
 
-    // Trasforma gli hashtag del testo (#family/wife, #progetto) in span stilizzati .tag-hash
-    _formatInlineHashtags: (text) => {
-        if (!text) return '';
-        return text.replace(/(^|[\s(>])#([a-zA-ZÀ-ÿ][a-zA-ZÀ-ÿ0-9_\-\/]*)/g, (match, before, tagVal) => {
-            // Esclude colori esadecimali puri (3 o 6 caratteri 0-9 a-f)
-            if (/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(tagVal)) {
-                return match;
-            }
-            return `${before}<span class="tag-hash">#${tagVal}</span>`;
-        });
-    },
-
     parseMarkdownToHTML: (md) => {
         let html = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
@@ -1182,8 +1170,6 @@ const ExportManager = {
         html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
         html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
-        // Conversione semantica Opzione C degli hashtag nel corpo del testo
-        html = ExportManager._formatInlineHashtags(html);
 
         // 5. PARSER DI LISTE GERARCHICO AD ALBERO (Supporto annidamento reale sotto il LI genitore)
         const rawLines = html.split('\n');

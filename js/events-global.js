@@ -23,10 +23,15 @@
  * - Paragrafo normale (<p>): Ctrl+Alt+0
  * FEAT GUTTER/PADDING CLICK & DBLCLICK STANDARD: Click nel padding di editorScrollContent posiziona il cursore
  * all'inizio della riga corrispondente; doppio click seleziona l'intero paragrafo/blocco.
+ * FEAT CSS CUSTOM HIGHLIGHT HASHTAGS: Sottolineatura ed evidenziazione visiva nativa dei tag #parola senza mutare il DOM.
+ * FEAT ESC CLEAR SEARCH: Tasto ESC all'interno del campo cerca/tag svuota automaticamente il campo e azzera i filtri.
+ * FEAT CTRL+CLICK DIRECT NAVIGATION: Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
+ * FIX RESILIENT TAG SEARCH: Risoluzione robusta dei nodi di testo per hashtag gerarchici (con '/') e apertura sincronizzata dell'autocompletamento.
  */
 
 const EventsGlobal = {
     _lastMiddleClickTime: 0,
+    _hashtagHighlightTimer: null,
 
     _triggerSearchUpdate: () => {
         const searchInput = document.getElementById('searchInput');
@@ -77,8 +82,8 @@ const EventsGlobal = {
                 Editor.cleanHighlightsBeforeSave();
             }
             if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
-              UI.highlightTreeNode(AppState.currentNoteId);
-          }
+                UI.highlightTreeNode(AppState.currentNoteId);
+            }
         }
         
         setTimeout(() => {
@@ -102,7 +107,7 @@ const EventsGlobal = {
         }, 150);
     },
 
-    // Risoluzione ed esecuzione diretta dei link (usata da click e auxclick centrale)
+    // Risoluzione ed esecuzione diretta dei link (usata da click, auxclick e Ctrl+Click)
     openLinkDirectly: (link) => {
         if (!link) return;
 
@@ -169,7 +174,182 @@ const EventsGlobal = {
         }
     },
 
+    // Invia direttamente un tag ripulito alla ricerca della sidebar e apre l'autocompletamento
+    executeTagSearch: (cleanTag) => {
+        if (!cleanTag) return;
+
+        // 1. Espandi la sidebar se collassata
+        const sb = document.getElementById('sidebar');
+        const sbBtn = document.getElementById('sidebarToggleBtn');
+        if (sb && sb.classList.contains('collapsed')) {
+            sb.classList.remove('collapsed');
+            if (sbBtn) sbBtn.classList.add('active');
+        }
+
+        // 2. Imposta la vista albero su Note
+        if (typeof UI !== 'undefined' && typeof UI.switchToNotes === 'function') {
+            UI.switchToNotes();
+        }
+
+        // 3. Inserisci nel campo di ricerca solo il testo senza '#' ed esegui la ricerca
+        const searchInputEl = document.getElementById('searchInput');
+        if (searchInputEl) {
+            searchInputEl.value = cleanTag;
+            EventsGlobal._executeSearchLogic(searchInputEl);
+            searchInputEl.focus();
+
+            // Mostra l'elenco dei suggerimenti delle proprietà ritardato per non essere chiuso dall'evento click
+            setTimeout(() => {
+                if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                    SidebarManager.SearchAutocomplete.show(searchInputEl, cleanTag);
+                }
+            }, 60);
+        }
+
+        if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+            UI.showToast(`Ricerca tag: "${cleanTag}"`, "info");
+        }
+    },
+
+    // Identifica se le coordinate del mouse cadono su un hashtag all'interno del testo
+    _getClickedHashtagAtPoint: (clientX, clientY) => {
+        let textNode = null;
+        let offset = 0;
+
+        if (document.caretRangeFromPoint) {
+            const range = document.caretRangeFromPoint(clientX, clientY);
+            if (range) {
+                textNode = range.startContainer;
+                offset = range.startOffset;
+            }
+        } else if (document.caretPositionFromPoint) {
+            const pos = document.caretPositionFromPoint(clientX, clientY);
+            if (pos) {
+                textNode = pos.offsetNode;
+                offset = pos.offset;
+            }
+        }
+
+        // Risoluzione difensiva se le coordinate cadono sul contenitore elemento anziché direttamente sul nodo di testo
+        if (textNode && textNode.nodeType === Node.ELEMENT_NODE) {
+            const child = textNode.childNodes[offset] || textNode.childNodes[offset - 1] || textNode.firstChild;
+            if (child && child.nodeType === Node.TEXT_NODE) {
+                textNode = child;
+                offset = 0;
+            }
+        }
+
+        if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return null;
+
+        // Escludi blocchi di codice dove '#' è sintassi di commento o direttiva
+        if (textNode.parentNode && textNode.parentNode.closest && textNode.parentNode.closest('pre.code-content')) {
+            return null;
+        }
+
+        const text = textNode.nodeValue || '';
+        if (!text.includes('#')) return null;
+
+        // Regex per intercettare sia tag semplici sia tag gerarchici (es. #family/mom)
+        const tagRegex = /(?:^|[^\wÀ-ÿ])(#([^\s.,;:!?'"()\[\]{}<>]+))/g;
+        let match;
+        while ((match = tagRegex.exec(text)) !== null) {
+            const fullMatch = match[1]; 
+            const tagName = match[2].replace(/^#+/, ''); // Depura da eventuali '#' multipli
+
+            const matchStart = match.index + (match[0].length - fullMatch.length);
+            const matchEnd = matchStart + fullMatch.length;
+
+            if (offset >= matchStart && offset <= matchEnd) {
+                // Esclude codici colore esadecimali puri a 3 o 6 caratteri (es. #fff, #123456)
+                if (/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(tagName)) continue;
+                return { fullTag: fullMatch, cleanTag: tagName };
+            }
+        }
+
+        return null;
+    },
+
+    // =========================================================================
+    // CSS CUSTOM HIGHLIGHT API: Sottolineatura ed evidenziazione tag senza mutare il DOM
+    // =========================================================================
+    updateHashtagHighlights: () => {
+        if (typeof CSS === 'undefined' || !CSS.highlights) return;
+
+        const editorEl = document.getElementById('noteContent');
+        if (!editorEl || !AppState.currentNoteId) {
+            CSS.highlights.delete('hashtag-highlight');
+            return;
+        }
+
+        const ranges = [];
+        const walker = document.createTreeWalker(editorEl, NodeFilter.SHOW_TEXT, null, false);
+        let node;
+
+        while ((node = walker.nextNode())) {
+            const parent = node.parentNode;
+            if (!parent) continue;
+
+            // Esclude blocchi di codice e widget complessi dove '#' ha altro significato
+            if (parent.closest && parent.closest('pre.code-content, .widget-type-code, [data-widget-type="code"]')) {
+                continue;
+            }
+
+            const val = node.nodeValue;
+            if (!val || !val.includes('#')) continue;
+
+            const tagRegex = /(?:^|[^\wÀ-ÿ])(#([^\s.,;:!?'"()\[\]{}<>]+))/g;
+            let match;
+
+            while ((match = tagRegex.exec(val)) !== null) {
+                const fullTag = match[1];
+                const cleanName = match[2].replace(/^#+/, '');
+
+                // Salta colori esadecimali puri
+                if (/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(cleanName)) continue;
+
+                const startOffset = match.index + (match[0].length - fullTag.length);
+                const endOffset = startOffset + fullTag.length;
+
+                try {
+                    const r = document.createRange();
+                    r.setStart(node, startOffset);
+                    r.setEnd(node, endOffset);
+                    ranges.push(r);
+                } catch (_) {}
+            }
+        }
+
+        if (ranges.length > 0) {
+            const hl = new Highlight(...ranges);
+            CSS.highlights.set('hashtag-highlight', hl);
+        } else {
+            CSS.highlights.delete('hashtag-highlight');
+        }
+    },
+
+    scheduleHashtagHighlights: () => {
+        clearTimeout(EventsGlobal._hashtagHighlightTimer);
+        EventsGlobal._hashtagHighlightTimer = setTimeout(() => {
+            EventsGlobal.updateHashtagHighlights();
+        }, 120);
+    },
+
     init: () => {
+        // Iniezione dello stile nativo CSS Custom Highlight per gli hashtag (permanente e visibile a colpo d'occhio)
+        if (!document.getElementById('adv-hashtag-highlight-style')) {
+            const st = document.createElement('style');
+            st.id = 'adv-hashtag-highlight-style';
+            st.innerHTML = `
+                ::highlight(hashtag-highlight) {
+                    color: var(--accent-color) !important;
+                    text-decoration: underline dotted var(--accent-color) !important;
+                    text-underline-offset: 3px !important;
+                    background-color: color-mix(in srgb, var(--accent-color) 10%, transparent) !important;
+                }
+            `;
+            document.head.appendChild(st);
+        }
+
         if (!document.getElementById('adv-global-row-selector')) {
             const selector = document.createElement('div');
             selector.id = 'adv-global-row-selector';
@@ -435,7 +615,31 @@ const EventsGlobal = {
                 }
             });
             
+            // Gestione tastiera sul campo cerca: Invio naviga, ESC svuota e resetta i filtri
             searchInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                        SidebarManager.SearchAutocomplete.hide();
+                    }
+
+                    if (searchInput.value !== '' || (AppState.activePropertyFilters && AppState.activePropertyFilters.length > 0)) {
+                        searchInput.value = '';
+                        AppState.activePropertyFilters = [];
+                        AppState.searchFilter = "";
+
+                        if (typeof Editor !== 'undefined' && typeof Editor.cleanHighlightsBeforeSave === 'function') {
+                            Editor.cleanHighlightsBeforeSave();
+                        }
+                        EventsGlobal._triggerSearchUpdate();
+                    } else {
+                        searchInput.blur();
+                    }
+                    return;
+                }
+
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     if (e.shiftKey) AppState.findPrevious();
@@ -476,6 +680,17 @@ const EventsGlobal = {
             Editor.initMultiCursor(editorEl);
             Editor.initCopyInterceptor(); 
         }
+
+        // =========================================================================
+        // MUTATION OBSERVER REATTIVO: Sincronizzazione Highlights Tag all'apertura nota e modifiche
+        // =========================================================================
+        const hashtagObserver = new MutationObserver(() => {
+            EventsGlobal.scheduleHashtagHighlights();
+        });
+        hashtagObserver.observe(editorEl, { childList: true, subtree: true, characterData: true });
+
+        // Calcolo iniziale immediato all'avvio
+        EventsGlobal.scheduleHashtagHighlights();
 
         document.addEventListener('keydown', (e) => {
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
@@ -696,12 +911,14 @@ const EventsGlobal = {
             }
         });
 
+        // DOPPIO CLICK: riservato alla selezione nativa delle parole nell'editor
+        // e all'auto-fit delle colonne per i resizer delle tabelle
         document.addEventListener('dblclick', (e) => {
-            if (!AppState.isEditMode) return;
-
             let target = e.target;
             if (target && target.nodeType === 3) target = target.parentNode;
             if (!target || !target.closest) return;
+
+            if (!AppState.isEditMode) return;
 
             const resizer = target.closest('.adv-col-resizer');
             if (resizer) {
@@ -831,7 +1048,6 @@ const EventsGlobal = {
                 e.dataTransfer.dropEffect = 'move';
 
                 // DRAG ASSIST: Scroll Engine a 60FPS
-                // Se mi avvicino ai margini dell'editor, scorro automaticamente
                 const scrollContainer = document.getElementById('editorScrollContent');
                 if (scrollContainer) {
                     const rect = scrollContainer.getBoundingClientRect();
@@ -896,7 +1112,6 @@ const EventsGlobal = {
                     protectedParent = null; 
                 }
 
-                // RIPRISTINO ESATTO DEL BLOCCO ORIGINALE TESTATO
                 if (protectedParent && protectedParent !== sourceBlock) {
                     if (AppState.draggedBlockType === 'image') {
                         hideDropIndicator();
@@ -958,7 +1173,6 @@ const EventsGlobal = {
                 const rect = editorEl.getBoundingClientRect();
                 if (e.clientX <= rect.left || e.clientX >= rect.right || e.clientY <= rect.top || e.clientY >= rect.bottom) {
                     hideDropIndicator();
-                    // Interrompiamo lo scroll forzato se il mouse esce fisicamente dall'editor
                     if (dragScrollTimer) {
                         cancelAnimationFrame(dragScrollTimer);
                         dragScrollTimer = null;
@@ -981,7 +1195,6 @@ const EventsGlobal = {
             const tc = document.getElementById('treeContainer');
             if (tc) tc.classList.remove('drag-over-root'); 
             
-            // DRAG ASSIST: Rimuove lo scudo e ferma lo scorrimento
             stopDragAssist();
         });
 
@@ -1003,8 +1216,6 @@ const EventsGlobal = {
                 e.stopPropagation();
 
                 const blockId = AppState.draggedBlockId;
-
-                // DRAG ASSIST: Arresto Immediato del motore prima dei calcoli di rilascio
                 stopDragAssist();
 
                 let target = e.target;
@@ -1117,12 +1328,12 @@ const EventsGlobal = {
                 setTimeout(() => {
                     if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll();
                     if (typeof Store !== 'undefined') Store.triggerAutoSave();
+                    EventsGlobal.scheduleHashtagHighlights();
                 }, 10);
 
                 return;
             }
 
-            // Arresto Immediato del motore anche per rilasci a vuoto o di testo
             stopDragAssist();
 
             let targetNode = e.target;
@@ -1156,13 +1367,13 @@ const EventsGlobal = {
                 return;
             }
 
-            // Consolidamento stato post-spostamento testo per abilitare Undo (Ctrl+Z)
             setTimeout(() => {
                 if (AppState.isEditMode && typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
                     Editor.saveSnapshot(true);
                 }
                 if (typeof WidgetManager !== 'undefined') WidgetManager.mountAll();
                 if (typeof Store !== 'undefined') Store.triggerAutoSave();
+                EventsGlobal.scheduleHashtagHighlights();
             }, 10);
         });
 
@@ -1180,7 +1391,6 @@ const EventsGlobal = {
                     e.preventDefault();
                     e.stopPropagation();
 
-                    // Prevenzione doppi scatti su browser che emettono eventi multipli
                     if (Date.now() - EventsGlobal._lastMiddleClickTime < 250) return;
                     EventsGlobal._lastMiddleClickTime = Date.now();
 
@@ -1207,7 +1417,6 @@ const EventsGlobal = {
                     scrollContainer.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
                 }
             } else if (timelineScroll) {
-                // Sulla Timeline, se l'utente usa la rotella del mouse sull'intestazione o nell'area libera
                 if (target.closest('.adv-timeline-header-sticky') || !target.closest('.adv-cal-week-container')) {
                     if (timelineScroll.scrollWidth > timelineScroll.clientWidth) {
                         e.preventDefault();
@@ -1215,7 +1424,6 @@ const EventsGlobal = {
                     }
                 }
             } else if (boardContainer) {
-                // Nella bacheca Kanban, se l'utente usa la rotella sull'intestazione o tra le colonne
                 const kanbanCol = target.closest('.adv-kanban-col');
                 if (!kanbanCol || kanbanCol.scrollHeight <= kanbanCol.clientHeight) {
                     if (boardContainer.scrollWidth > boardContainer.clientWidth) {
@@ -1229,14 +1437,12 @@ const EventsGlobal = {
         editorEl.addEventListener('paste', (e) => {
             if (AppState.isEditMode && typeof Editor !== 'undefined' && Editor.handlePaste) {
                 Editor.handlePaste(e);
+                EventsGlobal.scheduleHashtagHighlights();
             }
         });
 
         editorEl.addEventListener('input', (e) => {
             if (!AppState.isSwitchingNote) {
-                // Se l'evento input proviene da un widget a persistenza autonoma (Database, Diari, Codice, Bottoni),
-                // non aggiornare il testo della nota principale.
-                // Le tabelle semplici (.simple-table-wrapper) e gli snippet invece SONO parte del testo della nota!
                 const target = e.target;
                 const isInsideAutonomousWidget = target && target.closest && (
                     target.closest('.adv-table-wrapper, .adv-journal-wrapper, .code-wrapper, .adv-action-button-wrapper, .widget-type-database, .widget-type-pivot, .widget-type-journal, .widget-type-buttonbar')
@@ -1256,6 +1462,8 @@ const EventsGlobal = {
                 if (typeof UI !== 'undefined' && UI.handleEditorInput) {
                     UI.handleEditorInput();
                 }
+
+                EventsGlobal.scheduleHashtagHighlights();
             }
         });
 
@@ -1300,6 +1508,31 @@ const EventsGlobal = {
             if (target.nodeType === 3) target = target.parentNode;
             if (!target || !target.closest) return;
 
+            const isCtrlOrCmd = e.ctrlKey || e.metaKey;
+
+            // =========================================================================
+            // NAVIGAZIONE RAPIDA DA CLICK SU HASHTAG
+            // - In Read Mode: singolo click sinistro lancia direttamente la ricerca
+            // - In Edit Mode: Ctrl + Click sinistro lancia la ricerca senza bloccare l'editing
+            // =========================================================================
+            const editorContainer = target.closest('#noteContent');
+            if (editorContainer) {
+                const shouldTriggerTagSearch = (!AppState.isEditMode) || (AppState.isEditMode && isCtrlOrCmd);
+                if (shouldTriggerTagSearch) {
+                    const tagInfo = EventsGlobal._getClickedHashtagAtPoint(e.clientX, e.clientY);
+                    if (tagInfo && tagInfo.cleanTag) {
+                        e.preventDefault();
+                        e.stopPropagation();
+
+                        const sel = window.getSelection();
+                        if (sel) sel.removeAllRanges();
+
+                        EventsGlobal.executeTagSearch(tagInfo.cleanTag);
+                        return;
+                    }
+                }
+            }
+
             const isTd = target.closest('td');
             if (isTd && isTd.closest('.adv-table') && AppState.isEditMode) {
                 if (!target.closest('.is-editing')) {
@@ -1308,9 +1541,7 @@ const EventsGlobal = {
                 }
             }
 
-            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI):
-            // Leggiamo textContent anziché innerText per evitare che le proprietà CSS
-            // di mascheramento (-webkit-text-security) copino i pallini al posto della password reale.
+            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI)
             if (target.closest('.snippet-copy-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1389,7 +1620,7 @@ const EventsGlobal = {
                     return; 
                 }
 
-                // Supporto per click centrale nel caso venga emesso sul listener click (legacy/fallback)
+                // Supporto per click centrale nel caso venga emesso sul listener click
                 if (e.button === 1 || e.which === 2) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1399,14 +1630,23 @@ const EventsGlobal = {
                     return;
                 }
 
-                if (AppState.isEditMode && !e.ctrlKey && !e.metaKey && link.closest('#noteContent')) {
-                    // CITAZIONI: Se è dentro una citazione, clicca direttamente il link bypassando il menu fluttuante
+                if (AppState.isEditMode && link.closest('#noteContent')) {
+                    // In Edit Mode: se l'utente tiene premuto Ctrl (o Cmd), naviga direttamente!
+                    if (isCtrlOrCmd) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        EventsGlobal.openLinkDirectly(link);
+                        return;
+                    }
+
+                    // Se è dentro una citazione, clicca direttamente il link bypassando il menu fluttuante
                     if (link.closest('.block-citation')) {
                         e.preventDefault();
                         EventsGlobal.openLinkDirectly(link);
                         return;
                     }
 
+                    // Altrimenti in Edit Mode mostra il popover per modifiche/apertura
                     e.preventDefault();
                     e.stopPropagation(); 
                     
@@ -1414,6 +1654,7 @@ const EventsGlobal = {
                     if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
                     return;
                 } else {
+                    // In Read Mode il click normale apre sempre direttamente
                     if (link.classList.contains('internal-link')) {
                         e.preventDefault();
                         const noteId = link.getAttribute('data-note-id');

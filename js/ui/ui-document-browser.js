@@ -24,7 +24,7 @@ UI.DocumentBrowser = {
 
         const html = `
             <input type="text" id="docBrowserSearch" class="modern-input" placeholder="Cerca nota, capitolo, tabella, codice..." autocomplete="off" style="margin-bottom:15px; width:100%;">
-            <div id="docBrowserList" class="adv-scroll-container" style="flex:1; overflow-y:auto; overflow-x:hidden; border: 1px solid var(--border-color); background: var(--sidebar-bg); border-radius: 4px; padding: 5px; min-height: 200px; max-height: 60vh;"></div>
+            <div id="docBrowserList" class="adv-scroll-container" style="flex:1; overflow-y:auto; overflow-x:hidden; border: 1px solid var(--border-color); background: var(--sidebar-bg); border-radius: 4px; padding: 5px; min-height: 180px;"></div>
         `;
 
         UI.openDrawer(title, html, null);

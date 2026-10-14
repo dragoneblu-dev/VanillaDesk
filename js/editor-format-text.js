@@ -8,6 +8,10 @@
  * Preservazione esplicita del tag HR nella lista dei tag consentiti dalla gomma formattazioni.
  * toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
  * Aggiornamento contestuale dinamico dell'icona, del tooltip e dello stato active-format su btnListMenu.
+ * REFACTOR CENTRALIZZAZIONE: Esportazione di Editor.cleanDOMTree per condividere la logica di sanificazione
+ * con l'evento di Paste, eliminando codice duplicato ed Over Engineering.
+ * FIX TABELLE & STILI ALIENI: Sanificazione rigorosa del contenuto delle celle delle tabelle semplici,
+ * con srotolamento di tutti gli span parassiti, rimozione di classi non native e supporto alle celle selezionate.
  */
 
 Object.assign(Editor, {
@@ -425,25 +429,42 @@ Object.assign(Editor, {
         Editor.updateToolbarFormatting();
     },
 
-    clearFormatting: () => {
-        Editor.saveSnapshot();
-        Editor.restoreSelection();
+    /**
+     * MOTORE CENTRALE DI SANIFICAZIONE PROFONDA (GOMMA FORMATTAZIONI)
+     * Funzione riutilizzata sia da clearFormatting sia da handlePaste per garantire coerenza assoluta,
+     * rimozione totale di stili alieni (-webkit, margin, padding, user-select, font, colori inline)
+     * e classi parassite (MsoNormal, text-*, bg-*, ecc.).
+     * RISOLUZIONE TABELLE: I controlli interni protetti valgono solo per i componenti RDBMS/Macro;
+     * il testo contenuto nelle celle delle tabelle semplici viene sanificato rigorosamente.
+     */
+    cleanDOMTree: (container) => {
+        if (!container) return;
 
-        const selection = window.getSelection();
-        if (!selection.rangeCount) return;
+        // Distinzione tra widget con infrastruttura interna complessa e blocchi a testo libero
+        const isProtectedComplexWidget = (node) => {
+            if (!node || !node.closest) return false;
+            const shell = node.closest('.adv-widget-shell');
+            if (!shell) return false;
+            const type = shell.getAttribute('data-widget-type');
+            return ['database', 'pivot', 'journal', 'code', 'buttonbar', 'audio', 'video', 'citation'].includes(type);
+        };
 
-        let range = selection.getRangeAt(0);
-
-        // Controlla se il nodo fa parte di un'infrastruttura Widget
         const isSafeToTouch = (node) => {
             if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
             if (node.id === 'noteContent') return false;
 
-            if (WidgetManager.isInsideEditableWidgetArea(node)) return true; 
+            // Se il nodo si trova all'interno di un'area editabile riconosciuta (comprese le celle delle tabelle semplici)
+            if (typeof WidgetManager !== 'undefined' && WidgetManager.isInsideEditableWidgetArea(node)) return true; 
 
-            if (WidgetManager.isProtectedBlock(node) || 
-                WidgetManager.isProtectedInline(node) || 
-                node.closest('.internal-link, .file-link')) {
+            // Se il nodo si trova all'interno di una tabella semplice (.simple-table-wrapper o tag table)
+            if (node.closest && (node.closest('.simple-table-wrapper') || (node.closest('table') && !isProtectedComplexWidget(node)))) {
+                return true;
+            }
+
+            if (isProtectedComplexWidget(node)) {
+                return false;
+            }
+            if (node.closest && node.closest('.internal-link, .file-link')) {
                 return false;
             }
             if (node.classList && (
@@ -461,11 +482,18 @@ Object.assign(Editor, {
 
         // NOTA: 'HR' deve essere esplicitamente incluso in allowedTags affinché le linee di separazione non vengano cancellate dalla gomma
         const allowedTags = ['B', 'I', 'U', 'S', 'A', 'P', 'SPAN', 'UL', 'OL', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'CODE', 'TABLE', 'THEAD', 'TBODY', 'TR', 'TH', 'TD', 'BR', 'HR', 'IMG', 'INPUT', 'SVG', 'PATH', 'POLYLINE', 'LINE', 'RECT', 'CIRCLE'];
-        const allowedPrefixes = ['hl-', 'tx-', 'bg-', 'text-', 'ff-', 'fs-'];
+        
+        // Rigido allineamento con il Design System di VanillaDesk: ammesse solo le classi ufficiali dell'app.
+        // I prefissi validi sono rigorosamente vincolati ai token colore e tipografia di VanillaDesk.
+        const allowedPrefixes = ['hl-c', 'tx-c', 'ff-', 'fs-'];
         
         const allowedClasses = [
             // Link, Testo e Ricerca
-            'internal-link', 'file-link', 'highlighted-text', 'search-highlight', 'active-highlight',
+            'internal-link', 'file-link', 'highlighted-text', 'search-highlight', 'active-highlight', 'tag-hash',
+            // Allineamenti di testo VanillaDesk (definiti in tables.css)
+            'text-left', 'text-center', 'text-right',
+            // Utility colore VanillaDesk (definite in colors.css)
+            'bg-none', 'tx-auto',
             // Struttura Shell Base
             'adv-widget-shell', 'adv-inline-shell', 'widget-header', 'adv-table-header', 'widget-drag-handle', 'adv-drag-handle', 'widget-options-btn', 'widget-icon', 'widget-title', 'adv-table-title', 'widget-tools', 'adv-tools', 'widget-body', 'widget-editable-area',
             // Tipi di Widget
@@ -473,7 +501,7 @@ Object.assign(Editor, {
             // Database
             'adv-table-wrapper', 'table-striped', 'adv-col-resizer',
             // Tabelle Semplici
-            'simple-table-wrapper', 'table-row-trigger', 'table-col-trigger', 'table-move-trigger',
+            'simple-table-wrapper', 'table-row-trigger', 'table-col-trigger', 'table-move-trigger', 'adv-cell-selected',
             // Appunti Nascosti e Segnalibri
             'inline-note-wrapper', 'inline-note-marker', 'inline-note-data', 'adv-bookmark-marker', 'bookmark-icon', 'bookmark-comment-data',
             // Checklist
@@ -492,79 +520,54 @@ Object.assign(Editor, {
         // Whitelist per attributi Data: include data-link-note per salvaguardare le descrizioni opzionali dei link
         const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-link-note', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
 
-        let container = range.commonAncestorContainer;
-        if (container.nodeType === 3) container = container.parentNode;
-
-        let macroBlock = container.closest('table, ul, ol, blockquote, .journal-time-node');
-        if (macroBlock && !WidgetManager.isProtectedBlock(macroBlock)) {
-            if (macroBlock.classList.contains('journal-time-node')) container = macroBlock.querySelector('.journal-content');
-            else container = macroBlock;
-        } else {
-            let curr = container;
-            while (curr && curr.id !== 'noteContent' && curr.tagName) {
-                if (!allowedTags.includes(curr.tagName.toUpperCase())) container = curr;
-                curr = curr.parentNode;
-            }
-        }
-
+        const doc = container.ownerDocument || document;
         const elementsToClean = [];
-        const forceCleanAll = container.id === 'noteContent' || container.tagName === 'TABLE';
 
-        // 1. Identifica i nodi intersecati dalla selezione
-        if (isSafeToTouch(container) || container.id === 'noteContent') {
-            const isIntersecting = (node) => {
-                if (forceCleanAll) return true;
-                const nodeRange = document.createRange();
-                try {
-                    nodeRange.selectNode(node);
-                    return range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
-                           range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0;
-                } catch(e) { return false; }
-            };
-            const walker = document.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, null, false);
-            
-            if (container.id !== 'noteContent' && isIntersecting(container)) {
-                elementsToClean.push(container);
-            }
-            
-            let currentNode;
-            while ((currentNode = walker.nextNode())) {
-                if (currentNode.id === 'noteContent') continue; 
-                if (isIntersecting(currentNode)) {
-                    elementsToClean.push(currentNode);
-                }
-            }
+        if (container.id !== 'noteContent' && container.tagName !== 'BODY') {
+            elementsToClean.push(container);
         }
 
-        selection.removeAllRanges();
+        const walker = doc.createTreeWalker(container, NodeFilter.SHOW_ELEMENT, null, false);
+        let currentNode;
+        while ((currentNode = walker.nextNode())) {
+            if (currentNode.id === 'noteContent') continue;
+            elementsToClean.push(currentNode);
+        }
 
-        // 2. Processa ed esegue la sanificazione "Bottom-Up"
+        // Processa ed esegue la sanificazione "Bottom-Up"
         const processElement = (el) => {
-            if (!document.body.contains(el)) return null; 
-            
-            const isInternalWidget = el.closest('.adv-widget-shell, .simple-table-wrapper, .adv-inline-shell');
+            if (!el || !el.parentNode) return null;
 
+            const isProtectedWidget = isProtectedComplexWidget(el);
             if (!isSafeToTouch(el)) return el;
 
             let currentEl = el;
             let tag = currentEl.tagName.toUpperCase();
 
-            // Srotola i contenitori creati da copia/incolla
-            if (!isInternalWidget && (tag === 'DIV' || tag === 'HEADER' || tag === 'FOOTER' || tag === 'ASIDE')) {
-                const p = document.createElement('p');
-                if (currentEl.className) p.className = currentEl.className;
-                if (currentEl.style.cssText) p.style.cssText = currentEl.style.cssText;
-                
-                while (currentEl.firstChild) p.appendChild(currentEl.firstChild);
-                currentEl.parentNode.replaceChild(p, currentEl);
-                
-                if (container === currentEl) container = p; 
-                currentEl = p;
-                tag = 'P';
+            // Srotola i contenitori DIV, HEADER, FOOTER, ASIDE, SECTION, ARTICLE creati da copia/incolla
+            if (!isProtectedWidget && ['DIV', 'HEADER', 'FOOTER', 'ASIDE', 'SECTION', 'ARTICLE'].includes(tag)) {
+                // Esclude le shell dei widget e le colonne registrate
+                if (!currentEl.classList.contains('adv-widget-shell') && !currentEl.classList.contains('col-box') && !currentEl.classList.contains('adv-columns-independent') && !currentEl.classList.contains('adv-columns-container-wrap')) {
+                    const hasBlockChildren = currentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, table, ul, ol, blockquote, .adv-widget-shell');
+                    if (hasBlockChildren) {
+                        // Srotola il contenitore inserendo direttamente i figli al suo posto
+                        const parent = currentEl.parentNode;
+                        while (currentEl.firstChild) parent.insertBefore(currentEl.firstChild, currentEl);
+                        currentEl.remove();
+                        return null;
+                    } else {
+                        // Singolo blocco di testo: convertilo in <p> senza copiare stili parassiti di Word
+                        const p = doc.createElement('p');
+                        while (currentEl.firstChild) p.appendChild(currentEl.firstChild);
+                        currentEl.parentNode.replaceChild(p, currentEl);
+                        currentEl = p;
+                        tag = 'P';
+                    }
+                }
             }
 
             if (!allowedTags.includes(tag)) {
-                const frag = document.createDocumentFragment();
+                const frag = doc.createDocumentFragment();
                 while (currentEl.firstChild) frag.appendChild(currentEl.firstChild);
                 currentEl.parentNode.replaceChild(frag, currentEl);
                 return null;
@@ -585,7 +588,7 @@ Object.assign(Editor, {
                 // Preserva i modificatori di fusione celle per th e td
                 if ((attr.name === 'colspan' || attr.name === 'rowspan') && (tag === 'TD' || tag === 'TH')) return;
                 if (attr.name === 'contenteditable') return;
-                if (attr.name === 'id' && isInternalWidget) return;
+                if (attr.name === 'id' && (isProtectedWidget || currentEl.classList.contains('simple-table-wrapper') || currentEl.closest('.simple-table-wrapper'))) return;
 
                 if (attr.name === 'class') {
                     const classes = attr.value.split(/\s+/).filter(cls => allowedClasses.includes(cls) || allowedPrefixes.some(p => cls.startsWith(p)));
@@ -594,9 +597,16 @@ Object.assign(Editor, {
                 } else if (attr.name === 'style') {
                     if ((currentEl.classList.contains('inline-note-data') || currentEl.classList.contains('bookmark-comment-data')) && attr.value.includes('none')) {
                         currentEl.setAttribute('style', 'display: none;'); 
-                    } else if (isInternalWidget) {
+                    } else if ((tag === 'TD' || tag === 'TH') && /text-align\s*:\s*(center|right|left)/i.test(attr.value)) {
+                        const m = attr.value.match(/text-align\s*:\s*(center|right|left)/i);
+                        currentEl.setAttribute('style', `text-align: ${m[1].toLowerCase()};`);
+                    } else if (tag === 'TABLE' && currentEl.classList.contains('table-striped')) {
+                        currentEl.setAttribute('style', 'width:100%; table-layout:auto;');
+                    } else if (isProtectedWidget) {
                         return;
                     } else {
+                        // RIMOZIONE CATEGORICA DI TUTTI GLI STILI INLINE (color, background, font-family, font-size, -webkit, margin, padding, user-select)
+                        // Sia fuori che dentro le celle delle tabelle semplici
                         currentEl.removeAttribute('style'); 
                     }
                 } else if (attr.name.startsWith('data-')) {
@@ -607,8 +617,11 @@ Object.assign(Editor, {
                 }
             });
 
-            if ((tag === 'FONT' || tag === 'SPAN') && !isInternalWidget) {
-                if (currentEl.attributes.length === 0) {
+            // Srotola FONT e SPAN non protetti se rimasti privi di classi autorizzate
+            if ((tag === 'FONT' || tag === 'SPAN') && !isProtectedWidget) {
+                const hasValidClass = currentEl.getAttribute('class') && currentEl.getAttribute('class').trim() !== '';
+                const hasValidData = Array.from(currentEl.attributes).some(a => allowedDataAttrs.includes(a.name));
+                if (!hasValidClass && !hasValidData) {
                     const parent = currentEl.parentNode;
                     while (currentEl.firstChild) parent.insertBefore(currentEl.firstChild, currentEl);
                     parent.removeChild(currentEl);
@@ -620,6 +633,90 @@ Object.assign(Editor, {
         };
 
         elementsToClean.reverse().forEach(el => processElement(el));
+
+        // Pulizia ricorsiva degli SPAN / FONT rimasti vuoti o privi di classi autorizzate (anche nelle celle di tabella)
+        let changed = true;
+        while (changed) {
+            changed = false;
+            container.querySelectorAll('span, font').forEach(sp => {
+                if (isSafeToTouch(sp) && !isProtectedComplexWidget(sp)) {
+                    const hasValidClass = sp.getAttribute('class') && sp.getAttribute('class').trim() !== '';
+                    const hasValidData = Array.from(sp.attributes).some(a => allowedDataAttrs.includes(a.name));
+                    if (!hasValidClass && !hasValidData) {
+                        const parent = sp.parentNode;
+                        if (parent) {
+                            while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+                            sp.remove();
+                            changed = true;
+                        }
+                    }
+                }
+            });
+        }
+    },
+
+    clearFormatting: () => {
+        Editor.saveSnapshot();
+        Editor.restoreSelection();
+
+        // 1. Controllo selezione multipla celle di TableManager
+        if (typeof TableManager !== 'undefined' && TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0) {
+            TableManager.Selection.selectedCells.forEach(cell => {
+                Editor.cleanDOMTree(cell);
+                // Pulizia degli attributi inline style superflui da td/th preservando solo text-align valido
+                const rawStyle = (cell.getAttribute('style') || '').toLowerCase();
+                const alignMatch = rawStyle.match(/text-align\s*:\s*(center|right|left)/i);
+                if (alignMatch) {
+                    cell.setAttribute('style', `text-align: ${alignMatch[1].toLowerCase()};`);
+                } else {
+                    cell.removeAttribute('style');
+                }
+            });
+            Editor.healWidgetWrappers();
+            const rootEditor = document.getElementById('noteContent');
+            if (rootEditor && typeof Editor.ensureInlineWidgetBuffers === 'function') {
+                Editor.ensureInlineWidgetBuffers(rootEditor);
+            }
+            Store.triggerAutoSave();
+            Editor.updateToolbarFormatting();
+            return;
+        }
+
+        const selection = window.getSelection();
+        if (!selection.rangeCount) return;
+
+        let range = selection.getRangeAt(0);
+        let container = range.commonAncestorContainer;
+        if (container.nodeType === 3) container = container.parentNode;
+
+        // Se l'utente si trova dentro una cella di tabella semplice o ha selezionato una tabella
+        const tableCell = container.closest('td, th');
+        const simpleTable = container.closest('.simple-table-wrapper') || (container.closest('table') && !container.closest('.adv-widget-shell:not(.simple-table-wrapper)'));
+
+        if (tableCell) {
+            // Se la selezione è all'interno di una singola cella, sanifichiamo l'intera cella
+            container = tableCell;
+        } else if (simpleTable) {
+            // Se la selezione abbraccia la tabella semplice, sanifichiamo l'intera tabella
+            container = simpleTable.querySelector('table') || simpleTable;
+        } else {
+            let macroBlock = container.closest('ul, ol, blockquote, .journal-time-node');
+            if (macroBlock && (!WidgetManager || !WidgetManager.isProtectedBlock(macroBlock))) {
+                if (macroBlock.classList.contains('journal-time-node')) container = macroBlock.querySelector('.journal-content');
+                else container = macroBlock;
+            } else {
+                let curr = container;
+                while (curr && curr.id !== 'noteContent' && curr.tagName && !['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'].includes(curr.tagName)) {
+                    curr = curr.parentNode;
+                }
+                if (curr && curr.id !== 'noteContent') {
+                    container = curr;
+                }
+            }
+        }
+
+        // Delega la sanificazione profonda al motore unificato condiviso
+        Editor.cleanDOMTree(container);
 
         try {
             const newRange = document.createRange();
