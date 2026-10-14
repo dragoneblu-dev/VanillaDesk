@@ -1,7 +1,9 @@
 /**
  * sidebar-manager.js
  * Modulo dedicato alla gestione visiva e al ridimensionamento dell'albero di navigazione.
- * Integra il motore SearchAutocomplete per filtrare le note tramite Tag di Pagina.
+ * Integra il motore SearchAutocomplete per filtrare le note tramite Tag e Proprietà di Pagina.
+ * FEAT TAG PREFIX '#': L'autocompletamento si attiva esclusivamente quando l'input inizia con '#',
+ * lasciando la digitazione di testo libero completamente sgombra da overlay che coprono l'albero.
  * FEAT FACETED CHIPS: Pillole dei filtri interattive con apertura menu a tendina sul corpo,
  * visualizzazione delle opzioni disponibili per proprietà e rimozione isolata su click della ✕.
  * FIX RELATION LABELS: Risoluzione semantica dei record collegati (nessun ID 'sys_r_*' esposto all'utente).
@@ -66,16 +68,91 @@ const SidebarManager = {
     // MOTORE AUTOCOMPLETE E FILTRI A PILLOLA PER LA RICERCA LATERALE
     SearchAutocomplete: {
         
-        show: (inputEl, term) => {
-            SidebarManager.SearchAutocomplete.hide('Reinizializzazione');
+        // Raccoglie tutte le corrispondenze presenti nel database di sistema per un determinato valore di tag
+        getMatchesForTag: (cleanTag) => {
+            if (!cleanTag) return [];
+            const lowerTag = cleanTag.trim().toLowerCase();
 
-            if (!term || term.trim() === '') {
+            const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+            if (!propsDb || !propsDb.columns || !propsDb.rows) return [];
+
+            const matches = [];
+
+            propsDb.columns.forEach(col => {
+                if (col.id === 'sys_c_note') return;
+
+                let uniqueValuesMap = new Map();
+
+                if (col.type === 'select' || col.type === 'multi-select') {
+                    (propsDb.selectOptions[col.id] || []).forEach(v => {
+                        const sVal = String(v);
+                        uniqueValuesMap.set(sVal, sVal);
+                    });
+                }
+
+                propsDb.rows.forEach(r => {
+                    let val = r.cells[col.id];
+                    if (val === undefined || val === null || val === '') return;
+
+                    if (col.type === 'checkbox') {
+                        const boolLabel = val === true ? 'Sì (Spuntato)' : 'No (Vuoto)';
+                        uniqueValuesMap.set(val === true, boolLabel);
+                    } else if (col.type === 'relation' || col.type === 'relation_backlink') {
+                        if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.resolveRelationDetails === 'function') {
+                            const details = AdvancedTable.resolveRelationDetails(col, val);
+                            details.forEach(item => {
+                                if (item.id && item.name && item.name !== 'Orfano') {
+                                    uniqueValuesMap.set(item.id, item.name);
+                                }
+                            });
+                        }
+                    } else if (Array.isArray(val)) {
+                        val.forEach(v => {
+                            const sVal = String(v);
+                            uniqueValuesMap.set(sVal, sVal);
+                        });
+                    } else {
+                        const sVal = String(val);
+                        uniqueValuesMap.set(sVal, sVal);
+                    }
+                });
+
+                uniqueValuesMap.forEach((displayVal, realVal) => {
+                    if (String(displayVal).toLowerCase() === lowerTag) {
+                        let colorClass = 'default-color';
+                        if (['select', 'multi-select'].includes(col.type) && propsDb.selectColors && propsDb.selectColors[col.id]) {
+                            colorClass = propsDb.selectColors[col.id][realVal] || 'default-color';
+                        }
+
+                        matches.push({
+                            type: 'value',
+                            colId: col.id,
+                            colName: col.name,
+                            displayValue: displayVal,
+                            realValue: realVal,
+                            colorClass: colorClass
+                        });
+                    }
+                });
+            });
+
+            return matches;
+        },
+
+        show: (inputEl, term) => {
+            // REGOLA CHIAVE: L'autocompletamento delle proprietà/tag si attiva ESCLUSIVAMENTE
+            // se l'utente digita il marcatore '#' all'inizio della stringa di ricerca.
+            if (!term || !term.startsWith('#')) {
+                SidebarManager.SearchAutocomplete.hide('Termine privo di prefisso #');
                 return;
             }
-            const lowerTerm = term.toLowerCase();
+
+            const cleanQuery = term.replace(/^#+/, '').trim();
+            const lowerTerm = cleanQuery.toLowerCase();
 
             const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
             if (!propsDb || !propsDb.columns || !propsDb.rows) {
+                SidebarManager.SearchAutocomplete.hide('Nessun DB proprietà');
                 return;
             }
 
@@ -85,7 +162,7 @@ const SidebarManager = {
                 if (col.id === 'sys_c_note') return;
 
                 // 1. Ricerca sul NOME DELLA COLONNA (Filtro *EXISTS*)
-                if (col.name.toLowerCase().includes(lowerTerm)) {
+                if (!lowerTerm || col.name.toLowerCase().includes(lowerTerm)) {
                     const isAlreadyActive = AppState.activePropertyFilters && AppState.activePropertyFilters.some(f => f.colId === col.id && f.realValue === '*EXISTS*');
                     if (!isAlreadyActive) {
                         suggestions.push({
@@ -141,7 +218,7 @@ const SidebarManager = {
                 uniqueValuesMap.forEach((displayVal, realVal) => {
                     const strToSearch = String(displayVal).toLowerCase();
 
-                    if (strToSearch.includes(lowerTerm)) {
+                    if (!lowerTerm || strToSearch.includes(lowerTerm)) {
                         let colorClass = 'default-color';
                         if (['select', 'multi-select'].includes(col.type) && propsDb.selectColors && propsDb.selectColors[col.id]) {
                             colorClass = propsDb.selectColors[col.id][realVal] || 'default-color';
@@ -162,7 +239,10 @@ const SidebarManager = {
                 });
             });
 
-            if (suggestions.length === 0) return;
+            if (suggestions.length === 0) {
+                SidebarManager.SearchAutocomplete.hide('Nessun suggerimento');
+                return;
+            }
 
             let popup = document.getElementById('sidebar-filter-autocomplete-portal');
             if (!popup) {
@@ -179,10 +259,10 @@ const SidebarManager = {
             popup.style.left = rect.left + 'px';
             popup.style.width = rect.width + 'px';
 
-            let html = '<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">Suggerimenti Proprietà:</div>';
+            let html = '<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">Suggerimenti Tag / Proprietà:</div>';
             
             // Limitiamo a max 15 suggerimenti visivi
-            suggestions.slice(0, 15).forEach((sug) => {
+            suggestions.forEach((sug) => {
                 const safeDisplayValue = String(sug.displayValue).replace(/"/g, '&quot;').replace(/'/g, "\\'");
                 const safeRealValue = typeof sug.realValue === 'string' ? sug.realValue.replace(/"/g, '&quot;').replace(/'/g, "\\'") : sug.realValue;
                 const safeColName = sug.colName.replace(/'/g, "\\'");

@@ -26,7 +26,7 @@
  * FEAT CSS CUSTOM HIGHLIGHT HASHTAGS: Sottolineatura ed evidenziazione visiva nativa dei tag #parola senza mutare il DOM.
  * FEAT ESC CLEAR SEARCH: Tasto ESC all'interno del campo cerca/tag svuota automaticamente il campo e azzera i filtri.
  * FEAT CTRL+CLICK DIRECT NAVIGATION: Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
- * FIX RESILIENT TAG SEARCH: Risoluzione robusta dei nodi di testo per hashtag gerarchici (con '/') e apertura sincronizzata dell'autocompletamento.
+ * FEAT TAG DISAMBIGUATION: Gestione unificata navigazione tag con prefisso '#' - Selezione diretta se univoco, autocompletamento se ambiguo.
  */
 
 const EventsGlobal = {
@@ -174,7 +174,11 @@ const EventsGlobal = {
         }
     },
 
-    // Invia direttamente un tag ripulito alla ricerca della sidebar e apre l'autocompletamento
+    // Invia un tag alla sidebar gestendo la logica concordata:
+    // 1. Popola la barra col '#' mantenendo la coerenza grafica
+    // 2. Se il valore appartiene a una sola colonna/proprietà -> applica direttamente la pillola di filtro
+    // 3. Se il valore appartiene a più colonne (ambiguità) -> apre il menu a tendina per far scegliere l'utente
+    // 4. Se non esiste ancora come proprietà -> filtra l'albero via full-text
     executeTagSearch: (cleanTag) => {
         if (!cleanTag) return;
 
@@ -191,23 +195,49 @@ const EventsGlobal = {
             UI.switchToNotes();
         }
 
-        // 3. Inserisci nel campo di ricerca solo il testo senza '#' ed esegui la ricerca
         const searchInputEl = document.getElementById('searchInput');
-        if (searchInputEl) {
-            searchInputEl.value = cleanTag;
+        if (!searchInputEl) return;
+
+        // 3. Verifica le corrispondenze nello schema delle proprietà
+        const matchingProperties = (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete && typeof SidebarManager.SearchAutocomplete.getMatchesForTag === 'function')
+            ? SidebarManager.SearchAutocomplete.getMatchesForTag(cleanTag)
+            : [];
+
+        if (matchingProperties.length === 1) {
+            // CASO A (UNIVOCO): Una sola proprietà contiene questo valore esatto.
+            // Applica istantaneamente il filtro a pillola senza fastidiosi popup da chiudere a mano.
+            const match = matchingProperties[0];
+            SidebarManager.SearchAutocomplete.select(match.colId, match.realValue, match.colName, match.displayValue);
+
+            if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+                UI.showToast(`Filtro applicato: ${match.colName} = "${match.displayValue}"`, "info");
+            }
+        } 
+        else if (matchingProperties.length > 1) {
+            // CASO B (AMBIGUITÀ / PIÙ PROPRIETÀ): Più colonne hanno lo stesso valore (es. Tag e Categoria).
+            // Popola il campo con '#tag', focalizza e apre il menu a tendina per permettere all'utente di scegliere.
+            searchInputEl.value = '#' + cleanTag;
+            searchInputEl.focus();
+
+            setTimeout(() => {
+                if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                    SidebarManager.SearchAutocomplete.show(searchInputEl, '#' + cleanTag);
+                }
+            }, 60);
+
+            if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+                UI.showToast(`Seleziona la proprietà per: "${cleanTag}"`, "info");
+            }
+        } 
+        else {
+            // CASO C (NESSUNA PROPRIETÀ CENSITA): Cerca nel testo di tutte le note
+            searchInputEl.value = '#' + cleanTag;
             EventsGlobal._executeSearchLogic(searchInputEl);
             searchInputEl.focus();
 
-            // Mostra l'elenco dei suggerimenti delle proprietà ritardato per non essere chiuso dall'evento click
-            setTimeout(() => {
-                if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
-                    SidebarManager.SearchAutocomplete.show(searchInputEl, cleanTag);
-                }
-            }, 60);
-        }
-
-        if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-            UI.showToast(`Ricerca tag: "${cleanTag}"`, "info");
+            if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+                UI.showToast(`Ricerca tag nel testo: "#${cleanTag}"`, "info");
+            }
         }
     },
 
@@ -600,15 +630,20 @@ const EventsGlobal = {
 
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
+                // REGOLA CHIAVE: L'autocompletamento scatta esclusivamente se si digita il prefisso '#'
                 if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
-                    SidebarManager.SearchAutocomplete.show(e.target, e.target.value);
+                    if (e.target.value.startsWith('#')) {
+                        SidebarManager.SearchAutocomplete.show(e.target, e.target.value);
+                    } else {
+                        SidebarManager.SearchAutocomplete.hide();
+                    }
                 }
                 AppState._currentHighlightIndex = 0;
                 EventsGlobal._executeSearchLogic(searchInput);
             });
             
             searchInput.addEventListener('focus', (e) => {
-                if (e.target.value) {
+                if (e.target.value && e.target.value.startsWith('#')) {
                     if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
                         SidebarManager.SearchAutocomplete.show(e.target, e.target.value);
                     }
@@ -630,6 +665,7 @@ const EventsGlobal = {
                         AppState.activePropertyFilters = [];
                         AppState.searchFilter = "";
 
+                        // Rimuove istantaneamente ogni evidenziatore <mark> dall'editor vivo
                         if (typeof Editor !== 'undefined' && typeof Editor.cleanHighlightsBeforeSave === 'function') {
                             Editor.cleanHighlightsBeforeSave();
                         }
@@ -1048,6 +1084,7 @@ const EventsGlobal = {
                 e.dataTransfer.dropEffect = 'move';
 
                 // DRAG ASSIST: Scroll Engine a 60FPS
+                // Se mi avvicino ai margini dell'editor, scorro automaticamente
                 const scrollContainer = document.getElementById('editorScrollContent');
                 if (scrollContainer) {
                     const rect = scrollContainer.getBoundingClientRect();
@@ -1112,6 +1149,7 @@ const EventsGlobal = {
                     protectedParent = null; 
                 }
 
+                // RIPRISTINO ESATTO DEL BLOCCO ORIGINALE TESTATO
                 if (protectedParent && protectedParent !== sourceBlock) {
                     if (AppState.draggedBlockType === 'image') {
                         hideDropIndicator();
@@ -1173,6 +1211,7 @@ const EventsGlobal = {
                 const rect = editorEl.getBoundingClientRect();
                 if (e.clientX <= rect.left || e.clientX >= rect.right || e.clientY <= rect.top || e.clientY >= rect.bottom) {
                     hideDropIndicator();
+                    // Interrompiamo lo scroll forzato se il mouse esce fisicamente dall'editor
                     if (dragScrollTimer) {
                         cancelAnimationFrame(dragScrollTimer);
                         dragScrollTimer = null;
@@ -1195,6 +1234,7 @@ const EventsGlobal = {
             const tc = document.getElementById('treeContainer');
             if (tc) tc.classList.remove('drag-over-root'); 
             
+            // DRAG ASSIST: Rimuove lo scudo e ferma lo scorrimento
             stopDragAssist();
         });
 
@@ -1216,6 +1256,8 @@ const EventsGlobal = {
                 e.stopPropagation();
 
                 const blockId = AppState.draggedBlockId;
+
+                // DRAG ASSIST: Arresto Immediato del motore prima dei calcoli di rilascio
                 stopDragAssist();
 
                 let target = e.target;
@@ -1334,6 +1376,7 @@ const EventsGlobal = {
                 return;
             }
 
+            // Arresto Immediato del motore anche per rilasci a vuoto o di testo
             stopDragAssist();
 
             let targetNode = e.target;
@@ -1367,6 +1410,7 @@ const EventsGlobal = {
                 return;
             }
 
+            // Consolidamento stato post-spostamento testo per abilitare Undo (Ctrl+Z)
             setTimeout(() => {
                 if (AppState.isEditMode && typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
                     Editor.saveSnapshot(true);
@@ -1391,6 +1435,7 @@ const EventsGlobal = {
                     e.preventDefault();
                     e.stopPropagation();
 
+                    // Prevenzione doppi scatti su browser che emettono eventi multipli
                     if (Date.now() - EventsGlobal._lastMiddleClickTime < 250) return;
                     EventsGlobal._lastMiddleClickTime = Date.now();
 
@@ -1417,6 +1462,7 @@ const EventsGlobal = {
                     scrollContainer.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
                 }
             } else if (timelineScroll) {
+                // Sulla Timeline, se l'utente usa la rotella del mouse sull'intestazione o nell'area libera
                 if (target.closest('.adv-timeline-header-sticky') || !target.closest('.adv-cal-week-container')) {
                     if (timelineScroll.scrollWidth > timelineScroll.clientWidth) {
                         e.preventDefault();
@@ -1424,6 +1470,7 @@ const EventsGlobal = {
                     }
                 }
             } else if (boardContainer) {
+                // Nella bacheca Kanban, se l'utente usa la rotella sull'intestazione o tra le colonne
                 const kanbanCol = target.closest('.adv-kanban-col');
                 if (!kanbanCol || kanbanCol.scrollHeight <= kanbanCol.clientHeight) {
                     if (boardContainer.scrollWidth > boardContainer.clientWidth) {
@@ -1443,6 +1490,9 @@ const EventsGlobal = {
 
         editorEl.addEventListener('input', (e) => {
             if (!AppState.isSwitchingNote) {
+                // Se l'evento input proviene da un widget a persistenza autonoma (Database, Diari, Codice, Bottoni),
+                // non aggiornare il testo della nota principale.
+                // Le tabelle semplici (.simple-table-wrapper) e gli snippet invece SONO parte del testo della nota!
                 const target = e.target;
                 const isInsideAutonomousWidget = target && target.closest && (
                     target.closest('.adv-table-wrapper, .adv-journal-wrapper, .code-wrapper, .adv-action-button-wrapper, .widget-type-database, .widget-type-pivot, .widget-type-journal, .widget-type-buttonbar')
@@ -1541,7 +1591,9 @@ const EventsGlobal = {
                 }
             }
 
-            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI)
+            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI):
+            // Leggiamo textContent anziché innerText per evitare che le proprietà CSS
+            // di mascheramento (-webkit-text-security) copino i pallini al posto della password reale.
             if (target.closest('.snippet-copy-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -1620,7 +1672,7 @@ const EventsGlobal = {
                     return; 
                 }
 
-                // Supporto per click centrale nel caso venga emesso sul listener click
+                // Supporto per click centrale nel caso venga emesso sul listener click (legacy/fallback)
                 if (e.button === 1 || e.which === 2) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -1639,14 +1691,13 @@ const EventsGlobal = {
                         return;
                     }
 
-                    // Se è dentro una citazione, clicca direttamente il link bypassando il menu fluttuante
+                    // CITAZIONI: Se è dentro una citazione, clicca direttamente il link bypassando il menu fluttuante
                     if (link.closest('.block-citation')) {
                         e.preventDefault();
                         EventsGlobal.openLinkDirectly(link);
                         return;
                     }
 
-                    // Altrimenti in Edit Mode mostra il popover per modifiche/apertura
                     e.preventDefault();
                     e.stopPropagation(); 
                     
@@ -1654,7 +1705,6 @@ const EventsGlobal = {
                     if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
                     return;
                 } else {
-                    // In Read Mode il click normale apre sempre direttamente
                     if (link.classList.contains('internal-link')) {
                         e.preventDefault();
                         const noteId = link.getAttribute('data-note-id');
