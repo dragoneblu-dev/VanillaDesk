@@ -6,6 +6,7 @@
  * FIX: Aggiunto supporto per la proprietà 'shortcut' per visualizzare le scorciatoie da tastiera allineate a destra.
  * FIX RICERCA: Esclusione del portale di autocompletamento della Sidebar dalla distruzione globale.
  * FEAT UX: Supporto nativo per i 'badge' (Pillole numeriche informative) con colore personalizzabile (badgeColor).
+ * FEAT ITEM TITLE: Supporto per la proprietà 'title' per visualizzare descrizioni e tooltip informativi sulle voci di menu.
  */
 
 Object.assign(UI, {
@@ -118,6 +119,7 @@ Object.assign(UI, {
                         el.className = 'adv-menu-item';
                         if (item.danger) el.classList.add('danger');
                         if (item.disabled) el.classList.add('disabled');
+                        if (item.title) el.title = item.title;
 
                         let innerHTML = `
                             <div style="display:flex; align-items:center; flex:1; overflow:hidden;">

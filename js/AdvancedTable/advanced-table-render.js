@@ -14,6 +14,10 @@
  * PERF LAZY VIRTUAL RESOLUTION: In assenza di filtri/ordinamenti attivi, risolve solo le righe
  * paginate visibili (10 o 25 righe), riducendo a <1ms l'apertura di tabelle con oltre 20.000 record.
  * FEAT CELL-LEVEL CONDITIONAL STYLING: Applicazione di classi e sfondi diretti sui tag <td> per regole cell-scope.
+ * FIX CTRL+A CELL ISOLATION: Intercettazione in attachCellEvents di Ctrl+A / Cmd+A su campi di testo e numerici
+ * per selezionare esclusivamente il testo della cella impedendo al browser di selezionare tutta la pagina.
+ * FEAT CTRL+A WIDGET TITLE ISOLATION: Intercettazione in attachCellEvents di Ctrl+A / Cmd+A sul titolo del database
+ * per selezionare unicamente il testo del titolo senza estendere la selezione al documento principale.
  */
 
 Object.assign(AdvancedTable, {
@@ -706,11 +710,21 @@ Object.assign(AdvancedTable, {
     },
 
     attachCellEvents: (wrapper, tableId) => {
-        // Intercettazione Invio sul Titolo del Database
+        // Intercettazione Invio e Ctrl+A sul Titolo del Database
         const parentShell = wrapper.closest('.adv-widget-shell, .adv-table-wrapper') || wrapper;
         const titleEl = parentShell.querySelector('.adv-table-title');
         if (titleEl) {
             titleEl.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(titleEl);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    return;
+                }
                 if (e.key === 'Enter') {
                     e.preventDefault();
                     titleEl.blur();
@@ -718,10 +732,21 @@ Object.assign(AdvancedTable, {
             });
         }
 
-        // Celle di Testo
+        // Celle di Testo: Intercettazione Ctrl+A / Cmd+A isolata per non selezionare la pagina intera
         wrapper.querySelectorAll('.adv-cell-text[contenteditable="true"]').forEach(el => {
             el.addEventListener('dblclick', e => e.stopPropagation());
             el.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(el);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    return;
+                }
+
                 e.stopPropagation();
                 if (e.key === 'Enter') {
                     if (e.ctrlKey || e.metaKey || e.shiftKey) {
@@ -765,10 +790,17 @@ Object.assign(AdvancedTable, {
             });
         });
         
-        // Date e Campi Numerici
+        // Date e Campi Numerici: Intercettazione Ctrl+A / Cmd+A isolata all'input attivo
         wrapper.querySelectorAll('.adv-cell-date input:not([readonly]), .adv-number-input:not([readonly])').forEach(el => {
             el.addEventListener('dblclick', e => e.stopPropagation());
             el.addEventListener('keydown', e => {
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    el.select();
+                    return;
+                }
+
                 e.stopPropagation();
                 if (e.key === 'Enter') {
                     e.preventDefault();

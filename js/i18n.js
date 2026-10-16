@@ -225,6 +225,7 @@ dict: {
             menu_widget_database: "Database",
             menu_widget_pivot: "Vista / Pivot / Grafico",
             menu_widget_button: "Pulsante Macro",
+            menu_widget_database_desc: "Database relazionale: trasformabile in Tabella, Bacheca Kanban, Timeline (Gantt), Calendario o Albero WBS",
             alert_columns_barrier: "Sposta il cursore fuori dalle colonne prima di inserire questo elemento."
         },
         templates: {
@@ -1537,6 +1538,7 @@ audio: {
             menu_widget_database: "Database",
             menu_widget_pivot: "View / Pivot / Chart",
             menu_widget_button: "Action Button (Macro)",
+            menu_widget_database_desc: "Relational database: convertible into Table, Kanban Board, Timeline (Gantt), Calendar, or WBS Tree",
             alert_columns_barrier: "Please move the cursor outside of columns before inserting this element."
         },
         templates: {
@@ -2848,6 +2850,7 @@ audio: {
             menu_widget_database: "Base de Datos",
             menu_widget_pivot: "Vista / Pivot / Gráfico",
             menu_widget_button: "Botón de Acción (Macro)",
+            menu_widget_database_desc: "Base de datos relacional: convertible en Tabla, Tablero Kanban, Cronograma (Gantt), Calendario o Árbol WBS",
             alert_columns_barrier: "Mueve el cursor fuera de las columnas antes de insertar este elemento."
         },
         templates: {
@@ -4159,6 +4162,7 @@ audio: {
             menu_widget_database: "Datenbank",
             menu_widget_pivot: "Ansicht / Pivot / Diagramm",
             menu_widget_button: "Aktionsschaltfläche (Makro)",
+            menu_widget_database_desc: "Relationale Datenbank: wandelbar in Tabelle, Kanban-Board, Timeline (Gantt), Kalender oder WBS-Baumstruktur",
             alert_columns_barrier: "Bewege den Cursor aus den Spalten heraus, bevor du dieses Element einfügst."
         },
         templates: {

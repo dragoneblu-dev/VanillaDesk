@@ -5,6 +5,8 @@
  * in modo che l'utente veda immediatamente il nuovo paragrafo inserito.
  * FIX BLOAT DRAG&DROP: L'spostamento dei widget applica ora Editor.minifyHTMLForStorage 
  * prima di iniettare il payload HTML, prevenendo crescite esponenziali del file JSON in RAM.
+ * FEAT CTRL+A WIDGET TITLE ISOLATION: Intercettazione mirata di Ctrl+A / Cmd+A sui titoli editabili dei widget
+ * per selezionare esclusivamente il testo del titolo senza estendere la selezione al documento principale.
  */
 
 const LegacyMigrator = {
@@ -238,7 +240,6 @@ const WidgetManager = {
         sel.removeAllRanges();
         sel.addRange(range);
         
-        // FIX: Assicura che l'utente veda il cursore posizionato dopo la citazione o il codice
         p.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 
         if (typeof Store !== 'undefined') Store.triggerAutoSave();
@@ -269,8 +270,6 @@ const WidgetManager = {
             CodeManager.forceSyncAll();
         }
 
-        // FIX BLOAT JSON: Applica la minificazione forzata per estrarre l'html 
-        // nudo del guscio vuoto invece di trascinarsi dietro megabyte di UI renderizzata!
         let htmlCopy = '';
         if (wrapper.tagName === 'IMG') {
             htmlCopy = wrapper.outerHTML;
@@ -371,7 +370,23 @@ const WidgetManager = {
             titleEl.style.minWidth = '50px';
 
             titleEl.onblur = (e) => { if (config.onTitleChange) config.onTitleChange(id, e.target.textContent); };
-            titleEl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); titleEl.blur(); } };
+            titleEl.onkeydown = (e) => { 
+                // Intercettazione mirata di Ctrl+A / Cmd+A sul titolo del widget per isolare la selezione
+                if ((e.ctrlKey || e.metaKey) && (e.key === 'a' || e.key === 'A')) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const sel = window.getSelection();
+                    const range = document.createRange();
+                    range.selectNodeContents(titleEl);
+                    sel.removeAllRanges();
+                    sel.addRange(range);
+                    return;
+                }
+                if (e.key === 'Enter') { 
+                    e.preventDefault(); 
+                    titleEl.blur(); 
+                } 
+            };
         }
 
         const toolsEl = shell.querySelector('.widget-tools');

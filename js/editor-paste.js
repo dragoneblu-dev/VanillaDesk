@@ -21,6 +21,11 @@
  * FIX WORD 365 DOUBLE EMPTY LINES: Rimozione preventiva dei tag <o:p>, pulizia whitespace tra blocchi, estirpazione
  * dei trailing <br> a fine paragrafo e abolizione della sostituzione indiscriminata di <br> con </p><p>.
  * FIX SPREADSHEET DEEP SANITIZE: Sanificazione approfondita delle singole celle in _createSimpleTableFromExcel tramite Editor.cleanDOMTree.
+ * FEAT ANCESTOR STYLE CAPTURE ON COPY: Preservazione deterministica dei tag (b, i, u, s, code, a) e delle classi di stile VanillaDesk
+ * (tx-c*, hl-c*, ff-*, fs-*) quando si copia una porzione di testo interna a elementi formattati.
+ * FIX ORPHAN LI WRAP: Incapsulamento automatico di nodi <li> orfani copiati o incollati all'interno del relativo <ul>/<ol>,
+ * impedendo che vengano iniettati all'interno di tag <p>.
+ * ZERO-FONT PURITY: Conversione preventiva di qualsiasi tag <font> in <span> all'incolla con salvaguardia delle classi ff-* e fs-*.
  */
 
 Object.assign(Editor, {
@@ -372,8 +377,83 @@ Object.assign(Editor, {
 
             // GESTIONE COPIA STANDARD (Per testo normale, link e tabelle)
             const clone = range.cloneContents();
+
+            // =========================================================================
+            // RICOSTRUZIONE DETERMINISTICA DEGLI STILI ANTENATI PER IL FRAMMENTO COPIATO
+            // =========================================================================
+            let formattedFragment = clone;
+
+            const commonAncestor = range.commonAncestorContainer.nodeType === 3 
+                ? range.commonAncestorContainer.parentNode 
+                : range.commonAncestorContainer;
+
+            // Risaliamo da commonAncestor fino al blocco contenitore (p, div, li, td, th, h1..h6, ecc.)
+            let currAncestor = commonAncestor;
+            const blockBoundaryTags = ['P', 'DIV', 'LI', 'TD', 'TH', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'PRE', 'BODY'];
+            
+            while (currAncestor && currAncestor.id !== 'noteContent' && !blockBoundaryTags.includes(currAncestor.tagName)) {
+                const tag = currAncestor.tagName.toUpperCase();
+
+                if (tag === 'B' || tag === 'STRONG') {
+                    const b = document.createElement('b');
+                    b.appendChild(formattedFragment);
+                    formattedFragment = b;
+                } else if (tag === 'I' || tag === 'EM') {
+                    const i = document.createElement('i');
+                    i.appendChild(formattedFragment);
+                    formattedFragment = i;
+                } else if (tag === 'U') {
+                    const u = document.createElement('u');
+                    u.appendChild(formattedFragment);
+                    formattedFragment = u;
+                } else if (tag === 'S' || tag === 'STRIKE' || tag === 'DEL') {
+                    const s = document.createElement('s');
+                    s.appendChild(formattedFragment);
+                    formattedFragment = s;
+                } else if (tag === 'CODE' && !currAncestor.closest('pre')) {
+                    const code = document.createElement('code');
+                    code.appendChild(formattedFragment);
+                    formattedFragment = code;
+                } else if (tag === 'A') {
+                    const a = currAncestor.cloneNode(false);
+                    a.appendChild(formattedFragment);
+                    formattedFragment = a;
+                } else if (tag === 'SPAN') {
+                    // Estrae classi di colore, evidenziatore e font native VanillaDesk
+                    const validClasses = Array.from(currAncestor.classList).filter(cls => 
+                        /^hl-c\d+$/.test(cls) || 
+                        /^tx-c\d+$/.test(cls) || 
+                        /^ff-/.test(cls) || 
+                        /^fs-/.test(cls) ||
+                        cls === 'tag-hash'
+                    );
+
+                    if (validClasses.length > 0) {
+                        const span = document.createElement('span');
+                        span.className = validClasses.join(' ');
+                        span.appendChild(formattedFragment);
+                        formattedFragment = span;
+                    }
+                }
+                currAncestor = currAncestor.parentNode;
+            }
+
+            // GESTIONE LI ORFANI IN COPIA: se il frammento contiene LI non avvolti da UL/OL, li avvolge
+            const originalList = commonAncestor ? commonAncestor.closest('ul, ol') : null;
+            if (originalList) {
+                const tempCheck = document.createElement('div');
+                tempCheck.appendChild(formattedFragment.cloneNode(true));
+                const directLis = Array.from(tempCheck.children).filter(el => el.tagName === 'LI');
+                if (directLis.length > 0) {
+                    const wrapList = document.createElement(originalList.tagName);
+                    if (originalList.className) wrapList.className = originalList.className;
+                    while (tempCheck.firstChild) wrapList.appendChild(tempCheck.firstChild);
+                    formattedFragment = wrapList;
+                }
+            }
+
             const tempDiv = document.createElement('div');
-            tempDiv.appendChild(clone);
+            tempDiv.appendChild(formattedFragment);
 
             // 1. Rimuove elementi di servizio e maniglie UI copiate accidentalmente
             tempDiv.querySelectorAll('.adv-col-resizer, .std-col-resizer, .widget-drag-handle, .widget-options-btn, .adv-tools, .adv-add-btn, .adv-table-footer-controls').forEach(el => el.remove());
@@ -763,6 +843,25 @@ Object.assign(Editor, {
                     }
                 });
 
+                // ZERO-FONT CONVERSION INIZIALE: Trasforma preventivamente qualsiasi tag FONT in SPAN
+                doc.querySelectorAll('font').forEach(fontEl => {
+                    const span = doc.createElement('span');
+                    while (fontEl.attributes.length > 0) {
+                        span.setAttribute(fontEl.attributes[0].name, fontEl.attributes[0].value);
+                        fontEl.removeAttribute(fontEl.attributes[0].name);
+                    }
+                    while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
+                    fontEl.parentNode.replaceChild(span, fontEl);
+                });
+
+                // FASE 0.5: INCAPSULAMENTO DEI TAG LI ORFANI NEL DOCUMENTO INCOLLATO (Previene <p><li>...</li></p>)
+                const orphanLis = Array.from(doc.body.children).filter(el => el.tagName === 'LI');
+                if (orphanLis.length > 0) {
+                    const wrapUl = doc.createElement('ul');
+                    doc.body.insertBefore(wrapUl, orphanLis[0]);
+                    orphanLis.forEach(li => wrapUl.appendChild(li));
+                }
+
                 // FASE 0.8: CONVERSIONE DEGLI ELENCHI DI WORD (MsoListParagraph) IN VERI <ol> E <ul>
                 Editor._convertWordListsToHTML(doc.body);
 
@@ -792,7 +891,7 @@ Object.assign(Editor, {
                     wrapper.innerHTML = ''; 
                 });
 
-                // FASE 1: CONVERSIONE SEMANTICA PULITA (Bold, Italic, Underline, Strike)
+                // FASE 1: CONVERSIONE SEMANTICA PULITA (Bold, Italic, Underline, Strike) CON PRESERVAZIONE CLASSI VANILLADESK
                 const allElements = Array.from(doc.body.querySelectorAll('*')).reverse();
 
                 allElements.forEach(el => {
@@ -845,6 +944,10 @@ Object.assign(Editor, {
                         const needU = hasUnderlineStyle && tag !== 'U';
                         const needS = hasStrikeStyle && tag !== 'S';
 
+                        // Rileva se lo span possiede classi VanillaDesk native (font, dimensioni, colori, tag)
+                        const existingClass = el.getAttribute('class') || '';
+                        const hasVanillaDeskClass = /(?:^|\s)(?:ff-|fs-|hl-c|tx-c|tag-hash)/.test(existingClass);
+
                         if (needB || needI || needU || needS) {
                             const frag = doc.createDocumentFragment();
                             while (el.firstChild) frag.appendChild(el.firstChild);
@@ -870,7 +973,13 @@ Object.assign(Editor, {
                                 bTag.appendChild(wrapperTag);
                                 wrapperTag = bTag;
                             }
-                            el.parentNode.replaceChild(wrapperTag, el);
+
+                            if (hasVanillaDeskClass) {
+                                // Preserva lo span e le sue classi, inserendo la formattazione semantica al suo interno
+                                el.appendChild(wrapperTag);
+                            } else {
+                                el.parentNode.replaceChild(wrapperTag, el);
+                            }
                         }
                     }
 
@@ -974,13 +1083,12 @@ Object.assign(Editor, {
                 });
 
                 // FASE 4: SANIFICAZIONE PROFONDA UNIFICATA TRAMITE LA GOMMA FORMATTAZIONI (Editor.cleanDOMTree)
-                // Rimuove tutte le classi parassite (MsoNormal, ecc.) e gli stili inline (-webkit-*, margin, padding, user-select, font, colori inline) sia nel testo che nelle celle di tabella
+                // Rimuove tutte le classi parassite (MsoNormal, ecc.) e gli stili inline (-webkit-*, margin, padding, user-select)
                 if (typeof Editor !== 'undefined' && typeof Editor.cleanDOMTree === 'function') {
                     Editor.cleanDOMTree(doc.body);
                 }
 
                 // FASE 5: RISOLUZIONE RIGHE VUOTE SPURIE DI WORD 365
-                
                 // 5.1 Rimuove i nodi di testo di whitespace (\r, \n, spazi) direttamente figli del body tra blocchi
                 Array.from(doc.body.childNodes).forEach(node => {
                     if (node.nodeType === Node.TEXT_NODE && node.nodeValue.replace(/[\r\n\t\s]/g, '') === '') {
@@ -1077,7 +1185,7 @@ Object.assign(Editor, {
                 // =========================================================================
                 // CORREZIONE RADICE SPAZI: RIALLINEAMENTO DETERMINISTICO CON PASTEDTEXT
                 // =========================================================================
-                const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|blockquote|pre)>/i.test(finalHTML);
+                const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|li|blockquote|pre)>/i.test(finalHTML);
 
                 if (!hasBlockTags) {
                     finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');

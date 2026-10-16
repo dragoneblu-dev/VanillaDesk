@@ -3,7 +3,8 @@
  * Inizializzazione editor e core engine (Caret, Boundaries, RawText e Sanificazione JSON).
  * Scansione transitiva centralizzata delegata a Store.cleanOrphanedRAMCaches per tutelare database relazionali, template e asset.
  * Re-idratazione immediata post-salvataggio con rilevamento immagini non trovate e placeholder SVG.
- * Normalizzazione e ripristino deterministico dei cuscinetti Zero-Width Space (\u200B) ed estirpazione degli orfani.
+ * Normalizzazione e ripristino deterministico dei cuscinetti Zero-Width Space (\u200B) ed estirpazione degli orfani
+ * confinata unicamente alle vere shell non-editabili (.adv-inline-shell), escludendo i normali tag <a>.
  * Inseriti .adv-board-card e gli eventi calendario nella Whitelist di handleSmartClickEscape.
  * Normalizzazione retroattiva degli appunti inline salvati con tag a blocco.
  * FIX CARET: Integrato l'estrattore geometrico assoluto basato su Range.cloneContents per il calcolo infallibile degli offset.
@@ -16,6 +17,10 @@
  * FEAT RAW HTML SOURCE EDITOR: Editor a tutto schermo del codice sorgente liofilizzato per modifiche massive esterne (Ctrl+Shift+E).
  * FIX RAW HTML SOURCE CODING: Popolamento esplicito di ta.value e corretta codifica delle entità HTML senza decodifiche spurie.
  * FEAT LAZY LOADING ASSETS: Caricamento on-demand asincrono degli asset (loadAssetOnDemand e hydrateMedia) per RAM zero all'avvio e zero race conditions.
+ * FIX GHOST PARAGRAPHS: Pulizia chirurgica dei soli tag <p></p> parassiti privi di testo o media senza intaccare le shell dei widget.
+ * FIX GETCLEANHTML IMMUTABILITY: getCleanHTML normalizza esclusivamente il clone disaccoppiato, senza mutare il DOM vivo ed evitando salti del cursore.
+ * FIX INLINE SHELL DEAD ZONE: Metodo adjustCaretAwayFromZwsDeadZone per espellere istantaneamente il cursore
+ * dalla zona morta tra il widget e il cuscinetto \u200B, impedendo inserimenti invertiti di caratteri.
  */
 
 const Editor = {
@@ -66,6 +71,7 @@ const Editor = {
     markImageBroken: (img, ref = '') => {
         if (!img) return;
         img.classList.add('broken-image');
+        img.removeAttribute('src');
         img.setAttribute('data-broken', 'true');
         img.src = Editor.getBrokenImagePlaceholder(ref);
         img.setAttribute('title', `Immagine non trovata: ${ref} (File eliminato dal disco o mancante)`);
@@ -210,12 +216,56 @@ const Editor = {
         });
     },
 
+    // Corregge la posizione del cursore se è intrappolato nella zona morta tra la shell inline e il suo cuscinetto \u200B
+    adjustCaretAwayFromZwsDeadZone: () => {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.isCollapsed) return;
+
+        const range = sel.getRangeAt(0);
+        const node = range.startContainer;
+        if (!node || node.nodeType !== Node.TEXT_NODE) return;
+
+        const val = node.nodeValue || '';
+        const offset = range.startOffset;
+
+        // Caso A: il nodo si trova DOPO una .adv-inline-shell e inizia con \u200B
+        const prev = node.previousSibling;
+        if (prev && prev.nodeType === 1 && prev.classList.contains('adv-inline-shell')) {
+            if (val.startsWith('\u200B') && offset === 0) {
+                // Sposta il cursore a offset 1 (dopo il \u200B)
+                const safeOffset = Math.min(1, val.length);
+                const r = document.createRange();
+                r.setStart(node, safeOffset);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+                return;
+            }
+        }
+
+        // Caso B: il nodo si trova PRIMA di una .adv-inline-shell e finisce con \u200B
+        const next = node.nextSibling;
+        if (next && next.nodeType === 1 && next.classList.contains('adv-inline-shell')) {
+            if (val.endsWith('\u200B') && offset === val.length) {
+                // Sposta il cursore a offset val.length - 1 (prima del \u200B)
+                const safeOffset = Math.max(0, val.length - 1);
+                const r = document.createRange();
+                r.setStart(node, safeOffset);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+                return;
+            }
+        }
+    },
+
     // Ripristino deterministico dei cuscinetti \u200B attorno ai widget inline ed estirpazione degli orfani sparsi
+    // NOTA: I normali tag <a> NON sono shell non-editabili e sono categoricamente esclusi da questa logica.
     ensureInlineWidgetBuffers: (container) => {
         if (!container) return;
 
-        // 1. Ripristina/Garantisce i cuscinetti \u200B prima e dopo ogni shell inline o link interno
-        const inlineShells = container.querySelectorAll('.adv-inline-shell, a.internal-link, a.file-link');
+        // 1. Ripristina/Garantisce i cuscinetti \u200B prima e dopo OGNI shell inline (contenteditable="false")
+        const inlineShells = container.querySelectorAll('.adv-inline-shell');
         inlineShells.forEach(shell => {
             // Cuscinetto prima dell'elemento
             const prev = shell.previousSibling;
@@ -244,10 +294,17 @@ const Editor = {
             }
         });
 
-        // 3. Estirpazione degli Zero-Width Space orfani in punti errati del documento
+        // 3. Estirpazione degli Zero-Width Space orfani e riallineamento dei bordi
         const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
         const orphanNodes = [];
         let textNode;
+
+        const sel = window.getSelection();
+        const activeNode = (sel && sel.rangeCount > 0) ? sel.anchorNode : null;
+        const activeOffset = (sel && sel.rangeCount > 0) ? sel.anchorOffset : 0;
+        let needsRestoreCaret = false;
+        let newCaretOffset = activeOffset;
+        let caretTargetNode = null;
 
         while ((textNode = walker.nextNode())) {
             const val = textNode.nodeValue;
@@ -262,29 +319,59 @@ const Editor = {
             const prev = textNode.previousSibling;
             const next = textNode.nextSibling;
 
-            const isAdjacentToShell = (prev && (prev.classList?.contains('adv-inline-shell') || prev.tagName === 'A')) ||
-                                      (next && (next.classList?.contains('adv-inline-shell') || next.tagName === 'A'));
+            const isAfterShell = prev && prev.nodeType === 1 && prev.classList.contains('adv-inline-shell');
+            const isBeforeShell = next && next.nodeType === 1 && next.classList.contains('adv-inline-shell');
+            const isAdjacentToShell = isAfterShell || isBeforeShell;
 
             if (!isAdjacentToShell) {
-                // Nodo non adiacente a nessun widget: rimuovi completamente i \u200B
+                // Nodo non adiacente a nessun widget inline: rimuovi completamente i \u200B
+                if (textNode === activeNode) {
+                    const textBefore = val.substring(0, activeOffset);
+                    const zwsCountBefore = (textBefore.match(/\u200B/g) || []).length;
+                    newCaretOffset = Math.max(0, activeOffset - zwsCountBefore);
+                    caretTargetNode = textNode;
+                    needsRestoreCaret = true;
+                }
                 const cleaned = val.replace(/\u200B/g, '');
                 if (cleaned === '') {
                     orphanNodes.push(textNode);
                 } else {
                     textNode.nodeValue = cleaned;
                 }
-            } else if (val !== '\u200B') {
-                // Adiacente a widget ma con accumuli multipli: riduci a singolo \u200B sul bordo corretto
-                const starts = val.startsWith('\u200B');
-                const ends = val.endsWith('\u200B');
-                let inner = val.replace(/\u200B/g, '');
-                if (starts) inner = '\u200B' + inner;
-                if (ends && inner !== '\u200B') inner = inner + '\u200B';
-                textNode.nodeValue = inner;
+            } else {
+                // Nodo adiacente a una shell: il \u200B deve stare ESCLUSIVAMENTE sui bordi aderenti alla shell
+                let pureText = val.replace(/\u200B/g, '');
+                let inner = pureText;
+
+                if (isAfterShell) inner = '\u200B' + inner;
+                if (isBeforeShell && inner !== '\u200B') inner = inner + '\u200B';
+
+                if (inner !== val) {
+                    if (textNode === activeNode) {
+                        const textBefore = val.substring(0, activeOffset);
+                        const zwsCountBefore = (textBefore.match(/\u200B/g) || []).length;
+                        const startsAdjustment = (isAfterShell && activeOffset > 0) ? 1 : 0;
+                        newCaretOffset = Math.max(0, activeOffset - zwsCountBefore + startsAdjustment);
+                        caretTargetNode = textNode;
+                        needsRestoreCaret = true;
+                    }
+                    textNode.nodeValue = inner;
+                }
             }
         }
 
         orphanNodes.forEach(n => n.remove());
+
+        if (needsRestoreCaret && caretTargetNode && document.body.contains(caretTargetNode)) {
+            try {
+                const safeOffset = Math.min(newCaretOffset, caretTargetNode.nodeValue.length);
+                const r = document.createRange();
+                r.setStart(caretTargetNode, safeOffset);
+                r.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(r);
+            } catch (_) {}
+        }
     },
 
     // Caricamento asincrono on-demand (JIT) di singoli asset da disco senza precaricamento preventivo del Workspace
@@ -743,6 +830,12 @@ const Editor = {
             const innerHTML = el.innerHTML;
             const cleanText = el.innerText.replace(/\u200B/g, '').trim();
 
+            // Rimuove tag P parassiti completamente vuoti (<p></p>) lasciati da mutazioni o split di Blink
+            if (tag === 'P' && innerHTML === '' && cleanText === '' && rootNode.children.length > 1) {
+                el.remove();
+                return;
+            }
+
             if (innerHTML === '' && cleanText === '') {
                 if (!el.querySelector('img') && !el.querySelector('audio') && !el.querySelector('iframe')) {
                     el.innerHTML = '<br>';
@@ -772,9 +865,7 @@ const Editor = {
         const editor = document.getElementById('noteContent');
         if (!editor) return "";
 
-        // Normalizzazione immediata del DOM vivo prima della clonazione
-        Editor.ensureInlineWidgetBuffers(editor);
-
+        // Si clona l'editor senza alterare il DOM vivo per non disturbare la posizione del cursore attivo
         const clone = editor.cloneNode(true);
 
         clone.querySelectorAll(WidgetManager.blockSelector).forEach(el => {
@@ -1039,4 +1130,4 @@ const Editor = {
             UI.showToast(I18n.t('notes_utils.raw_html_success_toast') || "Codice HTML applicato e pagina reidratata con successo!", "success");
         }
     }
-};6
+};

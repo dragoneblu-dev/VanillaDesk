@@ -3,8 +3,9 @@
  * Mappatura e intercettazione degli eventi globali dell'applicazione.
  * FIX MACRO DRAG: Esclusa la barra dei pulsanti dallo Scudo Drag (Drag Shield)
  * per evitare la corruzione dell'evento HTML5 nativo dovuto al pointer-events: none.
- * FIX CTRL+A: L'isolamento della selezione (Select-All) copre ora anche i campi testuali del Diario
- * e gli snippet, prevenendo selezioni globali indesiderate.
+ * FIX CTRL+A: L'isolamento della selezione (Select-All) copre ora anche i campi testuali del Diario,
+ * gli snippet, tutte le celle di testo e numeriche dei database e i titoli di tutti i widget,
+ * impedendo la selezione accidentale dell'intera pagina.
  * FIX DRAG-SCROLL: Inserito "Drag Assist Engine" con calcolo matematico.
  * RESTORE DRAG & DROP DEI BLOCCHI: Ripristinato l'intero motore nativo di intercettazione
  * dragstart, dragenter, dragover, dragleave, dragend e drop su editorEl con posizionamento
@@ -27,6 +28,8 @@
  * FEAT ESC CLEAR SEARCH: Tasto ESC all'interno del campo cerca/tag svuota automaticamente il campo e azzera i filtri.
  * FEAT CTRL+CLICK DIRECT NAVIGATION: Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
  * FEAT TAG DISAMBIGUATION: Gestione unificata navigazione tag con prefisso '#' - Selezione diretta se univoco, autocompletamento se ambiguo.
+ * FIX CARET DEAD ZONE ON CLICK & KEYDOWN: Normalizzazione immediata del cursore per impedire digitazioni
+ * tra il bordo di una shell inline e il cuscinetto \u200B.
  */
 
 const EventsGlobal = {
@@ -755,26 +758,39 @@ const EventsGlobal = {
             if (!AppState.isEditMode) return;
             if (!e.key) return; 
 
-            // ISOLAMENTO RIGOROSO INPUT NATIVI: Se l'utente sta digitando in un input o textarea
+            // ISOLAMENTO RIGOROSO INPUT NATIVI: Gestione mirata di Ctrl+A su input e textarea
             const isNativeInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
             if (isNativeInput) {
+                if (isCtrlOrCmd && key === 'a') {
+                    // All'interno di input o textarea (campi numerici database, filtri, drawer, ecc.)
+                    // seleziona solo il testo del controllo corrente senza propagare la selezione al documento
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof e.target.select === 'function') {
+                        e.target.select();
+                    }
+                    return;
+                }
                 return;
             }
 
-            // ISOLAMENTO SELECT-ALL (Ctrl+A)
+            // ISOLAMENTO SELECT-ALL (Ctrl+A): Copre anche campi di testo del database (.adv-cell-text), tabelle e titoli dei widget
             if (isCtrlOrCmd && key === 'a' && AppState.isEditMode) {
                 const sel = window.getSelection();
                 if (sel.rangeCount > 0) {
                     let node = sel.anchorNode;
                     if (node && node.nodeType === 3) node = node.parentNode;
                     
-                    // Identifica se siamo in una sotto-area editabile protetta
-                    const isolatedArea = node ? node.closest('.code-content, .journal-content, .snippet-text, .adv-cell-text, td[contenteditable="true"], th[contenteditable="true"]') : null;
+                    const isolatedArea = node ? node.closest('.code-content, .journal-content, .snippet-text, .adv-cell-text, .widget-title, .adv-table-title, td[contenteditable="true"], th[contenteditable="true"], td, th') : null;
                     
                     if (isolatedArea) {
                         e.preventDefault();
+                        e.stopPropagation();
+                        const targetToSelect = isolatedArea.classList.contains('adv-cell-text') || isolatedArea.classList.contains('widget-title') || isolatedArea.classList.contains('adv-table-title')
+                            ? isolatedArea 
+                            : (isolatedArea.querySelector('.adv-cell-text') || isolatedArea);
                         const range = document.createRange();
-                        range.selectNodeContents(isolatedArea);
+                        range.selectNodeContents(targetToSelect);
                         sel.removeAllRanges();
                         sel.addRange(range);
                         return;
@@ -895,6 +911,10 @@ const EventsGlobal = {
                         }
                     }
                 }
+                // Garanzia di allontanamento preventivo dalla zona morta prima di qualsiasi inserimento testuale
+                if (typeof Editor !== 'undefined' && typeof Editor.adjustCaretAwayFromZwsDeadZone === 'function') {
+                    Editor.adjustCaretAwayFromZwsDeadZone();
+                }
                 if (typeof Editor !== 'undefined') Editor.registerTypingStart(e.key);
             }
         });
@@ -947,8 +967,13 @@ const EventsGlobal = {
             }
         });
 
-        // DOPPIO CLICK: riservato alla selezione nativa delle parole nell'editor
-        // e all'auto-fit delle colonne per i resizer delle tabelle
+        // Correzione automatica del cursore se un click atterra nella zona morta del cuscinetto \u200B
+        editorEl.addEventListener('mouseup', () => {
+            if (typeof Editor !== 'undefined' && typeof Editor.adjustCaretAwayFromZwsDeadZone === 'function') {
+                Editor.adjustCaretAwayFromZwsDeadZone();
+            }
+        });
+
         document.addEventListener('dblclick', (e) => {
             let target = e.target;
             if (target && target.nodeType === 3) target = target.parentNode;

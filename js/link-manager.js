@@ -2,12 +2,13 @@
  * LinkManager.js
  * Gestisce i Tipi di Link (Esterni, Interni, File Locali testuali) e l'inserimento Video YouTube.
  * FIX WORKSPACE: Aggiunto l'Auto-Loading per i file testuali referenziati con Path Relativo.
- * FIX CURSORE E POLLUZIONE DOM: L'inserimento di un link inietta ora un SOLO Zero-Width Space 
- * esclusivamente DOPO il link, per permettere all'utente di digitare senza rimanere incastrato, 
- * evitando la duplicazione di \u200B e la fastidiosa permanenza in caso di cancellazione del testo.
+ * FIX CURSORE E POLLUZIONE DOM: Inserimento pulito dei link senza Zero-Width Space parassiti.
  * FEAT UX: Aggiunta indicazione visiva della shortcut "[[" nel pannello di selezione link.
  * FEAT MIDDLE-CLICK: Centralizzata la funzione openLinkDirect per consentire l'apertura rapida tramite rotella mouse.
  * FIX REGEX URL: Raggruppamento con ancora iniziale esplicita per impedire che percorsi locali (es. C:\notepad.exe) vengano scambiati per URL web.
+ * FEAT CLEAN URL INPUT: Rimozione del prefisso forzato "https://" dall'input URL.
+ * FEAT URL TRUNCATE 60: Troncamento automatico a 60 caratteri del testo visualizzato quando corrisponde all'indirizzo web.
+ * FIX STALE SAVED RANGE: Azzeramento immediato di Editor.savedRange dopo il consumo in insertNodeAtSelection per evitare riferimenti orfani.
  */
 
 const LinkManager = {
@@ -21,6 +22,15 @@ const LinkManager = {
         const txt = document.createElement("textarea");
         txt.innerHTML = htmlStr;
         return txt.value;
+    },
+
+    _truncateUrl: (urlStr, maxLen = 60) => {
+        if (!urlStr) return '';
+        const trimmed = urlStr.trim();
+        if (trimmed.length > maxLen) {
+            return trimmed.substring(0, maxLen - 3) + '...';
+        }
+        return trimmed;
     },
 
     openSelectionModal: () => {
@@ -248,7 +258,7 @@ const LinkManager = {
             <div style="display:flex; flex-direction:column; gap:15px;">
                 <div>
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.url_label')}</label>
-                    <input type="text" id="externalLinkUrl" class="modern-input" placeholder="https://www.google.com" value="https://">
+                    <input type="text" id="externalLinkUrl" class="modern-input" placeholder="https://www.google.com" value="">
                 </div>
                 <div>
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.display_text_label')}</label>
@@ -285,7 +295,7 @@ const LinkManager = {
                 
                 let decodedText = prefilledUrl;
                 try { decodedText = decodeURIComponent(prefilledUrl); } catch(e) { }
-                if (textInput) textInput.value = decodedText;
+                if (textInput) textInput.value = LinkManager._truncateUrl(decodedText, 60);
 
             } else if (!LinkManager.isEditingMode) {
                 let selectedText = "";
@@ -295,18 +305,32 @@ const LinkManager = {
                 
                 let decodedText = selectedText;
                 try { decodedText = decodeURIComponent(selectedText); } catch(e) { }
-                if (textInput) textInput.value = decodedText;
+                if (textInput && decodedText) {
+                    const isUrlLike = /^(https?:\/\/|[a-zA-Z0-9\-\.]+\.[a-zA-Z]{2,})/i.test(decodedText);
+                    textInput.value = isUrlLike ? LinkManager._truncateUrl(decodedText, 60) : decodedText;
+                }
             }
-            if (urlInput) {
+
+            // Sincronizzazione dinamica: se l'utente incolla o digita l'URL senza aver inserito un testo personalizzato,
+            // il campo testo si popola in tempo reale con l'URL compatto a massimo 60 caratteri
+            if (urlInput && textInput) {
+                urlInput.addEventListener('input', () => {
+                    if (!textInput.dataset.userEdited) {
+                        textInput.value = LinkManager._truncateUrl(urlInput.value, 60);
+                    }
+                });
+                textInput.addEventListener('input', () => {
+                    textInput.dataset.userEdited = textInput.value.trim() !== '' ? 'true' : '';
+                });
                 urlInput.focus();
-                if(prefilledUrl) urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
+                if (prefilledUrl) urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
             }
         }, 50);
     },
 
     confirmExternalLink: () => {
         let url = document.getElementById('externalLinkUrl').value.trim();
-        const text = document.getElementById('externalLinkText').value;
+        const text = document.getElementById('externalLinkText').value.trim();
         let note = document.getElementById('externalLinkNote').value || '';
         
         if (!url || url === "https://") { alert(I18n.t('link_manager.alert_valid_url')); return; }
@@ -322,6 +346,14 @@ const LinkManager = {
             url = 'https://' + url;
         }
 
+        // Limita il testo visualizzato a 60 caratteri se l'utente non ha specificato un titolo o se coincide con l'URL
+        let displayText = text;
+        if (!displayText) {
+            displayText = LinkManager._truncateUrl(url, 60);
+        } else if (displayText === url || displayText.startsWith('http://') || displayText.startsWith('https://')) {
+            displayText = LinkManager._truncateUrl(displayText, 60);
+        }
+
         note = note.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
         UI.closeDrawer();
@@ -329,7 +361,7 @@ const LinkManager = {
         if (LinkManager.isEditingMode && LinkManager.editingLink) {
             Editor.saveSnapshot();
             LinkManager.editingLink.href = url;
-            LinkManager.editingLink.textContent = text || url;
+            LinkManager.editingLink.textContent = displayText;
             
             LinkManager.editingLink.removeAttribute('title'); 
 
@@ -350,7 +382,7 @@ const LinkManager = {
             if (note) link.setAttribute('data-link-note', note);
             
             link.style.cursor = "pointer";
-            link.textContent = text || url;
+            link.textContent = displayText;
             LinkManager.insertNodeAtSelection(link);
         }
     },
@@ -618,9 +650,11 @@ const LinkManager = {
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         
         const sel = window.getSelection();
-        if (Editor.savedRange) {
+        // Consumiamo e azzeriamo immediatamente Editor.savedRange per prevenire riferimenti stantii
+        if (typeof Editor !== 'undefined' && Editor.savedRange) {
             sel.removeAllRanges();
             sel.addRange(Editor.savedRange);
+            Editor.savedRange = null;
         }
 
         if (!sel.rangeCount) return;
@@ -630,11 +664,9 @@ const LinkManager = {
         
         range.insertNode(node);
         
-        const zwsAfter = document.createTextNode('\u200B');
-        node.parentNode.insertBefore(zwsAfter, node.nextSibling);
-        
+        // Inserimento pulito e nativo: il cursore si posiziona subito dopo il link senza iniettare \u200B fittizi
         const newRange = document.createRange();
-        newRange.setStartAfter(zwsAfter); // Cursor goes strictly after the ZWS to continue typing normally
+        newRange.setStartAfter(node);
         newRange.collapse(true);
         sel.removeAllRanges();
         sel.addRange(newRange);
@@ -696,7 +728,6 @@ const LinkManager = {
                 }
 
                 const pathParts = normalizedPath.split('/').filter(p => p);
-                
                 let currentDirHandle = AppState.workspaceHandle;
                 
                 // Naviga l'albero delle directory tranne l'ultimo elemento (che è il file)

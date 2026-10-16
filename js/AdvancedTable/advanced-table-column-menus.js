@@ -538,14 +538,22 @@ const AdvancedTableColumnMenus = {
 
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveColumnComment('${tableId}', '${colId}')">${I18n.t('common.save')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveColumnComment('${tableId}', '${colId}')" title="${I18n.t('common.save')} (Ctrl+Invio)">${I18n.t('common.save')}</button>
         `;
 
         UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.noteInline} ${I18n.t('adv_col_menu.comment_modal_title')}</span>`, bodyHTML, footerHTML);
 
         setTimeout(() => {
             const input = document.getElementById('advColCommentInput');
-            if (input) input.focus();
+            if (input) {
+                input.focus();
+                input.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        AdvancedTableColumnMenus.saveColumnComment(tableId, colId);
+                    }
+                });
+            }
         }, 50);
     },
 

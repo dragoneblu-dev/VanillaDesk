@@ -97,11 +97,21 @@ describe("LinkManager: Link Interni, Esterni, File Locali & YouTube (6 Test)", (
 
             LinkManager.insertNodeAtSelection(newLink);
 
-            // Il nodo immediatamente successivo al link deve essere un nodo di testo contenente \u200B
+        // 1. Il link deve essere presente nel DOM all'interno del paragrafo
+        Assert.strictEqual(newLink.parentNode, p);
+        Assert.strictEqual(newLink.textContent, 'Collegamento');
+
+        // 2. Garanzia di pulizia DOM: nessun nodo Zero-Width Space (\u200B) deve essere iniettato artificialmente dopo il tag <a>
             const next = newLink.nextSibling;
-            Assert.isNotNull(next);
-            Assert.strictEqual(next.nodeType, Node.TEXT_NODE);
-            Assert.strictEqual(next.nodeValue, '\u200B');
+        if (next && next.nodeType === Node.TEXT_NODE) {
+            Assert.isFalse(next.nodeValue.includes('\u200B'));
+        }
+
+        // 3. Verifica del posizionamento corretto del cursore (Caret) subito dopo il link inserito
+        const sel = window.getSelection();
+        Assert.isTrue(sel.rangeCount > 0);
+        const curRange = sel.getRangeAt(0);
+        Assert.isTrue(curRange.collapsed);
         });
 
     test("LinkManager: openLinkDirect su link interno delega a UI.selectNote", () => {

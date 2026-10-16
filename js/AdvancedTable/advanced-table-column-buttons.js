@@ -5,6 +5,7 @@
  * - Esecuzione transazionale delle macro di cella (runCellMacro)
  * - UI Drawer di configurazione visuale blocchi, azioni SET e filtri WHERE (openButtonColConfig, _renderButtonColBuilder)
  * - Gestione campi opacità, formule ed email
+ * - Sincronizzazione reattiva immediata della vista record (Drawer) a seguito dell'esecuzione macro
  */
 
 Object.assign(AdvancedTable, {
@@ -38,6 +39,13 @@ Object.assign(AdvancedTable, {
             });
             
             Store.triggerAutoSave(true);
+
+            // Se il drawer di dettaglio record è aperto sul record modificato, aggiorna la vista per mostrare i dati freschi
+            const drawer = document.getElementById('advGlobalDrawer');
+            if (drawer && drawer.classList.contains('open') && AdvancedTable.activeRecordId && response.errorsLog.length === 0) {
+                const activeTId = AdvancedTable.activeTableId || tableId;
+                AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
+            }
             
             if (response.errorsLog.length > 0) {
                 const errorHtml = `<div style="color:var(--danger-color); font-family:monospace;">${response.errorsLog.join('<br>')}</div>`;

@@ -4,6 +4,8 @@
  * Gestione degli appunti nascosti nel testo (Footnotes).
  * Protezione atomica contenteditable="false" per salvaguardare il contenitore dalle fusioni accidentali.
  * Salvataggio normalizzato tramite la funzione unica centralizzata Editor.sanitizeMiniText.
+ * FIX ANCORAGGIO CURSORE: Inserimento della selezione a offset 1 dopo il \u200B per impedire
+ * che caratteri digitati a fine riga finiscano prima del cuscinetto protettivo.
  */
 
 Object.assign(Editor, {
@@ -42,8 +44,9 @@ Object.assign(Editor, {
         range.insertNode(wrapper);
         range.insertNode(zwsBefore);
 
+        // Posizionamento esplicito DOPO il carattere \u200B del nodo zwsAfter
         const newRange = document.createRange();
-        newRange.setStartAfter(zwsAfter);
+        newRange.setStart(zwsAfter, 1);
         newRange.collapse(true);
         selection.removeAllRanges();
         selection.addRange(newRange);
@@ -97,14 +100,22 @@ Object.assign(Editor, {
         
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="Editor.saveInlineNote()">${I18n.t('inline_notes.btn_save')}</button>
+            <button class="btn btn-primary" onclick="Editor.saveInlineNote()" title="${I18n.t('inline_notes.btn_save')} (Ctrl+Invio)">${I18n.t('inline_notes.btn_save')}</button>
         `;
 
         UI.openDrawer(I18n.t('inline_notes.drawer_title'), bodyHTML, footerHTML);
 
         setTimeout(() => {
             const input = document.getElementById('inlineNoteInput');
-            if (input) input.focus();
+            if (input) {
+                input.focus();
+                input.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        Editor.saveInlineNote();
+                    }
+                });
+            }
         }, 50);
     },
 
@@ -112,7 +123,6 @@ Object.assign(Editor, {
         const input = document.getElementById('inlineNoteInput');
         if (!input || !Editor.currentInlineNote) return;
 
-        // Pulizia tramite la procedura unica centralizzata in Editor.sanitizeMiniText
         const newHTML = typeof Editor.sanitizeMiniText === 'function' 
             ? Editor.sanitizeMiniText(input.innerHTML) 
             : input.innerHTML.trim();

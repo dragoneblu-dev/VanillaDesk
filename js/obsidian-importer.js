@@ -4,6 +4,10 @@
  * - Scansione ricorsiva cartelle e file (.md, immagini, audio).
  * - Copia fisica degli asset nella cartella assets/ del Workspace.
  * - Two-Pass Resolver per wikilinks ([[Nota]], [[Nota|Alias]], [[Nota#Capitolo]]).
+ * - Estrazione completa delle proprietà Frontmatter YAML (type, role, location, status, faction, ecc.)
+ *   con mappatura relazionale diretta nelle colonne di SYS_PROPERTIES_DB.
+ * - Risoluzione automatica dei wikilinks inseriti nelle proprietà Frontmatter (es. location: "[[The Greyflat Pans]]")
+ *   nel tipo nativo 'note_link' di VanillaDesk, collegati al noteId della nota corrispondente.
  * - Estrazione completa dei tag da Frontmatter YAML e inline hashtag (#tag) con salvataggio in SYS_PROPERTIES_DB.
  * - Ottimizzazione salvataggio tag riciclando la procedura nativa senza verifiche ridondanti.
  * - Conversione marker Obsidian %%commento%% negli appunti nascosti inline di VanillaDesk.
@@ -101,6 +105,7 @@ const ObsidianImporter = {
             const dirEntries = []; // Tutte le cartelle
             const noteMap = new Map(); // pathRelativo / nomeFile -> noteId VanillaDesk
             const assetMap = new Map(); // nomeFileOriginale -> assetFileName VanillaDesk
+            const extractedPropertiesMap = new Map(); // noteId -> Object proprietà YAML estratte
             const extractedTagsMap = new Map(); // noteId -> Array di stringhe tag
 
             // Cartelle da ignorare tassativamente
@@ -233,11 +238,21 @@ const ObsidianImporter = {
                 updateProgress(`Censimento note: ${i + 1}/${totalFiles}`, indexPct, 100);
             }
 
-            // 7. PASSAGGIO 2: Parsing del contenuto, risoluzione Wikilinks ed estrazione Tag (35% - 60%)
+            // 7. PASSAGGIO 2: Parsing del contenuto, risoluzione Wikilinks ed estrazione Proprietà/Tag (35% - 60%)
             for (let i = 0; i < rawNotesData.length; i++) {
                 const item = rawNotesData[i];
                 let md = item.rawMarkdown;
 
+                // Estrazione di tutte le proprietà dal Frontmatter YAML (type, role, location, status, faction, ecc.)
+                const yamlMatch = md.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+                if (yamlMatch) {
+                    const parsedProps = ExportManager.parseYamlFrontmatter(yamlMatch[1]);
+                    if (Object.keys(parsedProps).length > 0) {
+                        extractedPropertiesMap.set(item.id, parsedProps);
+                    }
+                }
+
+                // Estrazione dei tag (sia da YAML che da hashtag nel corpo)
                 const allTags = ExportManager.extractTagsFromMarkdown(md);
                 if (allTags.length > 0) {
                     extractedTagsMap.set(item.id, allTags);
@@ -302,11 +317,18 @@ const ObsidianImporter = {
                 updateProgress(`Conversione contenuti: ${i + 1}/${totalFiles}`, parsePct, 100);
             }
 
-            // 8. Sincronizzazione Tag in SYS_PROPERTIES_DB riciclando la procedura esistente con skipEnsure attivo
+            // 8. Sincronizzazione atomica di tutte le Proprietà Frontmatter e Tag in SYS_PROPERTIES_DB
+            if (typeof AdvancedTable !== 'undefined') {
+                AdvancedTable.ensureSystemPropertiesDB();
+            }
+
+            if (extractedPropertiesMap.size > 0) {
+                extractedPropertiesMap.forEach((propsObj, noteId) => {
+                    ExportManager.saveNotePropertiesToSystemDB(noteId, propsObj, noteMap, true);
+                });
+            }
+
             if (extractedTagsMap.size > 0) {
-                if (typeof AdvancedTable !== 'undefined') {
-                    AdvancedTable.ensureSystemPropertiesDB();
-                }
                 extractedTagsMap.forEach((tags, noteId) => {
                     ExportManager.saveNoteTagsToSystemDB(noteId, tags, true);
                 });

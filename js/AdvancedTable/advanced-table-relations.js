@@ -483,7 +483,7 @@ Object.assign(AdvancedTable, {
         (targetState.columns || []).forEach(c => {
             if (c.id !== primaryDisplayColId) {
                 const isSelected = (c.id === activeSecondaryColId) ? 'selected' : '';
-                secondaryColOptionsHtml += `<option value="${c.id}" ${isSelected}>Dettaglio: ${UI.escapeHTML(c.name)} (${c.type})</option>`;
+                secondaryColOptionsHtml += `<option value="${c.id}" ${isSelected}>${UI.escapeHTML(c.name)} (${c.type})</option>`;
             }
         });
 

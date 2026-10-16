@@ -6,6 +6,7 @@
  * il markup e il flag _isDirty sulla nota corrente per garantire la reattività dell'autosave.
  * FEAT SNIPPET RISERVATO: Supporto all'inserimento di snippet mascherati (password/credenziali)
  * tramite riciclo dell'elemento nativo e classe CSS 'snippet-masked'.
+ * FEAT TOOLTIP DATABASE: Aggiunto title descrittivo sulla voce di menu Database per illustrare le viste supportate.
  */
 
 Object.assign(Editor, {
@@ -44,13 +45,14 @@ Object.assign(Editor, {
             fn();
         };
 
+
         const items = [
             { icon: Icons.code, label: I18n.t('format_blocks.menu_widget_code'), onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
             { icon: Icons.citation, label: I18n.t('format_blocks.menu_widget_citation'), onClick: () => executeInsert(() => CitationManager.openModal()) },
             { icon: Icons.columns, label: I18n.t('format_blocks.menu_widget_columns'), onClick: () => executeInsert(() => ColumnManager.insert()) },
             { type: 'divider' },
             { icon: Icons.tableSimple, label: I18n.t('format_blocks.menu_widget_table'), onClick: () => executeInsert(() => TableManager.openCreationModal()) },
-            { icon: Icons.tableDatabase, label: I18n.t('format_blocks.menu_widget_database'), onClick: () => executeInsert(() => AdvancedTable.create()) },
+            { icon: Icons.tableDatabase, label: I18n.t('format_blocks.menu_widget_database'), title: I18n.t('format_blocks.menu_widget_database_desc'), onClick: () => executeInsert(() => AdvancedTable.create()) },
             { icon: Icons.tablePivot, label: I18n.t('format_blocks.menu_widget_pivot'), onClick: () => executeInsert(() => AdvancedPivotMenus.openCreateWizard()) },
             { type: 'divider' },
             { icon: Icons.play, label: I18n.t('format_blocks.menu_widget_button'), onClick: () => executeInsert(() => ButtonManager.insert()) }

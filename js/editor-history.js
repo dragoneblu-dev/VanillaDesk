@@ -13,6 +13,10 @@
  * (rimozione di deletedAt), eliminando il paradosso dei puntatori "Pagina Orfana".
  * PERF B64 CACHING: Caching delle stringhe Base64 dei widget per evitare serializzazioni JSON e btoa() ridondanti
  * durante la digitazione di testo ordinario, eliminando il micro-stuttering da Garbage Collector.
+ * FIX CARET PRESERVATION: Rimozione del marcatore temporaneo con salvaguardia atomica del range attivo del browser,
+ * prevenendo che lo snapshot automatico di inattività sposti il cursore a inizio blocco durante la navigazione.
+ * FIX LIST CARET RECOVERY: Al ripristino Undo/Redo in prossimità di liste UL/OL, il cursore viene fatto atterrare
+ * direttamente dentro il <li> della lista invece che su noteContent, eliminando la creazione di <p></p> parassiti da parte di Blink.
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -296,12 +300,18 @@ Object.assign(Editor, {
 
             try {
                 if (origContainer && document.body.contains(origContainer)) {
-                    const restoreRange = document.createRange();
-                    const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                    restoreRange.setStart(origContainer, safeOffset);
-                    restoreRange.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(restoreRange);
+                    // Verifica di sicurezza prima di ripristinare il range per evitare sovrascritture parassite se il cursore è già valido
+                    const currentSel = window.getSelection();
+                    const isStillFocused = currentSel.rangeCount > 0 && editor.contains(currentSel.anchorNode);
+                    
+                    if (!isStillFocused || currentSel.anchorNode === origContainer) {
+                        const restoreRange = document.createRange();
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
+                    }
                 }
             } catch(err) {}
         }
@@ -439,6 +449,26 @@ Object.assign(Editor, {
                 } else if (next && next.nodeType === Node.TEXT_NODE) {
                     range.setStart(next, 0);
                     range.collapse(true);
+                } else if (next && next.tagName && ['UL', 'OL'].includes(next.tagName)) {
+                    // Cursore prima di una lista: atterra all'inizio del primo <li> invece che nudo su noteContent
+                    const firstLi = next.querySelector('li');
+                    if (firstLi) {
+                        range.setStart(firstLi, 0);
+                        range.collapse(true);
+                    } else {
+                        range.setStartBefore(next);
+                        range.collapse(true);
+                    }
+                } else if (prev && prev.tagName && ['UL', 'OL'].includes(prev.tagName)) {
+                    // Cursore dopo una lista: atterra alla fine dell'ultimo <li> invece che nudo su noteContent
+                    const lastLi = prev.querySelector('li:last-child') || prev.lastElementChild;
+                    if (lastLi) {
+                        range.selectNodeContents(lastLi);
+                        range.collapse(false);
+                    } else {
+                        range.setStartAfter(prev);
+                        range.collapse(true);
+                    }
                 } else if (next) {
                     range.setStartBefore(next);
                     range.collapse(true);

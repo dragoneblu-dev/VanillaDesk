@@ -1,7 +1,7 @@
 /**
  * editor-format-text.js
  * Sottomodulo di Editor.
- * Gestione formattazioni inline, Menu Stile, Font e la "Gomma Draconiana" (Deep Sanitization).
+ * Gestione formattazioni inline, Menu Stile, Font e la "Gomma Formattazioni" (Deep Sanitization).
  * Tutela dell'infrastruttura Widget, dell'attributo 'start' degli elenchi numerati (OL), di colspan/rowspan per le celle
  * e dei metadati dei link di VanillaDesk (incluso data-link-note per la descrizione aggiuntiva).
  * Inclusione classi e attributi per segnalibri e note commentate.
@@ -12,6 +12,9 @@
  * con l'evento di Paste, eliminando codice duplicato ed Over Engineering.
  * FIX TABELLE & STILI ALIENI: Sanificazione rigorosa del contenuto delle celle delle tabelle semplici,
  * con srotolamento di tutti gli span parassiti, rimozione di classi non native e supporto alle celle selezionate.
+ * ZERO-FONT UNIFICATION: Eliminazione integrale del tag legacy <font> sostituito ovunque da <span> standard W3C,
+ * garantendo la preservazione assoluta delle classi di stile VanillaDesk (ff-*, fs-*, hl-c*, tx-c*).
+ * WIDGET PROTECTION: Esclusione categorica di tutti i widget complessi di VanillaDesk dalla gomma formattazioni.
  */
 
 Object.assign(Editor, {
@@ -399,6 +402,17 @@ Object.assign(Editor, {
             }
         });
 
+        // ZERO-FONT CONVERSION: Trasforma qualsiasi tag FONT residuo generato da execCommand in un elemento SPAN standard
+        editor.querySelectorAll('font').forEach(fontEl => {
+            const span = document.createElement('span');
+            while (fontEl.attributes.length > 0) {
+                span.setAttribute(fontEl.attributes[0].name, fontEl.attributes[0].value);
+                fontEl.removeAttribute(fontEl.attributes[0].name);
+            }
+            while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
+            fontEl.parentNode.replaceChild(span, fontEl);
+        });
+
         // Garbage collection dei nodi vuoti lasciati indietro
         let changed = true;
         while (changed) {
@@ -412,8 +426,8 @@ Object.assign(Editor, {
                 if (el.getAttribute('size') === '') el.removeAttribute('size');
                 if (el.getAttribute('color') === '') el.removeAttribute('color');
 
-                if (el.tagName === 'SPAN' || el.tagName === 'FONT') {
-                    if (el.attributes.length === 0 || (el.tagName === 'SPAN' && el.classList.length === 0 && !el.hasAttribute('style'))) {
+                if (el.tagName === 'SPAN') {
+                    if (el.attributes.length === 0 || (el.classList.length === 0 && !el.hasAttribute('style'))) {
                         const parent = el.parentNode;
                         while (el.firstChild) parent.insertBefore(el.firstChild, el);
                         parent.removeChild(el);
@@ -432,38 +446,58 @@ Object.assign(Editor, {
     /**
      * MOTORE CENTRALE DI SANIFICAZIONE PROFONDA (GOMMA FORMATTAZIONI)
      * Funzione riutilizzata sia da clearFormatting sia da handlePaste per garantire coerenza assoluta,
-     * rimozione totale di stili alieni (-webkit, margin, padding, user-select, font, colori inline)
-     * e classi parassite (MsoNormal, text-*, bg-*, ecc.).
-     * RISOLUZIONE TABELLE: I controlli interni protetti valgono solo per i componenti RDBMS/Macro;
-     * il testo contenuto nelle celle delle tabelle semplici viene sanificato rigorosamente.
+     * rimozione totale di stili alieni (-webkit, margin, padding, user-select)
+     * e conservazione garantita delle classi di stile VanillaDesk (hl-c*, tx-c*, ff-*, fs-*).
+     * TUTELA ASSOLUTA: Esclusione totale e blindata dei widget complessi di VanillaDesk.
      */
     cleanDOMTree: (container) => {
         if (!container) return;
 
-        // Distinzione tra widget con infrastruttura interna complessa e blocchi a testo libero
         const isProtectedComplexWidget = (node) => {
             if (!node || !node.closest) return false;
-            const shell = node.closest('.adv-widget-shell');
+            if (node.closest('.simple-table-wrapper')) return false;
+            if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(node)) return true;
+            const shell = node.closest('.adv-widget-shell, .adv-table-wrapper, .adv-journal-wrapper, .code-wrapper, .block-citation, .adv-action-button-wrapper, [data-widget-type]');
             if (!shell) return false;
             const type = shell.getAttribute('data-widget-type');
-            return ['database', 'pivot', 'journal', 'code', 'buttonbar', 'audio', 'video', 'citation'].includes(type);
+            if (type === 'simple-table') return false;
+            return true;
         };
+
+        // Se il container stesso è o appartiene a un widget complesso di VanillaDesk, non toccarlo!
+        if (isProtectedComplexWidget(container)) return;
+
+        const doc = container.ownerDocument || document;
+
+        // ZERO-FONT CONVERSION INIZIALE: Trasforma preventivamente qualsiasi tag FONT in SPAN (escludendo i widget protetti)
+        container.querySelectorAll('font').forEach(fontEl => {
+            if (isProtectedComplexWidget(fontEl)) return;
+            const span = doc.createElement('span');
+            while (fontEl.attributes.length > 0) {
+                span.setAttribute(fontEl.attributes[0].name, fontEl.attributes[0].value);
+                fontEl.removeAttribute(fontEl.attributes[0].name);
+            }
+            while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
+            fontEl.parentNode.replaceChild(span, fontEl);
+        });
 
         const isSafeToTouch = (node) => {
             if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
             if (node.id === 'noteContent') return false;
 
-            // Se il nodo si trova all'interno di un'area editabile riconosciuta (comprese le celle delle tabelle semplici)
-            if (typeof WidgetManager !== 'undefined' && WidgetManager.isInsideEditableWidgetArea(node)) return true; 
+            // I widget di VanillaDesk (e tutto ciò che contengono) non devono MAI essere toccati dalla gomma formattazioni
+            if (isProtectedComplexWidget(node)) {
+                return false;
+            }
 
-            // Se il nodo si trova all'interno di una tabella semplice (.simple-table-wrapper o tag table)
+            // Se il nodo si trova all'interno di una tabella semplice (.simple-table-wrapper o tag table non complessa)
             if (node.closest && (node.closest('.simple-table-wrapper') || (node.closest('table') && !isProtectedComplexWidget(node)))) {
                 return true;
             }
 
-            if (isProtectedComplexWidget(node)) {
-                return false;
-            }
+            // Se il nodo si trova all'interno di un'area editabile generica fuori dai widget complessi
+            if (typeof WidgetManager !== 'undefined' && WidgetManager.isInsideEditableWidgetArea(node)) return true; 
+
             if (node.closest && node.closest('.internal-link, .file-link')) {
                 return false;
             }
@@ -520,7 +554,6 @@ Object.assign(Editor, {
         // Whitelist per attributi Data: include data-link-note per salvaguardare le descrizioni opzionali dei link
         const allowedDataAttrs = ['data-widget-type', 'data-image-ref', 'data-audio-ref', 'data-note-id', 'data-anchor', 'data-ref-id', 'data-file-path', 'data-link-note', 'data-tooltip', 'data-row', 'data-col', 'data-raw-value', 'data-decimals', 'data-opt-name', 'data-date', 'data-timer-expire', 'data-comment', 'data-ref-note', 'data-ref-type', 'data-collapsed', 'data-last-find', 'data-language'];
 
-        const doc = container.ownerDocument || document;
         const elementsToClean = [];
 
         if (container.id !== 'noteContent' && container.tagName !== 'BODY') {
@@ -617,8 +650,8 @@ Object.assign(Editor, {
                 }
             });
 
-            // Srotola FONT e SPAN non protetti se rimasti privi di classi autorizzate
-            if ((tag === 'FONT' || tag === 'SPAN') && !isProtectedWidget) {
+            // Srotola SPAN non protetti se rimasti privi di classi autorizzate
+            if (tag === 'SPAN' && !isProtectedWidget) {
                 const hasValidClass = currentEl.getAttribute('class') && currentEl.getAttribute('class').trim() !== '';
                 const hasValidData = Array.from(currentEl.attributes).some(a => allowedDataAttrs.includes(a.name));
                 if (!hasValidClass && !hasValidData) {
@@ -634,11 +667,11 @@ Object.assign(Editor, {
 
         elementsToClean.reverse().forEach(el => processElement(el));
 
-        // Pulizia ricorsiva degli SPAN / FONT rimasti vuoti o privi di classi autorizzate (anche nelle celle di tabella)
+        // Pulizia ricorsiva degli SPAN rimasti vuoti o privi di classi autorizzate
         let changed = true;
         while (changed) {
             changed = false;
-            container.querySelectorAll('span, font').forEach(sp => {
+            container.querySelectorAll('span').forEach(sp => {
                 if (isSafeToTouch(sp) && !isProtectedComplexWidget(sp)) {
                     const hasValidClass = sp.getAttribute('class') && sp.getAttribute('class').trim() !== '';
                     const hasValidData = Array.from(sp.attributes).some(a => allowedDataAttrs.includes(a.name));
@@ -689,13 +722,22 @@ Object.assign(Editor, {
         let container = range.commonAncestorContainer;
         if (container.nodeType === 3) container = container.parentNode;
 
-        // Se l'utente si trova dentro una cella di tabella semplice o ha selezionato una tabella
-        const tableCell = container.closest('td, th');
-        const simpleTable = container.closest('.simple-table-wrapper') || (container.closest('table') && !container.closest('.adv-widget-shell:not(.simple-table-wrapper)'));
+        // Se il cursore o la selezione si trova dentro un widget protetto di VanillaDesk (che non sia una tabella semplice),
+        // la gomma formattazioni non deve avere alcun effetto per prevenire la corruzione dei dati.
+        if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(container) && !container.closest('.simple-table-wrapper')) {
+            return;
+        }
 
-        if (tableCell) {
-            // Se la selezione è all'interno di una singola cella, sanifichiamo l'intera cella
+        // Se l'utente si trova dentro una cella di tabella semplice o ha selezionato una tabella semplice
+        const tableCell = container.closest('td, th');
+        const simpleTable = container.closest('.simple-table-wrapper') || (container.closest('table') && !container.closest('.adv-widget-shell:not(.simple-table-wrapper), .adv-table-wrapper'));
+
+        if (tableCell && simpleTable) {
+            // Se la selezione è all'interno di una singola cella di tabella semplice, sanifichiamo l'intera cella
             container = tableCell;
+        } else if (tableCell && !simpleTable) {
+            // È una cella appartenente a un Database o altro widget complesso: non toccare!
+            return;
         } else if (simpleTable) {
             // Se la selezione abbraccia la tabella semplice, sanifichiamo l'intera tabella
             container = simpleTable.querySelector('table') || simpleTable;
@@ -710,6 +752,10 @@ Object.assign(Editor, {
                     curr = curr.parentNode;
                 }
                 if (curr && curr.id !== 'noteContent') {
+                    // Se il blocco trovato è un widget protetto di VanillaDesk, non toccarlo!
+                    if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(curr) && !curr.closest('.simple-table-wrapper')) {
+                        return;
+                    }
                     container = curr;
                 }
             }

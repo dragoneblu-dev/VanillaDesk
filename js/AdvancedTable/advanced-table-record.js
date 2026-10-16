@@ -11,6 +11,10 @@
  * FEAT DUPLICATE RECORD (CLONE ROW): Pulsante 'Duplica Record' nel footer del drawer.
  * FEAT CONTEXT HEADER & BANNER: Intestazione drawer arricchita con il Titolo del Database di appartenenza
  * e banner informativo esplicito quando si visualizza un record collegato proveniente da un'altra tabella.
+ * FEAT RECORD BUTTON MACRO: Rendering nativo del pulsante interattivo eseguibile per colonne di tipo 'button'.
+ * FEAT COLUMN COMMENT ICON: Visualizzazione dell'icona info con tooltip esplicativo se la colonna possiede un commento.
+ * FIX READONLY FORCED: isReadOnlyForced scatta unicamente se si consulta un record esterno da altra tabella;
+ * il footer delle azioni relazionali (Scollega Record) rimane sempre accessibile in Edit Mode.
  */
 
 Object.assign(AdvancedTable, {
@@ -34,11 +38,15 @@ Object.assign(AdvancedTable, {
             }
         } else {
             state = AdvancedTable.getTableState(tableId);
-            // Se non c'è il wrapper a schermo forza il ReadOnly, 
-            // a meno che non sia il DB di Sistema che è invisibile per natura!
-            if (!isSysDB) {
+            // Forza la sola lettura dei campi unicamente se si sta consultando un record esterno proveniente da un'altra tabella
+            if (!isSysDB && relationCtx && relationCtx.srcTable && relationCtx.srcTable !== tableId) {
                 isReadOnlyForced = true;
             }
+        }
+
+        if (!state && AppState.databases) {
+            const realId = AdvancedTable._resolveSourceId(tableId);
+            state = AppState.databases[realId] || AppState.databases[tableId];
         }
 
         if (!state) {
@@ -123,7 +131,22 @@ Object.assign(AdvancedTable, {
 
             const isCellEdit = isEdit && !isBacklink && !isSysNoteLink;
 
-            if (isCellEdit) {
+            // GESTIONE DEDICATA CAMPO PULSANTE MACRO
+            if (col.type === 'button') {
+                const btnLabel = (col.buttonLabel || col.name).replace(/"/g, '&quot;');
+                const btnColor = col.buttonColor || 'var(--accent-color)';
+                const btnIcon = col.buttonIcon || Icons.play;
+                const actionCall = `onclick="event.stopPropagation(); AdvancedTable.runCellMacro('${tableId}', '${rowId}', '${col.id}');"`;
+
+                displayVal = `
+                    <div style="display:flex; justify-content:flex-end; width:100%;">
+                        <button class="btn action-btn-run" style="background-color:${btnColor}; border-color:${btnColor}; color:white; padding:6px 14px; font-size:0.85rem; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition: transform 0.1s, filter 0.1s;" ${actionCall} title="${I18n.t('adv_cell.execute_action')}" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
+                            <span style="display:inline-flex; flex-shrink:0; pointer-events:none;">${btnIcon}</span>
+                            <span style="pointer-events:none;">${btnLabel}</span>
+                        </button>
+                    </div>
+                `;
+            } else if (isCellEdit) {
                 if (col.type === 'created_time') {
                     displayVal = `<span style="opacity:0.6; font-family:monospace; font-size:0.9rem;">${AdvancedTable.formatTime(row.createdAt)}</span>`;
                 }
@@ -460,18 +483,32 @@ Object.assign(AdvancedTable, {
                 labelStyle += " cursor:pointer;";
             }
 
+            // GESTIONE ICONA COMMENTO COLONNA CON TOOLTIP DEDICATO
+            let commentIcon = '';
+            if (col.comment) {
+                const safeComment = col.comment.replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>');
+                const safeColName = String(col.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+                const tooltipHTML = `<b>${safeColName}</b><br><span style='color:var(--text-secondary);'>${safeComment}</span>`;
+                commentIcon = `<span style="opacity:0.5; margin-left:4px; display:inline-flex; align-items:center; cursor:help; vertical-align:middle;" data-tooltip="${tooltipHTML}" title="" onclick="event.stopPropagation();">${Icons.info}</span>`;
+            }
+
             const labelId = `drawer-prop-${col.id}`;
             const clickMenu = isEdit && !isSysNoteLink ? `id="${labelId}" onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
 
             html += `
                 <div style="display:flex; ${isLongText ? 'flex-direction:column; align-items:flex-start;' : 'align-items:center;'} gap:6px; padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px;">
-                    <div style="${labelStyle}" ${clickMenu}>${col.name} ${isColCurrentlyHidden ? `<span style="opacity:0.5; font-weight:normal; text-transform:none;">${I18n.t('adv_record.hidden_badge')}</span>` : ''}</div>
+                    <div style="${labelStyle}" ${clickMenu}>${col.name} ${commentIcon} ${isColCurrentlyHidden ? `<span style="opacity:0.5; font-weight:normal; text-transform:none;">${I18n.t('adv_record.hidden_badge')}</span>` : ''}</div>
                     <div style="${isLongText ? 'width:100%; box-sizing:border-box;' : 'flex:1; display:flex; justify-content:flex-end;'}">${displayVal}</div>
                 </div>
             `;
         });
 
-        if (isEdit) {
+        // Le azioni del footer sono disponibili quando l'applicazione è in modalità modifica
+        const canShowFooterActions = isWorkflowStudio
+            ? (!WorkflowApp.layout.locked && !state.isPivot)
+            : (AppState.isEditMode && !state.isPivot);
+
+        if (canShowFooterActions) {
             html += `<div style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed var(--border-color); display: flex; justify-content: space-between; align-items:center; flex-wrap:wrap; gap:10px;">`;
             
             if (isSysDB) {
@@ -489,12 +526,14 @@ Object.assign(AdvancedTable, {
             } else {
                 html += `<div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">`;
                 
-                // Bottone Duplica Record (Clone Row)
-                html += `
-                    <button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color); font-weight:500;" onclick="AdvancedTable.duplicateRecord('${tableId}', '${rowId}')">
-                        <span style="margin-right:5px; display:inline-flex; align-items:center;">${Icons.clipboard || '📑'}</span> Duplica Record
-                    </button>
-                `;
+                // Bottone Duplica Record (Clone Row) - solo se non stiamo consultando un record esterno in sola lettura
+                if (!isReadOnlyForced) {
+                    html += `
+                        <button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color); font-weight:500;" onclick="AdvancedTable.duplicateRecord('${tableId}', '${rowId}')">
+                            <span style="margin-right:5px; display:inline-flex; align-items:center;">${Icons.clipboard || '📑'}</span> Duplica Record
+                        </button>
+                    `;
+                }
 
                 // Se il record viene aperto a partire da una Relazione in un'altra riga,
                 // offriamo il bottone "Scollega Record" invece del pericoloso "Elimina Definitivamente".
@@ -508,11 +547,13 @@ Object.assign(AdvancedTable, {
                 }
                 html += `</div>`;
 
-                html += `
-                    <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: rgba(239, 68, 68, 0.05);" onclick="AdvancedTable.deleteRecord('${tableId}', '${rowId}')">
-                        <span style="margin-right:5px; display:inline-flex;">${Icons.trash}</span> ${I18n.t('adv_record.delete_permanently')}
-                    </button>
-                `;
+                if (!relationCtx && !isReadOnlyForced) {
+                    html += `
+                        <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: rgba(239, 68, 68, 0.05);" onclick="AdvancedTable.deleteRecord('${tableId}', '${rowId}')">
+                            <span style="margin-right:5px; display:inline-flex;">${Icons.trash}</span> ${I18n.t('adv_record.delete_permanently')}
+                        </button>
+                    `;
+                }
             }
             html += `</div>`;
         }

@@ -12,6 +12,8 @@
  * '⚠️ #VALORE!' con corretto escaping degli attributi data-tooltip per eliminare la rottura del DOM.
  * PERF READ-ONLY RELATIONS CLEANUP: Rimosso il padding superfluo e il margin-left di 10px in modalità sola lettura,
  * garantendo che le pillole relazionali scorrano compatte a filo senza contenitori gonfiati.
+ * FIX CTRL+A CELL ISOLATION: Intercettazione inline di Ctrl+A / Cmd+A sui campi input (numero e url)
+ * per circoscrivere la selezione alla sola cella attiva senza selezionare la pagina intera.
  */
 
 Object.assign(AdvancedTable, {
@@ -231,7 +233,7 @@ Object.assign(AdvancedTable, {
                            placeholder="..." 
                            class="adv-input-right adv-number-input" 
                            onfocus="this.type='number'; this.value=this.getAttribute('data-raw-value');" 
-                           onkeydown="if(event.key==='Enter'){event.preventDefault(); this.blur();}"
+                           onkeydown="if((event.ctrlKey||event.metaKey)&&(event.key==='a'||event.key==='A')){event.preventDefault();event.stopPropagation();this.select();return;}if(event.key==='Enter'){event.preventDefault(); this.blur();}"
                            onblur="this.setAttribute('data-raw-value', this.value); this.type='text'; this.value=AdvancedTable.formatDecimal(this.value, this.getAttribute('data-decimals'));" 
                            ${readonly}>
                 </div>`;

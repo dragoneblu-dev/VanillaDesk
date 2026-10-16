@@ -348,14 +348,22 @@ Object.assign(Editor, {
 
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="Editor.saveBookmarkComment('${markerId}')">${I18n.t('bookmarks.btn_save_comment')}</button>
+            <button class="btn btn-primary" onclick="Editor.saveBookmarkComment('${markerId}')" title="${I18n.t('bookmarks.btn_save_comment')} (Ctrl+Invio)">${I18n.t('bookmarks.btn_save_comment')}</button>
         `;
 
         UI.openDrawer(I18n.t('bookmarks.drawer_comment_title'), bodyHTML, footerHTML);
 
         setTimeout(() => {
             const input = document.getElementById('bookmarkCommentInput');
-            if (input) input.focus();
+            if (input) {
+                input.focus();
+                input.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        Editor.saveBookmarkComment(markerId);
+                    }
+                });
+            }
         }, 50);
     },
 

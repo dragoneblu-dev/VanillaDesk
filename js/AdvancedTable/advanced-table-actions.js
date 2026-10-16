@@ -404,7 +404,7 @@ Object.assign(AdvancedTable, {
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>
         ` : `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')">${I18n.t('adv_actions.save_text')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')" title="${I18n.t('adv_actions.save_text')} (Ctrl+Invio)">${I18n.t('adv_actions.save_text')}</button>
         `;
 
         if (typeof UI !== 'undefined') {
@@ -419,6 +419,14 @@ Object.assign(AdvancedTable, {
                     const pos = Math.min(initialCaretPos, input.value.length);
                     input.setSelectionRange(pos, pos);
                 }
+
+                // Scorciatoia rapida Ctrl+Invio (o Cmd+Invio) per confermare e salvare il testo
+                input.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        AdvancedTable.saveLongText(tableId, rowId, colId);
+                    }
+                });
             }
         }, 50);
     },

@@ -3,6 +3,8 @@
  * Modulo Bridge per Integrazione AI e Agenti Intelligenti.
  * Consente l'interscambio di dati tra l'ambiente nativo VanillaDesk
  * e rappresentazioni semantiche in linguaggio naturale / Markdown per LLM.
+ * FEAT FULL FRONTMATTER: exportNoteToSemanticMarkdown esporta l'intero blocco YAML Frontmatter
+ * arricchito con tutte le proprietà della pagina estratte da SYS_PROPERTIES_DB.
  */
 
 const AIBridge = {
@@ -61,19 +63,26 @@ const AIBridge = {
 
     /**
      * Esporta una nota in formato semantico per l'IA.
-     * Converte i gusci HTML dei database in blocchi strutturati YAML leggibili.
+     * Genera il Frontmatter YAML completo con tutte le proprietà di pagina da SYS_PROPERTIES_DB
+     * e converte i gusci HTML dei database in blocchi strutturati YAML leggibili.
      */
     exportNoteToSemanticMarkdown: (noteTitle) => {
         const note = AppState.notes.find(n => (n.title || '').trim().toLowerCase() === noteTitle.trim().toLowerCase() && !n.deletedAt);
         if (!note) return null;
 
-        let md = `---
-titolo: "${note.title.replace(/"/g, '\\"')}"
-preferito: ${!!note.isMarked}
-data_aggiornamento: "${note.updatedAt}"
+        // Costruzione del Frontmatter YAML universale arricchito
+        let md = "";
+        if (typeof ExportManager !== 'undefined' && typeof ExportManager.buildNoteFrontmatter === 'function') {
+            md = ExportManager.buildNoteFrontmatter(note.id);
+        } else {
+            md = `---
+created: "${note.createdAt}"
+updated: "${note.updatedAt}"
+favorite: ${!!note.isMarked}
 ---
 
 `;
+        }
 
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = note.content || '';

@@ -8,14 +8,17 @@
  * Selezione estesa verticale (Shift+ArrowUp/Down) attraverso gli snippet copiabili.
  * Navigazione orizzontale (ArrowLeft/ArrowRight) priva di blocchi per entrare e uscire da snippet e inline shells.
  * Rilascio automatico della selezione widget al movimento del cursore con tasti freccia.
+ * FIX CARET GLITCH: Navigazione fluida fuori dallo snippet scavalcando i cuscinetti \u200B ed esclusione
+ * degli inline widget dall'escape verticale su nuova riga per impedire salti del cursore.
+ * FIX HORIZONTAL INLINE ENTRY: Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso lo snippet.
  */
 
 Object.assign(Editor, {
 
     /**
-     * SNIPPET HORIZONTAL ESCAPE
-     * Consente alle frecce ArrowLeft e ArrowRight di uscire fluidamente dallo snippet copiabile
-     * quando si raggiunge il primo o l'ultimo carattere, evitando che il cursore rimanga intrappolato.
+     * SNIPPET HORIZONTAL ESCAPE & ENTRY
+     * Consente alle frecce ArrowLeft e ArrowRight di uscire e di entrare fluidamente nello snippet copiabile
+     * scavalcando il cuscinetto \u200B senza arrestarsi nello spazio vuoto tra lo \u200B e il widget.
      */
     _handleSnippetHorizontalEscape: (e) => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return false;
@@ -28,54 +31,106 @@ Object.assign(Editor, {
         let node = range.startContainer;
         let parent = node.nodeType === 3 ? node.parentNode : node;
 
+        // 1. USCITA DALLO SNIPPET (Quando il cursore è all'interno di .snippet-text)
         const snippetText = parent.closest('.snippet-text');
-        if (!snippetText) return false;
+        if (snippetText) {
+            const snippetWrapper = snippetText.closest('.adv-copy-snippet, .adv-inline-shell') || snippetText;
 
-        const snippetWrapper = snippetText.closest('.adv-copy-snippet, .adv-inline-shell') || snippetText;
+            if (e.key === 'ArrowLeft') {
+                const preRange = range.cloneRange();
+                preRange.selectNodeContents(snippetText);
+                preRange.setEnd(range.startContainer, range.startOffset);
+                const isAtStart = preRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0;
 
-        if (e.key === 'ArrowLeft') {
-            const preRange = range.cloneRange();
-            preRange.selectNodeContents(snippetText);
-            preRange.setEnd(range.startContainer, range.startOffset);
-            const isAtStart = preRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0;
-
-            if (isAtStart) {
-                e.preventDefault();
-                let prevNode = snippetWrapper.previousSibling;
-                const newRange = document.createRange();
-                if (prevNode && prevNode.nodeType === 3) {
-                    newRange.setStart(prevNode, prevNode.length);
-                } else if (prevNode) {
-                    newRange.setStartAfter(prevNode);
-                } else {
-                    newRange.setStartBefore(snippetWrapper);
+                if (isAtStart) {
+                    e.preventDefault();
+                    let prevNode = snippetWrapper.previousSibling;
+                    const newRange = document.createRange();
+                    if (prevNode && prevNode.nodeType === 3) {
+                        const val = prevNode.nodeValue || '';
+                        // Se prevNode termina con \u200B, scavalcalo e atterra saldamente sul testo visibile precedente
+                        const targetOffset = val.endsWith('\u200B') ? Math.max(0, val.length - 1) : val.length;
+                        newRange.setStart(prevNode, targetOffset);
+                    } else if (prevNode) {
+                        newRange.setStartAfter(prevNode);
+                    } else {
+                        newRange.setStartBefore(snippetWrapper);
+                    }
+                    newRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                    return true;
                 }
-                newRange.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(newRange);
-                return true;
+            } else if (e.key === 'ArrowRight') {
+                const postRange = range.cloneRange();
+                postRange.selectNodeContents(snippetText);
+                postRange.setStart(range.endContainer, range.endOffset);
+                const isAtEnd = postRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0;
+
+                if (isAtEnd) {
+                    e.preventDefault();
+                    let nextNode = snippetWrapper.nextSibling;
+                    const newRange = document.createRange();
+                    if (nextNode && nextNode.nodeType === 3) {
+                        const val = nextNode.nodeValue || '';
+                        // Se nextNode inizia con \u200B, scavalcalo e posizionati direttamente sul primo carattere di testo
+                        const targetOffset = val.startsWith('\u200B') ? Math.min(1, val.length) : 0;
+                        newRange.setStart(nextNode, targetOffset);
+                    } else if (nextNode) {
+                        newRange.setStartBefore(nextNode);
+                    } else {
+                        newRange.setStartAfter(snippetWrapper);
+                    }
+                    newRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                    return true;
+                }
             }
-        } else if (e.key === 'ArrowRight') {
-            const postRange = range.cloneRange();
-            postRange.selectNodeContents(snippetText);
-            postRange.setStart(range.endContainer, range.endOffset);
-            const isAtEnd = postRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0;
+            return false;
+        }
 
-            if (isAtEnd) {
-                e.preventDefault();
-                let nextNode = snippetWrapper.nextSibling;
-                const newRange = document.createRange();
-                if (nextNode && nextNode.nodeType === 3) {
-                    newRange.setStart(nextNode, 0);
-                } else if (nextNode) {
-                    newRange.setStartBefore(nextNode);
-                } else {
-                    newRange.setStartAfter(snippetWrapper);
+        // 2. INGRESSO NELLO SNIPPET DALL'ESTERNO (Scavalcamento dello \u200B senza soste nel limbo)
+        if (node.nodeType === 3) {
+            const val = node.nodeValue || '';
+            const offset = range.startOffset;
+
+            // Avvicinamento da sinistra verso lo snippet con ArrowRight
+            if (e.key === 'ArrowRight') {
+                const nextEl = node.nextSibling;
+                if (nextEl && nextEl.nodeType === 1 && nextEl.classList.contains('adv-copy-snippet') && val.endsWith('\u200B')) {
+                    if (offset >= val.length - 1) {
+                        const textSpan = nextEl.querySelector('.snippet-text');
+                        if (textSpan) {
+                            e.preventDefault();
+                            const newRange = document.createRange();
+                            newRange.selectNodeContents(textSpan);
+                            newRange.collapse(true);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
+                            return true;
+                        }
+                    }
                 }
-                newRange.collapse(true);
-                sel.removeAllRanges();
-                sel.addRange(newRange);
-                return true;
+            }
+
+            // Avvicinamento da destra verso lo snippet con ArrowLeft
+            if (e.key === 'ArrowLeft') {
+                const prevEl = node.previousSibling;
+                if (prevEl && prevEl.nodeType === 1 && prevEl.classList.contains('adv-copy-snippet') && val.startsWith('\u200B')) {
+                    if (offset <= 1) {
+                        const textSpan = prevEl.querySelector('.snippet-text');
+                        if (textSpan) {
+                            e.preventDefault();
+                            const newRange = document.createRange();
+                            newRange.selectNodeContents(textSpan);
+                            newRange.collapse(false);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
+                            return true;
+                        }
+                    }
+                }
             }
         }
 
@@ -281,6 +336,12 @@ Object.assign(Editor, {
      */
     handleTableNavigation: (e) => {
         if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return false;
+
+        // Azzeramento precauzionale del timer di digitazione quando l'utente naviga con le frecce
+        if (typeof Editor !== 'undefined') {
+            clearTimeout(Editor.typingTimer);
+            Editor.isTyping = false;
+        }
 
         // Rilascia l'eventuale selezione attiva di un intero widget
         if (typeof Editor.clearWidgetSelection === 'function' && Editor.selectedWidget) {
@@ -674,7 +735,7 @@ Object.assign(Editor, {
     handleFormatEscape: (e) => {
         if (!AppState.isEditMode) return;
         
-        // 1. ESCAPE DA AREE EDITABILI (WIDGETS)
+        // 1. ESCAPE DA AREE EDITABILI (WIDGETS A BLOCCO - Esclude categoricamente gli snippet inline)
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             const sel = window.getSelection();
             if (!sel.isCollapsed || !sel.rangeCount) return;
@@ -688,8 +749,7 @@ Object.assign(Editor, {
                 
                 let editableArea = container.nodeType === Node.TEXT_NODE ? container.parentNode.closest('.widget-editable-area') : container.closest('.widget-editable-area');
                 
-                if (editableArea) {
-                    // Controlla se non c'è più testo *dopo* il cursore all'interno di questa specifica area
+                if (editableArea && !editableArea.closest('.adv-inline-shell, .adv-copy-snippet')) {
                     const walker = document.createTreeWalker(editableArea, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, null, false);
                     walker.currentNode = container.nodeType === Node.TEXT_NODE ? container : container.childNodes[offset-1] || container;
                     
@@ -704,8 +764,7 @@ Object.assign(Editor, {
 
                     if (isAtVeryEnd) {
                         const widgetShell = editableArea.closest('.adv-widget-shell');
-                        // Creiamo e iniettiamo un nuovo paragrafo per evitare blocchi strutturali
-                        if (widgetShell) {
+                        if (widgetShell && !widgetShell.classList.contains('adv-inline-shell')) {
                             e.preventDefault();
                             let targetP = widgetShell.nextElementSibling;
                             if (!targetP || (targetP.tagName !== 'P' && targetP.tagName !== 'DIV')) {
@@ -758,8 +817,6 @@ Object.assign(Editor, {
                     sel.removeAllRanges();
                     sel.addRange(newRange);
 
-                    // FIX: Disattiva ESCLUSIVAMENTE gli stili che risultano attivi
-                    // Evita l'inversione accidentale di execCommand('italic') o ('underline')
                     if (document.queryCommandState('bold')) {
                         try { document.execCommand('bold', false, null); } catch(err) {}
                     }

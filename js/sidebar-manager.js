@@ -2,8 +2,10 @@
  * sidebar-manager.js
  * Modulo dedicato alla gestione visiva e al ridimensionamento dell'albero di navigazione.
  * Integra il motore SearchAutocomplete per filtrare le note tramite Tag e Proprietà di Pagina.
- * FEAT TAG PREFIX '#': L'autocompletamento si attiva esclusivamente quando l'input inizia con '#',
- * lasciando la digitazione di testo libero completamente sgombra da overlay che coprono l'albero.
+ * FEAT ROBUST QUERY HANDLING: SearchAutocomplete accetta ed elabora termini sia con prefisso '#'
+ * che puri, lasciando al controller degli eventi la discrezione sull'apertura dell'overlay.
+ * FEAT CSS-DRIVEN HEIGHT: L'altezza e lo scorrimento del menu a tendina sono interamente governati dal CSS
+ * (.adv-filter-autocomplete { max-height: calc(100vh - 80px); }), evitando calcoli imperativi via JS.
  * FEAT FACETED CHIPS: Pillole dei filtri interattive con apertura menu a tendina sul corpo,
  * visualizzazione delle opzioni disponibili per proprietà e rimozione isolata su click della ✕.
  * FIX RELATION LABELS: Risoluzione semantica dei record collegati (nessun ID 'sys_r_*' esposto all'utente).
@@ -140,13 +142,12 @@ const SidebarManager = {
         },
 
         show: (inputEl, term) => {
-            // REGOLA CHIAVE: L'autocompletamento delle proprietà/tag si attiva ESCLUSIVAMENTE
-            // se l'utente digita il marcatore '#' all'inizio della stringa di ricerca.
-            if (!term || !term.startsWith('#')) {
-                SidebarManager.SearchAutocomplete.hide('Termine privo di prefisso #');
+            if (!term || typeof term !== 'string' || term.trim() === '') {
+                SidebarManager.SearchAutocomplete.hide('Termine vuoto');
                 return;
             }
 
+            // Normalizza il termine di ricerca eliminando l'eventuale marcatore '#' iniziale
             const cleanQuery = term.replace(/^#+/, '').trim();
             const lowerTerm = cleanQuery.toLowerCase();
 

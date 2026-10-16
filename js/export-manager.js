@@ -17,6 +17,13 @@
  * Normalizzazione preventiva dei contenuti HTML importati con Editor.minifyHTMLForStorage e inizializzazione expanded: true.
  * FIX INLINE FOOTNOTES: Ripristinata la generazione corretta del marcatore standard ^[...] per appunti inline in htmlToMarkdown.
  * FIX CHECKLIST NESTING: Wrapping flessibile (flex-wrap: wrap) e larghezza piena (width: 100%) sulle sotto-liste annidate sotto checklist.
+ * FIX MODAL CLOSE: Corretta la chiusura della finestra modale di esportazione con classList.add('hidden').
+ * FEAT OBSIDIAN FRONTMATTER PROPERTIES: Parser universale parseYamlFrontmatter e sincronizzazione atomica
+ * di tutte le proprietà Frontmatter in SYS_PROPERTIES_DB (saveNotePropertiesToSystemDB) con deduzione dinamica dei tipi.
+ * FEAT FULL FRONTMATTER EXPORT: Generazione deterministica del blocco YAML Frontmatter completo (buildNoteFrontmatter)
+ * con estrazione di tutte le proprietà da SYS_PROPERTIES_DB, inclusi tags, wikilinks quotati, date e valori scalari.
+ * FEAT SINGLE NOTE TITLE STRIP: Nell'estrazione di una singola nota in Markdown il titolo non viene duplicato
+ * né come H1 nel corpo né nel YAML Frontmatter, coincidendo già con il nome del file salvato.
  */
 
 const ExportManager = {
@@ -31,7 +38,7 @@ const ExportManager = {
 
     closeModal: () => {
         const modal = document.getElementById('exportModal');
-        if (modal) modal.classList.remove('hidden');
+        if (modal) modal.classList.add('hidden');
     },
 
     // Recupera i tag di una specifica nota da SYS_PROPERTIES_DB
@@ -42,6 +49,103 @@ const ExportManager = {
         const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === noteId);
         if (!sysRow || !Array.isArray(sysRow.cells['sys_c_tags'])) return [];
         return sysRow.cells['sys_c_tags'].filter(t => t && String(t).trim() !== '');
+    },
+
+    // Genera il blocco standard YAML Frontmatter completo per una nota estraendo i dati da SYS_PROPERTIES_DB
+    // Il parametro includeTitle controlla se inserire o meno la chiave title (falso quando il nome file coincide con il titolo)
+    buildNoteFrontmatter: (noteId, includeTitle = true) => {
+        const note = typeof Store !== 'undefined' ? Store.getNote(noteId) : (AppState.notes ? AppState.notes.find(n => n.id === noteId) : null);
+        if (!note) return "";
+
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+        const sysRow = (propsDb && Array.isArray(propsDb.rows)) ? propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === noteId) : null;
+
+        const lines = ["---"];
+
+        // 1. Proprietà canoniche di base della nota
+        const escapeYamlString = (str) => String(str).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        
+        if (includeTitle && note.title) {
+            lines.push(`title: "${escapeYamlString(note.title)}"`);
+        }
+        if (note.createdAt) lines.push(`created: "${note.createdAt}"`);
+        if (note.updatedAt) lines.push(`updated: "${note.updatedAt}"`);
+        if (note.isMarked) lines.push(`favorite: true`);
+
+        // 2. Tag (sys_c_tags)
+        const tags = ExportManager.getNoteTags(noteId);
+        if (tags.length > 0) {
+            lines.push("tags:");
+            tags.forEach(t => {
+                const clean = String(t).replace(/^[-#\s]+/, '').replace(/["']/g, '').trim();
+                if (clean) lines.push(`  - ${clean}`);
+            });
+        }
+
+        // 3. Tutte le altre proprietà e colonne censite in SYS_PROPERTIES_DB
+        if (propsDb && Array.isArray(propsDb.columns) && sysRow && sysRow.cells) {
+            propsDb.columns.forEach(col => {
+                if (col.id === 'sys_c_note' || col.id === 'sys_c_tags') return;
+
+                const val = sysRow.cells[col.id];
+                if (val === undefined || val === null || val === '') return;
+                if (Array.isArray(val) && val.length === 0) return;
+
+                const colKey = col.name.replace(/[:\n\r]/g, '_').trim();
+                if (!colKey) return;
+
+                if (col.type === 'note_link') {
+                    let targetTitle = '';
+                    if (typeof val === 'object' && val !== null) {
+                        targetTitle = val.title || '';
+                        if (!targetTitle && val.noteId && typeof Store !== 'undefined') {
+                            const tn = Store.getNote(val.noteId);
+                            if (tn) targetTitle = tn.title;
+                        }
+                    } else {
+                        targetTitle = String(val);
+                    }
+
+                    if (targetTitle) {
+                        lines.push(`${colKey}: "[[${targetTitle.replace(/"/g, '')}]]"`);
+                    }
+                } else if (col.type === 'checkbox') {
+                    lines.push(`${colKey}: ${val === true || String(val).toLowerCase() === 'true'}`);
+                } else if (col.type === 'number') {
+                    const num = Number(val);
+                    lines.push(`${colKey}: ${isNaN(num) ? 0 : num}`);
+                } else if (col.type === 'date' || col.type === 'datetime') {
+                    if (typeof val === 'object' && val !== null) {
+                        const s = val.start || '';
+                        const e = val.end || '';
+                        if (s && e) lines.push(`${colKey}: "${s} ➔ ${e}"`);
+                        else if (s) lines.push(`${colKey}: "${s}"`);
+                    } else {
+                        lines.push(`${colKey}: "${val}"`);
+                    }
+                } else if (Array.isArray(val)) {
+                    lines.push(`${colKey}:`);
+                    val.forEach(item => {
+                        lines.push(`  - "${escapeYamlString(item)}"`);
+                    });
+                } else {
+                    const strVal = String(val).trim();
+                    if (/^[0-9]+(\.[0-9]+)?$/.test(strVal) || strVal === 'true' || strVal === 'false') {
+                        lines.push(`${colKey}: ${strVal}`);
+                    } else {
+                        lines.push(`${colKey}: "${escapeYamlString(strVal)}"`);
+                    }
+                }
+            });
+        }
+
+        // Se non ci sono proprietà oltre a "---", non emette frontmatter vuoto
+        if (lines.length <= 1) {
+            return "";
+        }
+
+        lines.push("---\n\n");
+        return lines.join("\n");
     },
 
     // Salva i tag estratti da un testo Markdown direttamente in SYS_PROPERTIES_DB con parametro opzionale skipEnsure
@@ -74,7 +178,6 @@ const ExportManager = {
         }
 
         tagsArray.forEach(t => {
-            // Pulizia difensiva: rimuove trattini residui, cancelletti, spazi e apici
             const cleanTag = String(t)
                 .replace(/^[-#\s]+/, '')
                 .replace(/["']/g, '')
@@ -92,67 +195,256 @@ const ExportManager = {
         sysRow.updatedAt = Date.now();
     },
 
+    // =========================================================================
+    // PARSER DETERMINISTICO FRONTMATTER YAML OBSIDIAN
+    // Estrae tutte le proprietà scalari, liste, booleani, date, numeri e wikilinks
+    // =========================================================================
+    parseYamlFrontmatter: (yamlText) => {
+        if (!yamlText || typeof yamlText !== 'string') return {};
+        const lines = yamlText.split(/\r?\n/);
+        const result = {};
+        let currentKey = null;
+        let currentList = null;
+
+        for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const trimmed = line.trim();
+            if (!trimmed || trimmed.startsWith('#')) continue;
+
+            // Rileva elemento di lista YAML indentato con trattino: "  - valore" o "- valore"
+            const listMatch = line.match(/^\s*-\s+(.*)$/);
+            if (listMatch && currentKey) {
+                let itemVal = listMatch[1].trim();
+                if ((itemVal.startsWith('"') && itemVal.endsWith('"')) || (itemVal.startsWith("'") && itemVal.endsWith("'"))) {
+                    itemVal = itemVal.slice(1, -1).trim();
+                }
+                if (currentList) {
+                    currentList.push(itemVal);
+                } else {
+                    currentList = [itemVal];
+                    result[currentKey] = currentList;
+                }
+                continue;
+            }
+
+            // Rileva coppia chiave: valore
+            const keyValMatch = line.match(/^([a-zA-Z0-9_\-\s]+?)\s*:(.*)$/);
+            if (keyValMatch) {
+                currentKey = keyValMatch[1].trim();
+                currentList = null;
+                let rawVal = keyValMatch[2].trim();
+
+                if (!rawVal) {
+                    // Inizio potenziale di una lista multilinea (es. tags: o aliases:)
+                    result[currentKey] = [];
+                    currentList = result[currentKey];
+                } else if (rawVal.startsWith('[') && rawVal.endsWith(']')) {
+                    // Array inline: [item1, item2, ...] con parsing sicuro di virgolette e wikilinks
+                    const inner = rawVal.slice(1, -1).trim();
+                    if (!inner) {
+                        result[currentKey] = [];
+                    } else {
+                        const items = [];
+                        let buffer = '';
+                        let inQuotes = false;
+                        let quoteChar = '';
+                        let inWiki = false;
+
+                        for (let c = 0; c < inner.length; c++) {
+                            const ch = inner[c];
+                            if (!inQuotes && (ch === '"' || ch === "'")) {
+                                inQuotes = true;
+                                quoteChar = ch;
+                            } else if (inQuotes && ch === quoteChar) {
+                                inQuotes = false;
+                            } else if (!inQuotes && ch === '[' && inner[c + 1] === '[') {
+                                inWiki = true;
+                                buffer += ch;
+                                continue;
+                            } else if (!inQuotes && ch === ']' && inner[c - 1] === ']') {
+                                inWiki = false;
+                                buffer += ch;
+                                continue;
+                            } else if (!inQuotes && !inWiki && ch === ',') {
+                                let cleanItem = buffer.trim();
+                                if ((cleanItem.startsWith('"') && cleanItem.endsWith('"')) || (cleanItem.startsWith("'") && cleanItem.endsWith("'"))) {
+                                    cleanItem = cleanItem.slice(1, -1).trim();
+                                }
+                                if (cleanItem) items.push(cleanItem);
+                                buffer = '';
+                                continue;
+                            }
+                            buffer += ch;
+                        }
+                        if (buffer.trim()) {
+                            let cleanItem = buffer.trim();
+                            if ((cleanItem.startsWith('"') && cleanItem.endsWith('"')) || (cleanItem.startsWith("'") && cleanItem.endsWith("'"))) {
+                                cleanItem = cleanItem.slice(1, -1).trim();
+                            }
+                            if (cleanItem) items.push(cleanItem);
+                        }
+                        result[currentKey] = items;
+                    }
+                } else {
+                    // Valore scalare singolo (rimuove virgolette esterne se presenti)
+                    if ((rawVal.startsWith('"') && rawVal.endsWith('"')) || (rawVal.startsWith("'") && rawVal.endsWith("'"))) {
+                        rawVal = rawVal.slice(1, -1).trim();
+                    }
+                    result[currentKey] = rawVal;
+                }
+            }
+        }
+
+        return result;
+    },
+
+    // Salva tutte le proprietà estratte dal Frontmatter YAML in SYS_PROPERTIES_DB creando dinamicamente le colonne
+    saveNotePropertiesToSystemDB: (noteId, propertiesObj, noteMap = null, skipEnsure = false) => {
+        if (!noteId || !propertiesObj || typeof propertiesObj !== 'object') return;
+        if (!skipEnsure && typeof AdvancedTable !== 'undefined') {
+            AdvancedTable.ensureSystemPropertiesDB();
+        }
+
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+        if (!propsDb || !Array.isArray(propsDb.rows) || !Array.isArray(propsDb.columns)) return;
+
+        let sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === noteId);
+        if (!sysRow) {
+            sysRow = {
+                id: 'sys_r_' + noteId,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+                cells: { 'sys_c_note': noteId, 'sys_c_tags': [] }
+            };
+            propsDb.rows.push(sysRow);
+        }
+
+        if (!propsDb.selectOptions) propsDb.selectOptions = {};
+        if (!propsDb.selectColors) propsDb.selectColors = {};
+
+        for (const [rawKey, rawVal] of Object.entries(propertiesObj)) {
+            const cleanKey = rawKey.trim();
+            if (!cleanKey) continue;
+
+            const lowerKey = cleanKey.toLowerCase();
+
+            // 1. Gestione Tag / Tags: indirizzati alla colonna nativa sys_c_tags
+            if (lowerKey === 'tags' || lowerKey === 'tag') {
+                const tagList = Array.isArray(rawVal) ? rawVal : [rawVal];
+                ExportManager.saveNoteTagsToSystemDB(noteId, tagList, true);
+                continue;
+            }
+
+            // Esclude chiavi di sistema interne
+            if (lowerKey === 'id' || lowerKey === 'sys_c_note') continue;
+
+            // 2. Controllo o creazione della colonna in SYS_PROPERTIES_DB
+            let colDef = propsDb.columns.find(c => c.name.toLowerCase() === lowerKey || c.id.toLowerCase() === `prop_${lowerKey}`);
+            
+            // Rilevamento automatico del tipo di dato dal valore
+            const inferColumnType = (val) => {
+                if (typeof val === 'boolean') return 'checkbox';
+                if (Array.isArray(val)) return 'multi-select';
+                if (typeof val === 'number') return 'number';
+
+                const str = String(val).trim();
+                if (str.toLowerCase() === 'true' || str.toLowerCase() === 'false') return 'checkbox';
+                if (/^\[\[(.*?)\]\]$/.test(str)) return 'note_link';
+                if (/^\d{4}-\d{2}-\d{2}$/.test(str)) return 'date';
+                if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(str)) return 'datetime';
+                if (/^-?\d+(\.\d+)?$/.test(str)) return 'number';
+                return 'text';
+            };
+
+            const inferredType = inferColumnType(rawVal);
+
+            if (!colDef) {
+                const newColId = 'prop_' + Store.generateId();
+                colDef = {
+                    id: newColId,
+                    name: cleanKey,
+                    type: inferredType,
+                    width: inferredType === 'note_link' ? 220 : 180,
+                    hidden: false
+                };
+                propsDb.columns.push(colDef);
+            }
+
+            // 3. Normalizzazione e assegnazione del valore nella cella
+            if (colDef.type === 'note_link') {
+                const rawStr = String(rawVal).trim();
+                const wikiMatch = rawStr.match(/^\[\[\s*([^\]|#]+?)(?:#([^\]|]+?))?(?:\|([^\]]+?))?\s*\]\]$/);
+                
+                let targetNoteTitle = rawStr;
+                let anchor = null;
+                let label = null;
+
+                if (wikiMatch) {
+                    targetNoteTitle = wikiMatch[1].trim();
+                    anchor = wikiMatch[2] ? wikiMatch[2].trim() : null;
+                    label = wikiMatch[3] ? wikiMatch[3].trim() : null;
+                }
+
+                let targetNoteId = null;
+                if (noteMap && typeof noteMap.get === 'function') {
+                    targetNoteId = noteMap.get(targetNoteTitle.toLowerCase()) || null;
+                }
+                if (!targetNoteId && AppState.notes) {
+                    const found = AppState.notes.find(n => !n.deletedAt && (n.title || '').trim().toLowerCase() === targetNoteTitle.toLowerCase());
+                    if (found) targetNoteId = found.id;
+                }
+
+                sysRow.cells[colDef.id] = {
+                    noteId: targetNoteId,
+                    title: label || targetNoteTitle,
+                    anchor: anchor,
+                    refId: null
+                };
+            } else if (colDef.type === 'checkbox') {
+                sysRow.cells[colDef.id] = (rawVal === true || String(rawVal).toLowerCase() === 'true' || String(rawVal).toLowerCase() === 'yes');
+            } else if (colDef.type === 'number') {
+                const n = parseFloat(String(rawVal).replace(',', '.'));
+                sysRow.cells[colDef.id] = isNaN(n) ? '' : n;
+            } else if (colDef.type === 'multi-select') {
+                const arr = Array.isArray(rawVal) ? rawVal.map(String) : [String(rawVal)];
+                sysRow.cells[colDef.id] = arr;
+
+                if (!propsDb.selectOptions[colDef.id]) propsDb.selectOptions[colDef.id] = [];
+                arr.forEach(optVal => {
+                    const cleanOpt = optVal.trim();
+                    if (cleanOpt && !propsDb.selectOptions[colDef.id].includes(cleanOpt)) {
+                        propsDb.selectOptions[colDef.id].push(cleanOpt);
+                    }
+                });
+            } else {
+                sysRow.cells[colDef.id] = String(rawVal);
+            }
+        }
+
+        sysRow.updatedAt = Date.now();
+    },
+
     // Estrae i tag sia da Frontmatter YAML (inline o multilinea) che da hashtag nel corpo (#tag, #famiglia/figli)
     extractTagsFromMarkdown: (markdownText) => {
         const tags = new Set();
         if (!markdownText || typeof markdownText !== 'string') return [];
 
-        // 1. Estrazione deterministica da Frontmatter YAML (--- tags: ... ---)
+        // 1. Estrazione tramite il parser deterministico YAML
         const yamlMatch = markdownText.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
         if (yamlMatch) {
-            const yaml = yamlMatch[1];
-            const lines = yaml.split(/\r?\n/);
-            let inTagBlock = false;
-            let tagBlockIndent = -1;
-
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const trimmed = line.trim();
-                if (!trimmed || trimmed.startsWith('#')) continue;
-
-                // Rileva intestazione del campo: tags: oppure tag:
-                const headerMatch = line.match(/^(\s*)(?:tags|tag)\s*:(.*)$/i);
-                if (headerMatch) {
-                    tagBlockIndent = headerMatch[1].length;
-                    const rest = headerMatch[2].trim();
-
-                    if (rest) {
-                        if (rest.startsWith('[') && rest.endsWith(']')) {
-                            rest.slice(1, -1).split(',').forEach(t => {
-                                const clean = t.replace(/^[-#\s]+/, '').replace(/["']/g, '').trim();
-                                if (clean) tags.add(clean);
-                            });
-                        } else {
-                            rest.split(',').forEach(t => {
-                                const clean = t.replace(/^[-#\s]+/, '').replace(/["']/g, '').trim();
-                                if (clean) tags.add(clean);
-                            });
-                        }
-                        inTagBlock = false;
-                    } else {
-                        inTagBlock = true;
-                    }
-                    continue;
-                }
-
-                if (inTagBlock) {
-                    const itemMatch = line.match(/^\s*-\s+(.+)$/);
-                    if (itemMatch) {
-                        const clean = itemMatch[1].replace(/^[-#\s]+/, '').replace(/["']/g, '').trim();
+            const parsedProps = ExportManager.parseYamlFrontmatter(yamlMatch[1]);
+            for (const [key, val] of Object.entries(parsedProps)) {
+                if (key.toLowerCase() === 'tags' || key.toLowerCase() === 'tag') {
+                    const tagArray = Array.isArray(val) ? val : [val];
+                    tagArray.forEach(t => {
+                        const clean = String(t).replace(/^[-#\s]+/, '').replace(/["']/g, '').trim();
                         if (clean) tags.add(clean);
-                    } else {
-                        // Se incontriamo un'altra proprietà YAML o termina l'indentazione, chiudiamo il blocco tag
-                        const currentIndent = line.match(/^(\s*)/)[1].length;
-                        if (currentIndent <= tagBlockIndent || /^[a-zA-Z0-9_\-]+:/.test(line)) {
-                            inTagBlock = false;
-                        }
-                    }
+                    });
                 }
             }
         }
 
         // 2. Estrazione da Hashtag nel corpo del testo (#progetto, #fase/1, #family/wife)
-        // Rimuove blocchi di codice e tag HTML per non intercettare colori hex (#ffffff) o anchor
         const cleanNoCode = markdownText
             .replace(/```[\s\S]*?```/g, '')
             .replace(/`[^`]*`/g, '')
@@ -162,7 +454,6 @@ const ExportManager = {
         let match;
         while ((match = tagRegex.exec(cleanNoCode)) !== null) {
             const tagVal = match[1].trim();
-            // Esclude stringhe esadecimali pure (3 o 6 caratteri 0-9 a-f)
             if (tagVal && !/^[0-9a-fA-F]{3}$|^[0-9a-fA-F]{6}$/.test(tagVal)) {
                 tags.add(tagVal);
             }
@@ -435,9 +726,7 @@ const ExportManager = {
                             } else {
                                 wrapper.outerHTML = `<p style="font-style:italic; color:#666;">(Barra Pulsanti vuota)</p>`;
                             }
-                        } catch(e) {
-                            wrapper.innerHTML = '<p>[Barra Pulsanti rimossa]</p>';
-                        }
+                        } catch(e) { wrapper.outerHTML = '<p>[Barra Pulsanti rimossa]</p>'; }
                     } else if (type === 'database' || type === 'pivot') {
                         try {
                             const state = AppState.databases[trueId];
@@ -631,14 +920,11 @@ const ExportManager = {
     generateMarkdownDocument: (title, flatList, includeImages) => {
         let md = "";
 
-        // Se esportiamo una singola nota (es. "Esporta SOLO Nota Corrente"), generiamo il Frontmatter YAML nativo per Obsidian
+        // Se esportiamo una singola nota, generiamo il Frontmatter YAML privo di titolo
+        // e omettiamo il titolo nel corpo del documento (il nome file coinciderà con il titolo)
         if (flatList.length === 1) {
             const singleNote = flatList[0].note;
-            const tags = ExportManager.getNoteTags(singleNote.id);
-            if (tags.length > 0) {
-                md += `---\ntags:\n${tags.map(t => `  - ${t}`).join('\n')}\n---\n\n`;
-            }
-            md += `# ${singleNote.title}\n\n`;
+            md += ExportManager.buildNoteFrontmatter(singleNote.id, false);
             md += ExportManager.htmlToMarkdown(singleNote.content || '', includeImages) + `\n`;
         } else {
             md += `# ${title}\n\n*Generato il: ${new Date().toLocaleString('it-IT')}*\n\n---\n\n`;
@@ -978,7 +1264,9 @@ const ExportManager = {
     processMarkdownImport: (mdText, title) => {
         if (!mdText) return;
 
-        // Estrazione di tutti i tag (YAML frontmatter ed inline hashtag)
+        // Estrazione di tutte le proprietà dal Frontmatter YAML e di tutti i tag
+        const yamlMatch = mdText.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n/);
+        const yamlProperties = yamlMatch ? ExportManager.parseYamlFrontmatter(yamlMatch[1]) : {};
         const extractedTags = ExportManager.extractTagsFromMarkdown(mdText);
 
         // Rimozione del Frontmatter prima di convertire l'HTML per non mostrare testo grezzo
@@ -1008,10 +1296,18 @@ const ExportManager = {
         
         AppState.notes.push(newNote);
         
-        // Sincronizzazione atomica dei tag estratti in SYS_PROPERTIES_DB con nome variabile corretto
+        // Sincronizzazione atomica di tutte le proprietà Frontmatter e dei tag in SYS_PROPERTIES_DB
+        if (typeof AdvancedTable !== 'undefined') {
+            AdvancedTable.ensureSystemPropertiesDB();
+        }
+
+        if (Object.keys(yamlProperties).length > 0) {
+            ExportManager.saveNotePropertiesToSystemDB(noteId, yamlProperties, null, true);
+        }
+
         if (extractedTags.length > 0) {
-            ExportManager.saveNoteTagsToSystemDB(noteId, extractedTags);
-        } else if (typeof AdvancedTable !== 'undefined') {
+            ExportManager.saveNoteTagsToSystemDB(noteId, extractedTags, true);
+        } else if (Object.keys(yamlProperties).length === 0 && typeof AdvancedTable !== 'undefined') {
             AdvancedTable.syncSystemPropertiesRow(noteId);
         }
 
@@ -1169,7 +1465,6 @@ const ExportManager = {
 
         html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
         html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
-
 
         // 5. PARSER DI LISTE GERARCHICO AD ALBERO (Supporto annidamento reale sotto il LI genitore)
         const rawLines = html.split('\n');
