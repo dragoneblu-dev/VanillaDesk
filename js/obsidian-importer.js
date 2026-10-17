@@ -20,27 +20,27 @@ const ObsidianImporter = {
 
     openModal: () => {
         if (!AppState.workspaceHandle) {
-            alert(I18n.t('obsidian_importer.alert_no_workspace') || "Devi prima aprire o creare un Workspace in cui importare il Vault.");
+            alert(I18n.t('obsidian_importer.alert_no_workspace'));
             return;
         }
 
         const bodyHTML = `
             <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); padding: 15px; border-radius: 6px; font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; margin-bottom: 20px;">
                 <p style="margin-top:0;">
-                    ${I18n.t('obsidian_importer.banner_desc') || "Questa procedura importerà l'intero Vault di Obsidian direttamente nel tuo Workspace VanillaDesk attuale."}
+                    ${I18n.t('obsidian_importer.banner_desc')}
                 </p>
                 <ul style="padding-left: 20px; margin-bottom: 0; color: var(--text-secondary);">
-                    <li>${I18n.t('obsidian_importer.feature_folders') || "Struttura delle cartelle preservata come note genitore/figlio."}</li>
-                    <li>${I18n.t('obsidian_importer.feature_links') || "Conversione automatica dei collegamenti interni ([[Wikilinks]] e alias)."}</li>
-                    <li>${I18n.t('obsidian_importer.feature_assets') || "Copia automatica di immagini e audio nella cartella assets/."}</li>
-                    <li>${I18n.t('obsidian_importer.feature_tags') || "Estrazione automatica dei tag YAML e hashtag (#tag) nelle proprietà di pagina."}</li>
+                    <li>${I18n.t('obsidian_importer.feature_folders')}</li>
+                    <li>${I18n.t('obsidian_importer.feature_links')}</li>
+                    <li>${I18n.t('obsidian_importer.feature_assets')}</li>
+                    <li>${I18n.t('obsidian_importer.feature_tags')}</li>
                 </ul>
             </div>
 
             <div style="display: flex; flex-direction: column; gap: 15px;">
                 <label style="display: flex; align-items: center; gap: 10px; font-size: 0.85rem; cursor: pointer; color: var(--text-primary);">
                     <input type="checkbox" id="obsidianWrapInRoot" checked style="transform: scale(1.15);">
-                    <span>${I18n.t('obsidian_importer.opt_wrap_root') || "Raggruppa tutte le note importate in una cartella radice con il nome del Vault"}</span>
+                    <span>${I18n.t('obsidian_importer.opt_wrap_root')}</span>
                 </label>
                 
                 <div id="obsidianProgressArea" style="display: none; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 15px;">
@@ -59,13 +59,13 @@ const ObsidianImporter = {
             <button class="btn" id="btnCancelObsidianImport" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
             <button class="btn btn-primary" id="btnStartObsidianImport" onclick="ObsidianImporter.startImport()">
                 <span style="display:inline-flex; align-items:center; gap:6px;">
-                    ${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'} ${I18n.t('obsidian_importer.btn_select_and_import') || "Seleziona Cartella Vault ed Avvia"}
+                    ${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'} ${I18n.t('obsidian_importer.btn_select_and_import')}
                 </span>
             </button>
         `;
 
         UI.openDrawer(
-            `<span style="display:inline-flex; align-items:center; gap:8px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} ${I18n.t('obsidian_importer.drawer_title') || "Importa Vault Obsidian"}</span>`,
+            `<span style="display:inline-flex; align-items:center; gap:8px;">${typeof Icons !== 'undefined' ? Icons.import : '📥'} ${I18n.t('obsidian_importer.drawer_title')}</span>`,
             bodyHTML,
             footerHTML
         );

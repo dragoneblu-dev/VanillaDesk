@@ -9,6 +9,10 @@
  * FEAT CLEAN URL INPUT: Rimozione del prefisso forzato "https://" dall'input URL.
  * FEAT URL TRUNCATE 60: Troncamento automatico a 60 caratteri del testo visualizzato quando corrisponde all'indirizzo web.
  * FIX STALE SAVED RANGE: Azzeramento immediato di Editor.savedRange dopo il consumo in insertNodeAtSelection per evitare riferimenti orfani.
+ * FEAT FULL HEIGHT DRAWER: Layout a tutta altezza (height: 100%, flex: 1) per il Drawer dei link, consentendo
+ * alla textarea delle note opzionali di espandersi armoniosamente fino al footer.
+ * FEAT COPY WEB LINK: Aggiunto pulsante di copia negli appunti dell'indirizzo web dal popover contestuale fluttuante.
+ * FEAT KEYBOARD SHORTCUT: Supporto alla combinazione Ctrl+Invio / Cmd+Invio nei drawer di creazione e modifica per conferma immediata.
  */
 
 const LinkManager = {
@@ -125,6 +129,13 @@ const LinkManager = {
                 <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
                 <button onclick="LinkManager.copyFileLinkPath()" title="${I18n.t('link_manager.tooltip_copy_path')}">${Icons.clipboard}</button>
             `;
+        } else if (!link.classList.contains('internal-link')) {
+            // Link web standard: pulsante per copiare l'URL negli appunti
+            const copyTitle = (typeof I18n !== 'undefined' && I18n.t('link_manager.tooltip_copy_link')) || "Copia Indirizzo Web";
+            extraHtml = `
+                <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
+                <button onclick="LinkManager.copyExternalLinkUrl()" title="${copyTitle}">${Icons.clipboard}</button>
+            `;
         }
 
         popover.innerHTML = `
@@ -158,6 +169,23 @@ const LinkManager = {
         const existing = document.getElementById('adv-link-popover');
         if (existing) existing.remove();
         LinkManager.activeLink = null;
+    },
+
+    copyExternalLinkUrl: () => {
+        if (!LinkManager.activeLink) return;
+        const href = LinkManager.activeLink.href;
+        if (!href) return;
+
+        let cleanUrl = href.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
+        navigator.clipboard.writeText(cleanUrl).then(() => {
+            const toastMsg = (typeof I18n !== 'undefined' && I18n.t('link_manager.toast_url_copied')) || "Indirizzo web copiato negli appunti!";
+            if (typeof UI !== 'undefined' && UI.showToast) {
+                UI.showToast(toastMsg, "success");
+            }
+            LinkManager.hideFloatingMenu();
+        }).catch(err => {
+            console.error("Errore copia link web:", err);
+        });
     },
 
     copyFileLinkPath: () => {
@@ -255,28 +283,32 @@ const LinkManager = {
         const btnLabel = LinkManager.isEditingMode ? I18n.t('link_manager.btn_save_changes') : I18n.t('link_manager.btn_insert_link');
 
         const html = `
-            <div style="display:flex; flex-direction:column; gap:15px;">
-                <div>
+            <div id="externalLinkDrawerContainer" style="display:flex; flex-direction:column; height:100%; gap:15px;">
+                <div style="flex-shrink:0;">
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.url_label')}</label>
-                    <input type="text" id="externalLinkUrl" class="modern-input" placeholder="https://www.google.com" value="">
+                    <input type="text" id="externalLinkUrl" class="modern-input" placeholder="https://www.google.com" value="" style="margin-top:4px;">
                 </div>
-                <div>
+                <div style="flex-shrink:0;">
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.display_text_label')}</label>
-                    <input type="text" id="externalLinkText" class="modern-input" placeholder="Es: Cerca su Google">
+                    <input type="text" id="externalLinkText" class="modern-input" placeholder="Es: Cerca su Google" style="margin-top:4px;">
                 </div>
-                <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.notes_optional_label')}</label>
-                    <textarea id="externalLinkNote" class="modern-input" rows="6" style="resize:vertical; width:100%; font-size:0.85rem;" placeholder="${I18n.t('link_manager.notes_tooltip_placeholder')}"></textarea>
+                <div style="display:flex; flex-direction:column; flex:1; min-height:0;">
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; margin-bottom:4px; flex-shrink:0;">${I18n.t('link_manager.notes_optional_label')}</label>
+                    <textarea id="externalLinkNote" class="modern-input adv-scroll-container" style="resize:vertical; width:100%; flex:1; min-height:140px; font-size:0.85rem; line-height:1.5; padding:10px; box-sizing:border-box;" placeholder="${I18n.t('link_manager.notes_tooltip_placeholder')}"></textarea>
                 </div>
             </div>
         `;
-        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmExternalLink()" style="width:100%; justify-content:center;">${btnLabel}</button>`;
+        const footer = `
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="LinkManager.confirmExternalLink()" style="gap:1px">${btnLabel} (Ctrl +<span style="display:inline-flex; vertical-align:middle;">${Icons.returnKey}</span>)</button>
+        `;
 
         UI.openDrawer(title, html, footer);
 
         setTimeout(() => {
             const urlInput = document.getElementById('externalLinkUrl');
             const textInput = document.getElementById('externalLinkText');
+            const container = document.getElementById('externalLinkDrawerContainer');
             
             if (prefilledUrl) {
                 let formattedUrl = prefilledUrl;
@@ -324,6 +356,16 @@ const LinkManager = {
                 });
                 urlInput.focus();
                 if (prefilledUrl) urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
+            }
+
+            // Scorciatoia rapida universale Ctrl+Invio / Cmd+Invio per confermare il drawer
+            if (container) {
+                container.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        LinkManager.confirmExternalLink();
+                    }
+                });
             }
         }, 50);
     },
@@ -456,32 +498,36 @@ const LinkManager = {
         const btnLabel = LinkManager.isEditingMode ? I18n.t('link_manager.btn_save_changes') : I18n.t('link_manager.btn_insert_link');
 
         const html = `
-            <div style="background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2); padding: 10px; border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 15px;">
-                ${I18n.t('link_manager.file_path_info_banner')}
-            </div>
-            <div style="display:flex; flex-direction:column; gap:15px;">
-                <div>
+            <div id="fileLinkDrawerContainer" style="display:flex; flex-direction:column; height:100%; gap:15px;">
+                <div style="background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2); padding: 10px; border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary); flex-shrink:0;">
+                    ${I18n.t('link_manager.file_path_info_banner')}
+                </div>
+                <div style="flex-shrink:0;">
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.file_path_label')}</label>
                     <input type="text" id="fileLinkPath" class="modern-input" placeholder="Es: C:\\Logs\\error.log oppure cartella/file.txt" style="margin-top:5px;">
                 </div>
-                <div>
+                <div style="flex-shrink:0;">
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.display_text_label')}</label>
                     <div style="display:flex; gap:10px; margin-top:5px;">
                         <input type="text" id="fileLinkName" class="modern-input" placeholder="Es: Log Errori" style="flex:1;">
                         <button class="btn" onclick="LinkManager.browseLocalFile()" style="padding:0 15px;"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.search} ${I18n.t('link_manager.btn_browse')}</span></button>
                     </div>
                 </div>
-                <div>
-                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('link_manager.notes_optional_label')}</label>
-                    <textarea id="fileLinkNote" class="modern-input" rows="4" style="resize:vertical; width:100%; font-size:0.85rem; margin-top:5px;" placeholder="${I18n.t('link_manager.file_notes_placeholder')}"></textarea>
+                <div style="display:flex; flex-direction:column; flex:1; min-height:0;">
+                    <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold; margin-bottom:4px; flex-shrink:0;">${I18n.t('link_manager.notes_optional_label')}</label>
+                    <textarea id="fileLinkNote" class="modern-input adv-scroll-container" style="resize:vertical; width:100%; flex:1; min-height:120px; font-size:0.85rem; line-height:1.5; padding:10px; box-sizing:border-box;" placeholder="${I18n.t('link_manager.file_notes_placeholder')}"></textarea>
                 </div>
             </div>
         `;
-        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmFileLink()" style="width:100%; justify-content:center;">${btnLabel}</button>`;
+        const footer = `
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="LinkManager.confirmFileLink()" title="${btnLabel} (Ctrl+Invio)">${btnLabel}</button>
+        `;
 
         UI.openDrawer(title, html, footer);
 
         setTimeout(() => {
+            const container = document.getElementById('fileLinkDrawerContainer');
             if (prefilledPath && !LinkManager.isEditingMode) {
                 document.getElementById('fileLinkPath').value = prefilledPath;
                 let filename = prefilledPath.split(/[\\/]/).pop() || I18n.t('link_manager.default_file_name');
@@ -496,6 +542,16 @@ const LinkManager = {
             
             const fileInput = document.getElementById('fileLinkPath');
             if (fileInput) fileInput.focus();
+
+            // Scorciatoia rapida universale Ctrl+Invio / Cmd+Invio per confermare il drawer
+            if (container) {
+                container.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        LinkManager.confirmFileLink();
+                    }
+                });
+            }
         }, 50);
     },
 
@@ -545,7 +601,7 @@ const LinkManager = {
     openYoutubeModal: (prefilledUrl = null) => {
         const title = `<span style="display:inline-flex; align-items:center; gap:5px; color:var(--danger-color);">${Icons.youtube} ${I18n.t('link_manager.drawer_embed_youtube')}</span>`;
         const html = `
-            <div style="display:flex; flex-direction:column; gap:15px;">
+            <div id="youtubeDrawerContainer" style="display:flex; flex-direction:column; gap:15px;">
                 <div style="font-size:0.85rem; color:var(--text-secondary); background:rgba(37,99,235,0.05); border:1px solid rgba(37,99,235,0.2); padding:10px; border-radius:6px; line-height:1.5;">
                     ${I18n.t('link_manager.youtube_banner_info')}
                 </div>
@@ -555,16 +611,27 @@ const LinkManager = {
                 </div>
             </div>
         `;
-        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmYoutube()" style="width:100%; justify-content:center;">${I18n.t('link_manager.btn_insert_video')}</button>`;
+        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmYoutube()" style="width:100%; justify-content:center;" title="${I18n.t('link_manager.btn_insert_video')} (Ctrl+Invio)">${I18n.t('link_manager.btn_insert_video')}</button>`;
         
         UI.openDrawer(title, html, footer);
 
         setTimeout(() => {
             const urlInput = document.getElementById('youtubeUrlInput');
+            const container = document.getElementById('youtubeDrawerContainer');
             if (prefilledUrl && urlInput) {
                 urlInput.value = prefilledUrl;
             }
             if (urlInput) urlInput.focus();
+
+            // Scorciatoia rapida universale Ctrl+Invio / Cmd+Invio per confermare il drawer
+            if (container) {
+                container.addEventListener('keydown', (e) => {
+                    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                        e.preventDefault();
+                        LinkManager.confirmYoutube();
+                    }
+                });
+            }
         }, 50);
     },
 

@@ -199,8 +199,7 @@
     text-decoration: none;
     border: 1px solid rgba(255, 193, 7, 0.3);
     font-size: 0.9em;
-    display: inline-flex;
-    align-items: center;
+    display: inline;
     vertical-align: baseline;
     margin: 0 1px;
     white-space: nowrap;

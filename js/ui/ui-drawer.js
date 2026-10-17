@@ -5,6 +5,9 @@
  * per l'apertura di sottomenu, e delle feature X-Ray (Ghost) e Docking.
  * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() alla chiusura del record
  * per aggiornare solo le tabelle RDBMS escludendo widget polimorfi.
+ * FIX LONG TEXT DISCARD SAFETY: Intercettazione in closeDrawer per verificare se il testo lungo
+ * di advLongTextInput è stato modificato rispetto a data-original-value, mostrando un confirm modale
+ * che ricorda di salvare con il pulsante o Ctrl+Invio prima di scartare le modifiche.
  */
 
 Object.assign(UI, {
@@ -221,26 +224,42 @@ Object.assign(UI, {
         document.dispatchEvent(new CustomEvent('drawer-restored', { detail: { titleText: prevState.titleText } }));
     },
 
-    closeDrawer: () => {
+    closeDrawer: (force = false) => {
         const drawer = document.getElementById('advGlobalDrawer');
-        if (drawer) {
-            drawer.classList.remove('open');
-            UI._drawerStack = []; 
-            const backBtn = document.getElementById('advDrawerBackBtn');
-            if (backBtn) backBtn.style.display = 'none';
-            
-            // Assicurati che alla chiusura venga disattivato il ghost mode
-            if (drawer.classList.contains('ghost-mode')) {
-                UI.toggleDrawerGhost();
-            }
+        if (!drawer) return;
 
-            if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll(true); 
-            UI._drawerCloseTimer = setTimeout(() => {
-                document.getElementById('advDrawerBody').innerHTML = '';
-                document.getElementById('advDrawerFooter').innerHTML = '';
-                drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)';
-            }, 300);
+        // INTERCETTAZIONE DI SICUREZZA PER TESTO LUNGO MODIFICATO
+        if (!force) {
+            const longTextInput = document.getElementById('advLongTextInput');
+            if (longTextInput && !longTextInput.hasAttribute('readonly')) {
+                const originalVal = longTextInput.getAttribute('data-original-value') ?? '';
+                const currentVal = longTextInput.value ?? '';
+                if (currentVal !== originalVal) {
+                    const msg = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('adv_actions.confirm_discard_long_text') : null);
+                    if (!confirm(msg)) {
+                        longTextInput.focus();
+                        return;
+                    }
+                }
+            }
         }
+
+        drawer.classList.remove('open');
+        UI._drawerStack = []; 
+        const backBtn = document.getElementById('advDrawerBackBtn');
+        if (backBtn) backBtn.style.display = 'none';
+        
+        // Assicurati che alla chiusura venga disattivato il ghost mode
+        if (drawer.classList.contains('ghost-mode')) {
+            UI.toggleDrawerGhost();
+        }
+
+        if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll(true); 
+        UI._drawerCloseTimer = setTimeout(() => {
+            document.getElementById('advDrawerBody').innerHTML = '';
+            document.getElementById('advDrawerFooter').innerHTML = '';
+            drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)';
+        }, 300);
 
         // --- GESTIONE INTEGRATA CHIUSURA RECORD DATABASE ---
         if (typeof AdvancedTable !== 'undefined' && AdvancedTable.activeRecordId) {

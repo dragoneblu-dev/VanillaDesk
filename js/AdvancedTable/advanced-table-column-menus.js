@@ -23,6 +23,8 @@
  * crash su widget non tabellari presenti in AppState.databases (diari, codice, bottoni).
  * FEAT WBS SEMANTIC DIRECTION: Toggle rapido e memorizzazione sullo schema colonna (col.treeDirection) per auto-relazioni.
  * FIX OPEN_COL_MENU TYPEGUARD: Protezione da chiamate asincrone o debounced per openColMenu senza eccezioni stopPropagation.
+ * FIX BLUR RENAME CONFIRMATION: Intercettazione del cambio nome abbandonato senza Invio, con richiesta di conferma
+ * esplicita dell'annullamento e promemoria sull'obbligo di premere Invio per confermare la modifica.
  */
 
 const AdvancedTableColumnMenus = {
@@ -391,7 +393,10 @@ const AdvancedTableColumnMenus = {
                 type: 'custom',
                 html: `
                     <div style="padding: 2px;">
-                        <input type="text" class="adv-menu-input" value="${safeName}" placeholder="${I18n.t('adv_col_menu.rename_placeholder')}" id="editColNameInput" onkeydown="event.stopPropagation(); if(event.key === 'Enter') { event.preventDefault(); AdvancedTableColumnMenus.changeColName('${realTableId}', '${colId}'); }" style="margin:0; width:100%; font-weight:bold;">
+                        <input type="text" class="adv-menu-input" value="${safeName}" placeholder="${I18n.t('adv_col_menu.rename_placeholder')}" id="editColNameInput" 
+                               onkeydown="event.stopPropagation(); if(event.key === 'Enter') { event.preventDefault(); AdvancedTableColumnMenus.changeColName('${realTableId}', '${colId}'); }" 
+                               onblur="AdvancedTableColumnMenus.handleColRenameBlur(event, '${realTableId}', '${colId}', '${safeName}')"
+                               style="margin:0; width:100%; font-weight:bold;">
                     </div>
                 `
             },
@@ -538,7 +543,7 @@ const AdvancedTableColumnMenus = {
 
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveColumnComment('${tableId}', '${colId}')" title="${I18n.t('common.save')} (Ctrl+Invio)">${I18n.t('common.save')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTableColumnMenus.saveColumnComment('${tableId}', '${colId}')"  style="gap:1px">${I18n.t('common.save')} (Ctrl +<span style="display:inline-flex; vertical-align:middle;">${Icons.returnKey}</span>)</button>
         `;
 
         UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.noteInline} ${I18n.t('adv_col_menu.comment_modal_title')}</span>`, bodyHTML, footerHTML);
@@ -576,8 +581,12 @@ const AdvancedTableColumnMenus = {
     changeColName: (tableId, colId) => {
         const input = document.getElementById('editColNameInput');
         if (!input) return;
+        input._isSubmitting = true;
         const newName = input.value.trim();
-        if (!newName) return;
+        if (!newName) {
+            input._isSubmitting = false;
+            return;
+        }
 
         let state = AdvancedTable.getState(tableId);
         const col = state.columns.find(c => c.id === colId);
@@ -606,6 +615,40 @@ const AdvancedTableColumnMenus = {
         
         Store.triggerAutoSave();
         AdvancedTable.closeDropdowns(true);
+    },
+
+    handleColRenameBlur: (e, tableId, colId, oldName) => {
+        const input = e.target;
+        if (!input || input._isSubmitting) return;
+
+        const currentVal = input.value.trim();
+        // Se non è stato modificato rispetto a oldName o se è vuoto, non intervenire
+        if (currentVal === oldName || !currentVal) {
+            return;
+        }
+
+        const msg = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('adv_col_menu.confirm_discard_rename') : null);
+
+        const confirmCancel = confirm(msg);
+
+        if (confirmCancel) {
+            // L'utente conferma l'annullamento: ripristiniamo il vecchio valore
+            input.value = oldName;
+        } else {
+            // L'utente NON vuole annullare: impediamo la distruzione del menu e rimettiamo il focus
+            if (typeof UI !== 'undefined' && UI.Menu) {
+                UI.Menu._preventClose = true;
+            }
+            setTimeout(() => {
+                if (typeof UI !== 'undefined' && UI.Menu) {
+                    UI.Menu._preventClose = false;
+                }
+                if (document.body.contains(input)) {
+                    input.focus();
+                    input.select();
+                }
+            }, 100);
+        }
     },
 
     changeColType: (tableId, colId, newType) => {

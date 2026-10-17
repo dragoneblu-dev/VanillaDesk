@@ -6,6 +6,8 @@
  * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
  * FEAT I18N: Voce "Lingua" trasformata in sottomenu dedicato per non occupare spazio verticale in "Configura".
  * FEAT CONTINUOUS EDIT: Attivazione di default (true) al primo avvio o su nuovi Workspace.
+ * FIX READ-MODE CHECKLIST: Le checkbox delle To-Do list (.adv-checklist) restano attive e cliccabili
+ * anche in modalità lettura (a meno che la nota non sia nel Cestino), consentendo la spunta rapida.
  */
 
 Object.assign(UI, {
@@ -361,6 +363,9 @@ Object.assign(UI, {
 
         if (!titleInput || !contentDiv || !toolbar || !toggleBtn) return;
 
+        const currentNote = AppState.currentNoteId ? Store.getNote(AppState.currentNoteId) : null;
+        const isTrashed = currentNote && currentNote.deletedAt;
+
         if (btnNoteOptions) {
             btnNoteOptions.style.display = AppState.isEditMode ? '' : 'none';
         }
@@ -392,7 +397,13 @@ Object.assign(UI, {
             contentDiv.setAttribute('contenteditable', 'false');
             
             contentDiv.querySelectorAll('[contenteditable="true"]').forEach(el => el.setAttribute('contenteditable', 'false'));
-            contentDiv.querySelectorAll('.adv-checklist input[type="checkbox"]').forEach(el => el.setAttribute('disabled', 'true'));
+
+            // Le caselle di controllo delle To-Do list restano abilitate in modalità lettura a meno che la nota non sia nel Cestino
+            if (isTrashed) {
+                contentDiv.querySelectorAll('.adv-checklist input[type="checkbox"]').forEach(el => el.setAttribute('disabled', 'true'));
+            } else {
+                contentDiv.querySelectorAll('.adv-checklist input[type="checkbox"]').forEach(el => el.removeAttribute('disabled'));
+            }
 
             toolbar.classList.add('hidden');
             toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.edit} ${I18n.t('common.edit')}</span>`;

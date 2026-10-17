@@ -156,6 +156,9 @@ Object.assign(Editor, {
         const editor = document.getElementById('noteContent');
         if (!editor || !editor.contains(focusEl)) return false;
 
+        // Se il cursore è dentro un link, non intervenire con lo shift selection degli snippet
+        if (focusEl.closest('a')) return false;
+
         // Verifica se l'estremo attivo della selezione è dentro o subito adiacente a uno snippet copiabile
         const snippet = focusEl.closest('.adv-copy-snippet') ||
                         (focusNode.nextSibling && focusNode.nextSibling.classList && focusNode.nextSibling.classList.contains('adv-copy-snippet') ? focusNode.nextSibling : null) ||
@@ -229,6 +232,11 @@ Object.assign(Editor, {
         const range = sel.getRangeAt(0);
         let node = range.startContainer;
         let parent = node.nodeType === 3 ? node.parentNode : node;
+
+        // Se il cursore è dentro un link, non intervenire: la navigazione verticale è naturale
+        if (parent && parent.closest('a')) {
+            return false;
+        }
 
         // Si attiva SOLO se il cursore è adiacente o dentro uno snippet copiabile
         const isNearSnippet = parent.closest('.adv-copy-snippet') || 
@@ -366,7 +374,14 @@ Object.assign(Editor, {
         let node = sel.anchorNode;
         if (node.nodeType === 3) node = node.parentNode;
 
+        // Se siamo dentro un link e NON siamo in una tabella, non eseguire alcuna intercettazione
+        const insideLink = node.closest('a');
         const cell = node.closest('td, th');
+
+        if (insideLink && !cell) {
+            return false;
+        }
+
         if (!cell) return false;
 
         const row = cell.parentElement;
@@ -476,9 +491,9 @@ Object.assign(Editor, {
         let targetY = currGeo.startY;
 
         if (intent === 'up') targetY = currGeo.startY - 1;
-        if (intent === 'down') targetY = currGeo.endY + 1; // Salta in fondo all'ingombro dell'eventuale rowspan
+        if (intent === 'down') targetY = currGeo.endY + 1;
         if (intent === 'left') targetX = currGeo.startX - 1;
-        if (intent === 'right') targetX = currGeo.endX + 1; // Salta in fondo all'ingombro dell'eventuale colspan
+        if (intent === 'right') targetX = currGeo.endX + 1;
 
         // 4. ESECUZIONE SPOSTAMENTO SULLA MATRICE
         let targetCell = null;
@@ -735,7 +750,7 @@ Object.assign(Editor, {
     handleFormatEscape: (e) => {
         if (!AppState.isEditMode) return;
         
-        // 1. ESCAPE DA AREE EDITABILI (WIDGETS A BLOCCO - Esclude categoricamente gli snippet inline)
+        // 1. ESCAPE DA AREE EDITABILI (WIDGETS A BLOCCO - Esclude esplicitamente gli snippet e i link inline)
         if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
             const sel = window.getSelection();
             if (!sel.isCollapsed || !sel.rangeCount) return;
@@ -743,6 +758,12 @@ Object.assign(Editor, {
             const range = sel.getRangeAt(0);
             let container = range.startContainer;
             let offset = range.startOffset;
+
+            // Se il cursore si trova dentro un link normale (a, .file-link, .internal-link), non applicare l'escape a blocchi
+            const parentEl = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+            if (parentEl && parentEl.closest('a')) {
+                return;
+            }
 
             if ((container.nodeType === Node.TEXT_NODE && offset === container.length) ||
                 (container.nodeType !== Node.TEXT_NODE && offset === container.childNodes.length)) {
@@ -784,7 +805,7 @@ Object.assign(Editor, {
             }
         }
 
-        // 2. ESCAPE DA SPAN DI FORMATTAZIONE (Grassetto, Colori, ecc.)
+        // 2. ESCAPE DA SPAN DI FORMATTAZIONE (Grassetto, Colori, ecc.) - Esclusivamente con Spazio o Freccia Destra
         if (e.key === ' ' || e.key === 'ArrowRight') {
             const sel = window.getSelection();
             if (!sel.isCollapsed || !sel.rangeCount) return;

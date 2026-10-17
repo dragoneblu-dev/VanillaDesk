@@ -18,6 +18,9 @@
  * per selezionare esclusivamente il testo della cella impedendo al browser di selezionare tutta la pagina.
  * FEAT CTRL+A WIDGET TITLE ISOLATION: Intercettazione in attachCellEvents di Ctrl+A / Cmd+A sul titolo del database
  * per selezionare unicamente il testo del titolo senza estendere la selezione al documento principale.
+ * FIX UX FOOTER AUTO-NAVIGATION: Se hideFooterControls è attivo ma i record superano la dimensione
+ * della pagina (totalPages > 1), viene mostrata la sola barra di navigazione/conteggio senza tasti di inserimento,
+ * impedendo che tabelle estese appaiano troncate o corrotte.
  */
 
 Object.assign(AdvancedTable, {
@@ -653,35 +656,50 @@ Object.assign(AdvancedTable, {
             ? `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;" title="Filtro o ricerca attiva"><b style="color:var(--accent-color); margin-right:3px;">${formattedFiltered}</b> di ${formattedStored} record</span>`
             : `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
 
-        if (!state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0)) {
+        // DETERMINAZIONE LOGICA VISIBILITÀ DEL FOOTER:
+        // 1. Footer completo: se hideFooterControls è false (mostra pulsante nuova riga, contatore e paginazione).
+        // 2. Footer compatto (solo navigazione): se hideFooterControls è true MA totalPages > 1 (sfogliare i record è essenziale per non perdere dati di vista).
+        // 3. Nessun footer: se hideFooterControls è true e tutti i record entrano nell'unica pagina (totalPages <= 1).
+        const showFullFooter = !state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0);
+        const showCompactNavigationFooter = state.hideFooterControls && totalPages > 1;
+
+        if (showFullFooter || showCompactNavigationFooter) {
             html += `<div class="adv-table-footer-controls">`;
             html += `<div class="adv-footer-left" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`;
             
-            if (isEdit && !isSysDB) {
-                html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} ${I18n.t('table.new_row')}</span></button>`;
-                html += recordCountHtml;
-                
-                if (state.selectedRows && state.selectedRows.length > 0) {
-                    if (state.selectedRows.length === 1) {
-                        html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} ${I18n.t('adv_render.open_record')}</span></button>`;
+            if (showFullFooter) {
+                if (isEdit && !isSysDB) {
+                    html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} ${I18n.t('table.new_row')}</span></button>`;
+                    html += recordCountHtml;
+                    
+                    if (state.selectedRows && state.selectedRows.length > 0) {
+                        if (state.selectedRows.length === 1) {
+                            html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} ${I18n.t('adv_render.open_record')}</span></button>`;
+                        }
+                        const btnLabel = state.selectedRows.length === 1 ? I18n.t('table.delete_rows_singular') : I18n.t('table.delete_rows_plural', { count: state.selectedRows.length });
+                        html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
+                        html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
                     }
-                    const btnLabel = state.selectedRows.length === 1 ? I18n.t('table.delete_rows_singular') : I18n.t('table.delete_rows_plural', { count: state.selectedRows.length });
-                    html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                    html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
+                } else if (!isSysDB) {
+                    html += recordCountHtml;
+                } else if (isSysDB) {
+                    html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
                 }
-            } else if (!isSysDB) {
-                html += recordCountHtml;
-            } else if (isSysDB) {
-                html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
+            } else {
+                // Modalità compatta: preserva il contatore per informare l'utente del volume complessivo,
+                // senza aggiungere pulsanti di creazione riga o azioni invasive.
+                if (!isSysDB) {
+                    html += recordCountHtml;
+                }
             }
 
             html += `</div><div class="adv-footer-right">`;
 
-                let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
-                let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
-                html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
-                         <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>${I18n.t('table.page_info', { current: currentPage, total: totalPages })}</div>
-                         <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
+            let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
+            let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
+            html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
+                     <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>${I18n.t('table.page_info', { current: currentPage, total: totalPages })}</div>
+                     <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
             html += `</div></div>`;
         }
 

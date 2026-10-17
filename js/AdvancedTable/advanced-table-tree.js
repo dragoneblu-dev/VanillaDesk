@@ -18,6 +18,8 @@
  * - PERF INVERTED INDEX O(1): Mantenimento atomico di AdvancedTable._rowIndices in addSubtask.
  * - FEAT CELL-LEVEL CONDITIONAL STYLING: Applicazione di classi e sfondi diretti sui tag <td> per regole cell-scope nella vista WBS.
  * - FIX DEFENSIVE STATE: Inizializzazione difensiva di sorts, filters e selectedRows per prevenire TypeError su find().
+ * - FIX UX FOOTER AUTO-NAVIGATION: Sincronizzazione automatica del footer in modalità navigazione quando hideFooterControls è attivo
+ *   ma i record radice superano la pagina (totalPages > 1).
  */
 
 const AdvancedTree = {
@@ -696,35 +698,50 @@ const AdvancedTree = {
         const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
         const recordCountHtml = `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
 
-        if (!state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0)) {
+        // DETERMINAZIONE LOGICA VISIBILITÀ DEL FOOTER (Tree View):
+        // 1. Footer completo: se hideFooterControls è false (mostra pulsante nuova radice, contatore e paginazione radici).
+        // 2. Footer compatto (solo navigazione): se hideFooterControls è true MA totalPages > 1 (sfogliare le radici è indispensabile).
+        // 3. Nessun footer: se hideFooterControls è true e tutte le radici entrano in un'unica pagina (totalPages <= 1).
+        const showFullFooter = !state.hideFooterControls && (isEdit || totalPages > 1 || totalStoredRows > 0);
+        const showCompactNavigationFooter = state.hideFooterControls && totalPages > 1;
+
+        if (showFullFooter || showCompactNavigationFooter) {
             html += `<div class="adv-table-footer-controls">`;
             html += `<div class="adv-footer-left" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`;
 
-            if (isEdit && !isSysDB) {
-                html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova Attività Radice</span></button>`;
-                html += recordCountHtml;
+            if (showFullFooter) {
+                if (isEdit && !isSysDB) {
+                    html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova Attività Radice</span></button>`;
+                    html += recordCountHtml;
 
-                if (state.selectedRows && state.selectedRows.length > 0) {
-                    if (state.selectedRows.length === 1) {
-                        html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} Apri Record</span></button>`;
+                    if (state.selectedRows && state.selectedRows.length > 0) {
+                        if (state.selectedRows.length === 1) {
+                            html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} Apri Record</span></button>`;
+                        }
+                        const btnLabel = state.selectedRows.length === 1 ? 'Elimina 1 riga' : `Elimina ${state.selectedRows.length} righe`;
+                        html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
+                        html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
                     }
-                    const btnLabel = state.selectedRows.length === 1 ? 'Elimina 1 riga' : `Elimina ${state.selectedRows.length} righe`;
-                    html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                    html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
+                } else if (!isSysDB) {
+                    html += recordCountHtml;
+                } else if (isSysDB) {
+                    html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
                 }
-            } else if (!isSysDB) {
-                html += recordCountHtml;
-            } else if (isSysDB) {
-                html += `<div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7; padding:4px;">${I18n.t('adv_render.sys_db_rows_info')}</div>`;
+            } else {
+                // Modalità compatta: preserva il contatore per informare l'utente del volume complessivo,
+                // senza aggiungere pulsanti di creazione radice o azioni invasive.
+                if (!isSysDB) {
+                    html += recordCountHtml;
+                }
             }
 
             html += `</div><div class="adv-footer-right">`;
 
-                let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
-                let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
-                html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
-                         <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>Radici: Pag. ${currentPage} di ${totalPages} (${totalRoots})</div>
-                         <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
+            let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
+            let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
+            html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
+                     <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>Radici: Pag. ${currentPage} di ${totalPages} (${totalRoots})</div>
+                     <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
             html += `</div></div>`;
         }
 

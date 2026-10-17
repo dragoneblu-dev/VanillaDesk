@@ -197,7 +197,7 @@ input.title-input {
 input.title-input[readonly] { cursor: default; }
 
 .editor-content a { color: var(--accent-color); text-decoration: underline; cursor: pointer; }
-.editor-content a.internal-link { background-color: rgba(37, 99, 235, 0.1); color: var(--accent-color); padding: 1px 5px; border-radius: 4px; text-decoration: none; border: 1px solid rgba(37, 99, 235, 0.2); font-size: 0.9em; display: inline-flex; align-items: center; vertical-align: baseline; margin: 0 1px; white-space: nowrap; user-select: none; cursor: pointer; }
+.editor-content a.internal-link { background-color: rgba(37, 99, 235, 0.1); color: var(--accent-color); padding: 1px 5px; border-radius: 4px; text-decoration: none; border: 1px solid rgba(37, 99, 235, 0.2); font-size: 0.9em; display: inline; vertical-align: baseline; margin: 0 1px; white-space: nowrap; user-select: none; cursor: pointer; }
 .editor-content a.internal-link:hover { background-color: rgba(37, 99, 235, 0.2); border-color: var(--accent-color); }
 .editor-content a.internal-link::before { content: "↪"; font-size: 0.8em; margin-right: 4px; opacity: 0.7; }
 

@@ -21,6 +21,7 @@
  * FIX GETCLEANHTML IMMUTABILITY: getCleanHTML normalizza esclusivamente il clone disaccoppiato, senza mutare il DOM vivo ed evitando salti del cursore.
  * FIX INLINE SHELL DEAD ZONE: Metodo adjustCaretAwayFromZwsDeadZone per espellere istantaneamente il cursore
  * dalla zona morta tra il widget e il cuscinetto \u200B, impedendo inserimenti invertiti di caratteri.
+ * FEAT CARET RESUME: Metodo snello setCaretAfterInlineElement per riposizionare il cursore dopo una nota inline o segnalibro (O(1)).
  */
 
 const Editor = {
@@ -256,6 +257,41 @@ const Editor = {
                 sel.addRange(r);
                 return;
             }
+        }
+    },
+
+    // Posiziona in modo snello e O(1) il cursore subito dopo un elemento inline o segnalibro
+    setCaretAfterInlineElement: (element) => {
+        if (!element || !document.body.contains(element)) return;
+
+        const editorEl = document.getElementById('noteContent');
+        if (!editorEl) return;
+
+        // Gestione puramente locale del cuscinetto: assicura che il nodo adiacente esista e inizi con ZWS
+        let next = element.nextSibling;
+        if (!next || next.nodeType !== Node.TEXT_NODE) {
+            const zws = document.createTextNode('\u200B');
+            element.parentNode.insertBefore(zws, element.nextSibling);
+            next = zws;
+        } else if (!next.nodeValue.startsWith('\u200B')) {
+            next.nodeValue = '\u200B' + next.nodeValue;
+        }
+
+        editorEl.focus();
+
+        const sel = window.getSelection();
+        const range = document.createRange();
+        // Offset 1 atterra esattamente dopo lo \u200B nel flusso del testo editabile
+        range.setStart(next, 1);
+        range.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(range);
+
+        // Aggiorna lo snapshot della selezione per proteggere i successivi comandi della toolbar
+        Editor.savedRange = range.cloneRange();
+
+        if (element.scrollIntoView) {
+            element.scrollIntoView({ behavior: 'auto', block: 'nearest' });
         }
     },
 

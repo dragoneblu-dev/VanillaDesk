@@ -174,7 +174,7 @@
                 </div>
 
                 <div id="homeDocumentView" class="hidden"
-                    style="width: 100%; max-width: 900px; display:flex; flex-direction:column; gap:15px; margin: 0 auto; padding-bottom: 40px;">
+                    style="width: 100%; max-width: var(--page-max-width, 900px); display:flex; flex-direction:column; gap:15px; margin: 0 auto; padding: 0 20px 40px 20px; box-sizing: border-box;">
                     <div
                         style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; border-bottom:1px solid var(--border-color); padding-bottom:15px;">
                         <h2 style="margin:0;"><script>document.write(I18n.t('home_dashboard.title'))</script></h2>
@@ -369,7 +369,13 @@
     <script src="js/store-workspace.js"></script>
     <script src="js/color-manager.js"></script>
     <script src="js/link-manager.js"></script>
+    
+    <!-- Moduli di Esportazione e Importazione -->
     <script src="js/export-manager.js"></script>
+    <script src="js/export-html.js"></script>
+    <script src="js/export-markdown.js"></script>
+    <script src="js/export-markdown-import.js"></script>
+
     <script src="js/image-manager.js"></script>
     <script src="js/audio-manager.js"></script>
     <script src="js/widget-manager.js"></script>
@@ -450,7 +456,7 @@
     <script src="js/button-manager-ui.js"></script>
     <script src="js/obsidian-importer.js"></script>
 
-    <!-- Nuovo Modulo Manuale in Sottocartella -->
+    <!-- Modulo Manuale in Sottocartella -->
     <script src="js/manual/manual-core.js"></script>
     <script src="js/manual/sec-intro.js"></script>
     <script src="js/manual/sec-editor.js"></script>

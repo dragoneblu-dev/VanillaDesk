@@ -7,11 +7,16 @@
  * FIX RICERCA: Esclusione del portale di autocompletamento della Sidebar dalla distruzione globale.
  * FEAT UX: Supporto nativo per i 'badge' (Pillole numeriche informative) con colore personalizzabile (badgeColor).
  * FEAT ITEM TITLE: Supporto per la proprietà 'title' per visualizzare descrizioni e tooltip informativi sulle voci di menu.
+ * FIX OUTSIDE CLICK PRESERVATION: Supporto per il flag UI.Menu._preventClose per impedire la distruzione
+ * intempestiva del menu quando l'utente annulla lo scarto di una modifica su blur.
  */
 
 Object.assign(UI, {
     Menu: {
+        _preventClose: false,
+
         closeAll: (force = false) => {
+            if (UI.Menu._preventClose && !force) return;
             const hoveredDropdown = document.querySelector('.adv-dropdown:hover');
             
             document.querySelectorAll('.adv-select-edit-menu').forEach(el => {

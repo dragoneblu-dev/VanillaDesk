@@ -6,6 +6,10 @@
  * Salvataggio normalizzato tramite la funzione unica centralizzata Editor.sanitizeMiniText.
  * FIX ANCORAGGIO CURSORE: Inserimento della selezione a offset 1 dopo il \u200B per impedire
  * che caratteri digitati a fine riga finiscano prima del cuscinetto protettivo.
+ * FEAT FULL HEIGHT DRAWER: Layout a tutta altezza (height: 100%, flex: 1) per consentire all'area
+ * di testo di occupare l'intero spazio verticale disponibile nel Drawer laterale.
+ * FEAT CARET RESUME: Al salvataggio della nota inline, il cursore viene riposizionato istantaneamente
+ * subito dopo il widget per riprendere la scrittura rapida.
  */
 
 Object.assign(Editor, {
@@ -85,22 +89,24 @@ Object.assign(Editor, {
         const currentHTML = dataSpan.innerHTML;
 
         const bodyHTML = `
-            <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display:flex; flex-direction:column;">
-                <div class="toolbar" style="margin-bottom: 10px; padding: 0; border: none; background: transparent;">
-                    <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="Grassetto"><b>B</b></button>
-                    <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="Corsivo"><i>I</i></button>
-                    <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="Sottolineato"><u>U</u></button>
-                    <div style="width:1px; height:15px; background:var(--border-color); margin:0 5px;"></div>
-                    <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista Puntata"><b>•</b></button>
+            <div style="display:flex; flex-direction:column; height:100%; gap:10px;">
+                <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display:flex; flex-direction:column; flex:1; min-height:0;">
+                    <div class="toolbar" style="margin-bottom: 10px; padding: 0; border: none; background: transparent; flex-shrink:0;">
+                        <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="Grassetto"><b>B</b></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="Corsivo"><i>I</i></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="Sottolineato"><u>U</u></button>
+                        <div style="width:1px; height:15px; background:var(--border-color); margin:0 5px;"></div>
+                        <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista Puntata"><b>•</b></button>
+                    </div>
+                    <div id="inlineNoteInput" class="editor-content adv-scroll-container" contenteditable="true" style="outline: none; flex:1; min-height:0; background:var(--bg-color); border:1px solid var(--border-color); padding:12px; border-radius:4px; overflow-y:auto; line-height:1.5;">${currentHTML}</div>
                 </div>
-                <div id="inlineNoteInput" class="editor-content" contenteditable="true" style="outline: none; flex:1; background:var(--bg-color); border:1px solid var(--border-color); padding:10px; border-radius:4px; overflow-y:auto;">${currentHTML}</div>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin:0; flex-shrink:0;">L'appunto resterà nascosto nel testo sotto forma di icona, e comparirà passandoci il mouse sopra. Utile per glossari o promemoria.</p>
             </div>
-            <p style="font-size:0.75rem; color:var(--text-secondary); margin-top:10px; margin-bottom:0;">L'appunto resterà nascosto nel testo sotto forma di icona, e comparirà passandoci il mouse sopra. Utile per glossari o promemoria.</p>
         `;
         
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="Editor.saveInlineNote()" title="${I18n.t('inline_notes.btn_save')} (Ctrl+Invio)">${I18n.t('inline_notes.btn_save')}</button>
+            <button class="btn btn-primary" onclick="Editor.saveInlineNote()" style="gap:1px">${I18n.t('inline_notes.btn_save')} (Ctrl +<span style="display:inline-flex; vertical-align:middle;">${Icons.returnKey}</span>)</button>
         `;
 
         UI.openDrawer(I18n.t('inline_notes.drawer_title'), bodyHTML, footerHTML);
@@ -129,7 +135,7 @@ Object.assign(Editor, {
 
         Editor.saveSnapshot();
         
-        const wrapper = Editor.currentInlineNote.closest('.inline-note-wrapper, .adv-inline-shell');
+        const wrapper = Editor.currentInlineNote.closest('.inline-note-wrapper, .adv-inline-shell') || Editor.currentInlineNote;
         if (wrapper) {
             const dataSpan = wrapper.querySelector('.inline-note-data');
             if (dataSpan) dataSpan.innerHTML = newHTML;
@@ -141,6 +147,12 @@ Object.assign(Editor, {
 
         Store.triggerAutoSave();
         UI.closeDrawer();
+
+        // Riposiziona il cursore subito dopo la nota inline per riprendere a scrivere immediatamente
+        if (typeof Editor.setCaretAfterInlineElement === 'function' && wrapper) {
+            Editor.setCaretAfterInlineElement(wrapper);
+        }
+
         Editor.currentInlineNote = null;
     }
 });

@@ -148,7 +148,7 @@ const AdvancedTable = {
                 isSystemDB: true,
                 columns: [
                     { id: 'sys_c_note', name: 'Pagina Collegata', type: 'record_note', width: 200, hidden: false },
-                    { id: 'sys_c_tags', name: '#Tag', type: 'multi-select', width: 250, hidden: false }
+                    { id: 'sys_c_tags', name: 'Tag', type: 'multi-select', width: 250, hidden: false }
                 ],
                 rows: [],
                 selectOptions: { 'sys_c_tags': [] },

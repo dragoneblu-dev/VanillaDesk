@@ -6,6 +6,8 @@
  * FIX RENAME PROPAGATION: updateTitle propaga la rinomina del titolo anche ad automazioni e macro buttons,
  * garantendo che le formule continuino a funzionare anche se non avevano ancora migrato all'ID immutabile.
  * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() per isolare le scansioni dei database.
+ * FIX LONG TEXT DISCARD SAFETY: Memorizzazione di data-original-value sul textarea e chiusura controllata
+ * con conferma di annullamento per evitare la perdita silenziosa di testo su chiusura del cassetto.
  */
 
 Object.assign(AdvancedTable, {
@@ -399,12 +401,11 @@ Object.assign(AdvancedTable, {
             <textarea id="advLongTextInput" class="modern-input" ${readonlyAttr} style="width:100%; height:100%; min-height: 300px; resize:vertical; font-family:inherit; font-size:0.95rem; line-height:1.5; padding:10px; ${isComputed ? 'cursor:default;' : ''}">${UI.escapeHTML(String(val))}</textarea>
         `;
         
-        // Se è in sola lettura/calcolato, usa un normale bottone 'btn' senza classe 'btn-primary' per abilitare la chiusura libera al click esterno
         const footerHTML = (isComputed || !AppState.isEditMode) ? `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>
         ` : `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')" title="${I18n.t('adv_actions.save_text')} (Ctrl+Invio)">${I18n.t('adv_actions.save_text')}</button>
+            <button class="btn btn-primary" onclick="AdvancedTable.saveLongText('${tableId}', '${rowId}', '${colId}')"  style="gap:1px">${I18n.t('adv_actions.save_text')} (Ctrl +<span style="display:inline-flex; vertical-align:middle;">${Icons.returnKey}</span>)</button>
         `;
 
         if (typeof UI !== 'undefined') {
@@ -414,6 +415,8 @@ Object.assign(AdvancedTable, {
         setTimeout(() => {
             const input = document.getElementById('advLongTextInput');
             if (input && !isComputed) {
+                // Memorizza il valore originale di partenza per consentire la verifica delle modifiche pendenti su chiusura
+                input.setAttribute('data-original-value', String(val));
                 input.focus();
                 if (initialCaretPos !== null) {
                     const pos = Math.min(initialCaretPos, input.value.length);
@@ -435,7 +438,9 @@ Object.assign(AdvancedTable, {
         const input = document.getElementById('advLongTextInput');
         if (input) {
             AdvancedTable.updateData(tableId, rowId, colId, input.value);
-            if (typeof UI !== 'undefined') UI.closeDrawer();
+            // Sincronizza data-original-value per evitare prompt di conferma allo sblocco
+            input.setAttribute('data-original-value', input.value);
+            if (typeof UI !== 'undefined') UI.closeDrawer(true);
         }
     },
 
