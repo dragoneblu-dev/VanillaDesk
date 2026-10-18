@@ -11,67 +11,9 @@
     <img src="https://img.shields.io/badge/Download_(ZIP)-blue?style=for-the-badge&logo=github&logoColor=white" alt="Scarica Repository" />
   </a>
 </p>
-<p align="center">
-  <a href="https://youtu.be/O8-uhmgFaos" target="_blank" style="text-decoration: none;">
-    <span style="
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #FF0000;
-      color: #FFFFFF;
-      font-weight: bold;
-      font-size: 16px;
-      padding: 12px 24px;
-      border-radius: 12px;
-      margin: 6px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    ">
-      ▶ Video Dimostrativo
-    </span>
-  </a>
 
-  <a href="https://dragoneblu-dev.github.io/VanillaDesk/" target="_blank" style="text-decoration: none;">
-    <span style="
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #28a745;
-      color: #FFFFFF;
-      font-weight: bold;
-      font-size: 16px;
-      padding: 12px 24px;
-      border-radius: 12px;
-      margin: 6px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    ">
-      🚀 Provalo Subito
-    </span>
-  </a>
-
-  <a href="https://github.com/dragoneblu-dev/VanillaDesk/archive/refs/heads/main.zip" style="text-decoration: none;">
-    <span style="
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      background-color: #0366d6;
-      color: #FFFFFF;
-      font-weight: bold;
-      font-size: 16px;
-      padding: 12px 24px;
-      border-radius: 12px;
-      margin: 6px;
-      box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
-    ">
-      📥 Scarica l'App (ZIP)
-    </span>
-  </a>
-</p>
-
-![Vanilla JS](https://img.shields.io/badge/Vanilla-JS-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
-![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
+![Vanilla JS](https://img.shields.io/badge/Vanilla_JS-1572B6?style=for-the-badge&logo=javascript&logoColor=white)
+![HTML5](https://img.shields.io/badge/HTML5-1572B6?style=for-the-badge&logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
 ![Local First](https://img.shields.io/badge/Architecture-Local_First-success?style=for-the-badge)
