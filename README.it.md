@@ -1,11 +1,10 @@
 # VanillaDesk - Local-First Knowledge & Workspace Manager
 
-<!-- Pulsanti d'azione rapidi -->
 <p align="center">
   <a href="https://youtu.be/O8-uhmgFaos" target="_blank">
     <img src="https://img.shields.io/badge/▶_Video_Demonstrativo-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Video YouTube" />
   </a>
-  <a href="dragoneblu-dev.github.io/VanillaDesk/" target="_blank">
+  <a href="https://dragoneblu-dev.github.io/VanillaDesk/" target="_blank">
     <img src="https://img.shields.io/badge/Provalo_Subito-success?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Prova l'App" />
   </a>
   <a href="https://github.com/dragoneblu-dev/VanillaDesk/archive/refs/heads/main.zip">
