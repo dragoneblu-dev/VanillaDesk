@@ -2,7 +2,7 @@
 
 <p align="center">
   <a href="https://youtu.be/O8-uhmgFaos" target="_blank">
-    <img src="https://img.shields.io/badge/▶_Demo_Video-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Video YouTube" />
+    <img src="https://img.shields.io/badge/Demo_Video-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Video YouTube" />
   </a>
   <a href="https://dragoneblu-dev.github.io/VanillaDesk/" target="_blank">
     <img src="https://img.shields.io/badge/Try_It_Now-success?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Prova l'App" />
