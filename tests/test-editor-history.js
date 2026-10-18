@@ -2,10 +2,10 @@
  * tests/test-editor-history.js
  * Suite Modulare di Collaudo Unitario e di Integrazione ad Altissima Copertura (100%).
  * Modulo testato: editor-history (Undo/Redo Engine, Snapshots, B64 State & Record Note Resurrection)
- * Conteggio test case: 15
+ * Conteggio test case: 19
  */
 
-describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note Resurrection (15 Test)", () => {
+describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note Resurrection (19 Test)", () => {
 
     test("History: saveSnapshot accumula snapshot nello stack undo e svuota redoStack", () => {
         let editorEl = document.getElementById('noteContent');
@@ -73,7 +73,7 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Assert.strictEqual(Editor.isTyping, false);
     });
 
-    test("History: limite massimo di capienza dello stack fissato a 200 elementi", () => {
+    test("History: limite massimo di capienza dello stack fissato a 50 elementi", () => {
         let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
 
@@ -265,7 +265,6 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Assert.isTrue(resurrectedNote.content.includes('Specifiche complete'), "Il contenuto originale della nota deve essere intatto");
     });
 
-    // NUOVI TEST CASE: RESURREZIONE MULTIPLA, REGOLE CONDIZIONALI & DEBOUNCE TYPING
     test("History (Multi-Resurrection): Undo ripristina simultaneamente più note cancellate in blocco", () => {
         let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
@@ -289,7 +288,6 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         editorEl.innerHTML = `<div id="${dbId}" class="adv-widget-shell adv-table-wrapper" data-widget-type="database"></div>`;
         Editor.saveSnapshot();
 
-        // Soft-delete simultaneo
         const now = Date.now();
         noteIds.forEach(id => {
             Store.getNote(id).deletedAt = now;
@@ -323,7 +321,6 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         editorEl.innerHTML = `<div id="${dbId}" class="adv-widget-shell adv-table-wrapper" data-widget-type="database"></div>`;
         Editor.saveSnapshot();
 
-        // Mutazione distruttiva
         delete AppState.databases[dbId].conditionalColors;
         delete AppState.databases[dbId].automations;
         editorEl.innerHTML = '<p>Vuoto</p>';
@@ -337,24 +334,6 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Assert.isNotNull(restored.automations);
         Assert.strictEqual(restored.automations[0].id, 'auto_1');
     });
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    
 
     beforeEach(() => {
         TestFramework.resetAppState();
@@ -374,7 +353,6 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Editor.saveSnapshot();
         Assert.strictEqual(Editor.undoStack.length, 1);
 
-        // Simuliamo un elemento nel redoStack
         Editor.redoStack.push('<p>Redo</p>');
         Assert.strictEqual(Editor.redoStack.length, 1);
 
@@ -389,19 +367,16 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
 
-        // 1. Inizio della prima parola 'ciao' (salva snapshot dello stato 'Parola' prima della modifica)
         editorEl.innerHTML = '<p>Parola</p>';
         Editor.registerTypingStart('a'); 
         Assert.isTrue(Editor.isTyping);
         Assert.strictEqual(Editor.undoStack.length, 1);
 
-        // 2. Termine della parola con spazio: resetta isTyping ma NON inserisce uno snapshot duplicato
         editorEl.innerHTML = '<p>Parola </p>';
         Editor.registerTypingStart(' ');
         Assert.isFalse(Editor.isTyping, "isTyping deve essere spento alla fine della parola");
         Assert.strictEqual(Editor.undoStack.length, 1, "Lo spazio non deve raddoppiare lo snapshot nello stack");
 
-        // 3. Inizio della seconda parola: scatta il secondo snapshot pulito (1 Parola = 1 Undo)
         editorEl.innerHTML = '<p>Parola nuova</p>';
         Editor.registerTypingStart('n');
         Assert.isTrue(Editor.isTyping);
@@ -420,12 +395,10 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
 
         editorEl.innerHTML = '<p>Stato 3</p>';
 
-        // Eseguiamo Undo: torna a Stato 2
         Editor.undo();
         Assert.isTrue(editorEl.innerHTML.includes('Stato 2'));
         Assert.strictEqual(Editor.redoStack.length, 1);
 
-        // Eseguiamo Redo: torna a Stato 3
         Editor.redo();
         Assert.isTrue(editorEl.innerHTML.includes('Stato 3'));
         Assert.strictEqual(Editor.redoStack.length, 0);
@@ -439,11 +412,9 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Editor.saveSnapshot();
         Assert.strictEqual(Editor.undoStack.length, 1);
 
-        // Tentativo di salvare lo stesso identico stato senza forcePush
         Editor.saveSnapshot(false);
         Assert.strictEqual(Editor.undoStack.length, 1, "Non deve aggiungere duplicati con lo stesso markup");
 
-        // Con forcePush = true (es. drag and drop) deve consentire il salvataggio
         Editor.saveSnapshot(true);
         Assert.strictEqual(Editor.undoStack.length, 2, "forcePush deve forzare l'inserimento");
     });

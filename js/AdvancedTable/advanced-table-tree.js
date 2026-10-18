@@ -480,19 +480,7 @@ const AdvancedTree = {
         html += `<div class="adv-scroll-container"><table class="adv-table ${zebraClass} ${tableWidthClass}"><thead><tr>`;
 
         visibleCols.forEach(col => {
-            let icon = Icons.text;
-            if (col.type === 'checkbox') icon = Icons.checkbox;
-            if (col.type === 'select') icon = Icons.select;
-            if (col.type === 'multi-select') icon = Icons.multiSelect;
-            if (col.type === 'date' || col.type === 'datetime') icon = Icons.date;
-            if (col.type === 'number') icon = Icons.number;
-            if (col.type === 'formula') icon = Icons.formula;
-            if (col.type === 'relation' || col.type === 'relation_backlink') icon = Icons.relation;
-            if (col.type === 'rollup') icon = Icons.rollup;
-            if (col.type === 'url') icon = Icons.url;
-            if (col.type === 'record_note') icon = Icons.recordPage;
-            if (col.type === 'note_link') icon = Icons.link;
-            if (col.type === 'button') icon = Icons.play;
+            const icon = AdvancedTable.getColumnTypeIcon(col.type);
 
             let sortIndicator = '';
             const sortRule = state.sorts.find(s => s.colId === col.id);

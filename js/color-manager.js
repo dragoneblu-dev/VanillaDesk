@@ -10,9 +10,9 @@
  */
 
 const ColorManager = {
-    defaults: { highlight: 'hl-c5', text: 'tx-c10' },
+    defaults: { highlight: 'hl-c5', text: 'tx-c6' },
     lastHighlight: 'hl-c5',
-    lastText: 'tx-c10',
+    lastText: 'tx-c6',
 
     // Colori finti usati per costringere il browser a "tagliare" i nodi sovrapposti
     magicHl: {

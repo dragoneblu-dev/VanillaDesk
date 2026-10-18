@@ -8,6 +8,8 @@
  * Attributi dataset.id a database, viste e pulsanti per abilitare la selezione attiva.
  * Nella vista dedicata ai Database (isExplicitDbMode), i database vengono mostrati come nodi primari standard al 100% di opacità.
  * Gestione TOC per capitoli (H1, H2, H3) indipendente dallo stato expanded delle sotto-note.
+ * FEAT ADAPTIVE TRUNCATION TOOLTIP: L'attributo 'title' viene calcolato e applicato al solo passaggio del mouse
+ * ESCLUSIVAMENTE se il testo risulta effettivamente tagliato dai limiti di larghezza della sidebar.
  */
 
 Object.assign(UI, {
@@ -373,7 +375,18 @@ Object.assign(UI, {
                     viewContent.className = 'node-content db-view-node';
                     if (AppState.currentNoteId === depId) viewContent.classList.add('active');
 
+                    const safeViewTitle = (depState.title || 'Vista').replace(/"/g, '&quot;');
                     viewContent.innerHTML = `<div class="toggle-btn" style="width:20px; display:flex; justify-content:center; align-items:center; cursor:default;"><span style="opacity:0.3; font-size:18px;">•</span></div><span class="node-title"><span style="color:var(--view-color); opacity:0.8;">${viewIcon}</span> <span>${depState.title || 'Vista'}</span></span>`;
+                    
+                    viewContent.onmouseenter = () => {
+                        const textSpan = viewContent.querySelector('.node-title span:last-child') || viewContent.querySelector('.node-title');
+                        if (textSpan && (textSpan.scrollWidth > textSpan.clientWidth)) {
+                            viewContent.title = depState.title || 'Vista';
+                        } else {
+                            viewContent.removeAttribute('title');
+                        }
+                    };
+
                     viewContent.onclick = (e) => { e.stopPropagation(); UI.jumpToWidget(depId); };
                     viewEl.appendChild(viewContent);
                     childElements.push(viewEl);
@@ -397,7 +410,8 @@ Object.assign(UI, {
                         btnContent.className = 'node-content db-view-node';
                         if (AppState.currentNoteId === depId) btnContent.classList.add('active');
 
-                        btnContent.innerHTML = `<div class="toggle-btn" style="width:20px; display:flex; justify-content:center; align-items:center; cursor:default;"><span style="opacity:0.3; font-size:18px;">•</span></div><span class="node-title" title="Contiene: ${btnNames.join(', ')}"><span style="color:var(--tx-c4); opacity:0.8;">${Icons.lightning}</span> <span>Barra Pulsanti</span></span></span>`;
+                        btnContent.innerHTML = `<div class="toggle-btn" style="width:20px; display:flex; justify-content:center; align-items:center; cursor:default;"><span style="opacity:0.3; font-size:18px;">•</span></div><span class="node-title"><span style="color:var(--tx-c4); opacity:0.8;">${Icons.lightning}</span> <span>Barra Pulsanti</span></span></span>`;
+                        btnContent.title = `Contiene: ${btnNames.join(', ')}`;
                         btnContent.onclick = (e) => { e.stopPropagation(); UI.jumpToWidget(depId); };
                         btnEl.appendChild(btnContent);
                         childElements.push(btnEl);
@@ -748,6 +762,17 @@ Object.assign(UI, {
 
         const title = document.createElement('span');
         title.className = 'node-title';
+
+        // GESTIONE INTELLIGENTE DEL TOOLTIP: Calcolato dinamicamente solo su hover ed esclusivamente se il testo è troncato
+        title.onmouseenter = () => {
+            const textSpan = title.querySelector('span:last-child') || title;
+            if (textSpan.scrollWidth > textSpan.clientWidth) {
+                title.title = node.title || I18n.t('editor.untitled');
+            } else {
+                title.removeAttribute('title');
+            }
+        };
+
         let customIcon = Icons.file;
         let iconColorStyle = "";
         const hasBookmark = node.content && node.content.includes('adv-bookmark-marker');

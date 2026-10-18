@@ -600,10 +600,17 @@ aside.collapsed {
     overflow: hidden;
     text-overflow: ellipsis;
     font-size: 0.9rem;
-    pointer-events: none;
     display: flex;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+}
+
+.node-title > span:last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
 }
 
 .node-title svg {
@@ -760,25 +767,19 @@ details > summary { list-style: none; }
     .widget-options-btn,
     .columns-opt-btn,
     .table-trigger-common {
-        opacity: 0.6 !important;
-        visibility: visible !important;
-        pointer-events: auto !important;
-        transform: scale(1) !important;
+        opacity: 0.6 !important; visibility: visible !important; pointer-events: auto !important; transform: scale(1) !important;
     }
 
     /* 2. ESPANSIONE AREE DI TOCCO (RESIZER E DRAG) */
     .adv-col-resizer,
     .std-col-resizer,
     .col-resizer {
-        width: 20px !important;
-        transform: translateX(10px) !important;
-        background-color: transparent;
+        width: 20px !important; transform: translateX(10px) !important; background-color: transparent;
     }
     .adv-col-resizer:active,
     .std-col-resizer:active,
     .col-resizer:active {
-        background-color: var(--accent-color) !important;
-        opacity: 0.3 !important;
+        background-color: var(--accent-color) !important; opacity: 0.3 !important;
     }
 
     .toggle-btn {
@@ -798,9 +799,7 @@ details > summary { list-style: none; }
     }
 
     .color-option, .color-swatch {
-        width: 28px !important;
-        height: 28px !important;
-        margin: 2px !important;
+        width: 28px !important; height: 28px !important; margin: 2px !important;
     }
 
     /* 4. TOOLBAR MOBILE-FRIENDLY */
@@ -816,8 +815,7 @@ details > summary { list-style: none; }
     /* 5. GESTIONE MIGLIORE DELLO SCROLL ORIZZONTALE SUI WIDGET */
     .adv-scroll-container,
     .toolbar {
-        -webkit-overflow-scrolling: touch;
-        scrollbar-width: none; 
+        -webkit-overflow-scrolling: touch; scrollbar-width: none; 
     }
     .adv-scroll-container::-webkit-scrollbar,
     .toolbar::-webkit-scrollbar {
@@ -830,20 +828,11 @@ details > summary { list-style: none; }
    ========================================================================= */
 @media (max-width: 900px) {
     aside {
-        position: absolute;
-        top: 50px;
-        left: 0;
-        bottom: 0;
-        height: calc(100dvh - 50px);
-        z-index: 300;
-        box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1);
-        transform: translateX(0);
-        transition: transform 0.3s ease;
+        position: absolute; top: 50px; left: 0; bottom: 0; height: calc(100dvh - 50px); z-index: 300; box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1); transform: translateX(0); transition: transform 0.3s ease;
     }
 
     aside.collapsed {
-        margin-left: 0;
-        transform: translateX(-100%);
+        margin-left: 0; transform: translateX(-100%);
     }
 
     .brand span#fileNameDisplay {
@@ -858,27 +847,15 @@ details > summary { list-style: none; }
 
 @media (max-width: 768px) {
     aside {
-        position: absolute;
-        top: 50px;
-        left: 0;
-        bottom: 0;
-        height: calc(100dvh - 50px);
-        z-index: 300;
-        box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1);
-        transform: translateX(0);
-        transition: transform 0.3s ease;
+        position: absolute; top: 50px; left: 0; bottom: 0; height: calc(100dvh - 50px); z-index: 300; box-shadow: 4px 0 15px rgba(0, 0, 0, 0.1); transform: translateX(0); transition: transform 0.3s ease;
     }
 
     aside.collapsed {
-        margin-left: 0;
-        transform: translateX(-100%);
+        margin-left: 0; transform: translateX(-100%);
     }
 
     .brand span#fileNameDisplay {
-        max-width: 120px;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
+        max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
     }
 
     header {
@@ -890,7 +867,6 @@ details > summary { list-style: none; }
     }
 
     .node-add-btn {
-        opacity: 0.8;
-        visibility: visible;
+        opacity: 0.8; visibility: visible;
     }
 }

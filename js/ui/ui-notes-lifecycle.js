@@ -22,6 +22,74 @@ Object.assign(UI, {
     updateCurrentNoteTimer: null,
     _lastHighlightedWidget: null,
 
+    // Cronologia di Navigazione Note (History Stack)
+    _navHistory: [],
+    _navHistoryIndex: -1,
+
+    updateNavHistoryUI: () => {
+        const btnBack = document.getElementById('navBackBtn');
+        const btnForward = document.getElementById('navForwardBtn');
+        const btnUp = document.getElementById('goUpBtn');
+
+        const canGoBack = UI._navHistoryIndex > 0;
+        const canGoForward = UI._navHistoryIndex >= 0 && UI._navHistoryIndex < UI._navHistory.length - 1;
+
+        if (btnBack) {
+            btnBack.disabled = !canGoBack;
+            btnBack.style.opacity = canGoBack ? '1' : '0.3';
+            btnBack.style.cursor = canGoBack ? 'pointer' : 'default';
+        }
+
+        if (btnForward) {
+            btnForward.disabled = !canGoForward;
+            btnForward.style.opacity = canGoForward ? '1' : '0.3';
+            btnForward.style.cursor = canGoForward ? 'pointer' : 'default';
+        }
+
+        if (btnUp && AppState.currentNoteId) {
+            const currentNote = Store.getNote(AppState.currentNoteId);
+            const canGoUp = currentNote && (currentNote.parentId || (currentNote.isRecordNote && currentNote.linkedTableId));
+            btnUp.disabled = !canGoUp;
+            btnUp.style.opacity = canGoUp ? '1' : '0.3';
+            btnUp.style.cursor = canGoUp ? 'pointer' : 'default';
+        }
+    },
+
+    navHistoryBack: () => {
+        if (UI._navHistoryIndex <= 0) return;
+
+        // Scorre a ritroso ignorando eventuali note eliminate nel frattempo
+        while (UI._navHistoryIndex > 0) {
+            UI._navHistoryIndex--;
+            const candidateId = UI._navHistory[UI._navHistoryIndex];
+            const note = Store.getNote(candidateId);
+            if (note && !note.deletedAt) {
+                UI.selectNote(candidateId, null, null, false, true);
+                return;
+            }
+        }
+
+        // Se tutte le note precedenti sono state rimosse, porta alla Home
+        UI.goHome();
+    },
+
+    navHistoryForward: () => {
+        if (UI._navHistoryIndex < 0 || UI._navHistoryIndex >= UI._navHistory.length - 1) return;
+
+        // Scorre in avanti ignorando eventuali note eliminate nel frattempo
+        while (UI._navHistoryIndex < UI._navHistory.length - 1) {
+            UI._navHistoryIndex++;
+            const candidateId = UI._navHistory[UI._navHistoryIndex];
+            const note = Store.getNote(candidateId);
+            if (note && !note.deletedAt) {
+                UI.selectNote(candidateId, null, null, false, true);
+                return;
+            }
+        }
+
+        UI.updateNavHistoryUI();
+    },
+
     // MOTORE PROPRIETÀ NELL'HEADER DELLA NOTA
     renderPageHeaderProperties: (note) => {
         let container = document.getElementById('noteHeaderProperties');
@@ -429,7 +497,7 @@ Object.assign(UI, {
         if (typeof Store !== 'undefined') Store.triggerAutoSave(true);
     },
 
-    selectNote: async (id, anchorText = null, refId = null, scrollToTop = false) => {
+    selectNote: async (id, anchorText = null, refId = null, scrollToTop = false, isHistoryNavigation = false) => {
         AppState.isSwitchingNote = true;
         
         // Pulizia immediata di qualsiasi evidenziazione drag residua sul pannello laterale
@@ -491,6 +559,22 @@ Object.assign(UI, {
 
         // Assegnazione sincrona immediata dell'ID della nota selezionata per garantire la coerenza dello stato
         AppState.currentNoteId = id;
+
+        // GESTIONE CRONOLOGIA DI NAVIGAZIONE LINEARE (HISTORY STACK)
+        if (!isHistoryNavigation && !note.deletedAt) {
+            // Tronca il ramo "avanti" se l'utente naviga verso una nuova nota
+            if (UI._navHistoryIndex < UI._navHistory.length - 1) {
+                UI._navHistory = UI._navHistory.slice(0, UI._navHistoryIndex + 1);
+            }
+            // Evita duplicati consecutivi della stessa nota
+            if (UI._navHistory.length === 0 || UI._navHistory[UI._navHistory.length - 1] !== id) {
+                UI._navHistory.push(id);
+                // Limite massimo di sicurezza per la cronologia in memoria
+                if (UI._navHistory.length > 80) UI._navHistory.shift();
+                UI._navHistoryIndex = UI._navHistory.length - 1;
+            }
+        }
+        UI.updateNavHistoryUI();
 
         // Se è stata richiesta l'apertura forzata all'inizio (es. doppio click per editare il titolo), azzera la posizione di scroll
         if (scrollToTop) {
@@ -810,9 +894,10 @@ Object.assign(UI, {
 
         document.querySelectorAll('.node-content').forEach(el => el.classList.remove('active'));
 
-        // Reset badge e proprietà
+        // Reset badge, proprietà e stato cronologia
         UI.checkAndUpdatePropertiesIcon(null);
         UI.updateNoteInfoIcon(null);
+        UI.updateNavHistoryUI();
 
         if (typeof UI.renderPageHeaderProperties === 'function') {
             UI.renderPageHeaderProperties(null);

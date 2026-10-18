@@ -93,12 +93,19 @@ describe("LogicEngine Macro: Esecuzione Massiva, Batch, Transazioni, VirtualCell
             }
         ];
 
-        const response = await LogicEngine.executeMacroBlocks(macroBlocks, dbId, null, false);
+        // Silenziamento controllato di console.error durante il negative testing intenzionale
+        const origConsoleError = console.error;
+        console.error = () => {};
 
-        Assert.isTrue(response.errorsLog.length > 0, "L'errore nella formula deve essere catturato nel log");
+        try {
+            const response = await LogicEngine.executeMacroBlocks(macroBlocks, dbId, null, false);
+            Assert.isTrue(response.errorsLog.length > 0, "L'errore nella formula deve essere catturato nel log");
 
-        const db = AppState.databases[dbId];
-        Assert.strictEqual(db.rows[0].cells.c1, 'Valore Originale');
+            const db = AppState.databases[dbId];
+            Assert.strictEqual(db.rows[0].cells.c1, 'Valore Originale');
+        } finally {
+            console.error = origConsoleError;
+        }
     });
 
     test("Macro Pipeline: 'insert_select' trasferisce record filtrati leggendo dal contesto origine", async () => {
@@ -192,8 +199,15 @@ describe("LogicEngine Macro: Esecuzione Massiva, Batch, Transazioni, VirtualCell
             actions: [{ colId: 'c_calc', type: 'set_formula', value: 'riga["Inesistente"].prop.sub' }]
         }];
 
-        const res = await LogicEngine.executeMacroBlocks(macro, dbId, null, false);
-        Assert.isTrue(res.errorsLog.length > 0);
+        const origConsoleError = console.error;
+        console.error = () => {};
+
+        try {
+            const res = await LogicEngine.executeMacroBlocks(macro, dbId, null, false);
+            Assert.isTrue(res.errorsLog.length > 0);
+        } finally {
+            console.error = origConsoleError;
+        }
     });
 
     test("Transazione Macro: Rollback atomico multi-riga se una formula fallisce a metà", async () => {
@@ -220,14 +234,21 @@ describe("LogicEngine Macro: Esecuzione Massiva, Batch, Transazioni, VirtualCell
             ]
         }];
 
-        const res = await LogicEngine.executeMacroBlocks(macro, dbId, null, false);
+        const origConsoleError = console.error;
+        console.error = () => {};
 
-        Assert.isTrue(res.rolledBack, "La transazione deve essere dichiarata rolledBack");
-        Assert.strictEqual(res.totalRowsAffected, 0, "Nessuna riga deve risultare confermata");
+        try {
+            const res = await LogicEngine.executeMacroBlocks(macro, dbId, null, false);
 
-        const db = AppState.databases[dbId];
-        Assert.strictEqual(db.rows[0].cells.c_bal, 100, "La prima riga deve essere ripristinata al valore originario");
-        Assert.strictEqual(db.rows[1].cells.c_bal, 200);
+            Assert.isTrue(res.rolledBack, "La transazione deve essere dichiarata rolledBack");
+            Assert.strictEqual(res.totalRowsAffected, 0, "Nessuna riga deve risultare confermata");
+
+            const db = AppState.databases[dbId];
+            Assert.strictEqual(db.rows[0].cells.c_bal, 100, "La prima riga deve essere ripristinata al valore originario");
+            Assert.strictEqual(db.rows[1].cells.c_bal, 200);
+        } finally {
+            console.error = origConsoleError;
+        }
     });
 
     test("Transazione Macro: Rollback cross-database se il secondo blocco fallisce", async () => {
@@ -264,13 +285,20 @@ describe("LogicEngine Macro: Esecuzione Massiva, Batch, Transazioni, VirtualCell
             }
         ];
 
-        const res = await LogicEngine.executeMacroBlocks(macro, dbA, null, false);
+        const origConsoleError = console.error;
+        console.error = () => {};
 
-        Assert.isTrue(res.rolledBack);
-        Assert.strictEqual(res.totalRowsAffected, 0);
+        try {
+            const res = await LogicEngine.executeMacroBlocks(macro, dbA, null, false);
 
-        Assert.strictEqual(AppState.databases[dbA].rows[0].cells.ca1, 50, "dbA deve subire rollback anche se il suo blocco era formalmente valido");
-        Assert.strictEqual(AppState.databases[dbB].rows[0].cells.cb1, 'Vecchio');
+            Assert.isTrue(res.rolledBack);
+            Assert.strictEqual(res.totalRowsAffected, 0);
+
+            Assert.strictEqual(AppState.databases[dbA].rows[0].cells.ca1, 50, "dbA deve subire rollback anche se il suo blocco era formalmente valido");
+            Assert.strictEqual(AppState.databases[dbB].rows[0].cells.cb1, 'Vecchio');
+        } finally {
+            console.error = origConsoleError;
+        }
     });
 
     test("Transazione Macro: Nessuna email accodata viene inviata se un blocco successivo fallisce", async () => {
@@ -300,10 +328,17 @@ describe("LogicEngine Macro: Esecuzione Massiva, Batch, Transazioni, VirtualCell
             }
         ];
 
-        const res = await LogicEngine.executeMacroBlocks(macro, dbId, null, false);
+        const origConsoleError = console.error;
+        console.error = () => {};
 
-        Assert.isTrue(res.rolledBack);
-        Assert.strictEqual(res.emailsSent, 0, "Nessuna email deve risultare inviata se la transazione fallisce");
+        try {
+            const res = await LogicEngine.executeMacroBlocks(macro, dbId, null, false);
+
+            Assert.isTrue(res.rolledBack);
+            Assert.strictEqual(res.emailsSent, 0, "Nessuna email deve risultare inviata se la transazione fallisce");
+        } finally {
+            console.error = origConsoleError;
+        }
     });
 
     test("Macro Pipeline: Mutazione opzioni Select apprende automaticamente nuovi tag", async () => {

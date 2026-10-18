@@ -11,16 +11,15 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
     test("Workflow Geometry: calcolo porte cardinali (Top, Right, Bottom, Left)", () => {
         const nodeId = 'n_geo_1';
-        // Simuliamo un nodo a coordinate (100, 200) con larghezza 288 e altezza simulata 80
         WorkflowApp.layout.nodes[nodeId] = { x: 100, y: 200 };
 
         const pTop = WorkflowApp.getNodePortGeometry(nodeId, 'top');
-        Assert.strictEqual(pTop.x, 100 + 144); // x + w/2
-        Assert.strictEqual(pTop.y, 200);       // y
+        Assert.strictEqual(pTop.x, 100 + 144);
+        Assert.strictEqual(pTop.y, 200);
         Assert.deepEqual(pTop.normal, { x: 0, y: -1 });
 
         const pRight = WorkflowApp.getNodePortGeometry(nodeId, 'right');
-        Assert.strictEqual(pRight.x, 100 + 288); // x + w
+        Assert.strictEqual(pRight.x, 100 + 288);
         Assert.deepEqual(pRight.normal, { x: 1, y: 0 });
 
         const pBottom = WorkflowApp.getNodePortGeometry(nodeId, 'bottom');
@@ -33,41 +32,34 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
     });
 
     test("Collision: _lineIntersectsLine rileva corretta intersezione a croce", () => {
-        // Due segmenti perpendicolari che si incrociano in (5, 5)
         const hit = WorkflowApp._lineIntersectsLine(0, 5, 10, 5, 5, 0, 5, 10);
         Assert.isTrue(hit);
 
-        // Due segmenti paralleli disgiunti
         const parallel = WorkflowApp._lineIntersectsLine(0, 0, 10, 0, 0, 5, 10, 5);
         Assert.isFalse(parallel);
 
-        // Due segmenti sghembi che non si toccano
         const miss = WorkflowApp._lineIntersectsLine(0, 0, 4, 4, 6, 6, 10, 2);
         Assert.isFalse(miss);
     });
 
     test("Collision: _segmentIntersectsBox rileva attraversamento ostacoli", () => {
-        // Ostacolo rettangolare: x: 100, y: 100, w: 200, h: 100
         const obstacleBox = { x: 100, y: 100, w: 200, h: 100 };
 
-        // Traiettoria che attraversa l'ostacolo da sinistra a destra
         const hitDirect = WorkflowApp._segmentIntersectsBox({ x: 50, y: 150 }, { x: 350, y: 150 }, obstacleBox);
         Assert.isTrue(hitDirect);
 
-        // Traiettoria che passa sopra l'ostacolo senza toccarlo
         const clearPass = WorkflowApp._segmentIntersectsBox({ x: 50, y: 50 }, { x: 350, y: 50 }, obstacleBox);
         Assert.isFalse(clearPass);
 
-        // Punto interno al box
         const insideHit = WorkflowApp._segmentIntersectsBox({ x: 150, y: 150 }, { x: 160, y: 160 }, obstacleBox);
         Assert.isTrue(insideHit);
     });
 
     test("Routing: nodi allineati verticalmente generano segmento dritto [p1, p2]", () => {
         const p1 = { x: 200, y: 100 };
-        const n1 = { x: 0, y: 1 }; // Uscita verso il basso
+        const n1 = { x: 0, y: 1 };
         const p2 = { x: 200, y: 300 };
-        const n2 = { x: 0, y: -1 }; // Entrata dall'alto
+        const n2 = { x: 0, y: -1 };
 
         const waypoints = WorkflowApp._buildOrthogonalWaypoints(p1, n1, p2, n2, []);
         Assert.strictEqual(waypoints.length, 2);
@@ -77,9 +69,9 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
     test("Routing: nodi allineati orizzontalmente generano segmento dritto [p1, p2]", () => {
         const p1 = { x: 100, y: 250 };
-        const n1 = { x: 1, y: 0 }; // Uscita a destra
+        const n1 = { x: 1, y: 0 };
         const p2 = { x: 400, y: 250 };
-        const n2 = { x: -1, y: 0 }; // Entrata da sinistra
+        const n2 = { x: -1, y: 0 };
 
         const waypoints = WorkflowApp._buildOrthogonalWaypoints(p1, n1, p2, n2, []);
         Assert.strictEqual(waypoints.length, 2);
@@ -119,10 +111,8 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
         WorkflowApp.currentDbState = dbMock;
         WorkflowApp.selfRelCol = { id: 'rel_self', singleRecord: false };
 
-        // Connettere wf_3 a wf_1 deve generare un ciclo!
         Assert.isTrue(WorkflowApp.checkCycle('wf_3', 'wf_1'));
 
-        // Connettere un nodo libero 'wf_4' a 'wf_3' non genera cicli
         dbMock.rows.push({ id: 'wf_4', cells: { rel_self: [] } });
         Assert.isFalse(WorkflowApp.checkCycle('wf_4', 'wf_3'));
     });
@@ -134,15 +124,14 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
             { id: 'n3', x: 1000, w: 288, h: 80, el: { style: {} } }
         ];
 
-        // Simulazione logica distribuzione orizzontale
-        const span = (dummyNodes[2].x + dummyNodes[2].w) - dummyNodes[0].x; // 1288
-        const totalW = dummyNodes.reduce((acc, n) => acc + n.w, 0); // 864
-        const freeSpace = span - totalW; // 424
-        const gap = freeSpace / 2; // 212
+        const span = (dummyNodes[2].x + dummyNodes[2].w) - dummyNodes[0].x;
+        const totalW = dummyNodes.reduce((acc, n) => acc + n.w, 0);
+        const freeSpace = span - totalW;
+        const gap = freeSpace / 2;
 
         const p0 = 0;
-        const p1 = WorkflowApp.snapToGrid(p0 + 288 + gap); // 500 -> 504 (multiplo 24)
-        const p2 = WorkflowApp.snapToGrid(p1 + 288 + gap); // 1004 -> 1008
+        const p1 = WorkflowApp.snapToGrid(p0 + 288 + gap);
+        const p2 = WorkflowApp.snapToGrid(p1 + 288 + gap);
 
         Assert.strictEqual(p0, 0);
         Assert.isTrue(p1 % 24 === 0);
@@ -162,9 +151,7 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
         WorkflowApp.currentDbState = dbMock;
         WorkflowApp.selfRelCol = { id: 'rel', singleRecord: false };
 
-        // Connessione legittima A -> D (non è un ciclo)
         Assert.isFalse(WorkflowApp.checkCycle('node_a', 'node_d'));
-        // Connessione ciclica D -> A (crea un loop chiuso lungo il grafo a diamante)
         Assert.isTrue(WorkflowApp.checkCycle('node_d', 'node_a'));
     });
 
@@ -214,9 +201,8 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
         };
         WorkflowApp.currentDbId = 'db_wf_multi';
         WorkflowApp.currentDbState = dbMock;
-        WorkflowApp.selfRelCol = dbMock.columns[1]; // rel_wbs
+        WorkflowApp.selfRelCol = dbMock.columns[1];
 
-        // Layout per rel_wbs
         WorkflowApp.layout = {
             zoom: 1.0,
             pan: { x: 50, y: 50 },
@@ -224,7 +210,6 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
             nodes: { 'task_A': { x: 0, y: 0 }, 'task_B': { x: 300, y: 0 } }
         };
 
-        // Layout precedentemente salvato per rel_gantt
         WorkflowApp.layoutsByRelation = {
             'rel_gantt': {
                 zoom: 0.8,
@@ -236,17 +221,10 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
         WorkflowApp.switchRelation('rel_gantt');
 
-        // 1. Verifica che la relazione attiva sia diventata rel_gantt
         Assert.strictEqual(WorkflowApp.selfRelCol.id, 'rel_gantt');
-
-        // 2. Verifica che le proprietà specifiche del layout rel_gantt siano attive
         Assert.strictEqual(WorkflowApp.layout.connectionStyle, 'bezier');
         Assert.strictEqual(WorkflowApp.layout.nodes['task_A'].x, 500);
-
-        // 3. Zoom ricalcolato in Full Auto da fitToView
         Assert.strictEqual(WorkflowApp.layout.zoom, 1.1);
-
-        // 4. Il vecchio layout di rel_wbs è stato preservato nella mappa
         Assert.strictEqual(WorkflowApp.layoutsByRelation['rel_wbs'].nodes['task_A'].x, 0);
     });
 
@@ -289,48 +267,43 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
     });
 
     test("Workflow Studio: getEffectiveDirection eredita correttamente la semantica dal campo di relazione", () => {
-        // Caso 1: Colonna esplicitamente impostata con treeDirection = 'parent'
         WorkflowApp.selfRelCol = { id: 'r1', treeDirection: 'parent', singleRecord: false };
         Assert.strictEqual(WorkflowApp.getEffectiveDirection(), 'predecessor');
 
-        // Caso 2: Colonna esplicitamente impostata con treeDirection = 'children'
         WorkflowApp.selfRelCol = { id: 'r2', treeDirection: 'children', singleRecord: true };
         Assert.strictEqual(WorkflowApp.getEffectiveDirection(), 'successor');
 
-        // Caso 3: Fallback naturale se treeDirection non presente: singleRecord true -> 'parent' ('predecessor')
         WorkflowApp.selfRelCol = { id: 'r3', singleRecord: true };
         Assert.strictEqual(WorkflowApp.getEffectiveDirection(), 'predecessor');
 
-        // Caso 4: Fallback naturale se treeDirection non presente: singleRecord false -> 'children' ('successor')
         WorkflowApp.selfRelCol = { id: 'r4', singleRecord: false };
         Assert.strictEqual(WorkflowApp.getEffectiveDirection(), 'successor');
 
-        // Caso 5: Nessuna colonna attiva -> default sicuro 'successor'
         WorkflowApp.selfRelCol = null;
         Assert.strictEqual(WorkflowApp.getEffectiveDirection(), 'successor');
     });
 
     test("Workflow Studio: isCanvasDark rileva correttamente sfondi scuri da stringa esadecimale a 6 cifre", () => {
-        WorkflowApp.layout.backgroundColor = '#1e293b'; // Blu scuro
+        WorkflowApp.layout.backgroundColor = '#1e293b';
         Assert.isTrue(WorkflowApp.isCanvasDark());
 
-        WorkflowApp.layout.backgroundColor = '#ffffff'; // Bianco
+        WorkflowApp.layout.backgroundColor = '#ffffff';
         Assert.isFalse(WorkflowApp.isCanvasDark());
     });
 
     test("Workflow Studio: isCanvasDark rileva correttamente sfondi da stringa esadecimale a 3 cifre", () => {
-        WorkflowApp.layout.backgroundColor = '#111'; // Quasi nero
+        WorkflowApp.layout.backgroundColor = '#111';
         Assert.isTrue(WorkflowApp.isCanvasDark());
 
-        WorkflowApp.layout.backgroundColor = '#fff'; // Bianco
+        WorkflowApp.layout.backgroundColor = '#fff';
         Assert.isFalse(WorkflowApp.isCanvasDark());
     });
 
     test("Workflow Studio: isCanvasDark rileva correttamente formati rgb e rgba", () => {
-        WorkflowApp.layout.backgroundColor = 'rgb(20, 24, 33)'; // Scuro
+        WorkflowApp.layout.backgroundColor = 'rgb(20, 24, 33)';
         Assert.isTrue(WorkflowApp.isCanvasDark());
 
-        WorkflowApp.layout.backgroundColor = 'rgba(255, 255, 255, 0.9)'; // Chiaro
+        WorkflowApp.layout.backgroundColor = 'rgba(255, 255, 255, 0.9)';
         Assert.isFalse(WorkflowApp.isCanvasDark());
     });
 
@@ -370,7 +343,6 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
         WorkflowApp.selfRelCol = dbMock.columns[0];
         WorkflowApp.layout.locked = false;
 
-        // Disattiva scrittura disco nei test unitari
         const origPersist = WorkflowApp.persistDatabaseToDisk;
         WorkflowApp.persistDatabaseToDisk = async () => {};
 
@@ -445,11 +417,11 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
         try {
             WorkflowApp.layout.zoom = 0.20;
-                WorkflowApp.zoomAtPoint(500, 500, 0.1); // zoom molto piccolo
+            WorkflowApp.zoomAtPoint(500, 500, 0.1);
             Assert.strictEqual(WorkflowApp.layout.zoom, 0.15);
 
             WorkflowApp.layout.zoom = 2.40;
-                WorkflowApp.zoomAtPoint(500, 500, 2.0); // zoom molto grande
+            WorkflowApp.zoomAtPoint(500, 500, 2.0);
             Assert.strictEqual(WorkflowApp.layout.zoom, 2.5);
         } finally {
             if (createdLocally) dummyVp.remove();
@@ -471,7 +443,7 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
         try {
             WorkflowApp.alignSelectedNodes('left');
-            const expectedX = WorkflowApp.snapToGrid(100); // 96
+            const expectedX = WorkflowApp.snapToGrid(100);
             Assert.strictEqual(WorkflowApp.layout.nodes['n1'].x, expectedX);
             Assert.strictEqual(WorkflowApp.layout.nodes['n2'].x, expectedX);
         } finally {
@@ -495,7 +467,7 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
         try {
             WorkflowApp.alignSelectedNodes('top');
-            const expectedY = WorkflowApp.snapToGrid(70); // 72
+            const expectedY = WorkflowApp.snapToGrid(70);
             Assert.strictEqual(WorkflowApp.layout.nodes['n1'].y, expectedY);
             Assert.strictEqual(WorkflowApp.layout.nodes['n2'].y, expectedY);
         } finally {
@@ -560,7 +532,7 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
         WorkflowApp.selectedNodeIds = new Set(['n_dragged']);
         WorkflowApp.layout.nodes = {
             'n_anchor': { x: 200, y: 200 },
-            'n_dragged': { x: 205, y: 203 } // Disallineato di soli 5px e 3px (dentro la soglia di 8px)
+            'n_dragged': { x: 205, y: 203 }
         };
 
         const dummyEl = document.createElement('div');
@@ -570,8 +542,8 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
 
         try {
             const alignment = WorkflowApp.calculateSmartGuides('n_dragged', 205, 203);
-            Assert.strictEqual(alignment.snappedX, 200, "Deve agganciare magneticamente a 200px");
-            Assert.strictEqual(alignment.snappedY, 200, "Deve agganciare magneticamente a 200px");
+            Assert.strictEqual(alignment.snappedX, 200);
+            Assert.strictEqual(alignment.snappedY, 200);
             Assert.isTrue(alignment.guides.length >= 1);
         } finally {
             dummyEl.remove();
@@ -644,4 +616,37 @@ describe("Workflow Studio: Core, Canvas, Routing, DAG & History (39 Test)", () =
             'n1': { x: 0, y: 0 },
             'n2': { x: 600, y: 400 }
         };
-        const el1 = document.createElement('div'); el1.i
+        const el1 = document.createElement('div');
+        el1.id = 'wf_node_n1';
+        el1.className = 'wf-node';
+        el1.style.height = '80px';
+
+        const el2 = document.createElement('div');
+        el2.id = 'wf_node_n2';
+        el2.className = 'wf-node';
+        el2.style.height = '80px';
+
+        document.body.appendChild(el1);
+        document.body.appendChild(el2);
+
+        let dummyVp = document.getElementById('canvasViewport');
+        let createdVp = false;
+        if (!dummyVp) {
+            dummyVp = document.createElement('div');
+            dummyVp.id = 'canvasViewport';
+            document.body.appendChild(dummyVp);
+            createdVp = true;
+        }
+
+        try {
+            WorkflowApp.fitToView();
+            Assert.isTrue(WorkflowApp.layout.zoom > 0, "Lo zoom deve essere ricalcolato e positivo");
+            Assert.isNotNull(WorkflowApp.layout.pan, "Il pan deve essere definito");
+        } finally {
+            el1.remove();
+            el2.remove();
+            if (createdVp) dummyVp.remove();
+        }
+    });
+
+});

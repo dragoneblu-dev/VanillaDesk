@@ -25,6 +25,34 @@ const AdvancedTable = {
     _rowIndices: new Map(),
 
     // =========================================================================
+    // HELPER UNIVERSALE ICONE TIPI DI COLONNA (CENTRALIZZATO)
+    // =========================================================================
+    getColumnTypeIcon: (type) => {
+        if (typeof Icons === 'undefined') return '📄';
+        switch (type) {
+            case 'text': return Icons.text;
+            case 'number': return Icons.number;
+            case 'select': return Icons.select;
+            case 'multi-select': return Icons.multiSelect;
+            case 'date':
+            case 'datetime': return Icons.date;
+            case 'time':
+            case 'created_time':
+            case 'last_edited_time': return Icons.time;
+            case 'checkbox': return Icons.checkbox;
+            case 'formula': return Icons.formula;
+            case 'relation':
+            case 'relation_backlink': return Icons.relation;
+            case 'rollup': return Icons.rollup;
+            case 'url': return Icons.url;
+            case 'note_link': return Icons.link;
+            case 'record_note': return Icons.recordPage;
+            case 'button': return Icons.play;
+            default: return Icons.text;
+        }
+    },
+
+    // =========================================================================
     // INDICE INVERTITO IN MEMORIA (O(1)) PER RECORD LOOKUP E RELAZIONI
     // =========================================================================
     getRow: (tableId, rowId) => {
@@ -74,14 +102,15 @@ const AdvancedTable = {
         const clearBtn = state.quickSearch ? `<button class="adv-icon-btn danger" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', '')" title="Azzera ricerca">${Icons.close}</button>` : '';
 
         return `
-            <div class="adv-quick-search-wrapper" style="padding: 4px 2px 8px 2px; display:flex; align-items:center; width:100%; position:relative;" onmousedown="event.stopPropagation()">
+            <div class="adv-quick-search-wrapper" style="padding: 4px 2px 8px 2px; display:flex; align-items:center; width:100%; position:relative;" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
                 <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); opacity:0.5; display:flex; pointer-events:none;">${Icons.search}</span>
                 <input type="text" id="adv-search-input-${tableId}" class="modern-input" style="width:100%; padding:6px 28px 6px 32px !important; border-radius:6px !important; background:var(--bg-color) !important; border:1px solid var(--border-color) !important; font-size:0.85rem;" placeholder="${(typeof I18n !== 'undefined' && I18n.t('adv_search.placeholder')) || 'Cerca in tutti i campi (testo, tag, date, pagine)...'}" value="${safeTerm}"
                        autocomplete="off"
                        oninput="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', this.value)"
                        onkeydown="if(event.key==='Escape'){ event.stopPropagation(); AdvancedTable.toggleQuickSearch('${tableId}'); } event.stopPropagation();"
                        onkeyup="event.stopPropagation()"
-                       onmousedown="event.stopPropagation()">
+                       onmousedown="event.stopPropagation()"
+                       onclick="event.stopPropagation()">
                 ${clearBtn}
             </div>
         `;
@@ -96,7 +125,10 @@ const AdvancedTable = {
         }
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);
+        
+        if (AppState.isEditMode) {
         Store.triggerAutoSave();
+        }
 
         if (state.showQuickSearch) {
             setTimeout(() => {

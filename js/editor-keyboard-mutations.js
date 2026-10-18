@@ -15,6 +15,8 @@
  * sul widget protetto che scompare automaticamente dopo mezzo secondo.
  * SALVAGUARDIA BLOCCO MINIMO: Impedisce lo svuotamento totale dell'editor su cancellazione dell'ultimo blocco vuoto.
  * RESET EREDITÀ FORMATTAZIONE: Disattivazione automatica del comando bold residuo all'uscita dai titoli H1..H6 con Invio.
+ * FIX AUTOSAVE DELETE/CANC: Parità operativa tra Backspace e Delete con salvataggio automatico (Store.triggerAutoSave)
+ * preservando il blocco di sicurezza per i widget inline (.adv-inline-shell).
  */
 
 Object.assign(Editor, {
@@ -742,6 +744,7 @@ Object.assign(Editor, {
                 
                 // Se c'è un BR nativo che il browser può rimuovere, lasciamo fare a lui
                 if (nextTextNode && nextTextNode.nodeName === 'BR') {
+                    setTimeout(() => { if (typeof Store !== 'undefined') Store.triggerAutoSave(); }, 10);
                     return; 
                 }
                 isAtEnd = true;
@@ -750,7 +753,8 @@ Object.assign(Editor, {
                 isAtEnd = true;
             }
             
-            const isEmptyBlock = block.textContent.replace(/[\u200B\n\r]/g, '').trim() === '';
+            const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+            const isEmptyBlock = cleanText(block.textContent) === '';
             if (isEmptyBlock) isAtEnd = true;
 
             if (isAtEnd) {
@@ -794,6 +798,32 @@ Object.assign(Editor, {
                     return; 
                 }
 
+                // Se il blocco successivo è vuoto (tra testi normali): rimuovilo con snapshot e autosave immediato
+                if (nextNode && !WidgetManager.isProtectedBlock(nextNode) && cleanText(nextNode.textContent) === '') {
+                    e.preventDefault();
+                    Editor.saveSnapshot();
+                    nextNode.remove();
+                    Store.triggerAutoSave();
+                    return;
+                }
+
+                // Se il blocco corrente è vuoto ed esiste un blocco successivo: rimuovi il blocco corrente e posizionati sul successivo
+                if (isEmptyBlock && nextNode && !WidgetManager.isProtectedBlock(nextNode) && !block.closest('li, table, .adv-widget-shell')) {
+                    e.preventDefault();
+                    Editor.saveSnapshot();
+
+                    const newRange = document.createRange();
+                    newRange.selectNodeContents(nextNode);
+                    newRange.collapse(true);
+
+                    block.remove();
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                    Store.triggerAutoSave();
+                    return;
+                }
+
+                // GUARDIA DIFENSIVA ORIGINALE INTEGRALE:
                 // Se il nodo successivo contiene un widget inline (come un appunto o snippet),
                 // il merge nativo del browser distruggerebbe i tag contenteditable=false. Lo uniamo manualmente!
                 if (nextNode && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextNode.tagName) && nextNode.querySelector('.adv-inline-shell')) {
@@ -829,5 +859,10 @@ Object.assign(Editor, {
                 }
             }
         }
+
+        // Simmetrico a Backspace: per tutte le altre cancellazioni ordinarie di testo in avanti, garantisce il trigger dell'autosave
+        setTimeout(() => {
+            if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        }, 50);
     }
 });

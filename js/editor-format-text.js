@@ -265,12 +265,36 @@ Object.assign(Editor, {
             range.insertNode(marker);
 
             const bq = document.createElement('blockquote');
+            // Assicura esplicitamente la visualizzazione a blocco per non ereditare display flex orizzontali
+            bq.style.display = 'block';
+
             const firstBlock = blocksToWrap[0];
             firstBlock.parentNode.insertBefore(bq, firstBlock);
 
             blocksToWrap.forEach(b => {
-                // Preserva i paragrafi all'interno del riquadro evitando dispersioni
-                if (b.tagName === 'P') {
+                // Se il blocco contiene interruzioni di riga <br>, ogni riga deve diventare un <p> separato
+                const hasBr = b.querySelector && b.querySelector('br');
+                if (hasBr) {
+                    let currentP = document.createElement('p');
+                    while (b.firstChild) {
+                        const child = b.firstChild;
+                        if (child.nodeType === 1 && child.tagName === 'BR') {
+                            child.remove();
+                            if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
+                            bq.appendChild(currentP);
+                            currentP = document.createElement('p');
+                        } else {
+                            currentP.appendChild(child);
+                        }
+                    }
+                    if (currentP.childNodes.length > 0) {
+                        const cleanT = currentP.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                        if (cleanT !== '' || currentP.querySelector('img, audio, iframe, input') || bq.children.length === 0) {
+                            bq.appendChild(currentP);
+                        }
+                    }
+                    b.remove();
+                } else if (b.tagName === 'P') {
                     bq.appendChild(b);
                 } else {
                     const p = document.createElement('p');

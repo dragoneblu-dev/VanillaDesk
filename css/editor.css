@@ -213,7 +213,6 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
 .editor-content li { margin-bottom: 2px; padding-left: 5px; }
 .editor-content li::marker { color: var(--text-secondary); font-weight: bold; }
 
-
 #noteLastUpdate { font-family: var(--font-editor); opacity: 0.8; }
 .hidden { display: none !important; }
 
@@ -293,7 +292,7 @@ hr { border: none; border-top: 1px dotted var(--text-primary); }
     padding: 20px;
     border: 1px dashed var(--border-color);
     border-radius: 6px;
-    background: var(--box-bg); /*rgba(0,0,0,0.01);*/
+    background: var(--box-bg);
     user-select: none;
     flex-shrink: 0;
     max-width: var(--page-max-width);
@@ -371,4 +370,22 @@ img[data-broken="true"] {
     border-radius: 4px;
     font-size: 0.9em;
     user-select: text;
+}
+
+/* =========================================================================
+   INTERATTIVITÀ RICERCA RAPIDA DATABASE (SEMPRE EDITABILE ANCHE IN READ-MODE)
+   ========================================================================= */
+.adv-quick-search-wrapper,
+.adv-quick-search-wrapper input,
+.adv-quick-search-wrapper button {
+    pointer-events: auto !important;
+    user-select: auto !important;
+}
+
+.adv-quick-search-wrapper input {
+    cursor: text !important;
+}
+
+.adv-quick-search-wrapper button {
+    cursor: pointer !important;
 }

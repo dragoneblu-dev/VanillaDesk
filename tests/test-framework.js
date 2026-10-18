@@ -3,7 +3,7 @@
  * Motore di testing isolato in-browser per VanillaDesk.
  * Fornisce suite runner, asserzioni tipizzate e visualizzazione automatica focalizzata sugli errori.
  * MODALITÀ DEFAULT "SOLO FALLITI": All'avvio espande e isola unicamente i test falliti.
- * FEAT: Aggiunti metodi di asserzione isNull e isNotNull per standardizzare i controlli DOM.
+ * Supporta nativamente beforeEach, afterEach, resetAppState e test asincroni (async/await).
  */
 
 const Assert = {
@@ -57,14 +57,53 @@ const TestFramework = {
     _activeFilter: 'fail', // Modalità predefinita: Solo Falliti
 
     describe: (title, fn) => {
-        const suite = { title, tests: [] };
+        const suite = {
+            title,
+            tests: [],
+            beforeHooks: [],
+            afterHooks: []
+        };
         TestFramework.suites.push(suite);
         TestFramework._currentSuite = suite;
         fn();
     },
 
     test: (title, fn) => {
-        TestFramework._currentSuite.tests.push({ title, fn });
+        if (TestFramework._currentSuite) {
+            TestFramework._currentSuite.tests.push({ title, fn });
+        }
+    },
+
+    beforeEach: (fn) => {
+        if (TestFramework._currentSuite) {
+            TestFramework._currentSuite.beforeHooks.push(fn);
+        }
+    },
+
+    afterEach: (fn) => {
+        if (TestFramework._currentSuite) {
+            TestFramework._currentSuite.afterHooks.push(fn);
+        }
+    },
+
+    resetAppState: () => {
+        if (typeof AppState !== 'undefined') {
+            AppState.databases = {};
+            AppState.notes = [];
+            AppState.currentNoteId = null;
+            AppState.isEditMode = false;
+            AppState.searchFilter = "";
+            AppState.activePropertyFilters = [];
+            AppState.showBookmarksInTree = false;
+            AppState.showFavoritesInTree = false;
+            AppState.showDbNotesInTree = false;
+        }
+        if (typeof Store !== 'undefined' && Store._diskHashes) {
+            Store._diskHashes = { notes: {}, databases: {}, index: "" };
+        }
+        if (typeof Editor !== 'undefined' && typeof Editor.clearHistory === 'function') {
+            Editor.clearHistory();
+        }
     },
 
     toggleAllSuites: (expand) => {
@@ -101,7 +140,7 @@ const TestFramework = {
                     suiteBox.style.display = 'none';
                 } else {
                     suiteBox.style.display = 'block';
-                    if (testList) testList.style.display = 'block'; // Espande la suite con errori
+                    if (testList) testList.style.display = 'block';
                     anyFailVisible = true;
                 }
 
@@ -116,7 +155,6 @@ const TestFramework = {
             }
         });
 
-        // Gestione banner in caso di zero fallimenti
         let emptyBanner = document.getElementById('allPassBanner');
         if (mode === 'fail' && !anyFailVisible) {
             if (!emptyBanner) {
@@ -142,10 +180,10 @@ const TestFramework = {
         let total = 0, passed = 0, failed = 0;
         const startTime = performance.now();
 
-        // Isolamento Sandbox di AppState
-        AppState.databases = {};
-        AppState.notes = [];
-        AppState.currentNoteId = 'test_note_root';
+        TestFramework.resetAppState();
+        if (typeof AppState !== 'undefined') {
+            AppState.currentNoteId = 'test_note_root';
+        }
 
         for (const suite of TestFramework.suites) {
             const suiteBox = document.createElement('div');
@@ -167,13 +205,33 @@ const TestFramework = {
             for (const t of suite.tests) {
                 total++;
                 let err = null;
+
                 try {
+                    // Esecuzione beforeEach hooks
+                    for (const bh of (suite.beforeHooks || [])) {
+                        await bh();
+                    }
+
+                    // Esecuzione del test
                     await t.fn();
+
                     passed++;
                     suitePass++;
                 } catch (e) {
                     failed++;
                     err = e;
+                } finally {
+                    // Esecuzione afterEach hooks
+                    for (const ah of (suite.afterHooks || [])) {
+                        try {
+                            await ah();
+                        } catch (afterErr) {
+                            if (!err) {
+                                failed++;
+                                err = afterErr;
+                            }
+                        }
+                    }
                 }
 
                 const li = document.createElement('li');
@@ -203,18 +261,22 @@ const TestFramework = {
         }
 
         const duration = Math.round(performance.now() - startTime);
-        document.getElementById('statTotal').innerText = total;
-        document.getElementById('statPass').innerText = passed;
-        document.getElementById('statFail').innerText = failed;
-        document.getElementById('statTime').innerText = `${duration}ms`;
-        
+        const statTotal = document.getElementById('statTotal');
+        const statPass = document.getElementById('statPass');
+        const statFail = document.getElementById('statFail');
+        const statTime = document.getElementById('statTime');
+
+        if (statTotal) statTotal.innerText = total;
+        if (statPass) statPass.innerText = passed;
+        if (statFail) statFail.innerText = failed;
+        if (statTime) statTime.innerText = `${duration}ms`;
+
         const statusMsg = document.getElementById('statusMessage');
         if (statusMsg) {
             statusMsg.innerText = failed === 0 ? "Tutte le suite hanno superato il collaudo." : `Rilevati ${failed} errori di regressione.`;
             statusMsg.style.color = failed === 0 ? "var(--pass)" : "var(--fail)";
         }
 
-        // Applica il filtro focalizzato sui falliti
         TestFramework.filterView('fail');
     }
 };
@@ -222,3 +284,13 @@ const TestFramework = {
 const describe = TestFramework.describe;
 const test = TestFramework.test;
 const it = TestFramework.test;
+const beforeEach = TestFramework.beforeEach;
+const afterEach = TestFramework.afterEach;
+
+window.describe = TestFramework.describe;
+window.test = TestFramework.test;
+window.it = TestFramework.test;
+window.beforeEach = TestFramework.beforeEach;
+window.afterEach = TestFramework.afterEach;
+window.TestFramework = TestFramework;
+window.Assert = Assert;

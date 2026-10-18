@@ -1,8 +1,8 @@
 /**
  * EditorPaste.js
  * Modulo isolato per la gestione degli eventi Copia, Taglia e Incolla.
- * FIX COPIA TABELLE: Eliminato l'algoritmo ridondante 2D a cicli quadrupli su stringa per il fallback plainText;
- * serializzazione TSV lineare e pulizia della classe adv-cell-selected dall'HTML copiato.
+ * FIX COPIA: Algoritmo generico lineare a blocchi per plainText che garantisce la corrispondenza 1:1
+ * esatta delle righe vuote copiate, eliminando alla radice duplicazioni e sparizioni di a capo.
  * FIX PASTE BR to P: Preserva la struttura a paragrafi nativa evitando la generazione di righe vuote superflue.
  * FIX SNIPPET & INLINE WIDGETS: Protezione assoluta dalle andate a capo (\n) negli snippet e
  * prevenzione dello split del DOM nativo del browser tramite BR-Shielding.
@@ -26,6 +26,8 @@
  * FIX ORPHAN LI WRAP: Incapsulamento automatico di nodi <li> orfani copiati o incollati all'interno del relativo <ul>/<ol>,
  * impedendo che vengano iniettati all'interno di tag <p>.
  * ZERO-FONT PURITY: Conversione preventiva di qualsiasi tag <font> in <span> all'incolla con salvaguardia delle classi ff-* e fs-*.
+ * FEAT SMART URL AUTO-LINK: Riconoscimento istantaneo di URL http/https incollati. Se è presente una selezione di testo
+ * viene eseguito il Link-Wrap automatico; se il cursore è libero inserisce il link attivo direttamente senza menu invasivi.
  */
 
 Object.assign(Editor, {
@@ -485,18 +487,73 @@ Object.assign(Editor, {
                 table.parentNode.replaceChild(document.createTextNode('\n' + tsv + '\n'), table);
             });
 
-            let htmlStr = tempDiv.innerHTML;
-            htmlStr = htmlStr.replace(/<\/p>\s*<p>/gi, '\n');
-            htmlStr = htmlStr.replace(/<p><br><\/p>/gi, '\n');
-            htmlStr = htmlStr.replace(/<br\s*\/?>/gi, '\n');
-            htmlStr = htmlStr.replace(/<\/li>\s*<li>/gi, '\n- ');
-            htmlStr = htmlStr.replace(/<li>/gi, '- ');
+            // Checklist: aggiunge il marcatore testuale [x] o [ ]
+            tempDiv.querySelectorAll('.adv-checklist-item').forEach(li => {
+                const cb = li.querySelector('.adv-checklist-cb, input[type="checkbox"]');
+                const isChecked = cb && (cb.checked || cb.hasAttribute('checked'));
+                const prefix = isChecked ? '[x] ' : '[ ] ';
+                if (cb) cb.remove();
+                li.prepend(document.createTextNode(prefix));
+            });
 
-            let cleanTextDiv = document.createElement('div');
-            cleanTextDiv.innerHTML = htmlStr;
-            
-            let plainText = cleanTextDiv.innerText || cleanTextDiv.textContent;
-            plainText = plainText.replace(/\u200B/g, '').replace(/\u00A0/g, ' '); 
+            // Liste puntate standard
+            tempDiv.querySelectorAll('ul:not(.adv-checklist) > li').forEach(li => {
+                li.prepend(document.createTextNode('- '));
+            });
+
+            // Liste numerate standard
+            tempDiv.querySelectorAll('ol > li').forEach((li, idx) => {
+                const start = parseInt(li.parentElement.getAttribute('start'), 10) || 1;
+                li.prepend(document.createTextNode(`${start + idx}. `));
+            });
+
+            // =========================================================================
+            // ESTRAZIONE PULITA A BLOCCHI DEL PLAIN TEXT (Zero duplicazione righe vuote)
+            // Ciascun blocco di riga foglia corrisponde a un elemento dell'array di righe.
+            // =========================================================================
+            const allBlocks = Array.from(tempDiv.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, li, blockquote'));
+            const leafBlocks = allBlocks.filter(b => !b.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote'));
+
+            let plainText = '';
+
+            if (leafBlocks.length === 0) {
+                plainText = tempDiv.innerHTML
+                    .replace(/<br\s*\/?>/gi, '\n')
+                    .replace(/<[^>]+>/g, '')
+                    .replace(/&nbsp;/g, ' ')
+                    .replace(/\u00A0/g, ' ')
+                    .replace(/\u200B/g, '')
+                    .replace(/&lt;/g, '<')
+                    .replace(/&gt;/g, '>')
+                    .replace(/&amp;/g, '&');
+            } else {
+                const lines = [];
+                leafBlocks.forEach(b => {
+                    const textOnly = b.textContent.replace(/[\u200B\uFEFF]/g, '').trim();
+                    let lineHtml = '';
+                    if (!textOnly && !b.querySelector('img, audio, input, svg')) {
+                        lineHtml = '';
+                    } else {
+                        lineHtml = b.innerHTML
+                            .replace(/<br\s*\/?>/gi, '\n')
+                            .replace(/<[^>]+>/g, '');
+                    }
+                    lineHtml = lineHtml
+                        .replace(/&nbsp;/g, ' ')
+                        .replace(/\u00A0/g, ' ')
+                        .replace(/\u200B/g, '')
+                        .replace(/&lt;/g, '<')
+                        .replace(/&gt;/g, '>')
+                        .replace(/&amp;/g, '&');
+                    lines.push(lineHtml);
+                });
+
+                if (lines.length === 1 && lines[0] === '') {
+                    plainText = '\n';
+                } else {
+                    plainText = lines.join('\n');
+                }
+            }
 
             e.clipboardData.setData('text/html', clipboardHTML);
             e.clipboardData.setData('text/plain', plainText);
@@ -565,7 +622,7 @@ Object.assign(Editor, {
                                      blockUnderCursor.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' &&
                                      !blockUnderCursor.querySelector('img, audio, iframe, .adv-widget-shell');
 
-                if (isBlockEmpty && blockUnderCursor.parentNode) {
+                if (isBlockEmpty && blockUnderCursor.parentNode && blockUnderCursor.parentNode.contains(blockUnderCursor)) {
                     currentRange.setStartBefore(blockUnderCursor);
                     currentRange.collapse(true);
                     blockUnderCursor.remove();
@@ -683,6 +740,62 @@ Object.assign(Editor, {
         const processPaste = () => {
             try {
                 Editor.saveSnapshot();
+
+                const rawPastedText = (pastedText || '').trim();
+                const isSingleWebUrl = /^https?:\/\/[^\s]+$/i.test(rawPastedText);
+                const isCodeContext = targetNode.closest && !!targetNode.closest('.code-content, [data-widget-type="code"]');
+
+                // Gestione incolla link web (Smart Link Wrap o inserimento link nativo pulito senza popup)
+                if (!isInsideWidget && !isCodeContext && !snippetText && isSingleWebUrl) {
+                    const currentRange = sel.getRangeAt(0);
+
+                    // CASO 1: SELEZIONE PRESENTE (Smart Link Wrap)
+                    if (!sel.isCollapsed && currentRange.toString().trim().length > 0) {
+                        const selectedText = currentRange.toString();
+                        const link = document.createElement('a');
+                        link.href = rawPastedText;
+                        link.target = "_blank";
+                        link.textContent = selectedText;
+
+                        currentRange.deleteContents();
+                        currentRange.insertNode(link);
+
+                        const newRange = document.createRange();
+                        newRange.setStartAfter(link);
+                        newRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+
+                        Store.triggerAutoSave();
+                        return;
+                    } 
+                    // CASO 2: NESSUNA SELEZIONE (Autolink su cursore libero)
+                    else {
+                        const link = document.createElement('a');
+                        link.href = rawPastedText;
+                        link.target = "_blank";
+                        
+                        const displayText = (typeof LinkManager !== 'undefined' && typeof LinkManager._truncateUrl === 'function')
+                            ? LinkManager._truncateUrl(rawPastedText, 60)
+                            : rawPastedText;
+                        link.textContent = displayText;
+
+                        if (typeof LinkManager !== 'undefined' && typeof LinkManager.insertNodeAtSelection === 'function') {
+                            LinkManager.insertNodeAtSelection(link);
+                        } else {
+                            currentRange.deleteContents();
+                            currentRange.insertNode(link);
+                            const newRange = document.createRange();
+                            newRange.setStartAfter(link);
+                            newRange.collapse(true);
+                            sel.removeAllRanges();
+                            sel.addRange(newRange);
+                        }
+
+                        Store.triggerAutoSave();
+                        return;
+                    }
+                }
 
                 if (isInsideWidget) {
                     const isEditable = WidgetManager.isInsideEditableWidgetArea(targetNode) || !!targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th');
@@ -1207,7 +1320,7 @@ Object.assign(Editor, {
                                          blockUnderCursor.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' &&
                                          !blockUnderCursor.querySelector('img, audio, iframe, .adv-widget-shell');
 
-                    if (isBlockEmpty && blockUnderCursor.parentNode && hasBlockTags) {
+                    if (isBlockEmpty && blockUnderCursor.parentNode && blockUnderCursor.parentNode.contains(blockUnderCursor) && hasBlockTags) {
                         currentRange.setStartBefore(blockUnderCursor);
                         currentRange.collapse(true);
                         blockUnderCursor.remove();

@@ -33,8 +33,7 @@ const AdvancedTableConditionalColors = {
         let colOptions = ``;
         state.columns.forEach(c => {
             const safeColName = String(c.name).replace(/"/g, '&quot;');
-            let icon = '📄';
-            if(c.type === 'text') icon = Icons.text; if(c.type === 'number') icon = Icons.number; if(c.type === 'select') icon = Icons.select; if(c.type === 'multi-select') icon = Icons.multiSelect; if(c.type === 'date' || c.type === 'datetime') icon = Icons.date; if(c.type === 'time') icon = Icons.time; if(c.type === 'checkbox') icon = Icons.checkbox; if(c.type === 'formula') icon = Icons.formula; if(c.type === 'relation') icon = Icons.relation; if(c.type === 'url') icon = Icons.url; if(c.type === 'button') icon = Icons.play;
+            const icon = AdvancedTable.getColumnTypeIcon(c.type);
             colOptions += `<option value="${c.id}">${icon} ${safeColName}</option>`;
         });
 

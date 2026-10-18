@@ -48,9 +48,7 @@
 
         <div class="controls-group">
             <div id="noteContextActions" style="display:flex; align-items:center; gap:8px;" class="hidden">
-                <button class="icon-btn" onclick="UI.goUpOneLevel()" id="goUpBtn">
-                    <script>document.write(Icons.cornerUpLeft); document.getElementById('goUpBtn').title = I18n.t('toolbar.go_up');</script>
-                </button>
+                
                 <button class="icon-btn" onclick="UI.toggleMark()" id="markBtn">
                     <script>document.write(Icons.starEmpty); document.getElementById('markBtn').title = I18n.t('toolbar.favorite');</script>
                 </button>
@@ -61,6 +59,19 @@
                     <script>document.write(Icons.info); document.getElementById('btnNoteInfo').title = I18n.t('toolbar.page_info');</script>
                 </button>
                 <div class="separator"></div>
+
+                <!-- Sezione Navigazione Cronologica e Gerarchica -->
+                <button class="icon-btn" onclick="UI.navHistoryBack()" id="navBackBtn">
+                    <script>document.write(Icons.navBack || Icons.arrowLeft); document.getElementById('navBackBtn').title = I18n.t('toolbar.nav_back') || 'Torna indietro (Alt+←)';</script>
+                </button>
+                <button class="icon-btn" onclick="UI.navHistoryForward()" id="navForwardBtn">
+                    <script>document.write(Icons.navForward || Icons.arrowRight); document.getElementById('navForwardBtn').title = I18n.t('toolbar.nav_forward') || 'Vai avanti (Alt+→)';</script>
+                </button>
+                <button class="icon-btn" onclick="UI.goUpOneLevel()" id="goUpBtn">
+                    <script>document.write(Icons.goUp || Icons.cornerUpLeft); document.getElementById('goUpBtn').title = I18n.t('toolbar.go_up');</script>
+                </button>
+                <div class="separator"></div>
+
             </div>
 
             <button class="icon-btn active" id="sidebarToggleBtn" onclick="UI.toggleSidebar()">
@@ -247,7 +258,7 @@
                         <button class="btn-color-main" id="btnColorTxMain" onclick="ColorManager.applyLast('text')">
                             <script>document.getElementById('btnColorTxMain').title = I18n.t('toolbar.text_color');</script>
                             <span style="font-weight:bold">A</span>
-                            <div id="txBar" class="btn-color-bar tx-c10"></div>
+                            <div id="txBar" class="btn-color-bar tx-c6"></div>
                         </button>
                         <button id="btnTxMenu" class="btn-color-arrow" onclick="ColorManager.openColorMenu(event, 'btnTxMenu', 'text')">▼</button>
                     </div>
@@ -487,6 +498,8 @@
     <script src="js/ui/ui-tree.js"></script>
     
     <script src="js/sidebar-manager.js"></script>
+    <script src="js/events-search.js"></script>
+    <script src="js/events-drag.js"></script>
     <script src="js/events-global.js"></script>
     <script src="js/column-manager.js"></script>
     <script src="js/package-manager.js"></script>

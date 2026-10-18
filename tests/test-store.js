@@ -172,7 +172,7 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         Assert.isFalse(Store.isDirty, "Un accesso o blur senza mutazioni non deve attivare il salvataggio automatico");
     });
 
-    test("Store: triggerAutoSave con workspace collegato applica debounce a 1500ms", (done) => {
+    test("Store: triggerAutoSave con workspace collegato applica debounce a 1500ms", async () => {
         Store.isDirty = false;
         clearTimeout(Store.debounceTimer);
 
@@ -195,21 +195,14 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
             Store.triggerAutoSave(false, true);
             Assert.strictEqual(saveToFileCalls, 0, "Il debounce deve accorpare le chiamate consecutive");
 
-            // Verifica asincrona dopo il tempo di debounce
-            setTimeout(() => {
-                try {
-                    Assert.strictEqual(saveToFileCalls, 1, "saveToFile deve essere eseguito una sola volta al termine del debounce");
-                } finally {
-                    Store.saveToFile = origSaveToFile;
-                    AppState.workspaceHandle = origHandle;
-                    Store.isDirty = false;
-                    done();
-                }
-            }, 1600);
-        } catch(e) {
+            // Verifica asincrona dopo il tempo di debounce (1600ms)
+            await new Promise(resolve => setTimeout(resolve, 1600));
+
+            Assert.strictEqual(saveToFileCalls, 1, "saveToFile deve essere eseguito una sola volta al termine del debounce");
+        } finally {
             Store.saveToFile = origSaveToFile;
             AppState.workspaceHandle = origHandle;
-            throw e;
+            Store.isDirty = false;
         }
     });
 
@@ -346,7 +339,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         Store.markNeedsPhysicalGC();
         Assert.isTrue(Store._needsPhysicalGC);
     });
-
 
     test("Store: _needsPhysicalGC e markNeedsPhysicalGC controllano l'esecuzione della GC fisica", async () => {
         Store._needsPhysicalGC = false;

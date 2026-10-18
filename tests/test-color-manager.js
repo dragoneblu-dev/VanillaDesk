@@ -10,7 +10,7 @@ describe("ColorManager: Palette Cromatiche, Magic Mappings & Sanitizzazione (9 T
 
     test("ColorManager: configurazione valori di default per highlight e text", () => {
             Assert.strictEqual(ColorManager.defaults.highlight, 'hl-c5');
-            Assert.strictEqual(ColorManager.defaults.text, 'tx-c10');
+            Assert.strictEqual(ColorManager.defaults.text, 'tx-c6');
         });
 
     test("ColorManager: mappa magicHl contiene 10 varianti cromatiche con hex e rgb", () => {

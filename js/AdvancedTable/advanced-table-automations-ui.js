@@ -6,10 +6,47 @@
  * REFACTOR: Usa AutomationUIBuilder per generare i selettori di Colore e abbattere duplicazioni.
  * FEAT RECORD NOTE PROPS: Integrazione dinamica di tutte le proprietà e tag da SYS_PROPERTIES_DB
  * per campi di tipo record_note, sia tra le Condizioni (WHERE) che tra le Azioni (SET).
+ * FIX INITIAL TRIGGER MISMATCH: Normalizzazione e risoluzione del trigger e dell'azione di default
+ * per impedire disallineamenti grafici (es. Creazione Nuova Riga con operatore '=' e campo testo)
+ * quando la prima colonna del database è di tipo 'record_note' o non supporta assegnazioni dirette.
+ * FIX COLUMN TYPE ICONS: Riuso centralizzato di AdvancedTable.getColumnTypeIcon.
  */
 
 Object.assign(AdvancedAutomations, {
     draggedAutoIdx: null,
+
+    _getDefaultTrigger: (state) => {
+        if (!state || !Array.isArray(state.columns) || state.columns.length === 0) {
+            return { colId: 'SYS_NEW_ROW', operator: 'sys_trigger', value: '', dateMode: 'exact', dateShift: 0 };
+        }
+        const firstCol = state.columns[0];
+        let colId = firstCol.id;
+        if (firstCol.type === 'record_note') {
+            colId = `${firstCol.id}_TITLE`;
+        }
+        let operator = '=';
+        if (firstCol.hasEndDate) {
+            operator = 'range_inside';
+        }
+        return { colId: colId, operator: operator, value: '', dateMode: 'exact', dateShift: 0 };
+    },
+
+    _getDefaultAction: (state) => {
+        if (!state || !Array.isArray(state.columns) || state.columns.length === 0) {
+            return { colId: 'SYS_ACTION', type: 'show_toast', value: '' };
+        }
+        // Cerca la prima colonna scrivibile (escludendo colonne calcolate e timestamp)
+        const writableCol = state.columns.find(c => !['created_time', 'last_edited_time', 'formula', 'rollup'].includes(c.type));
+        if (!writableCol) {
+            return { colId: 'SYS_ACTION', type: 'show_toast', value: '' };
+        }
+        let actType = 'set_fixed';
+        if (writableCol.type === 'checkbox') actType = 'set_true';
+        else if (['multi-select', 'relation'].includes(writableCol.type)) actType = 'add_fixed';
+        else if (['date', 'datetime'].includes(writableCol.type)) actType = writableCol.hasEndDate ? 'set_start_today' : 'set_today';
+        
+        return { colId: writableCol.id, type: actType, value: '' };
+    },
 
     openPanel: (e, tableId) => {
         if (e) e.stopPropagation();
@@ -165,14 +202,13 @@ Object.assign(AdvancedAutomations, {
     createAutomation: (e, tableId) => {
         if (e) e.stopPropagation();
         const state = AdvancedTable.getState(tableId);
-        const firstColId = state.columns.length > 0 ? state.columns[0].id : '';
 
         AdvancedAutomations._tempAuto = {
             id: 'a_' + Date.now(),
             name: '',
             active: true,
-            triggers: [{ colId: firstColId, operator: '=', value: '', dateMode: 'exact', dateShift: 0 }],
-            actions: [{ colId: firstColId, type: 'set_fixed', value: '' }]
+            triggers: [AdvancedAutomations._getDefaultTrigger(state)],
+            actions: [AdvancedAutomations._getDefaultAction(state)]
         };
         AdvancedAutomations._renderBuilder(tableId);
     },
@@ -260,17 +296,7 @@ Object.assign(AdvancedAutomations, {
         let colOptions = ``;
         cols.forEach(c => {
             const safeColName = String(c.name).replace(/"/g, '&quot;');
-            let icon = '📄';
-            if(c.type === 'text') icon = Icons.text;
-            if(c.type === 'number') icon = Icons.number;
-            if(c.type === 'select') icon = Icons.select;
-            if(c.type === 'multi-select') icon = Icons.multiSelect;
-            if(c.type === 'date' || c.type === 'datetime') icon = Icons.date;
-            if(c.type === 'time') icon = Icons.time;
-            if(c.type === 'checkbox') icon = Icons.checkbox;
-            if(c.type === 'formula') icon = Icons.formula;
-            if(c.type === 'relation') icon = Icons.relation;
-            if(c.type === 'url') icon = Icons.url;
+            const icon = AdvancedTable.getColumnTypeIcon(c.type);
 
             if (c.type === 'record_note') {
                 colOptions += `<option value="${c.id}_TITLE">${Icons.recordPage} ${safeColName}: Titolo</option>`;
@@ -299,6 +325,14 @@ Object.assign(AdvancedAutomations, {
             auto.triggers.forEach((t, idx) => {
                 const isFirst = idx === 0;
                 
+                // Normalizzazione difensiva immediata: se colId è un ID puro di record_note, lo allinea a _TITLE per match con le option
+                if (t.colId && !t.colId.startsWith('SYS_') && !t.colId.includes('_PROP_') && !t.colId.endsWith('_TITLE') && !t.colId.endsWith('_CONTENT')) {
+                    const rawCol = cols.find(c => c.id === t.colId);
+                    if (rawCol && rawCol.type === 'record_note') {
+                        t.colId = `${rawCol.id}_TITLE`;
+                    }
+                }
+
                 let tColDef = null;
 
                 if (t.colId.includes('_PROP_')) {
@@ -812,8 +846,7 @@ Object.assign(AdvancedAutomations, {
     _addTrigger: (e, tableId) => {
         if (e) e.stopPropagation();
         const state = AdvancedTable.getState(tableId);
-        const firstColId = state.columns.length > 0 ? state.columns[0].id : '';
-        AdvancedAutomations._tempAuto.triggers.push({ colId: firstColId, operator: '=', value: '', dateMode: 'exact', dateShift: 0 });
+        AdvancedAutomations._tempAuto.triggers.push(AdvancedAutomations._getDefaultTrigger(state));
         AdvancedAutomations._renderBuilder(tableId);
     },
     
@@ -838,7 +871,10 @@ Object.assign(AdvancedAutomations, {
                 const propId = val.split('_PROP_')[1];
                 col = propsDb ? propsDb.columns.find(c => c.id === propId) : null;
             } else {
-                col = state.columns.find(c => c.id === val);
+                let actualColId = val;
+                if (actualColId.endsWith('_TITLE')) actualColId = actualColId.replace('_TITLE', '');
+                if (actualColId.endsWith('_CONTENT')) actualColId = actualColId.replace('_CONTENT', '');
+                col = state.columns.find(c => c.id === actualColId);
             }
 
             AdvancedAutomations._tempAuto.triggers[idx].value = '';
@@ -891,8 +927,7 @@ Object.assign(AdvancedAutomations, {
     _addAction: (e, tableId) => {
         if (e) e.stopPropagation();
         const state = AdvancedTable.getState(tableId);
-        const firstColId = state.columns.length > 0 ? state.columns[0].id : '';
-        AdvancedAutomations._tempAuto.actions.push({ colId: firstColId, type: 'set_fixed', value: '' });
+        AdvancedAutomations._tempAuto.actions.push(AdvancedAutomations._getDefaultAction(state));
         AdvancedAutomations._renderBuilder(tableId);
     },
     

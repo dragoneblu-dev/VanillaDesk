@@ -8,6 +8,8 @@
  * FIX LONG TEXT DISCARD SAFETY: Intercettazione in closeDrawer per verificare se il testo lungo
  * di advLongTextInput è stato modificato rispetto a data-original-value, mostrando un confirm modale
  * che ricorda di salvare con il pulsante o Ctrl+Invio prima di scartare le modifiche.
+ * FIX ASYNC TIMER DEFENSIVE GUARD: Verifica difensiva di nullità su advDrawerBody e advDrawerFooter
+ * all'interno del timer di chiusura a 300ms, prevenendo eccezioni unhandled nel DOM.
  */
 
 Object.assign(UI, {
@@ -255,10 +257,14 @@ Object.assign(UI, {
         }
 
         if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll(true); 
+
+        // GUARDIA DIFENSIVA: verifica l'effettiva esistenza nel DOM prima di svuotare innerHTML
         UI._drawerCloseTimer = setTimeout(() => {
-            document.getElementById('advDrawerBody').innerHTML = '';
-            document.getElementById('advDrawerFooter').innerHTML = '';
-            drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)';
+            const bodyEl = document.getElementById('advDrawerBody');
+            const footerEl = document.getElementById('advDrawerFooter');
+            if (bodyEl) bodyEl.innerHTML = '';
+            if (footerEl) footerEl.innerHTML = '';
+            if (drawer) drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)';
         }, 300);
 
         // --- GESTIONE INTEGRATA CHIUSURA RECORD DATABASE ---
