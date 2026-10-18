@@ -1,14 +1,61 @@
 # VanillaDesk - Local-First Knowledge & Workspace Manager
 
 <p align="center">
-  <a href="https://youtu.be/O8-uhmgFaos" target="_blank">
-    <img src="https://img.shields.io/badge/▶_Video_Demonstrativo-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Video YouTube" />
+  <a href="https://youtu.be/O8-uhmgFaos" target="_blank" style="text-decoration: none;">
+    <span style="
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #FF0000;
+      color: #FFFFFF;
+      font-weight: bold;
+      font-size: 16px;
+      padding: 12px 24px;
+      border-radius: 12px;
+      margin: 6px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    ">
+      ▶ Video Dimostrativo
+    </span>
   </a>
-  <a href="https://dragoneblu-dev.github.io/VanillaDesk/" target="_blank">
-    <img src="https://img.shields.io/badge/Provalo_Subito-success?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Prova l'App" />
+
+  <a href="https://dragoneblu-dev.github.io/VanillaDesk/" target="_blank" style="text-decoration: none;">
+    <span style="
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #28a745;
+      color: #FFFFFF;
+      font-weight: bold;
+      font-size: 16px;
+      padding: 12px 24px;
+      border-radius: 12px;
+      margin: 6px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    ">
+      🚀 Provalo Subito
+    </span>
   </a>
-  <a href="https://github.com/dragoneblu-dev/VanillaDesk/archive/refs/heads/main.zip">
-    <img src="https://img.shields.io/badge/Scarica_l'App_(ZIP)-blue?style=for-the-badge&logo=github&logoColor=white" alt="Scarica Repository" />
+
+  <a href="https://github.com/dragoneblu-dev/VanillaDesk/archive/refs/heads/main.zip" style="text-decoration: none;">
+    <span style="
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      background-color: #0366d6;
+      color: #FFFFFF;
+      font-weight: bold;
+      font-size: 16px;
+      padding: 12px 24px;
+      border-radius: 12px;
+      margin: 6px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    ">
+      📥 Download (ZIP)
+    </span>
   </a>
 </p>
 
