@@ -52,18 +52,18 @@
     --tx-c2: #878787;
     --tx-c3: #b15a35;
     --tx-c4: #ff8600;
-    --tx-c5: #c0c800;
-    --tx-c6: #00ae49;
+    --tx-c5: #b1b100;
+    --tx-c6: #09ae40; /*#00ae49;*/
     --tx-c7: #0f8ddf;
     --tx-c8: #853bc7;
     --tx-c9: #c52779;
-    --tx-c10: #d00000;
+    --tx-c10: #db0000;
 
     /* --- PALETTE COLORI PER I GRAFICI (CHART.JS) --- */
-    --chart-pastel-1: #FFB3BA; --chart-pastel-2: #FFDFBA; --chart-pastel-3: #FFFFBA; --chart-pastel-4: #BAFFC9; --chart-pastel-5: #BAE1FF; --chart-pastel-6: #E6B3FF;
+    /*--chart-pastel-1: #FFB3BA; --chart-pastel-2: #FFDFBA; --chart-pastel-3: #FFFFBA; --chart-pastel-4: #BAFFC9; --chart-pastel-5: #BAE1FF; --chart-pastel-6: #E6B3FF;
     --chart-vibrant-1: #FF0055; --chart-vibrant-2: #00FF99; --chart-vibrant-3: #FF9900; --chart-vibrant-4: #00CCFF; --chart-vibrant-5: #9900FF; --chart-vibrant-6: #FFCC00;
     --chart-ocean-1: #0369A1; --chart-ocean-2: #0EA5E9; --chart-ocean-3: #38BDF8; --chart-ocean-4: #0D9488; --chart-ocean-5: #2DD4BF; --chart-ocean-6: #14B8A6;
-    --chart-sunset-1: #B91C1C; --chart-sunset-2: #E11D48; --chart-sunset-3: #F43F5E; --chart-sunset-4: #EA580C; --chart-sunset-5: #F97316; --chart-sunset-6: #FB923C;
+    --chart-sunset-1: #B91C1C; --chart-sunset-2: #E11D48; --chart-sunset-3: #F43F5E; --chart-sunset-4: #EA580C; --chart-sunset-5: #F97316; --chart-sunset-6: #FB923C;*/
 }
 
 [data-theme="white"] {
