@@ -12,12 +12,14 @@
   </a>
 </p>
 
+<p align="center">
 ![Vanilla JS](https://img.shields.io/badge/Vanilla_JS-1572B6?style=for-the-badge&logo=javascript&logoColor=white)
 ![HTML5](https://img.shields.io/badge/HTML5-1572B6?style=for-the-badge&logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
 ![License](https://img.shields.io/badge/License-MIT-blue.svg?style=for-the-badge)
 ![Local First](https://img.shields.io/badge/Architecture-Local_First-success?style=for-the-badge)
 ![AI Assisted](https://img.shields.io/badge/AI_Assisted_Development-8A2BE2?style=for-the-badge&logo=openai&logoColor=white)
+</p>
 
 ![VanillaDesk Banner](vanillaDesk.png)
 
