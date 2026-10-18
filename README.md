@@ -1,6 +1,19 @@
 # VanillaDesk - Local-First Knowledge & Workspace Manager
 
+<p align="center">
+  <a href="https://youtu.be/O8-uhmgFaos" target="_blank">
+    <img src="https://img.shields.io/badge/▶_Demo_Video-red?style=for-the-badge&logo=youtube&logoColor=white" alt="YouTube Video" />
+  </a>
+  <a href="https://dragoneblu-dev.github.io/VanillaDesk/" target="_blank">
+    <img src="https://img.shields.io/badge/Try_It_Now-success?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Try the App" />
+  </a>
+  <a href="https://github.com/dragoneblu-dev/VanillaDesk/archive/refs/heads/main.zip">
+    <img src="https://img.shields.io/badge/Download_App_(ZIP)-blue?style=for-the-badge&logo=github&logoColor=white" alt="Download Repository" />
+  </a>
+</p>
+
 Languages: [English](README.md) | [Italiano](README.it.md)
+
 
 ![Vanilla JS](https://img.shields.io/badge/Vanilla-JS-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
