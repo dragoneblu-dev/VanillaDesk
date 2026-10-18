@@ -1,5 +1,18 @@
 # VanillaDesk - Local-First Knowledge & Workspace Manager
 
+<!-- Pulsanti d'azione rapidi -->
+<p align="center">
+  <a href="https://youtu.be/O8-uhmgFaos" target="_blank">
+    <img src="https://img.shields.io/badge/▶_Video_Demonstrativo-red?style=for-the-badge&logo=youtube&logoColor=white" alt="Video YouTube" />
+  </a>
+  <a href="dragoneblu-dev.github.io/VanillaDesk/" target="_blank">
+    <img src="https://img.shields.io/badge/Provalo_Subito-success?style=for-the-badge&logo=google-chrome&logoColor=white" alt="Prova l'App" />
+  </a>
+  <a href="https://github.com/dragoneblu-dev/VanillaDesk/archive/refs/heads/main.zip">
+    <img src="https://img.shields.io/badge/Scarica_l'App_(ZIP)-blue?style=for-the-badge&logo=github&logoColor=white" alt="Scarica Repository" />
+  </a>
+</p>
+
 ![Vanilla JS](https://img.shields.io/badge/Vanilla-JS-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)
 ![HTML5](https://img.shields.io/badge/HTML5-E34F26?style=for-the-badge&logo=html5&logoColor=white)
 ![CSS3](https://img.shields.io/badge/CSS3-1572B6?style=for-the-badge&logo=css3&logoColor=white)
@@ -44,7 +57,7 @@ L'applicazione è una vera Single Page Application (SPA) serverless.
 2. Fai doppio click su `index.html` per aprirlo nel tuo browser.
 3. Clicca su **"Crea Nuovo Workspace"** per inizializzare la cartella di lavoro sul tuo PC.
 
-⚠️ **Compatibilità Browser:** Poiché VanillaDesk sfrutta la moderna *File System Access API* per scrivere fisicamente i file sul tuo hard disk, è necessario utilizzare un browser basato su Chromium (**Google Chrome, Microsoft Edge, Opera**). Browser come Safari o Firefox non supportano ancora pienamente queste API in modo nativo.
+⚠️ **Compatibilità Browser:** Poiché VanillaDesk sfrutta la moderna *File System Access API* per scrivere fisicamente i file sul tuo hard disk, è necessario utilizzare un browser basato su Chromium (**Google Chrome, Microsoft Edge, Brave, Opera**). Browser come Safari o Firefox non supportano ancora pienamente queste API in modo nativo.
 
 ## Lavoriamo Insieme / Consulenza
 Ho pubblicato questo progetto open-source per condividere uno strumento utile con altri colleghi del settore IT e per dimostrare le mie competenze architetturali e di sviluppo.
