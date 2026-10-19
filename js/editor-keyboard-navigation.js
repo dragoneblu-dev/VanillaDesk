@@ -11,6 +11,8 @@
  * FIX CARET GLITCH: Navigazione fluida fuori dallo snippet scavalcando i cuscinetti \u200B ed esclusione
  * degli inline widget dall'escape verticale su nuova riga per impedire salti del cursore.
  * FIX HORIZONTAL INLINE ENTRY: Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso lo snippet.
+ * FIX FORMAT ESCAPE JUMP: Risolto salto anomalo del cursore nei testi formattati/colorati annidati,
+ * vincolando l'escape con ArrowRight alla reale fine corsa del testo all'interno dell'intero blocco contenitore.
  */
 
 Object.assign(Editor, {
@@ -289,7 +291,7 @@ Object.assign(Editor, {
             const checkNode = targetNode.nodeType === 3 ? targetNode.parentNode : targetNode;
             
             if (!checkNode.closest('.adv-widget-shell:not(.adv-inline-shell)')) {
-                // Perfetto! Abbiamo trovato l'allineamento. Spostiamo il cursore.
+                // Posizionamento sulle coordinate del raycast
                 const newRange = document.createRange();
                 newRange.setStart(targetNode, targetOffset);
                 newRange.collapse(true);
@@ -736,7 +738,7 @@ Object.assign(Editor, {
             if (recoveredEnd) recoveredEnd.remove();
 
         } else {
-            // Fallback per paragrafi vuoti o testo libero: inserimento brutale di 4 spazi
+            // Fallback per paragrafi vuoti o testo libero: inserimento di 4 spazi
             document.execCommand('insertText', false, '\u00A0\u00A0\u00A0\u00A0');
         }
         Store.triggerAutoSave();
@@ -744,8 +746,8 @@ Object.assign(Editor, {
 
     /**
      * GESTORE DI ESCAPE FORMATTAZIONE (Smart Exit)
-     * Rileva quando il cursore si trova ai confini di uno span (grassetto, link, ecc.)
-     * o di una cella editabile e consente di proseguire la scrittura in testo normale.
+     * Rileva quando il cursore si trova ai confini di un blocco editabile o all'estremità assoluta
+     * di uno span di formattazione a fine paragrafo, permettendo di proseguire in testo normale.
      */
     handleFormatEscape: (e) => {
         if (!AppState.isEditMode) return;
@@ -805,66 +807,108 @@ Object.assign(Editor, {
             }
         }
 
-        // 2. ESCAPE DA SPAN DI FORMATTAZIONE (Grassetto, Colori, ecc.) - Esclusivamente con Spazio o Freccia Destra
-        if (e.key === ' ' || e.key === 'ArrowRight') {
+        // 2. ESCAPE DA ELEMENTI DI FORMATTAZIONE (Grassetto, Colori, ecc.) - Esclusivamente con Freccia Destra a fine blocco
+        if (e.key === 'ArrowRight') {
+            if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return;
+
             const sel = window.getSelection();
             if (!sel.isCollapsed || !sel.rangeCount) return;
 
             const range = sel.getRangeAt(0);
             let container = range.startContainer;
-            let offset = range.startOffset;
 
-            if (container.nodeType === Node.TEXT_NODE) {
-                if (offset < container.length) return;
-                container = container.parentNode;
-            } else if (container.childNodes.length > 0 && offset < container.childNodes.length) {
-                return; 
+            // Se il cursore si trova dentro un link normale (a, .file-link, .internal-link), la navigazione orizzontale è gestita altrove
+            const parentEl = container.nodeType === Node.TEXT_NODE ? container.parentNode : container;
+            if (parentEl && parentEl.closest('a')) {
+                return;
             }
 
-            const formatTags = ['B', 'I', 'U', 'S', 'A'];
-            const isFormatSpan = container.tagName === 'SPAN' && (
-                container.className.includes('hl-') || 
-                container.className.includes('tx-') || 
-                container.className.includes('ff-') || 
-                container.className.includes('fs-')
-            );
+            // Esclude le shell inline dei widget (snippet, note inline, ecc.)
+            if (parentEl && parentEl.closest('.adv-inline-shell')) {
+                return;
+            }
 
-            if (formatTags.includes(container.tagName) || isFormatSpan) {
-                if (e.key === 'ArrowRight') {
-                    e.preventDefault();
-                    const newRange = document.createRange();
-                    newRange.setStartAfter(container);
-                    newRange.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
+            // Esclude blocchi di codice
+            if (parentEl && parentEl.closest('pre, .code-content')) {
+                return;
+            }
 
-                    if (document.queryCommandState('bold')) {
-                        try { document.execCommand('bold', false, null); } catch(err) {}
-                    }
-                    if (document.queryCommandState('italic')) {
-                        try { document.execCommand('italic', false, null); } catch(err) {}
-                    }
-                    if (document.queryCommandState('underline')) {
-                        try { document.execCommand('underline', false, null); } catch(err) {}
-                    }
-                    if (document.queryCommandState('strikeThrough')) {
-                        try { document.execCommand('strikeThrough', false, null); } catch(err) {}
-                    }
+            const currentBlock = parentEl.closest('p, div, li, h1, h2, h3, h4, h5, h6, td, th') || document.getElementById('noteContent');
+            if (!currentBlock) return;
 
-                    Editor.updateToolbarFormatting();
-                } else if (e.key === ' ') {
-                    e.preventDefault();
-                    const newRange = document.createRange();
-                    newRange.setStartAfter(container);
-                    newRange.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
-                    
-                    document.execCommand('removeFormat', false, null);
-                    document.execCommand('insertText', false, ' ');
-                    Editor.updateToolbarFormatting();
+            // Riconoscimento elementi di formattazione inline o classi di stile VanillaDesk
+            const isFormatElement = (el) => {
+                if (!el || el.nodeType !== Node.ELEMENT_NODE || el === currentBlock) return false;
+                if (el.classList.contains('adv-inline-shell') || el.classList.contains('adv-widget-shell')) return false;
+
+                const tag = el.tagName.toUpperCase();
+                if (['B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'CODE'].includes(tag)) return true;
+                if (tag === 'SPAN' && (
+                    el.className.includes('hl-') || 
+                    el.className.includes('tx-') || 
+                    el.className.includes('ff-') || 
+                    el.className.includes('fs-')
+                )) return true;
+                return false;
+            };
+
+            // Identifica l'elemento di formattazione più esterno tra il nodo attivo e il blocco contenitore
+            let curr = parentEl;
+            let outermostFormatEl = null;
+            while (curr && curr !== currentBlock && curr.id !== 'noteContent') {
+                if (isFormatElement(curr)) {
+                    outermostFormatEl = curr;
                 }
+                curr = curr.parentNode;
             }
+
+            // Se non ci troviamo all'interno di alcun elemento formattato, non è richiesto alcun escape
+            if (!outermostFormatEl) return;
+
+            // Fast-path: se il cursore non si trova alla fine del nodo di testo corrente, ci sono ancora caratteri
+            if (container.nodeType === Node.TEXT_NODE && range.endOffset < container.nodeValue.length) {
+                return;
+            }
+
+            // Verifica se tra la posizione corrente del cursore e la fine del blocco contenitore è presente altro testo o media
+            try {
+                const postRangeInBlock = document.createRange();
+                postRangeInBlock.setStart(range.endContainer, range.endOffset);
+                postRangeInBlock.setEnd(currentBlock, currentBlock.childNodes.length);
+
+                const remainingText = postRangeInBlock.toString().replace(/[\u200B\uFEFF\n\r]/g, '');
+                const hasMediaAfter = !!postRangeInBlock.cloneContents().querySelector('img, iframe, audio, svg, .adv-widget-shell, .adv-inline-shell, .adv-copy-snippet, .inline-note-wrapper');
+
+                // Se nel blocco dopo il cursore è presente altro testo o media, la navigazione deve essere nativa senza salti
+                if (remainingText.length > 0 || hasMediaAfter) {
+                    return;
+                }
+            } catch (_) {
+                return;
+            }
+
+            // Siamo alla fine assoluta del blocco e dell'elemento formattato: esegue l'escape verso il testo normale
+            e.preventDefault();
+            const newRange = document.createRange();
+            newRange.setStartAfter(outermostFormatEl);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+
+            if (document.queryCommandState('bold')) {
+                try { document.execCommand('bold', false, null); } catch(err) {}
+            }
+            if (document.queryCommandState('italic')) {
+                try { document.execCommand('italic', false, null); } catch(err) {}
+            }
+            if (document.queryCommandState('underline')) {
+                try { document.execCommand('underline', false, null); } catch(err) {}
+            }
+            if (document.queryCommandState('strikeThrough')) {
+                try { document.execCommand('strikeThrough', false, null); } catch(err) {}
+            }
+
+            Editor.updateToolbarFormatting();
         }
     }
 });

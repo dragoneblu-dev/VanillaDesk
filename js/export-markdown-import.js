@@ -7,7 +7,7 @@
  * - Estrazione integrata di tag YAML ed hashtag nel corpo del testo (extractTagsFromMarkdown).
  * - Interfaccia di apertura file e pipeline transazionale di creazione nota (importMarkdown, processMarkdownImport).
  * - Parser completo da Markdown a HTML (parseMarkdownToHTML, _parseMarkdownCellText) con tokenizzazione
- *   XML per blocchi di codice, parser per tabelle pipe e ricostruzione gerarchica delle liste/checklist.
+ *   isolata per blocchi di codice, tabelle pipe con allineamento colonne, inline code e blockquote/callout continui.
  */
 
 Object.assign(ExportManager, {
@@ -449,8 +449,7 @@ Object.assign(ExportManager, {
     parseMarkdownToHTML: (md) => {
         let html = md.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
 
-        // 1. TOKENIZZAZIONE DEI BLOCCHI DI CODICE
-        // Uso di marcatori XML isolati immuni alle regole di corsivo o grassetto Markdown
+        // 1. TOKENIZZAZIONE DEI BLOCCHI DI CODICE FENCED (```...```)
         const codeBlocks = [];
         html = html.replace(/```([\w-]*)[^\n]*\n([\s\S]*?)```/gm, (match, lang, code) => {
             const blockId = 'adv_code_' + Store.generateId();
@@ -465,7 +464,54 @@ Object.assign(ExportManager, {
             return `\n\n<vd-code-token id="${codeBlocks.length - 1}"></vd-code-token>\n\n`;
         });
 
-        // 2. TOKENIZZAZIONE DELLE TABELLE MARKDOWN (Pipe Tables)
+        // 2. PARSING OBSIDIAN COMMENTS %%testo%% ED INLINE FOOTNOTES ^[testo] -> APPUNTI NASCOSTI VANILLADESK
+        const inlineNoteIcon = typeof Icons !== 'undefined' ? Icons.noteInline : '💬';
+        const buildInlineNoteHtml = (commentText) => {
+            const clean = commentText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r\n|\n|\r/g, '<br>').trim();
+            return `\u200B<span class="inline-note-wrapper adv-inline-shell" data-widget-type="inline-note" contenteditable="false"><span class="inline-note-marker" contenteditable="false">${inlineNoteIcon}</span><span class="inline-note-data" style="display: none;">${clean}</span></span>\u200B`;
+        };
+
+        html = html.replace(/%%([\s\S]*?)%%/g, (match, text) => buildInlineNoteHtml(text));
+        html = html.replace(/\^\[([\s\S]*?)\]/g, (match, text) => buildInlineNoteHtml(text));
+
+        // 3. TOKENIZZAZIONE DEI BLOCKQUOTE CONTINUI E OBSIDIAN CALLOUTS (> [!TYPE])
+        // Eseguita PRIMA della tokenizzazione del codice inline del documento padre,
+        // garantendo che le variabili tecniche (`maintenance_work_mem`) siano risolte
+        // all'interno del proprio contesto ricorsivo senza collisioni di indici token.
+        const quoteBlocks = [];
+        html = html.replace(/(?:^[ \t]*>[ \t]?[^\n]*(?:\n|$))+/gm, (blockMatch) => {
+            const rawLines = blockMatch.split('\n');
+            const cleanLines = [];
+            for (let i = 0; i < rawLines.length; i++) {
+                if (/^[ \t]*>/.test(rawLines[i])) {
+                    cleanLines.push(rawLines[i].replace(/^[ \t]*>[ \t]?/, ''));
+                } else if (rawLines[i].trim() !== '') {
+                    cleanLines.push(rawLines[i]);
+                }
+            }
+
+            while (cleanLines.length > 0 && cleanLines[cleanLines.length - 1].trim() === '') cleanLines.pop();
+            while (cleanLines.length > 0 && cleanLines[0].trim() === '') cleanLines.shift();
+
+            if (cleanLines.length === 0) return '';
+
+            // Gestione Obsidian Callout sulla prima riga: [!TYPE] Titolo Opzionale
+            const calloutMatch = cleanLines[0].match(/^\[!([a-zA-Z]+)\]\s*(.*)$/);
+            if (calloutMatch) {
+                const calloutType = calloutMatch[1].toUpperCase();
+                const calloutTitle = calloutMatch[2].trim();
+                cleanLines[0] = calloutTitle ? `**[${calloutType}] ${calloutTitle}**` : `**[${calloutType}]**`;
+            }
+
+            const innerMd = cleanLines.join('\n');
+            const innerHtml = ExportManager.parseMarkdownToHTML(innerMd);
+
+            quoteBlocks.push(`<blockquote>${innerHtml}</blockquote>`);
+            return `\n\n<vd-quote-token id="${quoteBlocks.length - 1}"></vd-quote-token>\n\n`;
+        });
+
+        // 4. TOKENIZZAZIONE DELLE TABELLE MARKDOWN (Pipe Tables)
+        // Estrae l'allineamento delle colonne (:---, :---:, ---:) e lo applica alle celle HTML generate
         const tableBlocks = [];
         const lines = html.split('\n');
         const outputLines = [];
@@ -488,20 +534,35 @@ Object.assign(ExportManager, {
                 const headerLine = tableBuffer[0].trim().replace(/^\|/, '').replace(/\|$/, '');
                 const headers = headerLine.split('|').map(h => h.trim());
                 
+                // Estrazione allineamento colonne dalla riga delimitatore (es. :---, :---:, ---:)
+                const delimiterLine = tableBuffer[1].trim().replace(/^\|/, '').replace(/\|$/, '');
+                const delimiterParts = delimiterLine.split('|').map(p => p.trim());
+                const colAlignments = headers.map((_, idx) => {
+                    const part = delimiterParts[idx] || '';
+                    const hasLeftColon = part.startsWith(':');
+                    const hasRightColon = part.endsWith(':');
+                    if (hasLeftColon && hasRightColon) return 'center';
+                    if (hasRightColon) return 'right';
+                    if (hasLeftColon) return 'left';
+                    return 'left';
+                });
+
                 const dataLines = tableBuffer.slice(2);
                 const stblId = 'stbl_' + Store.generateId();
                 
                 let tblHTML = `<div class="adv-widget-shell simple-table-wrapper" data-widget-type="simple-table" id="${stblId}" contenteditable="false">`;
                 tblHTML += `<table class="table-striped" style="width:100%; table-layout:auto;"><tbody>`;
                 
-                // Intestazione
+                // Intestazione con rispetto allineamento
                 tblHTML += `<tr>`;
-                headers.forEach(h => {
-                    tblHTML += `<th contenteditable="true">${ExportManager._parseMarkdownCellText(h)}</th>`;
+                headers.forEach((h, c) => {
+                    const align = colAlignments[c];
+                    const alignStyle = (align && align !== 'left') ? ` style="text-align: ${align};"` : '';
+                    tblHTML += `<th contenteditable="true"${alignStyle}>${ExportManager._parseMarkdownCellText(h)}</th>`;
                 });
                 tblHTML += `</tr>`;
                 
-                // Righe di dati
+                // Righe di dati con rispetto allineamento
                 dataLines.forEach(dLine => {
                     const cleanDLine = dLine.trim().replace(/^\|/, '').replace(/\|$/, '');
                     const cells = cleanDLine.split('|').map(c => c.trim());
@@ -509,7 +570,9 @@ Object.assign(ExportManager, {
                     tblHTML += `<tr>`;
                     for (let c = 0; c < headers.length; c++) {
                         const cellContent = cells[c] !== undefined ? cells[c] : '';
-                        tblHTML += `<td contenteditable="true">${ExportManager._parseMarkdownCellText(cellContent)}</td>`;
+                        const align = colAlignments[c];
+                        const alignStyle = (align && align !== 'left') ? ` style="text-align: ${align};"` : '';
+                        tblHTML += `<td contenteditable="true"${alignStyle}>${ExportManager._parseMarkdownCellText(cellContent)}</td>`;
                     }
                     tblHTML += `</tr>`;
                 });
@@ -539,17 +602,16 @@ Object.assign(ExportManager, {
 
         html = outputLines.join('\n');
 
-        // 3. PARSING OBSIDIAN COMMENTS %%testo%% ED INLINE FOOTNOTES ^[testo] -> APPUNTI NASCOSTI VANILLADESK
-        const inlineNoteIcon = typeof Icons !== 'undefined' ? Icons.noteInline : '💬';
-        const buildInlineNoteHtml = (commentText) => {
-            const clean = commentText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\r\n|\n|\r/g, '<br>').trim();
-            return `\u200B<span class="inline-note-wrapper adv-inline-shell" data-widget-type="inline-note" contenteditable="false"><span class="inline-note-marker" contenteditable="false">${inlineNoteIcon}</span><span class="inline-note-data" style="display: none;">${clean}</span></span>\u200B`;
-        };
+        // 5. TOKENIZZAZIONE DEL CODICE INLINE (`...`)
+        // Protegge variabili e parametri tecnici (es. maintenance_work_mem) prima del parser del corsivo
+        const inlineCodes = [];
+        html = html.replace(/`([^`\n]+)`/g, (match, codeText) => {
+            const safeCode = codeText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            inlineCodes.push(`<code>${safeCode}</code>`);
+            return `<vd-inline-code id="${inlineCodes.length - 1}"></vd-inline-code>`;
+        });
 
-        html = html.replace(/%%([\s\S]*?)%%/g, (match, text) => buildInlineNoteHtml(text));
-        html = html.replace(/\^\[([\s\S]*?)\]/g, (match, text) => buildInlineNoteHtml(text));
-
-        // 4. PARSING DELLE INTESTAZIONI CON ISOLAMENTO A BLOCCO RIGIDO (\n\n)
+        // 6. PARSING DELLE INTESTAZIONI CON ISOLAMENTO A BLOCCO RIGIDO (\n\n)
         html = html.replace(/^###### (.*?)$/gm, '\n\n<h6>$1</h6>\n\n');
         html = html.replace(/^##### (.*?)$/gm, '\n\n<h5>$1</h5>\n\n');
         html = html.replace(/^#### (.*?)$/gm, '\n\n<h4>$1</h4>\n\n');
@@ -557,7 +619,6 @@ Object.assign(ExportManager, {
         html = html.replace(/^## (.*?)$/gm, '\n\n<h2>$1</h2>\n\n');
         html = html.replace(/^# (.*?)$/gm, '\n\n<h1>$1</h1>\n\n');
 
-        html = html.replace(/^>\s*(.*?)(?=\n|$)/gm, '<blockquote>$1</blockquote>');
         html = html.replace(/^---$/gm, '\n\n<hr>\n\n');
 
         // CONVERSIONE EVIDENZIAZIONI (Obsidian ==testo== e tag <mark>) IN STILE VANILLADESK
@@ -573,7 +634,7 @@ Object.assign(ExportManager, {
         html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
         html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
 
-        // 5. PARSER DI LISTE GERARCHICO AD ALBERO (Supporto annidamento reale sotto il LI genitore)
+        // 7. PARSER DI LISTE GERARCHICO AD ALBERO (Supporto annidamento reale sotto il LI genitore)
         const rawLines = html.split('\n');
         const processedLines = [];
 
@@ -744,27 +805,40 @@ Object.assign(ExportManager, {
 
         html = processedLines.join('\n');
 
-        // 6. ISOLAMENTO DEI BLOCCHI E PACKAGING IN <P>
+        // 8. ISOLAMENTO DEI BLOCCHI E PACKAGING IN <P>
         const blocks = html.split(/\n{2,}/);
         html = blocks.map(block => {
             const t = block.trim();
             if (!t) return '';
 
             // Se è già un blocco strutturale HTML o un token, NON avvolgere in <p> e NON sostituire \n con <br>
-            if (/^<(ul|ol|h[1-6]|blockquote|hr|vd-code-token|vd-table-token)/i.test(t)) {
+            if (/^<(ul|ol|h[1-6]|blockquote|hr|vd-code-token|vd-table-token|vd-quote-token)/i.test(t)) {
                 return t.replace(/>\s*\n\s*</g, '><');
             }
 
             return `<p>${t.replace(/\n/g, '<br>')}</p>`;
         }).join('');
 
-        // 7. RE-INIEZIONE DETERMINISTICA DEI BLOCCHI CODICE E TABELLE
+        // 9. RE-INIEZIONE DETERMINISTICA DEI TOKEN
+        // Garantisce che nessun token venga sostituito da stringa vuota se appartiene a uno scope genitore
+        html = html.replace(/<vd-quote-token id="(\d+)"><\/vd-quote-token>/gi, (match, idx) => {
+            const i = parseInt(idx, 10);
+            return quoteBlocks[i] !== undefined ? quoteBlocks[i] : match;
+        });
+
         html = html.replace(/<vd-code-token id="(\d+)"><\/vd-code-token>/gi, (match, idx) => {
-            return codeBlocks[parseInt(idx, 10)] || '';
+            const i = parseInt(idx, 10);
+            return codeBlocks[i] !== undefined ? codeBlocks[i] : match;
         });
 
         html = html.replace(/<vd-table-token id="(\d+)"><\/vd-table-token>/gi, (match, idx) => {
-            return tableBlocks[parseInt(idx, 10)] || '';
+            const i = parseInt(idx, 10);
+            return tableBlocks[i] !== undefined ? tableBlocks[i] : match;
+        });
+
+        html = html.replace(/<vd-inline-code id="(\d+)"><\/vd-inline-code>/gi, (match, idx) => {
+            const i = parseInt(idx, 10);
+            return inlineCodes[i] !== undefined ? inlineCodes[i] : match;
         });
 
         return html;

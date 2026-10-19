@@ -2,13 +2,80 @@
  * js/export-markdown.js
  * Sottomodulo di ExportManager dedicato all'Esportazione Markdown e Vault Obsidian.
  * - Genera il Frontmatter YAML per Obsidian (buildNoteFrontmatter) estraendo le proprietà da SYS_PROPERTIES_DB.
- * - Converte il DOM vivo in Markdown fedele (htmlToMarkdown) preservando tabelle, gerarchie liste, footnotes ed evidenziatori.
+ * - Converte il DOM vivo in Markdown fedele (htmlToMarkdown) con supporto nativo alla sintassi Obsidian:
+ *   * Wikilinks bidirezionali ([[Nota]], [[Nota|Alias]], [[Nota#Capitolo|Alias]]).
+ *   * Commenti inline Obsidian (%% testo %%).
+ *   * Preservazione integrale multi-riga per blockquote, callout e citazioni live (> line).
+ *   * Esportazione fedele dell'allineamento colonne nelle tabelle (:---, :---:, ---:).
  * - Esporta la singola nota o il documento cumulativo (generateMarkdownDocument).
- * - Esporta l'intero Workspace come Vault fisico nativo su disco tramite File System Access API (exportObsidianVault).
- * - Nell'estrazione di una singola nota in Markdown il titolo non viene duplicato né nel Frontmatter né nel testo.
+ * - Esporta l'intero Workspace come Vault fisico nativo su disco tramite File System Access API (exportObsidianVault),
+ *   omettendo la creazione di file .md ridondanti per le note utilizzate unicamente come cartelle.
  */
 
 Object.assign(ExportManager, {
+
+    // Helper per rilevare l'allineamento CSS di una singola cella
+    _getCellAlignment: (cell) => {
+        if (!cell) return 'left';
+        const style = (cell.getAttribute('style') || '').toLowerCase();
+        if (style.includes('text-align: center') || style.includes('text-align:center') || cell.classList.contains('text-center')) {
+            return 'center';
+        }
+        if (style.includes('text-align: right') || style.includes('text-align:right') || cell.classList.contains('text-right')) {
+            return 'right';
+        }
+        if (style.includes('text-align: left') || style.includes('text-align:left') || cell.classList.contains('text-left')) {
+            return 'left';
+        }
+        if (cell.style && cell.style.textAlign) {
+            const ta = cell.style.textAlign.toLowerCase();
+            if (ta === 'center' || ta === 'right' || ta === 'left') return ta;
+        }
+        return 'left';
+    },
+
+    // Ispeziona la tabella HTML per estrarre l'allineamento di ciascuna colonna
+    _getTableColumnAlignments: (table) => {
+        if (!table || !table.rows || table.rows.length === 0) return [];
+        const numCols = table.rows[0].cells.length;
+        const alignments = [];
+        for (let c = 0; c < numCols; c++) {
+            let foundAlign = 'left';
+            for (let r = 0; r < Math.min(table.rows.length, 3); r++) {
+                const cell = table.rows[r]?.cells[c];
+                if (cell) {
+                    const align = ExportManager._getCellAlignment(cell);
+                    if (align !== 'left') {
+                        foundAlign = align;
+                        break;
+                    }
+                }
+            }
+            alignments.push(foundAlign);
+        }
+        return alignments;
+    },
+
+    // Converte una tabella HTML in sintassi Markdown preservando l'allineamento delle colonne
+    _tableToMarkdown: (table) => {
+        if (!table || !table.rows || table.rows.length === 0) return '';
+        let mdTable = '\n';
+        const alignments = ExportManager._getTableColumnAlignments(table);
+
+        Array.from(table.rows).forEach((row, i) => {
+            let rowData = Array.from(row.cells).map(cell => (cell.innerText || cell.textContent || '').replace(/\|/g, '\\|').replace(/\n/g, ' ').trim());
+            mdTable += `| ${rowData.join(' | ')} |\n`;
+            if (i === 0) {
+                const delimiterRow = alignments.map(a => {
+                    if (a === 'center') return ':---:';
+                    if (a === 'right') return '---:';
+                    return ':---';
+                });
+                mdTable += `| ${delimiterRow.join(' | ')} |\n`;
+            }
+        });
+        return mdTable + '\n';
+    },
 
     // Genera il blocco standard YAML Frontmatter completo per una nota estraendo i dati da SYS_PROPERTIES_DB
     // Il parametro includeTitle controlla se inserire o meno la chiave title (falso quando il nome file coincide con il titolo)
@@ -115,7 +182,7 @@ Object.assign(ExportManager, {
         if (flatList.length === 1) {
             const singleNote = flatList[0].note;
             md += ExportManager.buildNoteFrontmatter(singleNote.id, false);
-            md += ExportManager.htmlToMarkdown(singleNote.content || '', includeImages) + `\n`;
+            md += ExportManager.htmlToMarkdown(singleNote.content || '', includeImages, true) + `\n`;
         } else {
             md += `# ${title}\n\n*Generato il: ${new Date().toLocaleString('it-IT')}*\n\n---\n\n`;
 
@@ -139,7 +206,7 @@ Object.assign(ExportManager, {
 
                 md += `${'#'.repeat(headingLevel)} ${item.note.title}\n\n`;
                 if (tagBlock) md += tagBlock;
-                md += ExportManager.htmlToMarkdown(item.note.content || '', includeImages) + `\n\n---\n\n`;
+                md += ExportManager.htmlToMarkdown(item.note.content || '', includeImages, true) + `\n\n---\n\n`;
             });
         }
 
@@ -177,7 +244,7 @@ Object.assign(ExportManager, {
             if (!targetDirHandle) return;
 
             const sanitizeFolderName = (name) => {
-                return (name || 'Senza Titolo').replace(/[\\/:*?"<>|]/g, '_').trim();
+                return (name || '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Senza Titolo';
             };
 
             const aliveNotes = AppState.notes.filter(n => !n.deletedAt);
@@ -215,17 +282,35 @@ Object.assign(ExportManager, {
 
             await createFolderHierarchy(null, targetDirHandle);
 
+            // Helper per determinare se una nota contenitore è priva di contenuti propri
+            const isNoteContentEmpty = (content) => {
+                if (!content || typeof content !== 'string') return true;
+                const temp = document.createElement('div');
+                temp.innerHTML = content;
+                if (temp.querySelector('img, audio, iframe, table, .adv-widget-shell, input, svg, pre, hr')) {
+                    return false;
+                }
+                const text = temp.textContent.replace(/[\u200B\uFEFF\u00A0\s\n\r]/g, '');
+                return text === '';
+            };
+
             // 2. Scrittura dei file Markdown (.md)
             let exportedNotesCount = 0;
-            const totalNotes = aliveNotes.length;
 
             for (const note of aliveNotes) {
+                // Se la nota è utilizzata unicamente come cartella (ha sotto-note) e non ha contenuti testuali o widget,
+                // non creiamo un file .md ridondante: la cartella fisica nel filesystem è già stata creata.
+                if (notesWithChildren.has(note.id) && isNoteContentEmpty(note.content)) {
+                    continue;
+                }
+
                 const parentHandle = note.parentId ? (dirHandleMap.get(note.parentId) || targetDirHandle) : targetDirHandle;
                 const fileName = sanitizeFolderName(note.title) + '.md';
 
                 // Genera Frontmatter YAML completo con proprietà di SYS_PROPERTIES_DB senza duplicare title nel corpo
                 let mdContent = ExportManager.buildNoteFrontmatter(note.id, false);
-                mdContent += ExportManager.htmlToMarkdown(note.content || '', true);
+                // forObsidian = true abilita wikilink [[...]], commenti %%...%% e callout multi-riga
+                mdContent += ExportManager.htmlToMarkdown(note.content || '', true, true);
 
                 // Normalizzazione globale caratteri non-breaking space prima della scrittura del file
                 mdContent = mdContent.replace(/\u00A0/g, ' ').replace(/\u200B/g, '');
@@ -273,7 +358,7 @@ Object.assign(ExportManager, {
         }
     },
 
-    htmlToMarkdown: (html, includeImages) => {
+    htmlToMarkdown: (html, includeImages = true, forObsidian = true) => {
         if (!html) return "";
         const temp = document.createElement('div');
         temp.innerHTML = html;
@@ -294,9 +379,57 @@ Object.assign(ExportManager, {
             span.outerHTML = raw;
         });
 
+        // 1. CONVERSIONE LINK INTERNI E FILE LINK (Supporto nativo Wikilink per Obsidian)
+        temp.querySelectorAll('a.internal-link').forEach(link => {
+            const noteId = link.getAttribute('data-note-id');
+            const targetNote = typeof Store !== 'undefined' ? Store.getNote(noteId) : null;
+            const targetTitle = targetNote ? targetNote.title : link.textContent.trim();
+            const anchor = link.getAttribute('data-anchor');
+            const label = link.textContent.trim();
+
+            let wiki = '';
+            if (anchor) {
+                if (label && label !== targetTitle && label !== `${targetTitle} > ${anchor}` && label !== anchor) {
+                    wiki = `[[${targetTitle}#${anchor}|${label}]]`;
+                } else {
+                    wiki = `[[${targetTitle}#${anchor}]]`;
+                }
+            } else {
+                if (label && label !== targetTitle) {
+                    wiki = `[[${targetTitle}|${label}]]`;
+                } else {
+                    wiki = `[[${targetTitle}]]`;
+                }
+            }
+            link.outerHTML = wiki;
+        });
+
+        temp.querySelectorAll('a.file-link').forEach(link => {
+            const path = link.getAttribute('data-file-path') || '';
+            const label = link.textContent.replace(/^📄\s*/, '').trim();
+            link.outerHTML = `[${label}](${path})`;
+        });
+
+        // 2. CONVERSIONE NOTE INLINE (%% commento %% per Obsidian, ^[nota] per markdown generico)
+        temp.querySelectorAll('.inline-note-wrapper').forEach(wrapper => {
+            const dataSpan = wrapper.querySelector('.inline-note-data');
+            let text = dataSpan ? dataSpan.innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '') : '';
+            
+            if (!text) {
+                const marker = wrapper.querySelector('.inline-note-marker');
+                text = marker ? (marker.getAttribute('data-tooltip') || '').replace(/<br\s*\/?>/gi, '\n') : '';
+            }
+            const cleanText = text.trim();
+            wrapper.outerHTML = forObsidian ? `%% ${cleanText} %%` : `^[${cleanText}]`;
+        });
+
+        temp.querySelectorAll('.inline-note-marker[data-tooltip]').forEach(marker => {
+            const text = marker.getAttribute('data-tooltip') || '';
+            const cleanText = text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
+            marker.outerHTML = forObsidian ? `%% ${cleanText} %%` : `^[${cleanText}]`;
+        });
+
         // TOKENIZZAZIONE PROTETTA DEI BLOCCHI DI CODICE
-        // Isola il codice sorgente grezzo per impedire che tag legittimi (<script>, <div>, <button>)
-        // vengano distrutti dalla successiva rimozione globale dei tag HTML
         const protectedCodeTokens = new Map();
         let codeTokenCounter = 0;
 
@@ -345,12 +478,19 @@ Object.assign(ExportManager, {
                         viewRows = AdvancedTable.filterRows(viewRows, state);
                         viewRows = AdvancedTable.sortRows(viewRows, state);
                         
-                        // Titolo del Database pulito senza icone arbitrarie (nessun emoji fantasma)
                         let mdTable = `\n**${state.title || 'Database'}**\n\n`;
                         const visibleCols = state.columns.filter(c => !c.hidden);
 
                         mdTable += `| ${visibleCols.map(c => c.name.replace(/\|/g, '\\|')).join(' | ')} |\n`;
-                        mdTable += `| ${visibleCols.map(() => '---').join(' | ')} |\n`;
+                        
+                        // Generazione riga delimitatore con rispetto allineamento colonne
+                        const dbDelimiters = visibleCols.map(c => {
+                            const a = c.align || (c.type === 'number' ? 'right' : 'left');
+                            if (a === 'center') return ':---:';
+                            if (a === 'right') return '---:';
+                            return ':---';
+                        });
+                        mdTable += `| ${dbDelimiters.join(' | ')} |\n`;
 
                         viewRows.forEach(r => {
                             const rowData = visibleCols.map(c => {
@@ -388,7 +528,6 @@ Object.assign(ExportManager, {
                         const codeText = state.content || '';
                         const title = state.title || '';
 
-                        // Costruzione blocco codice pulito senza prefissi artificiali come &lt;/&gt;
                         let codeBlockMd = `\`\`\`${lang === 'none' ? '' : lang}\n${codeText}\n\`\`\`\n`;
                         if (title && title !== 'Codice') {
                             codeBlockMd = `**${title}**\n` + codeBlockMd;
@@ -404,27 +543,20 @@ Object.assign(ExportManager, {
                     const citTitle = titleNode ? titleNode.innerText : 'Citazione';
                     
                     if (body) {
-                        wrapper.outerHTML = `<blockquote><b>${citTitle}</b><br>${body.innerHTML}</blockquote>`;
+                        wrapper.outerHTML = `<blockquote><b>Riferimento: ${citTitle}</b><br>${body.innerHTML}</blockquote>`;
                     } else {
-                        wrapper.outerHTML = `<blockquote><b>${citTitle}</b><br>[Contenuto mancante]</blockquote>`;
+                        wrapper.outerHTML = `<blockquote><b>Riferimento: ${citTitle}</b><br>[Contenuto mancante]</blockquote>`;
                     }
                 }
             });
         }
 
+        // Tabelle HTML semplici (fuori dai blockquote)
         temp.querySelectorAll('table:not(.adv-table)').forEach(table => {
-            let mdTable = '\n';
-            Array.from(table.rows).forEach((row, i) => {
-                let rowData = Array.from(row.cells).map(cell => cell.innerText.replace(/\|/g, '\\|').replace(/\n/g, ' '));
-                mdTable += `| ${rowData.join(' | ')} |\n`;
-                if (i === 0) {
-                    mdTable += `| ${Array.from(row.cells).map(() => '---').join(' | ')} |\n`;
-                }
-            });
-            table.outerHTML = mdTable + '\n';
+            table.outerHTML = ExportManager._tableToMarkdown(table);
         });
 
-        // CONVERSIONE RICORSIVA DELLE LISTE E DELLE CHECKLIST NEL DOM (Preservazione esatta dell'indentazione)
+        // CONVERSIONE RICORSIVA DELLE LISTE E DELLE CHECKLIST NEL DOM
         const convertListElementToMarkdown = (listEl, depth = 0) => {
             let mdOutput = '';
             const indent = '\t'.repeat(depth);
@@ -450,7 +582,6 @@ Object.assign(ExportManager, {
                     prefix = '- ';
                 }
 
-                // Estrazione del contenuto testuale dell'elemento escludendo eventuali sotto-liste annidate
                 let itemClone = li.cloneNode(true);
                 itemClone.querySelectorAll('ul, ol, input[type="checkbox"]').forEach(nested => nested.remove());
 
@@ -461,12 +592,13 @@ Object.assign(ExportManager, {
                 itemHtml = itemHtml.replace(/<(b|strong)[^>]*>(.*?)<\/\1>/gi, '**$2**');
                 itemHtml = itemHtml.replace(/<(i|em)[^>]*>(.*?)<\/\1>/gi, '*$2*');
                 itemHtml = itemHtml.replace(/<(s|strike)[^>]*>(.*?)<\/\1>/gi, '~~$2~~');
+                itemHtml = itemHtml.replace(/`([^`]+)`/g, '`$1`');
+                itemHtml = itemHtml.replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`');
                 itemHtml = itemHtml.replace(/<a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
                 itemHtml = itemHtml.replace(/<[^>]+>/g, '').trim();
 
                 mdOutput += `${indent}${prefix}${itemHtml}\n`;
 
-                // Ricorsione sulle sotto-liste annidate all'interno di questo LI
                 const nestedLists = Array.from(li.children).filter(child => child.tagName === 'UL' || child.tagName === 'OL');
                 nestedLists.forEach(nestedList => {
                     mdOutput += convertListElementToMarkdown(nestedList, depth + 1);
@@ -476,8 +608,8 @@ Object.assign(ExportManager, {
             return mdOutput;
         };
 
-        // Trova tutte le liste radice (non annidate dentro altre liste) e le converte in blocchi Markdown
-        const rootLists = Array.from(temp.querySelectorAll('ul, ol')).filter(l => !l.parentElement.closest('ul, ol'));
+        // Liste radice fuori dai blockquote
+        const rootLists = Array.from(temp.querySelectorAll('ul, ol')).filter(l => !l.parentElement.closest('ul, ol, blockquote'));
         rootLists.forEach(rootList => {
             const listMd = convertListElementToMarkdown(rootList, 0);
             const placeholder = document.createElement('div');
@@ -486,44 +618,123 @@ Object.assign(ExportManager, {
             rootList.parentNode.replaceChild(placeholder, rootList);
         });
 
-        temp.querySelectorAll('blockquote').forEach(bq => {
+        // 3. CONVERSIONE MULTI-RIGA DEI BLOCKQUOTE E CALLOUT
+        // Garantisce che ogni singola riga interna mantenga il prefisso '> ' e che elenchi/paragrafi/tabelle non vengano schiacciati
+        const convertBlockquoteToMarkdown = (bq) => {
             const header = bq.querySelector('.citation-header');
             if (header) header.remove();
-            let text = bq.innerHTML.replace(/<br\s*\/?>/gi, '\n');
-            text = text.replace(/<[^>]+>/g, '').trim(); 
-            bq.outerHTML = `\n> ${text.replace(/\n/g, '\n> ')}\n\n`;
-        });
 
-        // CONVERSIONE NOTE INLINE IN FORMATO STANDARD FOOTNOTE ^[nota]
-        temp.querySelectorAll('.inline-note-wrapper').forEach(wrapper => {
-            const dataSpan = wrapper.querySelector('.inline-note-data');
-            let text = dataSpan ? dataSpan.innerHTML.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '') : '';
-            
-            if (!text) {
-                const marker = wrapper.querySelector('.inline-note-marker');
-                text = marker ? (marker.getAttribute('data-tooltip') || '').replace(/<br\s*\/?>/gi, '\n') : '';
+            const clone = bq.cloneNode(true);
+
+            // Risolvi tabelle interne al blockquote
+            clone.querySelectorAll('table:not(.adv-table)').forEach(table => {
+                table.outerHTML = ExportManager._tableToMarkdown(table);
+            });
+
+            // Risolvi liste interne al blockquote
+            const innerLists = Array.from(clone.querySelectorAll('ul, ol')).filter(l => !l.parentElement.closest('ul, ol'));
+            innerLists.forEach(l => {
+                const listMd = convertListElementToMarkdown(l, 0);
+                const placeholder = document.createElement('div');
+                placeholder.textContent = '\n' + listMd.trimEnd() + '\n';
+                l.parentNode.replaceChild(placeholder, l);
+            });
+
+            // Risolvi tag di codice inline
+            clone.querySelectorAll('code').forEach(c => {
+                c.outerHTML = '`' + c.textContent + '`';
+            });
+
+            // Risolvi formattazione inline all'interno della citazione
+            clone.querySelectorAll('.hl-c5, mark').forEach(m => { m.outerHTML = `==${m.textContent}==`; });
+            clone.querySelectorAll('b, strong').forEach(b => { b.outerHTML = `**${b.textContent}**`; });
+            clone.querySelectorAll('i, em').forEach(i => { i.outerHTML = `*${i.textContent}*`; });
+            clone.querySelectorAll('s, strike, del').forEach(s => { s.outerHTML = `~~${s.textContent}~~`; });
+
+            // Risolvi link esterni residui nel blockquote
+            clone.querySelectorAll('a').forEach(a => {
+                const href = a.getAttribute('href') || '';
+                const txt = a.textContent.trim();
+                a.outerHTML = `[${txt}](${href})`;
+            });
+
+            // Risolvi immagini nel blockquote
+            clone.querySelectorAll('img').forEach(img => {
+                const ref = img.getAttribute('data-image-ref');
+                const src = ref ? ('assets/' + ref) : (img.getAttribute('src') || '');
+                img.outerHTML = `![${img.getAttribute('alt') || 'Immagine'}](${src})`;
+            });
+
+            // Risolvi paragrafi e a capo
+            clone.querySelectorAll('br').forEach(br => br.replaceWith('\n'));
+            clone.querySelectorAll('p, div').forEach(p => {
+                p.prepend('\n');
+                p.append('\n');
+            });
+
+            // Estrazione del testo pulito multi-riga
+            let rawText = clone.textContent || clone.innerText || '';
+            rawText = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+            let lines = rawText.split('\n').map(l => l.trimEnd());
+            while (lines.length > 0 && lines[0].trim() === '') lines.shift();
+            while (lines.length > 0 && lines[lines.length - 1].trim() === '') lines.pop();
+
+            if (lines.length === 0) return '\n> \n\n';
+
+            // Preserva o ricostruisce la sintassi del Callout Obsidian se presente in testa
+            if (forObsidian) {
+                const calloutBoldMatch = lines[0].match(/^\*\*\[([a-zA-Z]+)\]\s*(.*?)\*\*$/);
+                const calloutBracketMatch = !calloutBoldMatch ? lines[0].match(/^\[!([a-zA-Z]+)\]\s*(.*)$/) : null;
+                const calloutPlainMatch = (!calloutBoldMatch && !calloutBracketMatch) ? lines[0].match(/^\[([a-zA-Z]+)\]\s*(.*)$/) : null;
+
+                if (calloutBoldMatch) {
+                    const type = calloutBoldMatch[1].toUpperCase();
+                    const title = calloutBoldMatch[2].trim();
+                    lines[0] = title ? `[!${type}] ${title}` : `[!${type}]`;
+                } else if (calloutBracketMatch) {
+                    const type = calloutBracketMatch[1].toUpperCase();
+                    const title = calloutBracketMatch[2].trim();
+                    lines[0] = title ? `[!${type}] ${title}` : `[!${type}]`;
+                } else if (calloutPlainMatch) {
+                    const type = calloutPlainMatch[1].toUpperCase();
+                    const title = calloutPlainMatch[2].trim();
+                    lines[0] = title ? `[!${type}] ${title}` : `[!${type}]`;
+                }
+
+                // Rimuove eventuale riga vuota immediatamente successiva all'header per mantenere compatto il callout
+                if (lines.length > 2 && lines[1].trim() === '' && lines[0].startsWith('[!')) {
+                    lines.splice(1, 1);
+                }
             }
-            wrapper.outerHTML = `^[${text.trim()}]`;
-        });
 
-        temp.querySelectorAll('.inline-note-marker[data-tooltip]').forEach(marker => {
-            const text = marker.getAttribute('data-tooltip') || '';
-            const cleanText = text.replace(/<br\s*\/?>/gi, '\n').replace(/<[^>]+>/g, '').trim();
-            marker.outerHTML = `^[${cleanText}]`;
+            // Applica il prefisso '> ' ad ogni singola riga
+            const quotedLines = lines.map(line => {
+                if (line.trim() === '') return '>';
+                return `> ${line}`;
+            });
+
+            return '\n' + quotedLines.join('\n') + '\n\n';
+        };
+
+        temp.querySelectorAll('blockquote').forEach(bq => {
+            const mdQuote = convertBlockquoteToMarkdown(bq);
+            bq.outerHTML = mdQuote;
         });
 
         let htmlStr = temp.innerHTML;
-        
         htmlStr = htmlStr.replace(/<br\s*\/?>/gi, '\n');
         
-        // CONVERSIONE EVIDENZIAZIONI IN FORMATO OBSIDIAN ==testo==
+        // Conversione evidenziazioni
         htmlStr = htmlStr.replace(/<span[^>]*class=["'][^"']*hl-c\d+[^"']*["'][^>]*>(.*?)<\/span>/gi, '==$1==');
         htmlStr = htmlStr.replace(/<mark(?![^>]*class=["'][^"']*(?:search-highlight|active-highlight)[^"']*["'])[^>]*>(.*?)<\/mark>/gi, '==$1==');
 
         htmlStr = htmlStr.replace(/<(b|strong)[^>]*>(.*?)<\/\1>/gi, '**$2**');
         htmlStr = htmlStr.replace(/<(i|em)[^>]*>(.*?)<\/\1>/gi, '*$2*');
         htmlStr = htmlStr.replace(/<(s|strike)[^>]*>(.*?)<\/\1>/gi, '~~$2~~');
+        htmlStr = htmlStr.replace(/<code[^>]*>(.*?)<\/code>/gi, '`$1`');
         
+        // Link web esterni residui
         htmlStr = htmlStr.replace(/<a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
 
         if (includeImages) {
@@ -544,7 +755,7 @@ Object.assign(ExportManager, {
         htmlStr = htmlStr.replace(/<\/?(p|div)[^>]*>/gi, '\n');
         htmlStr = htmlStr.replace(/\n{3,}/g, '\n\n');
         
-        // Strip dei tag HTML residui (il codice sorgente è protetto dentro protectedCodeTokens e non viene toccato!)
+        // Strip dei tag HTML residui
         htmlStr = htmlStr.replace(/<[^>]+>/g, '');
 
         // Decodifica entità HTML del testo
@@ -552,13 +763,11 @@ Object.assign(ExportManager, {
         decoder.innerHTML = htmlStr;
         let finalMarkdown = decoder.value.trim();
 
-        // RE-INIEZIONE DETERMINISTICA DEI BLOCCHI CODICE PROTETTI
+        // Re-iniezione blocchi codice protetti
         protectedCodeTokens.forEach((codeBlockText, tokenKey) => {
             finalMarkdown = finalMarkdown.replace(tokenKey, codeBlockText.trim());
         });
 
-        // NORMALIZZAZIONE SPAZI: Conversione rigorosa di non-breaking space (&nbsp; / \u00A0) in spazi standard ASCII
-        // ed eliminazione di Zero-Width Space (\u200B) per evitare la comparsa del carattere <0xa0> negli editor di testo
         finalMarkdown = finalMarkdown.replace(/\u00A0/g, ' ').replace(/\u200B/g, '');
 
         return finalMarkdown.trim();
