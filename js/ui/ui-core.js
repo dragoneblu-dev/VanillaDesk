@@ -4,6 +4,7 @@
  * FEEDBACK VISIVO HEADER: Sincronizzazione automatica della classe header-unsaved
  * per colorare l'intera prima riga di rosso quando la sessione è ripristinata o non salvata su disco.
  * FEAT WORKSPACE GUIDE: Modale esplicativo guidato per nuovi utenti prima della selezione della cartella.
+ * REFACTOR: Rimossa implementazione morta di goHome, gestita in via esclusiva da ui-notes-lifecycle.js.
  */
 
 window.UI = {
@@ -25,40 +26,6 @@ window.UI = {
         if (typeof UI.Minimap !== 'undefined') {
             UI.Minimap.toggle();
         }
-    },
-
-    goHome: () => {
-        AppState.isSwitchingNote = true;
-        if (typeof UI.updateCurrentNoteTimer !== 'undefined') clearTimeout(UI.updateCurrentNoteTimer);
-
-        if (AppState.currentNoteId) {
-            const scrollArea = document.querySelector('.editor-scroll-content');
-            if (scrollArea) {
-                const currentNote = Store.getNote(AppState.currentNoteId);
-                if (currentNote) currentNote._lastScroll = scrollArea.scrollTop;
-            }
-            if (typeof Editor !== 'undefined') Editor.sanitizeContent();
-            if (typeof Store !== 'undefined') Store.triggerAutoSave(true);
-        }
-
-        UI.closeDrawer();
-        if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll(true);
-        if (typeof TableManager !== 'undefined') {
-            TableManager.hideTriggers();
-            TableManager.hideMenus();
-        }
-
-        AppState.currentNoteId = null;
-        AppState.isEditMode = false;
-
-        document.querySelectorAll('.node-content').forEach(el => el.classList.remove('active'));
-
-        UI.showEditor(false);
-        if (typeof UI.Minimap !== 'undefined') UI.Minimap.sync(); 
-        
-        setTimeout(() => {
-            AppState.isSwitchingNote = false;
-        }, 150);
     },
 
     formatDate: (isoString) => {

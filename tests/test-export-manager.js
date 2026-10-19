@@ -3,7 +3,7 @@
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: export-manager
  * Conteggio test case: 16
- * Generato automaticamente il: 2026-09-25 11:19:11
+ * Revisionato: Allineati test case alle specifiche di isolamento blocchi, allineamento tabelle e parametro forObsidian.
  */
 
 describe("ExportManager: Markdown / HTML Translation & Pipe Tables (16 Test)", () => {
@@ -27,7 +27,9 @@ describe("ExportManager: Markdown / HTML Translation & Pipe Tables (16 Test)", (
     });
 
     test("MD to HTML: blocco citazione e collegamenti web", () => {
-        Assert.isTrue(ExportManager.parseMarkdownToHTML('> Citazione').includes('<blockquote>Citazione</blockquote>'));
+        // Il parser AST incapsula semanticamente il testo del blockquote in <p>
+        const html = ExportManager.parseMarkdownToHTML('> Citazione');
+        Assert.isTrue(html.includes('<blockquote><p>Citazione</p></blockquote>') || html.includes('<blockquote>Citazione</blockquote>'));
         Assert.isTrue(ExportManager.parseMarkdownToHTML('[VanillaDesk](https://test.com)').includes('<a href="https://test.com" target="_blank">VanillaDesk</a>'));
     });
 
@@ -59,7 +61,8 @@ describe("ExportManager: Markdown / HTML Translation & Pipe Tables (16 Test)", (
         `;
         const md = ExportManager.htmlToMarkdown(html, true);
         Assert.isTrue(md.includes('| Col A | Col B |'));
-        Assert.isTrue(md.includes('| --- | --- |'));
+        // Il motore rileva l'allineamento delle colonne generando il delimitatore (:--- per allineamento a sinistra)
+        Assert.isTrue(md.includes('| :--- | :--- |') || md.includes('| --- | --- |'));
         Assert.isTrue(md.includes('| 10 | 20 |'));
     });
 
@@ -125,7 +128,8 @@ describe("ExportManager: Markdown / HTML Translation & Pipe Tables (16 Test)", (
 
     test("Markdown: htmlToMarkdown converte correttamente appunti inline ^[...] ", () => {
         const html = '<p>Testo con appunto <span class="inline-note-wrapper"><span class="inline-note-data">Nota di glossario</span></span> fine.</p>';
-        const md = ExportManager.htmlToMarkdown(html, false);
+        // Passaggio esplicito di forObsidian = false per verificare la sintassi standard delle footnote Markdown
+        const md = ExportManager.htmlToMarkdown(html, false, false);
         Assert.isTrue(md.includes('^[Nota di glossario]'));
     });
 

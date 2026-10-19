@@ -13,6 +13,7 @@
  * alla textarea delle note opzionali di espandersi armoniosamente fino al footer.
  * FEAT COPY WEB LINK: Aggiunto pulsante di copia negli appunti dell'indirizzo web dal popover contestuale fluttuante.
  * FEAT KEYBOARD SHORTCUT: Supporto alla combinazione Ctrl+Invio / Cmd+Invio nei drawer di creazione e modifica per conferma immediata.
+ * REFACTOR: Eliminata duplicazione di openLinkDirect delegando a EventsGlobal.openLinkDirectly.
  */
 
 const LinkManager = {
@@ -251,22 +252,11 @@ const LinkManager = {
         }
     },
 
-    // APERTURA DIRETTA DEL LINK (USATA ANCHE DAL CLICK CENTRALE CON ROTELLA DEL MOUSE)
+    // APERTURA DIRETTA DEL LINK (Delega al router centrale unificato)
     openLinkDirect: (link) => {
         if (!link || link.tagName !== 'A') return;
-
-        if (link.classList.contains('internal-link')) {
-            const noteId = link.getAttribute('data-note-id');
-            const anchor = link.getAttribute('data-anchor');
-            const refId = link.getAttribute('data-ref-id'); 
-            if (noteId && typeof UI !== 'undefined' && UI.selectNote) UI.selectNote(noteId, anchor, refId);
-        } else if (link.classList.contains('file-link')) {
-            const path = link.getAttribute('data-file-path');
-            if (path && typeof LinkManager !== 'undefined' && LinkManager.openViewer) LinkManager.openViewer(path, link);
-        } else {
-            if (link.href && !link.href.startsWith('javascript:')) {
-                window.open(link.href, '_blank');
-            }
+        if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal.openLinkDirectly === 'function') {
+            EventsGlobal.openLinkDirectly(link);
         }
     },
 

@@ -25,6 +25,7 @@
  * delle scorciatoie da tastiera anche in presenza di eventi sintetici o parziali.
  * FIX CANC/BACKSPACE TYPING HISTORY: Invocazione di registerTypingStart su Delete e Backspace per salvare
  * lo snapshot iniziale prima di cancellazioni continue o prolungate, proteggendo interi capitoli su Undo (Ctrl+Z).
+ * REFACTOR: Rimosso listener fallback middle-click da click (gestito nativamente da auxclick).
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -733,16 +734,6 @@ Object.assign(EventsGlobal, {
 
                 if (link.hasAttribute('download')) {
                     return; 
-                }
-
-                // Supporto per click centrale nel caso venga emesso sul listener click (legacy/fallback)
-                if (e.button === 1 || e.which === 2) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    if (Date.now() - EventsGlobal._lastMiddleClickTime < 250) return;
-                    EventsGlobal._lastMiddleClickTime = Date.now();
-                    EventsGlobal.openLinkDirectly(link);
-                    return;
                 }
 
                 if (AppState.isEditMode && link.closest('#noteContent')) {

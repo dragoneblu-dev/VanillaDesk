@@ -4,18 +4,13 @@
  * Tracciamento del dirty state volatile (_isDirty) all'applicazione di un template su nota esistente.
  * FEAT PREVIEW WIDGETS: Motore di anteprima visiva reale e fedele per tutti i componenti complessi
  * (Database, Viste Kanban, Calendario, Timeline Gantt, Albero WBS, Tabelle Pivot, Grafici, Codice, Bottoni Macro, Diari, Colonne).
+ * REFACTOR: Eliminata duplicazione di escape delegando a UI.escapeHTML.
  */
 
 const TemplateManager = {
 
     _escape: (str) => {
-        if (str === null || str === undefined) return '';
-        return String(str)
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/"/g, '&quot;')
-            .replace(/'/g, '&#39;');
+        return typeof UI !== 'undefined' && UI.escapeHTML ? UI.escapeHTML(str) : (str || '');
     },
 
     toggleEmptyOverlay: () => {

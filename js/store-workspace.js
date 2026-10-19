@@ -851,11 +851,6 @@ Object.assign(Store, {
             Store._baseDatabases = {};
             CryptoUtils.clearCache();
 
-            // Pulizia silente di eventuali file residui di journal da versioni precedenti
-            try {
-                await dirHandle.removeEntry('.vault_journal.json');
-            } catch (_) {}
-
             // Rilevamento Architettura
             let isLegacyMonolith = false;
             try {
@@ -904,7 +899,6 @@ Object.assign(Store, {
                             const dFile = await dHandle.getFile();
                             const dText = await dFile.text();
 
-                            // Caricamento diretto privo di mutazioni intermedie e doppia serializzazione (_id_hack)
                             await Store._decryptAndProcessFragment(dText, 'database', dbId);
                         }
                     }
@@ -1187,7 +1181,7 @@ Object.assign(Store, {
             Object.keys(cleanData).forEach(k => { if (k.startsWith('_')) delete cleanData[k]; });
             Store._diskHashes.notes[data.id] = Store._hashObj(cleanData, cryptoPrefix);
         } else if (type === 'database') {
-            // Assegnazione diretta dell'ID database senza manipolazioni JSON intermedie
+            // Assegnazione con supporto retrocompatibile a entityId, data.id e data._id_hack
             const dbId = entityId || data.id || data._id_hack; 
             if (data._id_hack) delete data._id_hack;
             
