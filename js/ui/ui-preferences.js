@@ -4,7 +4,7 @@
  * Gestione delle impostazioni dell'utente (Salvataggio in LocalStorage), 
  * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
  * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
- * FEAT I18N: Voce "Lingua" trasformata in sottomenu dedicato per non occupare spazio verticale in "Configura".
+ * FEAT UNIFIED IMPORT/EXPORT: Spostamento di "Carica Backup JSON..." nel sottomenu "Importa..." ed eliminazione del blocco ridondante File JSON.
  * FEAT CONTINUOUS EDIT: Attivazione di default (true) al primo avvio o su nuovi Workspace.
  * FIX READ-MODE CHECKLIST: Le checkbox delle To-Do list (.adv-checklist) restano attive e cliccabili
  * anche in modalità lettura (a meno che la nota non sia nel Cestino), consentendo la spunta rapida.
@@ -38,23 +38,6 @@ Object.assign(UI, {
                 onClick: () => Store.openWorkspace()
             },
             {
-                icon: Icons.file,
-                label: I18n.t('menu.json_files'),
-                type: 'submenu',
-                items: [
-                    {
-                        icon: Icons.import,
-                        label: I18n.t('menu.load_json'),
-                        onClick: () => Store.loadSnapshot()
-                    },
-                    {
-                        icon: Icons.download,
-                        label: I18n.t('menu.download_backup'),
-                        onClick: () => Store.downloadSnapshot()
-                    }
-                ]
-            },
-            {
                 icon: Icons.trash,
                 label: I18n.t('menu.trash'),
                 badge: trashCount > 0 ? trashCount : null,
@@ -63,23 +46,36 @@ Object.assign(UI, {
             },
             { type: 'divider' },
             {
-                icon: Icons.lightning || '📦',
-                label: I18n.t('menu.install_modpack'),
-                onClick: () => PackageManager.importModpack()
-            },
-            {
                 icon: Icons.import || '📥',
-                label: I18n.t('menu.import_obsidian') || "Importa Vault Obsidian...",
-                onClick: () => {
-                    if (typeof ObsidianImporter !== 'undefined') {
-                        ObsidianImporter.openModal();
+                label: I18n.t('menu.import') || "Importa...",
+                type: 'submenu',
+                items: [
+                    {
+                        icon: Icons.file,
+                        label: I18n.t('menu.load_json') || "Carica Backup JSON...",
+                        onClick: () => Store.loadSnapshot()
+                    },
+                    { type: 'divider' },
+                    {
+                        icon: Icons.lightning || '📦',
+                        label: I18n.t('menu.install_modpack'),
+                        onClick: () => PackageManager.importModpack()
+                    },
+                    {
+                        icon: Icons.import || '📥',
+                        label: I18n.t('menu.import_obsidian') || "Importa Vault Obsidian...",
+                        onClick: () => {
+                            if (typeof ObsidianImporter !== 'undefined') {
+                                ObsidianImporter.openModal();
+                            }
+                        }
+                    },
+                    {
+                        icon: Icons.file,
+                        label: I18n.t('menu.import_markdown'),
+                        onClick: () => ExportManager.importMarkdown()
                     }
-                }
-            },
-            {
-                icon: Icons.file,
-                label: I18n.t('menu.import_markdown'),
-                onClick: () => ExportManager.importMarkdown()
+                ]
             },
             {
                 icon: Icons.export,

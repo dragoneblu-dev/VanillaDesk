@@ -3,9 +3,8 @@
  * Modulo Core e Controller Interfaccia di Esportazione.
  * Gestisce lo stato della finestra di esportazione, la selezione a schede (Formato e Ambito),
  * l'attraversamento gerarchico dei discendenti (collectDescendants) e il dispatch
- * verso i motori specializzati (HTML, Markdown e Vault Obsidian).
- * Tutte le funzioni rimangono aggregate sull'oggetto globale ExportManager garantendo
- * la totale retrocompatibilità con gli altri moduli applicativi (AIBridge, LinkManager, ecc.).
+ * verso i motori specializzati (HTML, Markdown, Vault Obsidian e Backup JSON).
+ * FEAT UNIFIED JSON BACKUP: Integrazione nativa del Backup Monolitico JSON come quarto formato nel pannello esportazione.
  */
 
 const ExportManager = {
@@ -18,7 +17,7 @@ const ExportManager = {
             modal.classList.remove('hidden');
             // Inizializza lo stato dell'interfaccia con i valori predefiniti
             ExportManager.selectFormatCard(ExportManager._activeExportFormat || 'html');
-            if (ExportManager._activeExportFormat !== 'obsidian') {
+            if (ExportManager._activeExportFormat !== 'obsidian' && ExportManager._activeExportFormat !== 'json') {
                 ExportManager.selectScopeCard(AppState.currentNoteId ? 'current' : 'all');
             }
         }
@@ -57,11 +56,12 @@ const ExportManager = {
             mdOptions.style.display = (formatKey === 'md') ? 'block' : 'none';
         }
 
-        // Regola vincolante: se si seleziona "obsidian", l'unico ambito valido è "all" (Intero Workspace)
+        // Regola vincolante: per "obsidian" e "json", l'unico ambito valido è "all" (Intero Workspace)
         const scopeCards = document.querySelectorAll('#exportScopeCards .export-scope-card');
         const scopeNotice = document.getElementById('exportScopeNotice');
+        const isGlobalOnlyFormat = (formatKey === 'obsidian' || formatKey === 'json');
 
-        if (formatKey === 'obsidian') {
+        if (isGlobalOnlyFormat) {
             scopeCards.forEach(card => {
                 if (card.dataset.scope !== 'all') {
                     card.style.opacity = '0.35';
@@ -75,14 +75,20 @@ const ExportManager = {
                 }
             });
             ExportManager.selectScopeCard('all');
-            if (scopeNotice) scopeNotice.style.display = 'block';
+            if (scopeNotice) {
+                const hintText = formatKey === 'json'
+                    ? (I18n.t('export_dialog.scope_json_hint') || "Il backup JSON include l'intero Workspace per consentirne il ripristino.")
+                    : (I18n.t('export_dialog.scope_vault_hint') || "L'esportazione come Vault Obsidian include l'intera gerarchia del Workspace.");
+                scopeNotice.textContent = `ℹ️ ${hintText}`;
+                scopeNotice.style.display = 'block';
+            }
         } else {
             scopeCards.forEach(card => {
                 card.style.opacity = '1';
                 card.style.pointerEvents = 'auto';
             });
             if (scopeNotice) scopeNotice.style.display = 'none';
-            // Se non c'è una nota aperta e torniamo da obsidian, forza 'all'
+            // Se non c'è una nota aperta e torniamo da formati globali, forza 'all'
             if (!AppState.currentNoteId && ExportManager._activeExportScope !== 'all') {
                 ExportManager.selectScopeCard('all');
             }
@@ -90,8 +96,8 @@ const ExportManager = {
     },
 
     selectScopeCard: (scopeKey) => {
-        // Se siamo in modalità obsidian, impedisce di selezionare scope diversi da 'all'
-        if (ExportManager._activeExportFormat === 'obsidian' && scopeKey !== 'all') {
+        // Se siamo in modalità obsidian o json, impedisce di selezionare scope diversi da 'all'
+        if ((ExportManager._activeExportFormat === 'obsidian' || ExportManager._activeExportFormat === 'json') && scopeKey !== 'all') {
             return;
         }
 
@@ -120,7 +126,9 @@ const ExportManager = {
 
         ExportManager.closeModal();
 
-        if (format === 'obsidian') {
+        if (format === 'json') {
+            Store.downloadSnapshot();
+        } else if (format === 'obsidian') {
             ExportManager.exportObsidianVault();
         } else {
             ExportManager.processExport(scope, format);

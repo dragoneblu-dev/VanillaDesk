@@ -4,6 +4,8 @@
  * Tracciamento del dirty state volatile (_isDirty) all'applicazione di un template su nota esistente.
  * FEAT PREVIEW WIDGETS: Motore di anteprima visiva reale e fedele per tutti i componenti complessi
  * (Database, Viste Kanban, Calendario, Timeline Gantt, Albero WBS, Tabelle Pivot, Grafici, Codice, Bottoni Macro, Diari, Colonne).
+ * FEAT PAGE PROPERTIES & TAGS: Salvataggio e ripristino automatico di tag e proprietà di pagina da/verso SYS_PROPERTIES_DB
+ * con ripristino colonne mancanti, auto-registrazione opzioni select e aggiornamento immediato dell'interfaccia.
  * REFACTOR: Eliminata duplicazione di escape delegando a UI.escapeHTML.
  */
 
@@ -616,14 +618,49 @@ const TemplateManager = {
 
         const safeTitle = (tpl.title || I18n.t('templates.default_new_name')).replace(/</g, '&lt;');
 
+        // Genera il riepilogo visivo dei tag e delle proprietà associate a questo template
+        let propsBadgeHtml = '';
+        if (tpl.properties) {
+            const hasTags = Array.isArray(tpl.properties.tags) && tpl.properties.tags.length > 0;
+            const hasFields = Array.isArray(tpl.properties.fields) && tpl.properties.fields.length > 0;
+            if (hasTags || hasFields) {
+                let chips = '';
+                if (hasTags) {
+                    tpl.properties.tags.forEach(t => {
+                        chips += `<span class="adv-select-pill default-color" style="padding:2px 8px; font-size:0.75rem;">🏷️ #${TemplateManager._escape(t)}</span>`;
+                    });
+                }
+                if (hasFields) {
+                    tpl.properties.fields.forEach(f => {
+                        let valStr = '';
+                        if (typeof f.value === 'object' && f.value !== null) {
+                            if (f.value.title) valStr = f.value.title;
+                            else if (f.value.start) valStr = `${f.value.start}${f.value.end ? ' ➔ ' + f.value.end : ''}`;
+                            else valStr = JSON.stringify(f.value);
+                        } else {
+                            valStr = String(f.value);
+                        }
+                        chips += `<span class="adv-select-pill default-color" style="padding:2px 8px; font-size:0.75rem;"><b>${TemplateManager._escape(f.colName)}:</b> ${TemplateManager._escape(valStr)}</span>`;
+                    });
+                }
+                propsBadgeHtml = `
+                    <div style="background:var(--box-bg); border:1px dashed var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:12px; display:flex; flex-direction:column; gap:6px;">
+                        <span style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase;">${I18n.t('templates.preview_props_title') || 'Proprietà e Tag inclusi nel Template:'}</span>
+                        <div style="display:flex; flex-wrap:wrap; gap:6px;">${chips}</div>
+                    </div>
+                `;
+            }
+        }
+
         // Genera il contenuto di anteprima idratato con rendering visivo reale per tutti i widget
         const previewContentHTML = TemplateManager.generateTemplatePreviewHTML(tpl);
 
         const bodyHTML = `
             <div style="display:flex; flex-direction:column; height: 100%;">
-                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; flex-shrink: 0;">
+                <div style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 12px; border-bottom: 1px solid var(--border-color); padding-bottom: 10px; flex-shrink: 0;">
                     ${I18n.t('templates.preview_desc')}
                 </div>
+                ${propsBadgeHtml}
                 <div class="editor-content adv-scroll-container" style="flex: 1; border: 1px solid var(--border-color); border-radius: 6px; padding: 20px; overflow-y: auto; background: var(--bg-color);">
                     <div style="pointer-events: none; opacity: 0.95; user-select: none; zoom: 0.75;">
                         ${previewContentHTML}
@@ -667,6 +704,11 @@ const TemplateManager = {
                     ? I18n.t('templates.contains_text_only') 
                     : (widgetCount === 1 ? I18n.t('templates.contains_single_widget') : I18n.t('templates.contains_multi_widgets', { count: widgetCount }));
 
+                const propCount = (tpl.properties?.tags?.length || 0) + (tpl.properties?.fields?.length || 0);
+                if (propCount > 0) {
+                    countStr += I18n.t('templates.contains_props_info', { count: propCount }) || ` • ${propCount} proprietà/tag`;
+                }
+
                 bodyHTML += `
                     <div style="background:var(--bg-color); border:1px solid var(--border-color); padding:15px; border-radius:6px; display:flex; flex-direction:column; gap:10px;">
                         <div style="display:flex; justify-content:space-between; align-items:flex-start;">
@@ -709,9 +751,40 @@ const TemplateManager = {
             title: tplTitle.trim(),
             content: note.content,
             widgets: {},
+            properties: {
+                tags: [],
+                fields: []
+            },
             updatedAt: new Date().toISOString(),
             lastUsed: new Date().toISOString()
         };
+
+        // 1. Raccolta delle Proprietà e Tag della pagina da SYS_PROPERTIES_DB
+        if (AppState.databases && AppState.databases['SYS_PROPERTIES_DB']) {
+            const propsDb = AppState.databases['SYS_PROPERTIES_DB'];
+            const sysRow = (propsDb.rows || []).find(r => r && r.cells && r.cells['sys_c_note'] === noteId);
+            if (sysRow && sysRow.cells) {
+                // Tag di pagina
+                if (Array.isArray(sysRow.cells['sys_c_tags'])) {
+                    tpl.properties.tags = sysRow.cells['sys_c_tags'].filter(t => t && String(t).trim() !== '');
+                }
+
+                // Altre proprietà di pagina censite
+                (propsDb.columns || []).forEach(col => {
+                    if (col.id === 'sys_c_note' || col.id === 'sys_c_tags') return;
+                    const val = sysRow.cells[col.id];
+                    if (val !== undefined && val !== null && val !== '') {
+                        if (Array.isArray(val) && val.length === 0) return;
+                        tpl.properties.fields.push({
+                            colId: col.id,
+                            colName: col.name,
+                            colType: col.type,
+                            value: JSON.parse(JSON.stringify(val))
+                        });
+                    }
+                });
+            }
+        }
 
         const parser = new DOMParser();
         const doc = parser.parseFromString(note.content, 'text/html');
@@ -860,6 +933,97 @@ const TemplateManager = {
             editorEl.innerHTML = rawHtml;
         } else {
             editorEl.innerHTML += '<p><br></p>' + rawHtml;
+        }
+
+        // =========================================================================
+        // SINCRONIZZAZIONE DIRETTA DI PROPRIETA' E TAG IN SYS_PROPERTIES_DB
+        // =========================================================================
+        if (tpl.properties && (tpl.properties.tags?.length > 0 || tpl.properties.fields?.length > 0)) {
+            if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.ensureSystemPropertiesDB === 'function') {
+                AdvancedTable.ensureSystemPropertiesDB();
+            }
+
+            const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+            if (propsDb && Array.isArray(propsDb.rows) && Array.isArray(propsDb.columns)) {
+                let sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
+                if (!sysRow) {
+                    sysRow = {
+                        id: 'sys_r_' + note.id,
+                        createdAt: Date.now(),
+                        updatedAt: Date.now(),
+                        cells: { 'sys_c_note': note.id, 'sys_c_tags': [] }
+                    };
+                    propsDb.rows.push(sysRow);
+                }
+
+                // 1. Unione dei Tag (senza duplicati)
+                if (Array.isArray(tpl.properties.tags) && tpl.properties.tags.length > 0) {
+                    if (!Array.isArray(sysRow.cells['sys_c_tags'])) sysRow.cells['sys_c_tags'] = [];
+                    if (!propsDb.selectOptions) propsDb.selectOptions = {};
+                    if (!Array.isArray(propsDb.selectOptions['sys_c_tags'])) propsDb.selectOptions['sys_c_tags'] = [];
+
+                    tpl.properties.tags.forEach(t => {
+                        const cleanTag = String(t).trim();
+                        if (cleanTag) {
+                            if (!sysRow.cells['sys_c_tags'].includes(cleanTag)) {
+                                sysRow.cells['sys_c_tags'].push(cleanTag);
+                            }
+                            if (!propsDb.selectOptions['sys_c_tags'].includes(cleanTag)) {
+                                propsDb.selectOptions['sys_c_tags'].push(cleanTag);
+                            }
+                        }
+                    });
+                }
+
+                // 2. Assegnazione Proprietà (con ricreazione automatica della colonna se non esiste ancora nel Workspace)
+                if (Array.isArray(tpl.properties.fields) && tpl.properties.fields.length > 0) {
+                    tpl.properties.fields.forEach(f => {
+                        if (!f.colName) return;
+                        let colDef = propsDb.columns.find(c => c.name.toLowerCase() === f.colName.toLowerCase());
+                        if (!colDef) {
+                            const newColId = 'prop_' + Store.generateId();
+                            colDef = {
+                                id: newColId,
+                                name: f.colName,
+                                type: f.colType || 'text',
+                                width: f.colType === 'note_link' ? 220 : 180,
+                                hidden: false
+                            };
+                            propsDb.columns.push(colDef);
+                        }
+
+                        // Assegna il valore tipizzato dal template
+                        sysRow.cells[colDef.id] = JSON.parse(JSON.stringify(f.value));
+
+                        // Se select o multi-select, registra l'opzione in selectOptions
+                        if (['select', 'multi-select'].includes(colDef.type)) {
+                            if (!propsDb.selectOptions[colDef.id]) propsDb.selectOptions[colDef.id] = [];
+                            const valArray = Array.isArray(f.value) ? f.value : (f.value ? [f.value] : []);
+                            valArray.forEach(v => {
+                                const clean = String(v).trim();
+                                if (clean && !propsDb.selectOptions[colDef.id].includes(clean)) {
+                                    propsDb.selectOptions[colDef.id].push(clean);
+                                }
+                            });
+                        }
+                    });
+                }
+
+                sysRow.updatedAt = Date.now();
+                if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.setState === 'function') {
+                    AdvancedTable.setState('SYS_PROPERTIES_DB', propsDb);
+                }
+
+                // Aggiornamento reattivo dell'interfaccia (icona badge e proprietà di pagina in cima alla nota)
+                if (typeof UI !== 'undefined') {
+                    if (typeof UI.checkAndUpdatePropertiesIcon === 'function') {
+                        UI.checkAndUpdatePropertiesIcon(note.id);
+                    }
+                    if (typeof UI.renderPageHeaderProperties === 'function') {
+                        UI.renderPageHeaderProperties(note);
+                    }
+                }
+            }
         }
 
         tpl.lastUsed = new Date().toISOString();

@@ -34,6 +34,7 @@ dict: {
             session_recovered: "Sessione Ripristinata (Senza Workspace)"
         },
         menu: {
+            import: "Importa...",
             import_obsidian: "Importa Vault Obsidian...",
             configure: "Configura",
             language: "Lingua / Language",
@@ -45,7 +46,7 @@ dict: {
             trash: "Cestino",
             install_modpack: "Installa Modulo (Modpack)...",
             import_markdown: "Importa file Markdown...",
-            export_doc: "Esporta Doc. Unico...",
+            export_doc: "Esporta...",
             no_word_wrap: "No Word Wrap",
             continuous_edit: "Edit Continuo",
             security: "Sicurezza e Password...",
@@ -74,6 +75,9 @@ dict: {
             toast_success: "Vault importato con successo: {notes} note, {folders} cartelle e {assets} allegati!"
         },
 export_dialog: {
+    fmt_json_title: "Backup JSON",
+    fmt_json_desc: "Archivio completo per ripristino",
+    scope_json_hint: "Il backup JSON include l'intero workspace per consentirne il ripristino.",
     title: "Esporta Documento o Vault",
     step1_format: "1. Scegli Formato di Esportazione:",
     fmt_html_title: "Pagina Web HTML",
@@ -246,6 +250,8 @@ export_dialog: {
             alert_columns_barrier: "Sposta il cursore fuori dalle colonne prima di inserire questo elemento."
         },
         templates: {
+            preview_props_title: "Proprietà e Tag inclusi nel Template:",
+            contains_props_info: " • {count} proprietà/tag",
             drawer_title: "Gestione Template",
             preview_title: "Anteprima: {title}",
             preview_desc: "Anteprima del template. Clicca il pulsante in basso per applicarlo alla nota corrente.",
@@ -1125,7 +1131,7 @@ audio: {
         },
         home_dashboard: {
             title: "Dashboard Workspace",
-            add_citation: "Aggiungi Citazione Live in Home",
+            add_citation: "Aggiungi Citazione Live",
             ws_stats_title: "PANORAMICA E STATISTICHE WORKSPACE",
             stat_active_notes: "Note Attive",
             stat_trash: "Nel Cestino",
@@ -1384,7 +1390,8 @@ audio: {
             trash: "Trash",
             install_modpack: "Install Modpack...",
             import_markdown: "Import Markdown file...",
-            export_doc: "Export Document...",
+            import: "Import...",
+            export_doc: "Export...",
             no_word_wrap: "No Word Wrap",
             continuous_edit: "Continuous Edit",
             security: "Security & Password...",
@@ -1413,6 +1420,9 @@ audio: {
             toast_success: "Vault successfully imported: {notes} notes, {folders} folders, and {assets} attachments!"
         },
 export_dialog: {
+    fmt_json_title: "JSON Backup",
+    fmt_json_desc: "Full monolithic archive",
+    scope_json_hint: "JSON backup includes the entire workspace for complete restoration.",
     title: "Export Document or Vault",
     step1_format: "1. Choose Export Format:",
     fmt_html_title: "HTML Webpage",
@@ -1585,6 +1595,8 @@ export_dialog: {
             alert_columns_barrier: "Please move the cursor outside of columns before inserting this element."
         },
         templates: {
+            preview_props_title: "Properties and Tags included in Template:",
+            contains_props_info: " • {count} properties/tags",
             drawer_title: "Template Manager",
             preview_title: "Preview: {title}",
             preview_desc: "Template preview. Click the button below to apply it to the current note.",
@@ -2722,7 +2734,8 @@ audio: {
             trash: "Papelera",
             install_modpack: "Instalar Modpack...",
             import_markdown: "Importar archivo Markdown...",
-            export_doc: "Exportar Documento...",
+            import: "Importar...",
+            export_doc: "Exportar...",
             no_word_wrap: "Sin Ajuste de Línea",
             continuous_edit: "Edición Continua",
             security: "Seguridad y Contraseña...",
@@ -2751,6 +2764,9 @@ audio: {
             toast_success: "¡Vault importado con éxito: {notes} notas, {folders} carpetas y {assets} archivos adjuntos!"
         },
 export_dialog: {
+    fmt_json_title: "Copia JSON",
+    fmt_json_desc: "Archivo completo de restauración",
+    scope_json_hint: "La copia JSON incluye todo el espacio de trabajo para su restauración.",
     title: "Exportar Documento o Vault",
     step1_format: "1. Elige el Formato de Exportación:",
     fmt_html_title: "Página Web HTML",
@@ -2923,6 +2939,8 @@ export_dialog: {
             alert_columns_barrier: "Mueve el cursor fuera de las columnas antes de insertar este elemento."
         },
         templates: {
+            preview_props_title: "Propiedades y Etiquetas incluidas en la Plantilla:",
+            contains_props_info: " • {count} propiedades/etiquetas",
             drawer_title: "Gestor de Plantillas",
             preview_title: "Vista previa: {title}",
             preview_desc: "Vista previa de la plantilla. Haz clic abajo para aplicarla a la nota actual.",
@@ -4061,7 +4079,8 @@ audio: {
             trash: "Papierkorb",
             install_modpack: "Modpack installieren...",
             import_markdown: "Markdown-Datei importieren...",
-            export_doc: "Dokument exportieren...",
+            import: "Importieren...",
+            export_doc: "Exportieren...",
             no_word_wrap: "Kein Zeilenumbruch",
             continuous_edit: "Fortlaufendes Bearbeiten",
             security: "Sicherheit & Passwort...",
@@ -4090,6 +4109,9 @@ audio: {
             toast_success: "Vault erfolgreich importiert: {notes} Notizen, {folders} Ordner und {assets} Anhänge!"
         },
 export_dialog: {
+    fmt_json_title: "JSON-Backup",
+    fmt_json_desc: "Vollständiges Wiederherstellungsarchiv",
+    scope_json_hint: "Das JSON-Backup umfasst den gesamten Workspace für eine vollständige Wiederherstellung.",
     title: "Dokument oder Vault exportieren",
     step1_format: "1. Exportformat wählen:",
     fmt_html_title: "HTML-Webseite",
@@ -4262,6 +4284,8 @@ export_dialog: {
             alert_columns_barrier: "Bewege den Cursor aus den Spalten heraus, bevor du dieses Element einfügst."
         },
         templates: {
+            preview_props_title: "Im Template enthaltene Eigenschaften und Tags:",
+            contains_props_info: " • {count} Eigenschaften/Tags",
             drawer_title: "Vorlagenverwaltung",
             preview_title: "Vorschau: {title}",
             preview_desc: "Vorlagenvorschau. Klicke unten, um sie auf die aktuelle Notiz anzuwenden.",

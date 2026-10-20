@@ -1,15 +1,15 @@
 /**
  * UI-Modals.js
  * Iniezione dinamica delle finestre modali nel DOM.
- * REFACTOR: Rinnovata integralmente la finestra di esportazione con selezione a schede
- * a griglia (Selection Cards) per Formato (HTML, Markdown, Vault Obsidian) e Ambito (Corrente, Ramo, Workspace).
+ * REFACTOR: Integrazione della scheda "Backup JSON" direttamente nel pannello di esportazione a 4 colonne,
+ * unificando tutti i flussi di output dell'applicazione in un'unica interfaccia coerente.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     const modalsHTML = `
     <!-- Export Modal -->
     <div id="exportModal" class="link-modal-overlay hidden">
-        <div class="link-modal export-modal modal-animate" style="width: 580px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column;">
+        <div class="link-modal export-modal modal-animate" style="width: 760px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column;">
             <div class="link-modal-header" style="flex-shrink: 0;">
                 <div class="link-modal-title">
                     <span style="display:flex; align-items:center; gap:8px;">
@@ -22,28 +22,34 @@ document.addEventListener('DOMContentLoaded', () => {
             
             <div class="link-modal-list adv-scroll-container" style="padding: 20px; display:flex; flex-direction:column; gap:18px; overflow-y:auto; flex:1;">
                 
-                <!-- PASSO 1: FORMATO -->
+                <!-- PASSO 1: FORMATO (4 CARDS) -->
                 <div>
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:8px;">
                         ${I18n.t('export_dialog.step1_format')}
                     </label>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;" id="exportFormatCards">
-                        <div class="selection-card export-format-card active" data-format="html" onclick="ExportManager.selectFormatCard('html')" style="padding:12px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:rgba(37,99,235,0.06); transition:all 0.2s;">
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;" id="exportFormatCards">
+                        <div class="selection-card export-format-card active" data-format="html" onclick="ExportManager.selectFormatCard('html')" style="padding:12px 8px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:rgba(37,99,235,0.06); transition:all 0.2s;">
                             <span style="color:var(--accent-color); display:inline-flex; transform:scale(1.2);">${Icons.book}</span>
-                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">HTML</div>
-                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">Doc. Unico per Stampa/PDF</div>
+                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">${I18n.t('export_dialog.fmt_html_title')}</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">${I18n.t('export_dialog.fmt_html_desc')}</div>
                         </div>
 
-                        <div class="selection-card export-format-card" data-format="md" onclick="ExportManager.selectFormatCard('md')" style="padding:12px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
+                        <div class="selection-card export-format-card" data-format="md" onclick="ExportManager.selectFormatCard('md')" style="padding:12px 8px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
                             <span style="color:var(--text-primary); display:inline-flex; transform:scale(1.2);">${Icons.file}</span>
-                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">Markdown</div>
-                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">File .md con Frontmatter YAML</div>
+                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">${I18n.t('export_dialog.fmt_md_title')}</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">${I18n.t('export_dialog.fmt_md_desc')}</div>
                         </div>
 
-                        <div class="selection-card export-format-card" data-format="obsidian" onclick="ExportManager.selectFormatCard('obsidian')" style="padding:12px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
+                        <div class="selection-card export-format-card" data-format="obsidian" onclick="ExportManager.selectFormatCard('obsidian')" style="padding:12px 8px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
                             <span style="color:var(--tx-c8); display:inline-flex; transform:scale(1.2);">${Icons.folderOpen}</span>
-                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">Vault Obsidian</div>
-                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">Cartelle, note e assets fisici</div>
+                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">${I18n.t('export_dialog.fmt_vault_title')}</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">${I18n.t('export_dialog.fmt_vault_desc')}</div>
+                        </div>
+
+                        <div class="selection-card export-format-card" data-format="json" onclick="ExportManager.selectFormatCard('json')" style="padding:12px 8px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
+                            <span style="color:var(--tx-c6); display:inline-flex; transform:scale(1.2);">${Icons.download}</span>
+                            <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">${I18n.t('export_dialog.fmt_json_title') || 'Backup JSON'}</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">${I18n.t('export_dialog.fmt_json_desc') || 'Archivio unico di ripristino'}</div>
                         </div>
                     </div>
                 </div>
@@ -56,13 +62,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;" id="exportScopeCards">
                         <div class="selection-card export-scope-card active" data-scope="current" onclick="ExportManager.selectScopeCard('current')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:rgba(37,99,235,0.06); transition:all 0.2s;">
                             <span style="display:inline-flex; color:var(--accent-color);">${Icons.file}</span>
-                            <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">Solo Corrente</div>
+                            <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">${I18n.t('export_dialog.scope_current')}</div>
                             <div style="font-size:0.7rem; color:var(--text-secondary);">La nota aperta</div>
                         </div>
 
                         <div class="selection-card export-scope-card" data-scope="branch" onclick="ExportManager.selectScopeCard('branch')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
                             <span style="display:inline-flex; color:var(--text-primary);">${Icons.treeNode}</span>
-                            <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">Ramo Sotto-note</div>
+                            <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">${I18n.t('export_dialog.scope_branch')}</div>
                             <div style="font-size:0.7rem; color:var(--text-secondary);">Nota e figlie</div>
                         </div>
 
@@ -73,7 +79,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         </div>
                     </div>
                     <div id="exportScopeNotice" style="font-size:0.75rem; color:var(--text-secondary); margin-top:6px; display:none; font-style:italic;">
-                        ℹ️ L'esportazione come Vault Obsidian include l'intera gerarchia del Workspace.
+                        ℹ️ L'esportazione come Vault Obsidian o Backup JSON include l'intero Workspace.
                     </div>
                 </div>
 
@@ -81,7 +87,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <div id="exportMdOptions" style="display:none; background:rgba(0,0,0,0.02); padding:10px 14px; border-radius:6px; border:1px dashed var(--border-color);">
                     <label style="display:flex; align-items:center; gap:8px; font-size:0.85rem; cursor:pointer; color:var(--text-primary);">
                         <input type="checkbox" id="exportMdIncludeImages" checked style="cursor:pointer; transform:scale(1.15);">
-                        <span>Includi riferimenti alle immagini locali nel testo Markdown</span>
+                        <span>${I18n.t('export_dialog.opt_include_images')}</span>
                     </label>
                 </div>
             </div>
