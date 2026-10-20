@@ -423,6 +423,9 @@ export_dialog: {
             new_card: "Nuova scheda"
         },
         adv_record: {
+            hidden_fields_count: "Campi nascosti in questa vista ({count})",
+            unhide_field: "Mostra in questa vista",
+            unvalued_properties_count: "Altre proprietà disponibili ({count} non valorizzate)",
             title_system: "🏷️ Tag e Proprietà Pagina",
             title_record: "📄 Dettaglio Record",
             title_record_db: "📄 Dettaglio Record: {dbTitle}",
@@ -1759,6 +1762,9 @@ export_dialog: {
             new_card: "New card"
         },
         adv_record: {
+            hidden_fields_count: "Hidden fields in this view ({count})",
+            unhide_field: "Show in this view",
+            unvalued_properties_count: "Other available properties ({count} empty)",
             title_system: "🏷️ Page Tags & Properties",
             title_record: "📄 Record Details",
             title_record_db: "📄 Record Details: {dbTitle}",
@@ -3094,6 +3100,9 @@ export_dialog: {
             new_card: "Nueva tarjeta"
         },
         adv_record: {
+            hidden_fields_count: "Campos ocultos en esta vista ({count})",
+            unhide_field: "Mostrar en esta vista",
+            unvalued_properties_count: "Otras propiedades disponibles ({count} sin valor)",
             title_system: "🏷️ Etiquetas y Propiedades",
             title_record: "📄 Detalle del Registro",
             title_record_db: "📄 Detalle del Registro: {dbTitle}",
@@ -4430,6 +4439,9 @@ export_dialog: {
             new_card: "Neue Karte"
         },
         adv_record: {
+            hidden_fields_count: "Ausgeblendete Felder in dieser Ansicht ({count})",
+            unhide_field: "In dieser Ansicht anzeigen",
+            unvalued_properties_count: "Weitere verfügbare Eigenschaften ({count} ohne Wert)",
             title_system: "🏷️ Seiten-Tags & Eigenschaften",
             title_record: "📄 Datensatzdetails",
             title_record_db: "📄 Datensatzdetails: {dbTitle}",

@@ -18,6 +18,9 @@
  * DEFAULT COLOR: Allineamento colore pulsanti macro su #2563eb per coerenza con la palette selezionabile.
  * FEAT EMPTY BUTTON LABEL: Supporto per pulsanti senza testo (solo icona) se buttonLabel è vuoto.
  * REFACTOR CSS ARCHITECTURE: Eliminazione degli stili inline e delega completa alle classi di layout in advanced-table.css.
+ * FEAT SMART SPARSE PROPERTIES (SYS_PROPERTIES_DB): Nelle proprietà di pagina, mostra in cima i soli campi valorizzati
+ * (+ i Tag) e raccoglie tutti i campi non compilati nell'accordion ripiegabile in fondo.
+ * Nei database standard preserva la visualizzazione completa dei campi vuoti per non ostacolare l'inserimento dati.
  */
 
 Object.assign(AdvancedTable, {
@@ -79,7 +82,7 @@ Object.assign(AdvancedTable, {
             return;
         }
 
-        // Memoria dello stato dell'accordion dei campi nascosti prima del ridisegno
+        // Memoria dello stato dell'accordion prima del ridisegno
         const existingAccordion = document.querySelector('.adv-hidden-fields-details');
         const wasAccordionOpen = existingAccordion ? existingAccordion.hasAttribute('open') : false;
 
@@ -128,8 +131,20 @@ Object.assign(AdvancedTable, {
             `;
         }
 
+        // Helper per verificare se un valore è vuoto o non valorizzato
+        const isValueEmpty = (v) => {
+            if (v === '' || v === null || v === undefined) return true;
+            if (Array.isArray(v)) return v.length === 0;
+            if (typeof v === 'object') {
+                if (v.start || v.end) return false;
+                if (v.noteId || v.title) return false;
+                return Object.keys(v).length === 0;
+            }
+            return false;
+        };
+
         // Funzione helper isolata per renderizzare una singola riga di campo sfruttando le classi CSS
-        const renderFieldRowHTML = (col, isColCurrentlyHidden) => {
+        const renderFieldRowHTML = (col, isSecondaryGroup) => {
             const isBacklink = col.type === 'relation_backlink';
             const isSysNoteLink = isSysDB && col.id === 'sys_c_note';
             
@@ -279,7 +294,7 @@ Object.assign(AdvancedTable, {
                             if (rel.name === 'Orfano') {
                                 pills += `<span class="adv-select-pill hl-c10">${I18n.t('adv_record.orphan_badge')}</span>`;
                             } else {
-                                pills += `<span class="adv-select-pill default-color" style="margin-right:4px;" onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxStr}), 100)">${UI.escapeHTML(rel.name)}</span>`;
+                                pills += `<span class="adv-select-pill default-color" style="margin-right:4px;" onclick="event.stopPropagation(); UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordView('${targetDbId}', '${rel.id}', ${ctxStr}), 100)">${UI.escapeHTML(rel.name)} <span style="margin-left:4px;">${Icons.recordView}</span></span>`;
                             }
                         });
                     } else {
@@ -495,6 +510,12 @@ Object.assign(AdvancedTable, {
             const clickMenu = isEdit && !isSysNoteLink ? `id="${labelId}" onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
             const labelEditableClass = isEdit && !isSysNoteLink ? 'adv-cell-label-editable' : '';
 
+            // Icona rapida per mostrare la colonna nella vista attiva (solo se il campo è nascosto in un database normale)
+            const unhideActionHtml = (!isSysDB && isSecondaryGroup && isEdit) ? `
+                <button class="adv-icon-btn" style="padding:2px; margin-left:auto; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTableColumnMenus.toggleVisibility('${tableId}', '${col.id}')" title="${(typeof I18n !== 'undefined' && I18n.t('adv_record.unhide_field')) || 'Mostra in questa vista'}">
+                    ${typeof Icons !== 'undefined' ? Icons.eye : '👁'}
+                </button>
+            ` : '';
 
             const layoutClass = isLongText ? 'adv-cell-layout adv-cell-layout-long' : 'adv-cell-layout';
 
@@ -502,40 +523,69 @@ Object.assign(AdvancedTable, {
                 <div class="${layoutClass}">
                     <div class="adv-cell-label-wrap">
                         <div class="adv-cell-label ${labelEditableClass}" ${clickMenu}>${col.name} ${commentIcon}</div>
+                        ${unhideActionHtml}
                     </div>
                     <div class="adv-cell-value-wrap">${displayVal}</div>
                 </div>
             `;
         };
 
-        // 1. Separazione dei campi in due liste: Visibili e Nascosti
-        const visibleCols = [];
-        const hiddenCols = [];
+        // 1. PARTIZIONAMENTO INTELLIGENTE DELLE COLONNE
+        const primaryCols = [];
+        const secondaryCols = [];
 
-        state.columns.forEach(col => {
-            const isColCurrentlyHidden = hiddenList.includes(col.id) || col.hidden;
-            if (isColCurrentlyHidden) {
-                hiddenCols.push(col);
-            } else {
-                visibleCols.push(col);
-            }
-        });
+        if (isSysDB) {
+            // NELLE PROPRIETÀ DI PAGINA (SYS_PROPERTIES_DB):
+            // In cima mostriamo solo le colonne valorizzate (+ i Tag 'sys_c_tags' che sono sempre primari).
+            // Tutte le altre colonne censite ma vuote finiscono nell'accordion ripiegabile in fondo.
+            state.columns.forEach(col => {
+                if (col.id === 'sys_c_note') return; // Riferimento interno nota gestito a parte
+                const val = vRow.virtualCells[col.id];
+                const hasValue = !isValueEmpty(val);
 
-        // 2. Rendering dei campi visibili
-        visibleCols.forEach(col => {
+                if (col.id === 'sys_c_tags' || hasValue) {
+                    primaryCols.push(col);
+                } else {
+                    secondaryCols.push(col);
+                }
+            });
+        } else {
+            // NEI DATABASE NORMALI:
+            // Lo schema è omogeneo e strutturato. I campi non valorizzati rimangono normalmente visibili
+            // per permetterne l'immediata compilazione senza dover aprire accordion ogni volta.
+            // Nell'accordion finiscono solo i campi esplicitamente nascosti dalla vista tramite 'Nascondi campo'.
+            state.columns.forEach(col => {
+                const isColCurrentlyHidden = hiddenList.includes(col.id) || col.hidden;
+                if (isColCurrentlyHidden) {
+                    secondaryCols.push(col);
+                } else {
+                    primaryCols.push(col);
+                }
+            });
+        }
+
+        // 2. Rendering dei campi primari
+        primaryCols.forEach(col => {
             html += renderFieldRowHTML(col, false);
         });
 
-        // 3. Rendering dei campi nascosti racchiusi nell'Accordion pieghevole in fondo
-        if (hiddenCols.length > 0) {
-            let hiddenColsHtml = '';
-            hiddenCols.forEach(col => {
-                hiddenColsHtml += renderFieldRowHTML(col, true);
+        // 3. Rendering dei campi secondari racchiusi nell'Accordion pieghevole in fondo
+        if (secondaryCols.length > 0) {
+            let secondaryColsHtml = '';
+            secondaryCols.forEach(col => {
+                secondaryColsHtml += renderFieldRowHTML(col, true);
             });
 
-            const accordionTitle = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' && I18n.t('adv_record.hidden_fields_count', { count: hiddenCols.length }) !== 'adv_record.hidden_fields_count')
-                ? I18n.t('adv_record.hidden_fields_count', { count: hiddenCols.length })
-                : `Campi nascosti in questa vista (${hiddenCols.length})`;
+            let accordionTitle = '';
+            if (isSysDB) {
+                accordionTitle = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' && I18n.t('adv_record.unvalued_properties_count', { count: secondaryCols.length }) !== 'adv_record.unvalued_properties_count')
+                    ? I18n.t('adv_record.unvalued_properties_count', { count: secondaryCols.length })
+                    : `Altre proprietà disponibili (${secondaryCols.length} non valorizzate)`;
+            } else {
+                accordionTitle = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' && I18n.t('adv_record.hidden_fields_count', { count: secondaryCols.length }) !== 'adv_record.hidden_fields_count')
+                    ? I18n.t('adv_record.hidden_fields_count', { count: secondaryCols.length })
+                    : `Campi nascosti in questa vista (${secondaryCols.length})`;
+            }
 
             html += `
                 <details class="adv-hidden-fields-details" ${wasAccordionOpen ? 'open' : ''}>
@@ -547,7 +597,7 @@ Object.assign(AdvancedTable, {
                         <span class="adv-hidden-fields-arrow">▼</span>
                     </summary>
                     <div class="adv-hidden-fields-content">
-                        ${hiddenColsHtml}
+                        ${secondaryColsHtml}
                     </div>
                 </details>
             `;
