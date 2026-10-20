@@ -89,6 +89,7 @@
 .editor-container.read-mode .adv-widget-shell .adv-table-footer-controls button,
 .editor-container.read-mode .adv-widget-shell .adv-table-footer-controls .adv-add-btn,
 .editor-container.read-mode .adv-widget-shell .columns-opt-btn,
+.editor-container.read-mode .adv-widget-shell .columns-drag-handle,
 .editor-container.read-mode .adv-widget-shell .journal-search-input,
 .editor-container.read-mode .adv-widget-shell .journal-search-wrapper,
 .editor-container.read-mode .widget-type-audio audio,
@@ -201,7 +202,6 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 [data-theme="dark"] #minimapViewport { background: rgba(255, 255, 255, 0.1); border-color: rgba(255, 255, 255, 0.2); }
 
 /* --- CORNICE RIDIMENSIONAMENTO IMMAGINI --- */
-/* FIX Z-INDEX: Abbassato a 90 per non sovrapporsi mai all'editor toolbar (100) o all'header (200) */
 #adv-image-resizer-overlay { position: absolute; border: 2px dashed var(--accent-color); z-index: 90; pointer-events: none; box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5); }
 .adv-image-handle { position: absolute; width: 10px; height: 10px; background-color: var(--accent-color); border: 1px solid #fff; box-shadow: 0 1px 3px rgba(0,0,0,0.3); border-radius: 50%; pointer-events: auto; }
 .adv-image-handle.nw { top: -6px; left: -6px; cursor: nwse-resize; }
@@ -242,7 +242,7 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 /* NUOVO: BOTTONE PRIORITA' NEL GAP VUOTO */
 .journal-priority-btn {
     position: absolute;
-    left: -14px; /* Si sovrappone perfettamente allo spazio vuoto */
+    left: -14px;
     top: 2px;
     width: 14px;
     height: 14px;
@@ -297,7 +297,46 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
     background: rgba(0,0,0,0.02); 
 }
 
-/* Pulsante Opzioni Ingranaggio: completamente interno al riquadro per garantire l'hover su tutti i pixel */
+/* Maniglia di Spostamento Drag: posizionata in alto a sinistra del riquadro */
+.columns-drag-handle { 
+    position: absolute; 
+    top: -6px; 
+    left: -6px; 
+    opacity: 0; 
+    pointer-events: none; 
+    z-index: 20; 
+    border-radius: 4px; 
+    padding: 4px; 
+    width: 26px; 
+    height: 26px; 
+    color: var(--text-secondary); 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    cursor: grab; 
+    transition: opacity 0.2s, color 0.2s, background-color 0.2s, transform 0.1s; 
+    user-select: none;
+}
+
+.columns-drag-handle:active {
+    cursor: grabbing;
+}
+
+.adv-columns-container-wrap:hover .columns-drag-handle, 
+.adv-columns-container-wrap:focus-within .columns-drag-handle { 
+    border-color: var(--accent-color); 
+    opacity: 0.85; 
+    pointer-events: auto !important; 
+}
+
+.columns-drag-handle:hover { 
+    opacity: 1 !important; 
+    color: var(--text-primary); 
+    background: var(--item-hover); 
+    border-color: var(--accent-color); 
+}
+
+/* Pulsante Opzioni Ingranaggio: posizionato in alto a destra del riquadro */
 .columns-opt-btn { 
     position: absolute; 
     top: -6px; 
@@ -309,8 +348,8 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
     border: 1px solid var(--border-color); 
     border-radius: 4px; 
     padding: 4px; 
-    width: 26px;
-    height: 26px;
+    width: 26px; 
+    height: 26px; 
     color: var(--text-secondary); 
     display: flex; 
     align-items: center; 
@@ -327,11 +366,11 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 }
 
 .columns-opt-btn:hover { 
-    opacity: 1 !important;
+    opacity: 1 !important; 
     transform: scale(1.08); 
     color: var(--accent-color); 
     background: var(--item-hover); 
-    border-color: var(--accent-color);
+    border-color: var(--accent-color); 
 }
 
 .adv-columns-continuous { column-gap: 30px; column-width: 250px; width: 100%; outline: none; }

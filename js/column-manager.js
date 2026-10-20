@@ -4,6 +4,7 @@
  * Soddisfa i requisiti: Ridimensionamento a passi del 5%.
  * FIX INSERIMENTO: Sostituzione netta delle righe vuote per impedire la corruzione del DOM (Nesting p > div).
  * FEAT UX: Aggiunto Tooltip dinamico che segue il mouse durante il resize per indicare le percentuali delle colonne.
+ * FEAT DRAG HANDLE & PARITY: Aggiunta maniglia di selezione e spostamento (drag & drop) conforme a tutti gli altri widget.
  */
 
 const ColumnManager = {
@@ -24,6 +25,20 @@ const ColumnManager = {
         if (!AppState.databases) AppState.databases = {};
         const trueId = id.split('_cited_')[0];
         AppState.databases[trueId] = state;
+    },
+
+    onDragStart: (e, id) => {
+        if (!AppState.isEditMode) return;
+        AppState.draggedBlockId = id;
+        AppState.draggedBlockType = 'columns';
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', id);
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll();
+    },
+
+    onDragEnd: (e) => {
+        AppState.draggedBlockId = null;
+        AppState.draggedBlockType = null;
     },
 
     insert: () => {
@@ -191,6 +206,9 @@ const ColumnManager = {
         bodyContainer.innerHTML = `
             <div class="adv-columns-container-wrap">
                 ${isEdit ? `
+                <span class="widget-drag-handle adv-drag-handle columns-drag-handle" title="${(typeof I18n !== 'undefined' && I18n.t('adv_render.drag_to_move')) || 'Trascina per spostare'}" draggable="true" ondragstart="ColumnManager.onDragStart(event, '${id}')" ondragend="ColumnManager.onDragEnd(event)">
+                    ${Icons.dragHandle}
+                </span>
                 <button class="adv-icon-btn columns-opt-btn" id="col-opt-${id}" title="${I18n.t('columns_widget.opt_title')}" onclick="ColumnManager.openMenu(event, '${id}')">
                     ${Icons.gear}
                 </button>
@@ -231,7 +249,9 @@ const ColumnManager = {
             { type: 'divider' },
             { type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('columns_widget.behavior_group')}</div>` },
             { icon: Icons.listFilter, label: I18n.t('columns_widget.mode_continuous') + (state.mode === 'continuous' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'continuous') },
-            { icon: Icons.viewBoard, label: I18n.t('columns_widget.mode_independent') + (state.mode === 'independent' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'independent') }
+            { icon: Icons.viewBoard, label: I18n.t('columns_widget.mode_independent') + (state.mode === 'independent' ? chk : ''), onClick: () => ColumnManager.setMode(id, 'independent') },
+            { type: 'divider' },
+            { icon: Icons.trash, label: I18n.t('common.delete'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(id)) }
         ];
 
         UI.Menu.buildContextMenu(`col-opt-${id}`, menuItems);

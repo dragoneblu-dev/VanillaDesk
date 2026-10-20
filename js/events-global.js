@@ -210,6 +210,23 @@ Object.assign(EventsGlobal, {
             document.body.style.cursor = '';
         });
 
+        // 6. GESTIONE REATTIVA DEL FOCUS TRA TITOLO NOTA E CORPO TESTO PER LA TOOLBAR
+        document.addEventListener('focusin', (e) => {
+            if (!AppState.isEditMode) return;
+            const target = e.target;
+            if (!target) return;
+
+            if (target.id === 'noteTitle' || target.classList.contains('title-input')) {
+                if (typeof Editor !== 'undefined' && typeof Editor.toggleAdvancedToolbar === 'function') {
+                    Editor.toggleAdvancedToolbar(false);
+                }
+            } else if (target.closest && target.closest('#noteContent')) {
+                if (typeof Editor !== 'undefined' && typeof Editor.checkContext === 'function') {
+                    Editor.checkContext();
+                }
+            }
+        });
+
         // BLINDO SALVATAGGIO IN USCITA: Blocco chiusura accidentale della scheda se una scrittura massiva è in corso
         window.addEventListener('beforeunload', (e) => {
             if (Store.isDirty || Store._isSavingFile) {

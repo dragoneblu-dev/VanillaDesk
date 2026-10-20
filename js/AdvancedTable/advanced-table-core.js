@@ -12,6 +12,7 @@
  * FEAT QUICK SEARCH: Motore universale di ricerca full-text integrato nello stato (quickSearch, showQuickSearch).
  * PERF QUICK SEARCH: Gestione sincrona del focus/cursore senza timeout intermedi e correzione 'event.key' su Escape.
  * PERF INVERTED INDEX O(1): Struttura volatile in memoria _rowIndices e lookup atomico getRow() per relazioni e rollup.
+ * FIX QUICK SEARCH FOCUS STYLING: Rimozione degli stili inline invasivi e adozione della classe .adv-quick-search-input per consentire l'evidenziazione :focus.
  */
 
 const AdvancedTable = {
@@ -99,12 +100,12 @@ const AdvancedTable = {
     renderQuickSearchBar: (tableId, state) => {
         if (!state.showQuickSearch) return '';
         const safeTerm = String(state.quickSearch || '').replace(/"/g, '&quot;');
-        const clearBtn = state.quickSearch ? `<button class="adv-icon-btn danger" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', '')" title="Azzera ricerca">${Icons.close}</button>` : '';
+        const clearBtn = state.quickSearch ? `<button class="adv-icon-btn danger" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', '')" title="${(typeof I18n !== 'undefined' && I18n.t('adv_search.clear'))}">${Icons.close}</button>` : '';
 
         return `
             <div class="adv-quick-search-wrapper" style="padding: 4px 2px 8px 2px; display:flex; align-items:center; width:100%; position:relative;" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
-                <span style="position:absolute; left:10px; top:50%; transform:translateY(-50%); opacity:0.5; display:flex; pointer-events:none;">${Icons.search}</span>
-                <input type="text" id="adv-search-input-${tableId}" class="modern-input" style="width:100%; padding:6px 28px 6px 32px !important; border-radius:6px !important; background:var(--bg-color) !important; border:1px solid var(--border-color) !important; font-size:0.85rem;" placeholder="${(typeof I18n !== 'undefined' && I18n.t('adv_search.placeholder')) || 'Cerca in tutti i campi (testo, tag, date, pagine)...'}" value="${safeTerm}"
+                <span class="search-icon">${Icons.search}</span>
+                <input type="text" id="adv-search-input-${tableId}" class="adv-quick-search-input" placeholder="${(typeof I18n !== 'undefined' && I18n.t('adv_search.placeholder'))}" value="${safeTerm}"
                        autocomplete="off"
                        oninput="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', this.value)"
                        onkeydown="if(event.key==='Escape'){ event.stopPropagation(); AdvancedTable.toggleQuickSearch('${tableId}'); } event.stopPropagation();"
@@ -127,7 +128,7 @@ const AdvancedTable = {
         AdvancedTable.renderTable(tableId);
         
         if (AppState.isEditMode) {
-        Store.triggerAutoSave();
+            Store.triggerAutoSave();
         }
 
         if (state.showQuickSearch) {

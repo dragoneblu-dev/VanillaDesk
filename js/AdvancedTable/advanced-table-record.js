@@ -510,20 +510,12 @@ Object.assign(AdvancedTable, {
             const clickMenu = isEdit && !isSysNoteLink ? `id="${labelId}" onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
             const labelEditableClass = isEdit && !isSysNoteLink ? 'adv-cell-label-editable' : '';
 
-            // Icona rapida per mostrare la colonna nella vista attiva (solo se il campo è nascosto in un database normale)
-            const unhideActionHtml = (!isSysDB && isSecondaryGroup && isEdit) ? `
-                <button class="adv-icon-btn" style="padding:2px; margin-left:auto; opacity:0.6;" onclick="event.stopPropagation(); AdvancedTableColumnMenus.toggleVisibility('${tableId}', '${col.id}')" title="${(typeof I18n !== 'undefined' && I18n.t('adv_record.unhide_field')) || 'Mostra in questa vista'}">
-                    ${typeof Icons !== 'undefined' ? Icons.eye : '👁'}
-                </button>
-            ` : '';
-
             const layoutClass = isLongText ? 'adv-cell-layout adv-cell-layout-long' : 'adv-cell-layout';
 
             return `
                 <div class="${layoutClass}">
                     <div class="adv-cell-label-wrap">
                         <div class="adv-cell-label ${labelEditableClass}" ${clickMenu}>${col.name} ${commentIcon}</div>
-                        ${unhideActionHtml}
                     </div>
                     <div class="adv-cell-value-wrap">${displayVal}</div>
                 </div>

@@ -22,6 +22,7 @@
  * FIX INLINE SHELL DEAD ZONE: Metodo adjustCaretAwayFromZwsDeadZone per espellere istantaneamente il cursore
  * dalla zona morta tra il widget e il cuscinetto \u200B, impedendo inserimenti invertiti di caratteri.
  * FEAT CARET RESUME: Metodo snello setCaretAfterInlineElement per riposizionare il cursore dopo una nota inline o segnalibro (O(1)).
+ * FIX TITLE TOOLBAR DISABLE: Disattivazione automatica di tutta la toolbar quando il cursore è posizionato su noteTitle.
  */
 
 const Editor = {
@@ -295,7 +296,7 @@ const Editor = {
         }
     },
 
-    // Ripristino deterministico dei cuscinetti \u200B attorno ai widget inline ed estirpazione degli orfani sparsi
+    // Ripristino deterministico dei cuscinetti \u200B attorno ai widget inline ed eliminazione orfani
     // NOTA: I normali tag <a> NON sono shell non-editabili e sono categoricamente esclusi da questa logica.
     ensureInlineWidgetBuffers: (container) => {
         if (!container) return;
@@ -1165,5 +1166,70 @@ const Editor = {
         if (typeof UI !== 'undefined' && UI.showToast) {
             UI.showToast(I18n.t('notes_utils.raw_html_success_toast') || "Codice HTML applicato e pagina reidratata con successo!", "success");
         }
+    },
+
+    checkContext: () => {
+        if (!AppState.isEditMode) return;
+
+        // DISATTIVAZIONE INTEGRALE TOOLBAR SE IL FOCUS È SUL TITOLO DELLA NOTA
+        const activeEl = document.activeElement;
+        if (activeEl && (activeEl.id === 'noteTitle' || activeEl.classList.contains('title-input'))) {
+            Editor.currentContext = null;
+            Editor.toggleAdvancedToolbar(false);
+            return;
+        }
+
+        Editor.updateToolbarFormatting();
+        Editor.enforceBoundaries();
+
+        const selection = window.getSelection();
+        if (selection.rangeCount === 0) {
+            Editor.currentContext = null;
+            return;
+        }
+
+        let node = selection.anchorNode;
+        let parent = (node.nodeType === 3) ? node.parentNode : node;
+
+        const isInsideColumn = parent.closest('.widget-type-columns') ? true : false;
+        const isInsideSimpleTable = parent.closest('.simple-table-wrapper') ? true : false;
+        
+        const isInsideDB = WidgetManager.isProtectedBlock(parent) && !isInsideColumn && !isInsideSimpleTable;
+        
+        Editor.toggleAdvancedToolbar(!isInsideDB);
+
+        let targetElement = null;
+        if (parent.closest('table')) targetElement = parent.closest('table');
+        else if (parent.closest('ul, ol')) targetElement = parent.closest('ul, ol');
+
+        Editor.currentContext = targetElement;
+    },
+
+    editContextElement: () => {
+        if (!Editor.currentContext) return;
+        const el = Editor.currentContext;
+        if (el.tagName === 'TABLE') {
+            TableManager.editCurrentTable(el);
+        } else if (el.tagName === 'UL' || el.tagName === 'OL') {
+            if (typeof UI !== 'undefined' && UI.Menu) {
+                const btn = document.getElementById('btnListMenu');
+                if (btn) Editor.openListMenu(null, 'btnListMenu');
+            }
+        }
+    },
+
+    toggleAdvancedToolbar: (enable) => {
+        const tb = document.getElementById('editorToolbar');
+        if (!tb) return;
+        
+        // I pulsanti Undo/Redo vengono gestiti in esclusiva da Editor.updateUndoRedoUI() in history
+        const buttons = tb.querySelectorAll('button:not([title*="Annulla Ultima"]):not([title*="Ripeti ("])');
+        const dropdowns = tb.querySelectorAll('.color-picker-group');
+
+        buttons.forEach(btn => btn.disabled = !enable);
+        dropdowns.forEach(grp => {
+            if (!enable) grp.classList.add('disabled-tool');
+            else grp.classList.remove('disabled-tool');
+        });
     }
 };

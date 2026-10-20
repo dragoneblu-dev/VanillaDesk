@@ -373,7 +373,7 @@ img[data-broken="true"] {
 }
 
 /* =========================================================================
-   INTERATTIVITÀ RICERCA RAPIDA DATABASE (SEMPRE EDITABILE ANCHE IN READ-MODE)
+   INTERATTIVITÀ E FEEDBACK VISIVO RICERCA RAPIDA DATABASE
    ========================================================================= */
 .adv-quick-search-wrapper,
 .adv-quick-search-wrapper input,
@@ -382,8 +382,41 @@ img[data-broken="true"] {
     user-select: auto !important;
 }
 
-.adv-quick-search-wrapper input {
+.adv-quick-search-wrapper .search-icon {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.5;
+    display: flex;
+    pointer-events: none;
+    color: var(--text-secondary);
+    transition: color 0.2s ease, opacity 0.2s ease;
+}
+
+.adv-quick-search-wrapper:focus-within .search-icon {
+    opacity: 1;
+    color: var(--accent-color);
+}
+
+.adv-quick-search-input {
+    width: 100%;
+    padding: 7px 30px 7px 32px !important;
+    border-radius: 6px !important;
+    background: var(--bg-color) !important;
+    border: 1px solid var(--border-color) !important;
+    color: var(--text-primary) !important;
+    font-size: 0.85rem !important;
+    font-family: inherit;
+    outline: none !important;
+    box-sizing: border-box;
     cursor: text !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.adv-quick-search-input:focus {
+    border-color: var(--accent-color) !important;
+    background: var(--bg-color) !important;
 }
 
 .adv-quick-search-wrapper button {
