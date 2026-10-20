@@ -255,7 +255,7 @@ header.header-unsaved .btn:not(.btn-primary):hover {
 
 .btn-primary {
     background: var(--accent-color);
-    color: white;
+    color: var(--accent-color-tx);
     border-color: var(--accent-color);
 }
 

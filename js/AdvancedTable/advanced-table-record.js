@@ -15,6 +15,9 @@
  * FEAT COLUMN COMMENT ICON: Visualizzazione dell'icona info con tooltip esplicativo se la colonna possiede un commento.
  * FIX READONLY FORCED: isReadOnlyForced scatta unicamente se si consulta un record esterno da altra tabella;
  * il footer delle azioni relazionali (Scollega Record) rimane sempre accessibile in Edit Mode.
+ * DEFAULT COLOR: Allineamento colore pulsanti macro su #2563eb per coerenza con la palette selezionabile.
+ * FEAT EMPTY BUTTON LABEL: Supporto per pulsanti senza testo (solo icona) se buttonLabel è vuoto.
+ * REFACTOR CSS ARCHITECTURE: Eliminazione degli stili inline e delega completa alle classi di layout in advanced-table.css.
  */
 
 Object.assign(AdvancedTable, {
@@ -76,6 +79,10 @@ Object.assign(AdvancedTable, {
             return;
         }
 
+        // Memoria dello stato dell'accordion dei campi nascosti prima del ridisegno
+        const existingAccordion = document.querySelector('.adv-hidden-fields-details');
+        const wasAccordionOpen = existingAccordion ? existingAccordion.hasAttribute('open') : false;
+
         AdvancedTable.activeRecordId = rowId;
         AdvancedTable.activeTableId = tableId;
 
@@ -121,20 +128,21 @@ Object.assign(AdvancedTable, {
             `;
         }
 
-        state.columns.forEach(col => {
+        // Funzione helper isolata per renderizzare una singola riga di campo sfruttando le classi CSS
+        const renderFieldRowHTML = (col, isColCurrentlyHidden) => {
             const isBacklink = col.type === 'relation_backlink';
             const isSysNoteLink = isSysDB && col.id === 'sys_c_note';
-            const isColCurrentlyHidden = hiddenList.includes(col.id) || col.hidden;
             
             let val = vRow.virtualCells[col.id];
             let displayVal = '';
 
             const isCellEdit = isEdit && !isBacklink && !isSysNoteLink;
 
-            // GESTIONE DEDICATA CAMPO PULSANTE MACRO
+            // GESTIONE CAMPO PULSANTE MACRO
             if (col.type === 'button') {
-                const btnLabel = (col.buttonLabel || col.name).replace(/"/g, '&quot;');
-                const btnColor = col.buttonColor || 'var(--accent-color)';
+                const hasCustomLabel = col.buttonLabel !== undefined && col.buttonLabel !== null;
+                const btnLabel = (hasCustomLabel ? col.buttonLabel : (col.name || '')).replace(/"/g, '&quot;');
+                const btnColor = col.buttonColor || '#2563eb';
                 const btnIcon = col.buttonIcon || Icons.play;
                 const actionCall = `onclick="event.stopPropagation(); AdvancedTable.runCellMacro('${tableId}', '${rowId}', '${col.id}');"`;
 
@@ -142,7 +150,7 @@ Object.assign(AdvancedTable, {
                     <div style="display:flex; justify-content:flex-end; width:100%;">
                         <button class="btn action-btn-run" style="background-color:${btnColor}; border-color:${btnColor}; color:white; padding:6px 14px; font-size:0.85rem; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition: transform 0.1s, filter 0.1s;" ${actionCall} title="${I18n.t('adv_cell.execute_action')}" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
                             <span style="display:inline-flex; flex-shrink:0; pointer-events:none;">${btnIcon}</span>
-                            <span style="pointer-events:none;">${btnLabel}</span>
+                            ${btnLabel ? `<span>${btnLabel}</span>` : ''}
                         </button>
                     </div>
                 `;
@@ -207,7 +215,6 @@ Object.assign(AdvancedTable, {
                     let content = '';
                     let vals = Array.isArray(val) ? [...val] : (val ? [val] : []);
                     
-                    // Ordinamento alfabetico solo per il Multi-Select
                     if (col.type === 'multi-select' && vals.length > 0) {
                         vals.sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
                     }
@@ -475,14 +482,6 @@ Object.assign(AdvancedTable, {
 
             const isLongText = (col.type === 'text' && val && (val.length > 50 || val.includes('\n'))) || (col.type === 'relation_backlink' && col.backlinkDisplay === 'property');
 
-            let labelStyle = isLongText
-                ? "font-weight:bold; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase; width:100%; margin-bottom:4px;"
-                : "font-weight:bold; color:var(--text-secondary); font-size:0.8rem; text-transform:uppercase; flex: 0 0 35%;";
-            
-            if (isEdit && !isSysNoteLink) {
-                labelStyle += " cursor:pointer;";
-            }
-
             // GESTIONE ICONA COMMENTO COLONNA CON TOOLTIP DEDICATO
             let commentIcon = '';
             if (col.comment) {
@@ -494,14 +493,65 @@ Object.assign(AdvancedTable, {
 
             const labelId = `drawer-prop-${col.id}`;
             const clickMenu = isEdit && !isSysNoteLink ? `id="${labelId}" onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
+            const labelEditableClass = isEdit && !isSysNoteLink ? 'adv-cell-label-editable' : '';
 
-            html += `
-                <div style="display:flex; ${isLongText ? 'flex-direction:column; align-items:flex-start;' : 'align-items:center;'} gap:6px; padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px;">
-                    <div style="${labelStyle}" ${clickMenu}>${col.name} ${commentIcon} ${isColCurrentlyHidden ? `<span style="opacity:0.5; font-weight:normal; text-transform:none;">${I18n.t('adv_record.hidden_badge')}</span>` : ''}</div>
-                    <div style="${isLongText ? 'width:100%; box-sizing:border-box;' : 'flex:1; display:flex; justify-content:flex-end;'}">${displayVal}</div>
+
+            const layoutClass = isLongText ? 'adv-cell-layout adv-cell-layout-long' : 'adv-cell-layout';
+
+            return `
+                <div class="${layoutClass}">
+                    <div class="adv-cell-label-wrap">
+                        <div class="adv-cell-label ${labelEditableClass}" ${clickMenu}>${col.name} ${commentIcon}</div>
+                    </div>
+                    <div class="adv-cell-value-wrap">${displayVal}</div>
                 </div>
             `;
+        };
+
+        // 1. Separazione dei campi in due liste: Visibili e Nascosti
+        const visibleCols = [];
+        const hiddenCols = [];
+
+        state.columns.forEach(col => {
+            const isColCurrentlyHidden = hiddenList.includes(col.id) || col.hidden;
+            if (isColCurrentlyHidden) {
+                hiddenCols.push(col);
+            } else {
+                visibleCols.push(col);
+            }
         });
+
+        // 2. Rendering dei campi visibili
+        visibleCols.forEach(col => {
+            html += renderFieldRowHTML(col, false);
+        });
+
+        // 3. Rendering dei campi nascosti racchiusi nell'Accordion pieghevole in fondo
+        if (hiddenCols.length > 0) {
+            let hiddenColsHtml = '';
+            hiddenCols.forEach(col => {
+                hiddenColsHtml += renderFieldRowHTML(col, true);
+            });
+
+            const accordionTitle = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' && I18n.t('adv_record.hidden_fields_count', { count: hiddenCols.length }) !== 'adv_record.hidden_fields_count')
+                ? I18n.t('adv_record.hidden_fields_count', { count: hiddenCols.length })
+                : `Campi nascosti in questa vista (${hiddenCols.length})`;
+
+            html += `
+                <details class="adv-hidden-fields-details" ${wasAccordionOpen ? 'open' : ''}>
+                    <summary class="adv-hidden-fields-summary">
+                        <span class="adv-hidden-fields-title">
+                            <span style="display:inline-flex; opacity:0.7;">${typeof Icons !== 'undefined' ? Icons.eyeOff : '👁‍🗨'}</span>
+                            <span>${accordionTitle}</span>
+                        </span>
+                        <span class="adv-hidden-fields-arrow">▼</span>
+                    </summary>
+                    <div class="adv-hidden-fields-content">
+                        ${hiddenColsHtml}
+                    </div>
+                </details>
+            `;
+        }
 
         // Le azioni del footer sono disponibili quando l'applicazione è in modalità modifica
         const canShowFooterActions = isWorkflowStudio

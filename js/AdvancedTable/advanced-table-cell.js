@@ -120,8 +120,9 @@ Object.assign(AdvancedTable, {
         }
 
         if (col.type === 'button') {
-            const btnLabel = (col.buttonLabel || col.name).replace(/"/g, '&quot;');
-            const btnColor = col.buttonColor || 'var(--accent-color)';
+            const hasCustomLabel = col.buttonLabel !== undefined && col.buttonLabel !== null;
+            const btnLabel = (hasCustomLabel ? col.buttonLabel : (col.name || '')).replace(/"/g, '&quot;');
+            const btnColor = col.buttonColor || '#2563eb';
             const btnIcon = col.buttonIcon || Icons.play;
             
             const btnStyle = `cursor:pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.1s, filter 0.1s;`;

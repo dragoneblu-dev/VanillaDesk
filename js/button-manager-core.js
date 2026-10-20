@@ -145,7 +145,7 @@ const ButtonManager = {
                     id: 'btn_' + Store.generateId(),
                     label: I18n.t('buttons.default_button_label'),
                     icon: Icons.lightning,
-                    color: 'var(--accent-color)',
+                    color: '#2563eb',
                     requireConfirm: false,
                     actionBlocks: [] 
                 }
@@ -198,7 +198,7 @@ const ButtonManager = {
             id: 'btn_' + Store.generateId(),
             label: I18n.t('buttons.default_button_label'),
             icon: Icons.lightning,
-            color: 'var(--accent-color)',
+            color: '#2563eb',
             requireConfirm: false,
             actionBlocks: []
         });
@@ -290,6 +290,9 @@ const ButtonManager = {
             const displayLabel = ButtonManager._evaluateDynamicLabel(btn.label || '');
             const safeLabel = UI.escapeHTML(displayLabel);
             
+            const rawBtnColor = btn.color;
+            const effectiveColor = (rawBtnColor && rawBtnColor !== 'var(--accent-color)') ? rawBtnColor : '#2563eb';
+
             const btnStyle = isEdit 
                 ? `opacity:0.8; box-shadow:none; cursor:default;` 
                 : `box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor:pointer;`;
@@ -298,14 +301,14 @@ const ButtonManager = {
 
             if (isEdit) {
                 html += `
-                    <div class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${btn.color || 'var(--accent-color)'}; border-color: ${btn.color || 'var(--accent-color)'}; color: white; ${btnStyle} display:inline-flex; align-items:center; gap:8px;" title="Clicca sul testo per configurare">
+                    <div class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${btn.color || '#2563eb'}; border-color: ${btn.color || '#2563eb'}; color: white; ${btnStyle} display:inline-flex; align-items:center; gap:8px;" title="Clicca sul testo per configurare">
                         <span class="adv-btn-icon-trigger" style="cursor:pointer;" title="Esegui Azione" onclick="event.stopPropagation(); ButtonManager.execute('${id}', '${btn.id}', true)">${btn.icon || Icons.play}</span>
                         <span style="cursor:pointer; flex:1;" onclick="ButtonManager.openConfig(event, '${id}', '${btn.id}')">${safeLabel}</span>
                     </div>
                 `;
             } else {
                 html += `
-                    <button class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${btn.color || 'var(--accent-color)'}; border-color: ${btn.color || 'var(--accent-color)'}; color: white; ${btnStyle}" onclick="ButtonManager.execute('${id}', '${btn.id}', false)" title="Esegui Azione">
+                    <button class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${btn.color || '#2563eb'}; border-color: ${btn.color || '#2563eb'}; color: white; ${btnStyle}" onclick="ButtonManager.execute('${id}', '${btn.id}', false)" title="Esegui Azione">
                         <span style="display:inline-flex; align-items:center; gap:8px; pointer-events:none;">${btn.icon || ''} ${safeLabel}</span>
                     </button>
                 `;

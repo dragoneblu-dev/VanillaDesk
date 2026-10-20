@@ -77,7 +77,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable._captureOpenStates();
         const labelEl = document.getElementById('btnConfigLabel');
         if (labelEl && AdvancedTable._tempColButtonConfig) {
-             AdvancedTable._tempColButtonConfig.config.buttonLabel = labelEl.value.trim();
+             AdvancedTable._tempColButtonConfig.config.buttonLabel = labelEl.value;
         }
         AdvancedTable._renderButtonColBuilder();
     },
@@ -101,16 +101,17 @@ Object.assign(AdvancedTable, {
         window._openActionBlocks = undefined;
         window._openAesthetic = undefined;
 
-        AdvancedTable._renderButtonColBuilder();
+        AdvancedTable._renderButtonColBuilder(true);
     },
 
-    _renderButtonColBuilder: () => {
+    _renderButtonColBuilder: (isFirstOpen = false) => {
         const { tableId, config } = AdvancedTable._tempColButtonConfig;
         const hostState = AdvancedTable.getState(tableId); 
         if (hostState) hostState.id = tableId;
 
         const dbList = AutomationUIBuilder.getAvailableDatabases();
         const isAestheticOpen = window._openAesthetic !== undefined ? window._openAesthetic : true;
+        const labelValue = config.buttonLabel !== undefined ? config.buttonLabel : '';
 
         const buttonColors = [
             { val: '#2563eb', name: I18n.t('adv_actions.btn_color_blue') },
@@ -123,7 +124,7 @@ Object.assign(AdvancedTable, {
 
         let colorSwatchesHtml = `<div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">`;
         buttonColors.forEach(c => {
-            const isSelected = (config.buttonColor || 'var(--accent-color)') === c.val;
+            const isSelected = (config.buttonColor || '#2563eb') === c.val;
             const borderStyle = isSelected ? 'border: 2px solid var(--text-primary); transform: scale(1.1);' : 'border: 2px solid transparent;';
             colorSwatchesHtml += `
                 <div class="btn-color-swatch" 
@@ -147,7 +148,7 @@ Object.assign(AdvancedTable, {
                 
                 <div style="padding: 0 15px 15px 15px; display:flex; flex-direction:column; gap:10px; border-top: 1px solid var(--border-color); margin-top: 10px; padding-top: 15px;">
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_label_label')}</label>
-                    <input type="text" id="btnConfigLabel" class="modern-input" style="width:100%; margin-bottom: 10px;" value="${(config.buttonLabel || config.name).replace(/"/g, '&quot;')}" onblur="AdvancedTable._triggerRefresh()">
+                    <input type="text" id="btnConfigLabel" class="modern-input" style="width:100%; margin-bottom: 10px;" value="${labelValue.replace(/"/g, '&quot;')}" placeholder="Pulsante Macro" oninput="if(AdvancedTable._tempColButtonConfig) AdvancedTable._tempColButtonConfig.config.buttonLabel = this.value;">
                     
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_color_label')}</label>
                     ${colorSwatchesHtml}
@@ -202,6 +203,12 @@ Object.assign(AdvancedTable, {
         UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.settings} ${I18n.t('adv_actions.btn_configure_title')}</span>`, html, footerHTML);
 
         setTimeout(() => {
+            const labelInput = document.getElementById('btnConfigLabel');
+            if (isFirstOpen && labelInput && isAestheticOpen) {
+                labelInput.focus();
+                labelInput.select();
+            }
+
             const fullArea = document.getElementById('btnConfigFullArea');
             if (fullArea) {
                 fullArea.querySelectorAll('.action-block-card, .aesthetic-block-card').forEach(details => {
@@ -224,7 +231,7 @@ Object.assign(AdvancedTable, {
                     });
                 }
             });
-        }, 100);
+        }, 50);
     },
 
     _updateButtonColField: (field, val) => {
@@ -319,8 +326,9 @@ Object.assign(AdvancedTable, {
         
         let targetCol = state.columns.find(c => c.id === colId);
         if (targetCol) {
-            targetCol.buttonLabel = config.buttonLabel;
-            targetCol.buttonColor = config.buttonColor;
+            const labelInput = document.getElementById('btnConfigLabel');
+            targetCol.buttonLabel = labelInput ? labelInput.value : (config.buttonLabel !== undefined ? config.buttonLabel : '');
+            targetCol.buttonColor = config.buttonColor || '#2563eb';
             targetCol.requireConfirm = config.requireConfirm;
             targetCol.actionBlocks = JSON.parse(JSON.stringify(config.actionBlocks));
             

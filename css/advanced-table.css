@@ -99,7 +99,12 @@ z-index: 2;
 
 .adv-cell-layout { display: flex; align-items: center; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px; }
 .adv-cell-layout-long { flex-direction: column; align-items: flex-start; }
-.adv-cell-label { font-weight: bold; color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; }
+.adv-cell-label { font-weight: bold; color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; user-select: none; }
+.adv-cell-label-editable { cursor: pointer; }
+.adv-cell-label-wrap { display: flex; align-items: center; flex: 0 0 35%; }
+.adv-cell-layout-long .adv-cell-label-wrap { width: 100%; margin-bottom: 4px; }
+.adv-cell-value-wrap { flex: 1; display: flex; justify-content: flex-end; }
+.adv-cell-layout-long .adv-cell-value-wrap { width: 100%; box-sizing: border-box; }
 
 .adv-col-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10;
 }
@@ -226,4 +231,59 @@ body.is-panning * { user-select: none !important; pointer-events: none !importan
 }
 
 .tree-ancestor-dimmed { opacity: 0.55; font-style: italic;
+}
+
+/* =========================================================================
+   SEZIONE COLLASSABILE CAMPI NASCOSTI NEL RECORD DRAWER
+   ========================================================================= */
+
+.adv-hidden-fields-details {
+    background: var(--item-hover);
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    margin-top: 10px;
+    overflow: hidden;
+}
+
+.adv-hidden-fields-summary {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    user-select: none;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.adv-hidden-fields-summary:hover {
+    background: var(--item-active);
+    color: var(--text-primary);
+}
+
+.adv-hidden-fields-title {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.adv-hidden-fields-arrow {
+    font-size: 0.75rem;
+    opacity: 0.6;
+    transition: transform 0.2s ease;
+}
+
+.adv-hidden-fields-details[open] .adv-hidden-fields-arrow {
+    transform: rotate(180deg);
+}
+
+.adv-hidden-fields-content {
+    padding: 8px 10px 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-top: 1px solid var(--border-color);
+    /*background: var(--bg-color);*/
 }

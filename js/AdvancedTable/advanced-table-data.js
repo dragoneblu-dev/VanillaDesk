@@ -705,26 +705,34 @@ Object.assign(AdvancedTable, {
         const newColId = 'c_' + Store.generateId();
 
         const typeNames = {
-            'text': 'Nuovo Testo',
-            'number': 'Nuovo Numero',
-            'select': 'Nuova Selezione',
-            'multi-select': 'Nuova Selezione Multipla',
-            'date': 'Nuova Data',
-            'datetime': 'Nuova Data e Ora',
-            'time': 'Nuovo Orario',
-            'checkbox': 'Nuova Spunta',
-            'formula': 'Nuova Formula',
-            'relation': 'Nuova Relazione',
-            'rollup': 'Nuovo Rollup',
-            'url': 'Nuovo Link',
-            'created_time': 'Data Creazione',
+            'text': 'Testo',
+            'number': 'Numero',
+            'select': 'Selezione',
+            'multi-select': 'Selezione Multipla',
+            'date': 'Data',
+            'datetime': 'Data e Ora',
+            'time': 'Orario',
+            'checkbox': 'Spunta',
+            'formula': 'Formula',
+            'relation': 'Relazione',
+            'rollup': 'Rollup',
+            'url': 'Link',
+            'created_time': 'Creazione',
             'last_edited_time': 'Ultima Modifica',
             'record_note': 'Pagina Record',
-            'note_link': 'Collegamento a Nota'
+            'note_link': 'Collegamento a Nota',
+            'button': 'Macro'
         };
         const colName = typeNames[type] || 'Nuova Colonna';
 
         const newCol = { id: newColId, name: colName, type: type, width: 150 };
+        if (type === 'button') {
+            newCol.buttonLabel = 'Esegui';
+            newCol.buttonColor = '#2563eb';
+            newCol.buttonIcon = typeof Icons !== 'undefined' ? Icons.play : '▶';
+            newCol.requireConfirm = false;
+            newCol.actionBlocks = [];
+        }
         if (state.isPivot && type === 'formula') newCol.isViewFormula = true;
 
         state.columns.push(newCol);
@@ -749,6 +757,8 @@ Object.assign(AdvancedTable, {
             AdvancedTable.openRollupConfig(realTableId, newColId);
         } else if (type === 'formula') {
             AdvancedTable.editFormula(realTableId, newColId);
+        } else if (type === 'button') {
+            AdvancedTable.openButtonColConfig(realTableId, newColId);
         }
         
         if (realTableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {

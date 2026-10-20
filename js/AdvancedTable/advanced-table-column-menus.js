@@ -1118,8 +1118,8 @@ const AdvancedTableColumnMenus = {
         if (newType === 'formula' && !col.formula) col.formula = 'riga["Nome"] || ""';
         
         if (newType === 'button') {
-            col.buttonLabel = 'Esegui Azione';
-            col.buttonColor = 'var(--accent-color)';
+            col.buttonLabel = 'Esegui';
+            col.buttonColor = '#2563eb';
             col.buttonIcon = Icons.play;
             col.requireConfirm = false;
             col.actionBlocks = [];

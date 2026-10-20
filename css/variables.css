@@ -7,6 +7,7 @@
     --text-primary: #000000;
     --text-secondary: #566172;
     --accent-color: #4f8b00; /*2563eb;*/
+    --accent-color-tx: #FFFFFF;
     --accent-hover: #1d4ed8;
     --border-color: #e5e7eb;
     --item-hover: #edf3d0; /*f9fafb;*/
@@ -148,14 +149,15 @@
     --editor-bg: #191919;
     --text-primary: #FFFFFF;
     --text-secondary: rgba(255, 255, 255, 0.64);
-    --accent-color: #429df7;
-    --accent-hover: #176dc8;
+    --accent-color-tx: #000000;
+    --accent-color: #cbf53f;
+    --accent-hover: #b3da36;
     --border-color: rgba(255, 255, 255, 0.09);
     --item-hover: rgba(255, 255, 255, 0.055);
     --item-active: rgba(255, 255, 255, 0.11);
     --marked-bg: rgba(35, 131, 226, 0.15);
-    --marked-border: #2383E2;
-    --danger-color: #EB5757;
+    --marked-border: #cbf53f;
+    --danger-color: #FF5757;
     --code-bg: #1e1e1e;
     --code-text: #d4d4d4;
     

@@ -83,7 +83,7 @@ Object.assign(ButtonManager, {
 
         let colorSwatchesHtml = `<div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">`;
         buttonColors.forEach(c => {
-            const isSelected = (btnState.color || 'var(--accent-color)') === c.val;
+            const isSelected = (btnState.color || '#2563eb') === c.val;
             const borderStyle = isSelected ? 'border: 2px solid var(--text-primary); transform: scale(1.1);' : 'border: 2px solid transparent;';
             colorSwatchesHtml += `
                 <div class="btn-color-swatch" 
