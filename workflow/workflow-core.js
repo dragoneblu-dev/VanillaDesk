@@ -2,16 +2,15 @@
  * workflow-core.js
  * Modulo Core di Workflow Studio: Stato, Inizializzazione, Sincronizzazione,
  * Gestione Schermate, Persistenza automatica e Navigazione Canvas non distruttiva.
- * FEAT AUTO-LAUNCH: Riconoscimento parametri da URL hash (#db=...&rel=...) 
- * ed ereditarietà trasparente dello stato/handle dal genitore (window.opener) per l'apertura immediata.
- * FEAT MULTI-RELATION WORKFLOW: Supporto completo a workflow multipli e indipendenti per database aventi
- * diverse auto-relazioni. Ogni relazione dispone del proprio layout spaziale, collegamenti, stile e impostazioni.
- * EREDITARIETÀ SEMANTICA WBS: Il workflow eredita automaticamente relationDirection ('successor' | 'predecessor')
- * dalla colonna auto-relazione attiva (col.treeDirection || col.singleRecord ? 'predecessor' : 'successor').
- * FIX PERSISTENZA: Salvataggio automatico nativo su assets/workflow/{dbId}.json con architettura multi-layout.
- * FEAT TITLE COLUMN: Supporto per la selezione dinamica della colonna usata come titolo primario dei nodi (titleColId).
- * FEAT UNDO/REDO: Stack di cronologia completo (Ctrl+Z / Ctrl+Y) per posizioni nodi, connessioni e layout sul canvas.
- * FEAT REACTIVE GRAPH UPDATE: Metodo onDatabaseModified per aggiornare e sincronizzare il canvas a seguito di mutazioni da Drawer.
+ * EREDITARIETÀ STATO: Risoluzione immediata di workspaceHandle, assetsHandle, databases,
+ * notes e documentPassword da window.opener (accesso alle proprietà o scope lessicale).
+ * PERSISTENZA IDB: Memorizzazione e recupero del FileSystemHandle in IndexedDB per supportare il ricaricamento (F5).
+ * MULTI-RELATION WORKFLOW: Supporto a workflow indipendenti per database con auto-relazioni multiple.
+ * EREDITARIETÀ SEMANTICA WBS: relationDirection calcolata da col.treeDirection o col.singleRecord.
+ * PERSISTENZA AUTONOMA: Salvataggio automatico delle coordinate su assets/workflow/{dbId}.json.
+ * TITLE COLUMN DINAMICO: Selezione della colonna usata come titolo primario dei nodi (titleColId).
+ * UNDO/REDO CANVAS: Stack di cronologia completo (Ctrl+Z / Ctrl+Y) per posizioni nodi e collegamenti.
+ * REACTIVE GRAPH UPDATE: Metodo onDatabaseModified per aggiornare il canvas a seguito di mutazioni dal Drawer.
  */
 
 window.WorkflowApp = {
@@ -254,7 +253,9 @@ window.WorkflowApp = {
     switchScreen: (screenId) => {
         document.querySelectorAll('.app-screen').forEach(s => s.classList.remove('active'));
         const target = document.getElementById(screenId);
-        if (target) target.classList.add('active');
+        if (target) {
+            target.classList.add('active');
+        }
 
         const isWorkflow = screenId === 'canvasScreen';
         const ctrl = document.getElementById('workflowCanvasControls');
@@ -288,20 +289,17 @@ window.WorkflowApp = {
         const btn = document.getElementById('btnLockLayout');
         const label = document.getElementById('lockBtnLabel');
 
-        if (isLocked) {
-            document.body.classList.add('layout-locked');
-            if (btn) {
-                btn.classList.add('active');
-                btn.title = I18n.t('workflow.menu_lock');
-            }
-            if (label) label.innerText = I18n.t('workflow.unlock');
-        } else {
-            document.body.classList.remove('layout-locked');
-            if (btn) {
-                btn.classList.remove('active');
-                btn.title = I18n.t('workflow.menu_lock');
-            }
-            if (label) label.innerText = I18n.t('workflow.lock');
+        if (document.body) {
+            if (isLocked) document.body.classList.add('layout-locked');
+            else document.body.classList.remove('layout-locked');
+        }
+
+        if (btn) {
+            btn.classList.toggle('active', isLocked);
+            btn.title = I18n.t('workflow.menu_lock');
+        }
+        if (label) {
+            label.innerText = isLocked ? I18n.t('workflow.unlock') : I18n.t('workflow.lock');
         }
     },
 
@@ -385,7 +383,106 @@ window.WorkflowApp = {
     },
 
     // =========================================================================
-    // RICONOSCIMENTO PARAMETRI DI AVVIO E COLLEGAMENTO WORKSPACE
+    // GESTIONE PERMESSI FILE SYSTEM ACCESS API & CACHE INDEXEDDB
+    // =========================================================================
+    verifyWorkspacePermission: async (requestIfNeeded = false, customHandle = null) => {
+        const handle = customHandle || AppState.workspaceHandle;
+        if (!handle) return false;
+        try {
+            const opts = { mode: 'readwrite' };
+            if (typeof handle.queryPermission === 'function') {
+                let status = await handle.queryPermission(opts);
+                if (status === 'granted') return true;
+                if (status === 'prompt' && requestIfNeeded && typeof handle.requestPermission === 'function') {
+                    const res = await handle.requestPermission(opts);
+                    return res === 'granted';
+                }
+            }
+        } catch (_) {}
+        return false;
+    },
+
+    saveWorkspaceHandleToIDB: async (handle) => {
+        try {
+            if (typeof Store !== 'undefined' && Store.initDB) {
+                const db = await Store.initDB();
+                const tx = db.transaction('backupStore', 'readwrite');
+                tx.objectStore('backupStore').put(handle, 'workflow_last_workspace_handle');
+            }
+        } catch (_) {}
+    },
+
+    getWorkspaceHandleFromIDB: async () => {
+        try {
+            if (typeof Store !== 'undefined' && Store.initDB) {
+                const db = await Store.initDB();
+                return new Promise((resolve) => {
+                    const tx = db.transaction('backupStore', 'readonly');
+                    const req = tx.objectStore('backupStore').get('workflow_last_workspace_handle');
+                    req.onsuccess = () => resolve(req.result || null);
+                    req.onerror = () => resolve(null);
+                });
+            }
+        } catch (_) {
+            return null;
+        }
+        return null;
+    },
+
+    loadWorkspaceFromDirectory: async (dirHandle) => {
+        AppState.databases = {};
+        AppState.notes = [];
+
+        try {
+            const dbDir = await dirHandle.getDirectoryHandle('databases');
+            for await (const entry of dbDir.values()) {
+                if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+                    const dbId = entry.name.replace('.json', '');
+                    const fileHandle = await dbDir.getFileHandle(entry.name);
+                    const file = await fileHandle.getFile();
+                    let text = await file.text();
+
+                    if (text.startsWith('PRONOTES_ENC_V1|') && AppState.documentPassword && typeof CryptoUtils !== 'undefined') {
+                        try {
+                            text = await CryptoUtils.decrypt(text, AppState.documentPassword);
+                        } catch (_) {}
+                    }
+
+                    try {
+                        const dbState = JSON.parse(text);
+                        if (!dbState.isPivot && !dbState.isLinkedView && !dbId.includes('adv_btnbar_') && !dbId.includes('adv_code_') && !dbId.includes('adv_cols_') && dbId !== 'SYS_PROPERTIES_DB') {
+                            AppState.databases[dbId] = dbState;
+                        }
+                    } catch (_) {}
+                }
+            }
+        } catch (_) {}
+
+        try {
+            const notesDir = await dirHandle.getDirectoryHandle('notes');
+            for await (const entry of notesDir.values()) {
+                if (entry.kind === 'file' && entry.name.endsWith('.json')) {
+                    const nHandle = await notesDir.getFileHandle(entry.name);
+                    const nFile = await nHandle.getFile();
+                    let nText = await nFile.text();
+
+                    if (nText.startsWith('PRONOTES_ENC_V1|') && AppState.documentPassword && typeof CryptoUtils !== 'undefined') {
+                        try {
+                            nText = await CryptoUtils.decrypt(nText, AppState.documentPassword);
+                        } catch (_) {}
+                    }
+
+                    try {
+                        const nData = JSON.parse(nText);
+                        AppState.notes.push(nData);
+                    } catch (_) {}
+                }
+            }
+        } catch (_) {}
+    },
+
+    // =========================================================================
+    // RICONOSCIMENTO PARAMETRI DI AVVIO E EREDITARIETÀ STATO
     // =========================================================================
     checkUrlParams: async () => {
         const hash = window.location.hash ? window.location.hash.substring(1) : '';
@@ -406,51 +503,86 @@ window.WorkflowApp = {
             WorkflowApp._pendingTargetRelId = targetRelId;
         }
 
-        // Tenta l'aggancio diretto a window.opener se disponibile
-        if (window.opener && window.opener.AppState) {
-            try {
-                if (window.opener.AppState.workspaceHandle) {
-                    const handle = window.opener.AppState.workspaceHandle;
-                    AppState.workspaceHandle = handle;
-                    const wsLabel = document.getElementById('wsBtnLabel');
-                    if (wsLabel) wsLabel.innerText = handle.name;
+        let inherited = false;
 
-                    // Legge tutti i database dal disco usando l'handle
+        // 1. Tenta l'aggancio diretto a window.opener (proprietà diretta o scope lessicale globale)
+        try {
+            if (window.opener && !window.opener.closed) {
+                let openerState = null;
+
+                try {
+                    if (window.opener.AppState) {
+                        openerState = window.opener.AppState;
+                    }
+                } catch (_) {}
+
+                // Risoluzione per variabili globali dichiarate con const/let nello script genitore
+                if (!openerState && typeof window.opener.eval === 'function') {
                     try {
-                        const dbDir = await handle.getDirectoryHandle('databases');
-                        for await (const entry of dbDir.values()) {
-                            if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                                const dbId = entry.name.replace('.json', '');
-                                const fileHandle = await dbDir.getFileHandle(entry.name);
-                                const file = await fileHandle.getFile();
-                                const text = await file.text();
-                                try {
-                                    const dbState = JSON.parse(text);
-                                    if (!dbState.isPivot && !dbState.isLinkedView && !dbId.includes('adv_btnbar_') && !dbId.includes('adv_code_') && !dbId.includes('adv_cols_') && dbId !== 'SYS_PROPERTIES_DB') {
-                                        AppState.databases[dbId] = dbState;
-                                    }
-                                } catch (err) {}
-                            }
+                        openerState = window.opener.eval('typeof AppState !== "undefined" ? AppState : null');
+                        if (openerState) {
+                            try {
+                                window.opener.eval('window.AppState = AppState; if (typeof Store !== "undefined") window.Store = Store; if (typeof AdvancedTable !== "undefined") window.AdvancedTable = AdvancedTable;');
+                            } catch (_) {}
                         }
-                    } catch(readErr) {
-                        if (window.opener.AppState.databases) {
-                            AppState.databases = Object.assign({}, window.opener.AppState.databases);
-                        }
+                    } catch (_) {}
+                }
+
+                if (openerState) {
+                    if (openerState.databases) {
+                        AppState.databases = Object.assign({}, openerState.databases);
+                    }
+                    if (openerState.notes) {
+                        AppState.notes = [...(openerState.notes || [])];
                     }
 
-                    if (window.opener.AppState.notes) {
-                        AppState.notes = [...(window.opener.AppState.notes || [])];
+                    if (openerState.workspaceHandle) {
+                        const handle = openerState.workspaceHandle;
+                        AppState.workspaceHandle = handle;
+                        AppState.assetsHandle = openerState.assetsHandle || null;
+                        AppState.documentPassword = openerState.documentPassword || null;
+                        AppState.workspaceId = openerState.workspaceId || null;
+                        AppState.fileName = openerState.fileName || handle.name;
+
+                        const wsLabel = document.getElementById('wsBtnLabel');
+                        if (wsLabel) wsLabel.innerText = handle.name;
+
+                        await WorkflowApp.verifyWorkspacePermission(false);
+                        await WorkflowApp.saveWorkspaceHandleToIDB(handle);
                     }
 
-                    // Se il database target è presente, caricalo immediatamente sul canvas
-                    if (targetDbId && AppState.databases[targetDbId]) {
-                        WorkflowApp._pendingTargetDbId = null;
-                        await WorkflowApp.loadDatabaseForWorkflow(targetDbId);
-                        return;
+                    inherited = Object.keys(AppState.databases || {}).length > 0;
+                }
+            }
+        } catch (_) {}
+
+        // 2. Se non aperto tramite window.opener, tenta il ripristino dell'handle da IndexedDB (supporto F5)
+        if (!inherited && (!AppState.workspaceHandle || Object.keys(AppState.databases || {}).length === 0)) {
+            try {
+                const storedHandle = await WorkflowApp.getWorkspaceHandleFromIDB();
+                if (storedHandle) {
+                    const hasPerm = await WorkflowApp.verifyWorkspacePermission(false, storedHandle);
+                    if (hasPerm) {
+                        AppState.workspaceHandle = storedHandle;
+                        const wsLabel = document.getElementById('wsBtnLabel');
+                        if (wsLabel) wsLabel.innerText = storedHandle.name;
+                        await WorkflowApp.loadWorkspaceFromDirectory(storedHandle);
+                        inherited = Object.keys(AppState.databases || {}).length > 0;
                     }
                 }
-            } catch (err) {
-                console.warn("[WORKFLOW] Accesso a window.opener non consentito:", err);
+            } catch (_) {}
+        }
+
+        // 3. Routing di visualizzazione iniziale
+        const dbCount = Object.keys(AppState.databases || {}).length;
+        const dbToLoad = targetDbId || WorkflowApp._pendingTargetDbId;
+
+        if (dbCount > 0) {
+            if (dbToLoad && AppState.databases[dbToLoad]) {
+                WorkflowApp._pendingTargetDbId = null;
+                await WorkflowApp.loadDatabaseForWorkflow(dbToLoad);
+            } else {
+                WorkflowApp.showDbPicker();
             }
         }
     },
@@ -647,16 +779,13 @@ window.WorkflowApp = {
             }
 
             if (WorkflowApp.dragNodeState.active) {
-                // Se i nodi sono stati effettivamente spostati, salva il layout su disco
                 if (WorkflowApp.dragNodeState.hasMoved) {
                     WorkflowApp.saveWorkflowAuto();
                 } else if (WorkflowApp.undoStack.length > 0) {
-                    // Se non c'è stato movimento reale (solo click sul blocco), scarta lo snapshot preventivo
                     WorkflowApp.undoStack.pop();
                 }
             }
 
-            // Se l'utente ha rilasciato il mouse senza muoverlo (click singolo a vuoto), allora deseleziona
             if (WorkflowApp.panState.active && !WorkflowApp.panState.hasMoved) {
                 WorkflowApp.clearFocusBranch();
                 WorkflowApp.clearSelection();
@@ -697,7 +826,6 @@ window.WorkflowApp = {
             });
         }
 
-        // Controllo automatico dei parametri URL/hash all'avvio
         WorkflowApp.checkUrlParams();
     },
 
@@ -711,7 +839,7 @@ window.WorkflowApp = {
                     WorkflowApp.reloadCurrentDatabase(true);
                 }
             };
-        } catch(e) {}
+        } catch (_) {}
 
         window.addEventListener('focus', () => {
             if (document.visibilityState === 'visible') {
@@ -735,44 +863,25 @@ window.WorkflowApp = {
 
     selectWorkspace: async () => {
         try {
-            const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            let dirHandle = null;
+
+            if (AppState.workspaceHandle) {
+                const hasPerm = await WorkflowApp.verifyWorkspacePermission(true);
+                if (hasPerm) {
+                    dirHandle = AppState.workspaceHandle;
+                }
+            }
+
+            if (!dirHandle) {
+                dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            }
+
             AppState.workspaceHandle = dirHandle;
-            document.getElementById('wsBtnLabel').innerText = dirHandle.name;
+            const wsBtn = document.getElementById('wsBtnLabel');
+            if (wsBtn) wsBtn.innerText = dirHandle.name;
+            await WorkflowApp.saveWorkspaceHandleToIDB(dirHandle);
 
-            AppState.databases = {};
-            AppState.notes = [];
-
-            try {
-                const dbDir = await dirHandle.getDirectoryHandle('databases');
-                for await (const entry of dbDir.values()) {
-                    if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                        const dbId = entry.name.replace('.json', '');
-                        const fileHandle = await dbDir.getFileHandle(entry.name);
-                        const file = await fileHandle.getFile();
-                        const text = await file.text();
-                        try {
-                            const dbState = JSON.parse(text);
-                            if (!dbState.isPivot && !dbState.isLinkedView && !dbId.includes('adv_btnbar_') && !dbId.includes('adv_code_') && !dbId.includes('adv_cols_') && dbId !== 'SYS_PROPERTIES_DB') {
-                                AppState.databases[dbId] = dbState;
-                            }
-                        } catch (err) {}
-                    }
-                }
-            } catch(e) {}
-
-            try {
-                const notesDir = await dirHandle.getDirectoryHandle('notes');
-                for await (const entry of notesDir.values()) {
-                    if (entry.kind === 'file' && entry.name.endsWith('.json')) {
-                        const nHandle = await notesDir.getFileHandle(entry.name);
-                        const nFile = await nHandle.getFile();
-                        try {
-                            const nData = JSON.parse(await nFile.text());
-                            AppState.notes.push(nData);
-                        } catch(e) {}
-                    }
-                }
-            } catch(e) {}
+            await WorkflowApp.loadWorkspaceFromDirectory(dirHandle);
 
             if (WorkflowApp._pendingTargetDbId && AppState.databases[WorkflowApp._pendingTargetDbId]) {
                 const targetDbId = WorkflowApp._pendingTargetDbId;
@@ -788,11 +897,15 @@ window.WorkflowApp = {
 
     showDbPicker: () => {
         const grid = document.getElementById('dbGridList');
+        if (!grid) {
+            WorkflowApp.switchScreen('dbPickerScreen');
+            return;
+        }
         grid.innerHTML = '';
 
-        const dbKeys = Object.keys(AppState.databases).filter(id => {
+        const dbKeys = Object.keys(AppState.databases || {}).filter(id => {
             const db = AppState.databases[id];
-            return (db.columns || []).some(c => c.type === 'relation' && (c.targetTableId === id || c.targetTableId === db.id));
+            return db && (db.columns || []).some(c => c.type === 'relation' && (c.targetTableId === id || c.targetTableId === db.id));
         });
 
         if (dbKeys.length === 0) {
@@ -812,11 +925,12 @@ window.WorkflowApp = {
         dbKeys.sort((a, b) => {
             const dbA = AppState.databases[a];
             const dbB = AppState.databases[b];
-            return (dbA.title || '').localeCompare(dbB.title || '');
+            return (dbA?.title || '').localeCompare(dbB?.title || '');
         });
 
         dbKeys.forEach(id => {
             const db = AppState.databases[id];
+            if (!db) return;
             const rowCount = (db.rows || []).length;
             const selfRels = (db.columns || []).filter(c => c.type === 'relation' && (c.targetTableId === id || c.targetTableId === db.id));
             const relNames = selfRels.map(r => r.name).join(', ');
@@ -845,7 +959,10 @@ window.WorkflowApp = {
 
     loadDatabaseForWorkflow: async (dbId) => {
         const db = AppState.databases[dbId];
-        if (!db) return;
+        if (!db) {
+            console.error(`[WORKFLOW] Database "${dbId}" non trovato.`);
+            return;
+        }
 
         WorkflowApp.currentDbId = dbId;
         WorkflowApp.currentDbState = db;
@@ -965,7 +1082,7 @@ window.WorkflowApp = {
             WorkflowApp.renderClusters();
             WorkflowApp.updateMinimap();
             if (!silent) UI.showToast(I18n.t('workflow.toast_data_reloaded'), "success");
-        } catch(e) {
+        } catch (e) {
             if (!silent) {
                 console.error("Errore ricarica:", e);
                 UI.showToast(I18n.t('workflow.toast_reload_error'), "error");
@@ -979,6 +1096,7 @@ window.WorkflowApp = {
     getWorkflowFolderHandle: async () => {
         if (!AppState.workspaceHandle) return null;
         try {
+            await WorkflowApp.verifyWorkspacePermission(false);
             const assetsDir = await AppState.workspaceHandle.getDirectoryHandle('assets', { create: true });
             return await assetsDir.getDirectoryHandle('workflow', { create: true });
         } catch (e) {
@@ -1011,7 +1129,7 @@ window.WorkflowApp = {
 
             await writable.write(JSON.stringify(exportObj, null, 2));
             await writable.close();
-        } catch(e) {
+        } catch (e) {
             console.error("Errore salvataggio automatico workflow:", e);
         }
     },
@@ -1050,7 +1168,7 @@ window.WorkflowApp = {
                     return true;
                 }
             }
-        } catch(e) {
+        } catch (_) {
             return false;
         }
         return false;

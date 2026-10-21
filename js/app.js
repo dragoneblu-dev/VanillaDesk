@@ -3,9 +3,13 @@
  * ENTRY POINT - Inizializzazione applicazione e montaggio architettura a componenti.
  * REFACTOR: Eliminata l'iniezione imperativa sul DOM del menu principale poiché 
  * la voce "Sicurezza e Password..." è ora nativamente inclusa in UI.toggleMainMenu.
+ * FEAT WINDOW NAME: Impostazione deterministica di window.name per consentire il re-targeting da finestre figlie.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
+
+    // 0. Assegna il nome univoco della finestra per consentire il targeting dalle finestre figlie (Graph, Workflow)
+    window.name = 'VanillaDeskMain';
 
     // 1. Registrazione Moduli nel Widget Manager Centrale
     if (typeof WidgetManager !== 'undefined') {

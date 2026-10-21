@@ -12,6 +12,7 @@
  * UX COMPACT PILL MENU: Spaziatura compatta ottimizzata (padding 2px 4px) per l'elenco delle opzioni a pillola.
  * FIX REATTIVITÀ PILLS: Invocazione diretta di renderPills() all'aggiunta e rimozione filtri.
  * FEAT EMPTY FILTER VALUE (*EMPTY*): Supporto al filtraggio per sole note senza tag/proprietà valorizzata.
+ * FIX OBJECT OBJECT DISPLAY: Risoluzione corretta delle date con intervallo {start, end} e note_link evitando [object Object].
  */
 
 const SidebarManager = {
@@ -109,10 +110,38 @@ const SidebarManager = {
                                 }
                             });
                         }
+                    } else if (['date', 'datetime'].includes(col.type) || (typeof val === 'object' && val !== null && (val.start !== undefined || val.end !== undefined))) {
+                        let dateDisplay = '';
+                        if (typeof val === 'object' && val !== null) {
+                            if (val.start && val.end) dateDisplay = `${val.start} ➔ ${val.end}`;
+                            else if (val.start) dateDisplay = val.start;
+                            else if (val.end) dateDisplay = `➔ ${val.end}`;
+                        } else {
+                            dateDisplay = String(val);
+                        }
+                        if (dateDisplay) {
+                            uniqueValuesMap.set(dateDisplay, dateDisplay);
+                        }
+                    } else if (col.type === 'note_link' || (typeof val === 'object' && val !== null && val.noteId)) {
+                        let linkTitle = '';
+                        if (typeof val === 'object' && val !== null) {
+                            linkTitle = val.title || '';
+                            if (!linkTitle && val.noteId && typeof Store !== 'undefined') {
+                                const tn = Store.getNote(val.noteId);
+                                if (tn) linkTitle = tn.title;
+                            }
+                        } else {
+                            linkTitle = String(val);
+                        }
+                        if (linkTitle) {
+                            uniqueValuesMap.set(linkTitle, linkTitle);
+                        }
                     } else if (Array.isArray(val)) {
                         val.forEach(v => {
-                            const sVal = String(v);
-                            uniqueValuesMap.set(sVal, sVal);
+                            if (v !== undefined && v !== null && v !== '') {
+                                const sVal = String(v);
+                                uniqueValuesMap.set(sVal, sVal);
+                            }
                         });
                     } else {
                         const sVal = String(val);
@@ -171,14 +200,14 @@ const SidebarManager = {
                             type: 'column_exists',
                             colId: col.id,
                             colName: col.name,
-                            displayValue: `Qualsiasi valore in "${col.name}"`,
+                            displayValue: `Qualsiasi valore`,
                             realValue: '*EXISTS*', 
                             colorClass: 'default-color'
                         });
                     }
                 }
 
-                // 2. Estrazione e risoluzione dei valori unici (con decodifica delle relazioni)
+                // 2. Estrazione e risoluzione dei valori unici (con decodifica corretta di date e relazioni)
                 let uniqueValuesMap = new Map();
                 
                 if (col.type === 'select' || col.type === 'multi-select') {
@@ -205,10 +234,40 @@ const SidebarManager = {
                                 }
                             });
                         }
+                    } else if (['date', 'datetime'].includes(col.type) || (typeof val === 'object' && val !== null && (val.start !== undefined || val.end !== undefined))) {
+                        // Riconoscimento ed estrazione semantica delle date ad intervallo
+                        let dateDisplay = '';
+                        if (typeof val === 'object' && val !== null) {
+                            if (val.start && val.end) dateDisplay = `${val.start} ➔ ${val.end}`;
+                            else if (val.start) dateDisplay = val.start;
+                            else if (val.end) dateDisplay = `➔ ${val.end}`;
+                        } else {
+                            dateDisplay = String(val);
+                        }
+                        if (dateDisplay) {
+                            uniqueValuesMap.set(dateDisplay, dateDisplay);
+                        }
+                    } else if (col.type === 'note_link' || (typeof val === 'object' && val !== null && val.noteId)) {
+                        // Riconoscimento ed estrazione semantica dei link alle note
+                        let linkTitle = '';
+                        if (typeof val === 'object' && val !== null) {
+                            linkTitle = val.title || '';
+                            if (!linkTitle && val.noteId && typeof Store !== 'undefined') {
+                                const tn = Store.getNote(val.noteId);
+                                if (tn) linkTitle = tn.title;
+                            }
+                        } else {
+                            linkTitle = String(val);
+                        }
+                        if (linkTitle) {
+                            uniqueValuesMap.set(linkTitle, linkTitle);
+                        }
                     } else if (Array.isArray(val)) {
                         val.forEach(v => {
-                            const sVal = String(v);
-                            uniqueValuesMap.set(sVal, sVal);
+                            if (v !== undefined && v !== null && v !== '') {
+                                const sVal = String(v);
+                                uniqueValuesMap.set(sVal, sVal);
+                            }
                         });
                     } else {
                         const sVal = String(val);
@@ -259,7 +318,14 @@ const SidebarManager = {
             const rect = inputEl.getBoundingClientRect();
             popup.style.top = rect.bottom + 5 + 'px';
             popup.style.left = rect.left + 'px';
-            popup.style.width = rect.width + 'px';
+
+            // CALCOLO DINAMICO LARGHEZZA: Larghezza minima pari al campo di input, espandibile fino a +200px con protezione schermo
+            popup.style.minWidth = rect.width + 'px';
+            const availableSpace = Math.max(rect.width, window.innerWidth - rect.left - 15);
+            const maxAllowedWidth = Math.min(rect.width + 200, availableSpace);
+            popup.style.maxWidth = maxAllowedWidth + 'px';
+            popup.style.width = 'max-content';
+            popup.style.boxSizing = 'border-box';
 
             let html = '<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">Suggerimenti Tag / Proprietà:</div>';
             
@@ -520,32 +586,61 @@ const SidebarManager = {
                     });
                 }
             } else {
-                // Per campi di tipo testo, data, numero: estrae i valori distinti presenti nei record
-                let distinctVals = new Set();
+                // Per campi di tipo testo, data, numero, note_link: estrae i valori distinti gestendo correttamente gli oggetti
+                let distinctVals = new Map();
                 if (propsDb && propsDb.rows) {
                     propsDb.rows.forEach(r => {
                         let v = r.cells[filter.colId];
-                        if (v !== undefined && v !== null && v !== '') {
-                            if (typeof v === 'object' && v.start) distinctVals.add(v.start);
-                            else distinctVals.add(String(v));
+                        if (v === undefined || v === null || v === '') return;
+
+                        if (['date', 'datetime'].includes(col?.type) || (typeof v === 'object' && v !== null && (v.start !== undefined || v.end !== undefined))) {
+                            let dateDisplay = '';
+                            if (typeof v === 'object' && v !== null) {
+                                if (v.start && v.end) dateDisplay = `${v.start} ➔ ${v.end}`;
+                                else if (v.start) dateDisplay = v.start;
+                                else if (v.end) dateDisplay = `➔ ${v.end}`;
+                            } else {
+                                dateDisplay = String(v);
+                            }
+                            if (dateDisplay) distinctVals.set(dateDisplay, dateDisplay);
+                        } else if (col?.type === 'note_link' || (typeof v === 'object' && v !== null && v.noteId)) {
+                            let linkTitle = '';
+                            if (typeof v === 'object' && v !== null) {
+                                linkTitle = v.title || '';
+                                if (!linkTitle && v.noteId && typeof Store !== 'undefined') {
+                                    const tn = Store.getNote(v.noteId);
+                                    if (tn) linkTitle = tn.title;
+                                }
+                            } else {
+                                linkTitle = String(v);
+                            }
+                            if (linkTitle) distinctVals.set(linkTitle, linkTitle);
+                        } else if (typeof v === 'object' && v !== null) {
+                            const sVal = JSON.stringify(v);
+                            distinctVals.set(sVal, sVal);
+                        } else {
+                            const sVal = String(v);
+                            distinctVals.set(sVal, sVal);
                         }
                     });
                 }
 
-                const valArray = Array.from(distinctVals).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+                const sortedEntries = Array.from(distinctVals.entries()).sort((a, b) => 
+                    a[1].localeCompare(b[1], undefined, { numeric: true, sensitivity: 'base' })
+                );
 
-                if (valArray.length === 0) {
+                if (sortedEntries.length === 0) {
                     menuItems.push({
                         type: 'custom',
                         html: '<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">Nessun valore memorizzato.</div>'
                     });
                 } else {
-                    valArray.forEach(val => {
-                        const isSelected = String(filter.realValue) === String(val);
+                    sortedEntries.forEach(([realVal, displayVal]) => {
+                        const isSelected = String(filter.realValue) === String(realVal);
                         menuItems.push({
-                            label: `${String(val).replace(/</g, '&lt;')}` + (isSelected ? chk : ''),
+                            label: `${String(displayVal).replace(/</g, '&lt;')}` + (isSelected ? chk : ''),
                             onClick: () => {
-                                SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, val, val, 'default-color');
+                                SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, realVal, displayVal, 'default-color');
                             }
                         });
                     });

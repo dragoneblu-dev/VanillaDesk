@@ -116,9 +116,13 @@ describe("Sidebar Manager: Autocomplete Ricerca, Pillole Filtro & Tag", () => {
         // Deve contenere il suggerimento di esistenza per l'intera colonna
         Assert.isTrue(popup.textContent.includes('Qualsiasi valore'));
 
-        SidebarManager.SearchAutocomplete.select('sys_c_tags', '*EXISTS*', '#Tag', '🏷️ #Tag');
+        SidebarManager.SearchAutocomplete.select('sys_c_tags', '*EXISTS*', '#Tag', '🏷️ #Tag: Qualsiasi');
         Assert.strictEqual(AppState.activePropertyFilters[0].realValue, '*EXISTS*');
-        Assert.strictEqual(AppState.activePropertyFilters[0].visualText, '🏷️ #Tag');
+        Assert.strictEqual(AppState.activePropertyFilters[0].visualText, '🏷️ #Tag: Qualsiasi');
+
+        // Verifica la corretta visualizzazione anche nel contenitore delle pillole attive
+        const pillsContainer = document.getElementById('activeSearchFilters');
+        Assert.isTrue(pillsContainer.textContent.includes('🏷️ #Tag: Qualsiasi'));
     });
 
     test("Autocomplete: Combinazione multi-pillola (Faceted Intersect) filtra in logica AND", () => {

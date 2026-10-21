@@ -11,6 +11,7 @@
  * FEAT ADAPTIVE TRUNCATION TOOLTIP: L'attributo 'title' viene calcolato e applicato al solo passaggio del mouse
  * ESCLUSIVAMENTE se il testo risulta effettivamente tagliato dai limiti di larghezza della sidebar.
  * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto completo al filtro delle note prive di tag o proprietà valorizzata.
+ * FIX DATE RANGE MATCHING: Risoluzione robusta delle date con intervallo {start, end} e note_link evitando falsi negativi.
  */
 
 Object.assign(UI, {
@@ -332,12 +333,23 @@ Object.assign(UI, {
             // 5. Date Range con oggetto {start, end}
             if (typeof cellVal === 'object' && cellVal !== null) {
                 const searchLower = String(f.realValue).toLowerCase();
+                const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
+                if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
                 const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
                 const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
                 return !!(startMatch || endMatch);
             }
 
-            // 6. Testo, Numeri e Singoli Valori
+            // 6. Note Link con oggetto {noteId, title, anchor}
+            if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
+                const searchLower = String(f.realValue).toLowerCase();
+                const titleStr = (cellVal.title || '').toLowerCase();
+                if (titleStr.includes(searchLower)) return true;
+                if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
+                return false;
+            }
+
+            // 7. Testo, Numeri e Singoli Valori
             return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
         });
     },
@@ -359,7 +371,6 @@ Object.assign(UI, {
         let forceExpandBecauseOfMatch = false;
 
         if (isExplicitDbMode && (!isFiltering || dbTitleMatch)) {
-            // Ordinamento alfabetico anche delle viste collegate e delle macro associate
             const depDbIds = Object.keys(AppState.databases).sort((a, b) => {
                 const titleA = AppState.databases[a]?.title || '';
                 const titleB = AppState.databases[b]?.title || '';
@@ -739,12 +750,9 @@ Object.assign(UI, {
         let isExpanded = false;
 
         if (isCurrentActive && hasOnlyToc) {
-            // Se la nota ha solo capitoli TOC, è aperta di default a meno che l'utente non l'abbia appena chiusa manualmente (_tocCollapsed)
             isExpanded = node._tocCollapsed !== true;
         } else {
-            // Se ha sotto-note cartella reali, segue la memoria permanente node.expanded
             isExpanded = node.expanded !== false || !isDefaultView || dbElementsToInject.length > 0;
-            // Ma se è la nota attiva e ha anche capitoli, e l'utente ha collassato il TOC:
             if (isCurrentActive && node._tocCollapsed === true && !hasSubNotes) {
                 isExpanded = false;
             }
@@ -757,10 +765,8 @@ Object.assign(UI, {
             toggle.onclick = (e) => {
                 e.stopPropagation();
                 if (isCurrentActive && hasOnlyToc) {
-                    // Toggle temporaneo del TOC per la nota attualmente aperta
                     node._tocCollapsed = !node._tocCollapsed;
                 } else {
-                    // Toggle permanente delle sotto-note cartella
                     if (node.expanded === undefined) node.expanded = false; 
                     else node.expanded = !node.expanded;
                     if (isCurrentActive && hasAnyChildren) {
@@ -810,7 +816,6 @@ Object.assign(UI, {
 
         // ISOLAMENTO RIGOROSO: il timer e l'appunto del segnalibro vengono calcolati unicamente dal contenuto della specifica nota 'node'
         if (reqBook && !isGhost && node.content) {
-            // Rilevamento presenza di un appunto/commento nel segnalibro per mostrare la nuvoletta con tooltip
             const commentMatch = node.content.match(/<span[^>]*class=["'][^"']*bookmark-comment-data[^"']*["'][^>]*>(.*?)<\/span>/i);
             if (commentMatch && commentMatch[1]) {
                 const tempDiv = document.createElement('div');

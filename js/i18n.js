@@ -478,6 +478,7 @@ export_dialog: {
             compress_error: "Errore durante la compressione dell'immagine: "
         },
 toolbar: {
+    graph_view: "Mappa delle Connessioni (Graph View)",
     page_properties_count: "Proprietà / Tag Pagina ({count} valorizzati)",
     page_info_count: "Informazioni e Collegamenti Nota ({count} menzioni in entrata)",
     undo: "Annulla Ultima Modifica (Ctrl+Z)",

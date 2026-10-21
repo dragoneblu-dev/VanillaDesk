@@ -4,7 +4,8 @@
  * FEEDBACK VISIVO HEADER: Sincronizzazione automatica della classe header-unsaved
  * per colorare l'intera prima riga di rosso quando la sessione è ripristinata o non salvata su disco.
  * FEAT WORKSPACE GUIDE: Modale esplicativo guidato per nuovi utenti prima della selezione della cartella.
- * REFACTOR: Rimossa implementazione morta di goHome, gestita in via esclusiva da ui-notes-lifecycle.js.
+ * FEAT GRAPH VIEW DISPATCH: Metodo openGraphView per aprire la mappa delle connessioni in una finestra standalone
+ * con targeting nominale bidirezionale e notifica via BroadcastChannel per finestre già attive.
  */
 
 window.UI = {
@@ -20,6 +21,46 @@ window.UI = {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;')
             .replace(/'/g, '&#39;');
+    },
+
+    openGraphView: (targetNoteId = null) => {
+        // Se vi sono modifiche non salvate nel workspace su disco, salva preventivamente
+        if (typeof Store !== 'undefined' && Store.isDirty && AppState.workspaceHandle) {
+            Store.saveToFile();
+        }
+
+        // Assegna il nome univoco alla finestra principale per consentire alle schede figlie di riportarvi il focus
+        if (!window.name) {
+            window.name = 'VanillaDeskMain';
+        }
+
+        const noteParam = targetNoteId || AppState.currentNoteId;
+        const targetUrl = noteParam ? `graph/index.html#note=${encodeURIComponent(noteParam)}` : `graph/index.html`;
+
+        const graphWin = window.open(targetUrl, 'VanillaDeskGraph');
+        if (graphWin) {
+            try {
+                graphWin.focus();
+                // Se la finestra era già aperta ed è accessibile via script, centra immediatamente il nodo
+                if (graphWin.GraphCanvas && typeof graphWin.GraphCanvas.focusNode === 'function' && noteParam) {
+                    graphWin.GraphCanvas.focusNode(noteParam);
+                }
+            } catch (_) {}
+        }
+
+        // Notifica asincrona via BroadcastChannel: garantisce la selezione anche se il riferimento window è differito
+        if (noteParam) {
+            try {
+                const channel = new BroadcastChannel('vanilladesk_sync');
+                channel.postMessage({
+                    type: 'focus_graph_node',
+                    noteId: noteParam
+                });
+                channel.close();
+            } catch (_) {}
+        }
+
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
     },
 
     toggleMinimap: () => {

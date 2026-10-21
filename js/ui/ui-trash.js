@@ -104,8 +104,8 @@ Object.assign(UI, {
                 const showModal = count > 3 && AppState.workspaceHandle;
                 if (showModal) {
                     UI.ProgressModal.show(
-                        I18n.t('progress.deleting_files') || "Eliminazione definitiva file...",
-                        I18n.t('progress.do_not_close') || "Rimozione fisica dal disco fisso. Non chiudere l'applicazione...",
+                        I18n.t('progress.deleting_files'),
+                        I18n.t('progress.do_not_close'),
                         0,
                         count
                     );

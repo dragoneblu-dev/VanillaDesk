@@ -425,27 +425,27 @@ const AdvancedCalendar = {
 
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
-            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewCalendar, label: (typeof I18n !== 'undefined' && I18n.t('adv_board.calendar_view')) || 'Calendario', onClick: AdvancedBoard.openViewMenu });
+            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewCalendar, label: I18n.t('adv_board.calendar_view'), onClick: AdvancedBoard.openViewMenu });
             if (!state.isLinkedView) {
-                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: (typeof I18n !== 'undefined' && I18n.t('table.automations')) || 'Automazioni', onClick: AdvancedAutomations.openPanel });
+                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
 
             // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
             tools.push({ 
                 id: `adv-search-btn-${tableId}`, 
                 icon: Icons.search, 
-                title: (typeof I18n !== 'undefined' && I18n.t('adv_search.title')) || 'Cerca in tutti i campi...', 
+                title: I18n.t('adv_search.title'), 
                 active: !!state.showQuickSearch, 
                 editOnly: false, 
                 onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
             });
 
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: (typeof I18n !== 'undefined' && I18n.t('table.sort')) || 'Ordina', active: hasSort, onClick: AdvancedTable.openSortMenu });
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: (typeof I18n !== 'undefined' && I18n.t('table.filter')) || 'Filtra', active: hasFilter, onClick: AdvancedTable.openFilterMenu });
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, onClick: AdvancedTable.openFilterMenu });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
-                title: state.title || (typeof I18n !== 'undefined' && I18n.t('editor.database')) || 'Database',
+                title: state.title || I18n.t('editor.database'),
                 optionsId: `adv-opt-btn-${tableId}`,
                 tools: tools,
                 onTitleChange: AdvancedTable.updateTitle,
@@ -890,7 +890,7 @@ const AdvancedCalendar = {
                 const isCurrentMonth = currentGridDate.getMonth() === month;
                 const isToday = currentGridDate.getTime() === new Date().setHours(0, 0, 0, 0);
                 const bg = isCurrentMonth ? 'var(--bg-color)' : 'rgba(0,0,0,0.03)';
-                const dayStr = isToday ? `<span style="background:var(--accent-color); color:white; border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">${currentGridDate.getDate()}</span>` : currentGridDate.getDate();
+                const dayStr = isToday ? `<span style="background:var(--accent-color); color:var(--accent-color-tx); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">${currentGridDate.getDate()}</span>` : currentGridDate.getDate();
 
                 const events = eventsByDate[currentGridDate.getTime()] ||[];
                 
@@ -934,7 +934,7 @@ const AdvancedCalendar = {
                 const currentGridDate = new Date(startOfWeek);
                 currentGridDate.setDate(startOfWeek.getDate() + i);
                 const isToday = currentGridDate.getTime() === new Date().setHours(0, 0, 0, 0);
-                const dayStr = isToday ? `<span style="background:var(--accent-color); color:white; border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;">${currentGridDate.getDate()}</span>` : currentGridDate.getDate();
+                const dayStr = isToday ? `<span style="background:var(--accent-color); color:var(--accent-color-tx); border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;">${currentGridDate.getDate()}</span>` : currentGridDate.getDate();
 
                 html += `<div style="padding:10px; text-align:center; background:var(--sidebar-bg);">
                             <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase;">${daysNames[i]}</div>

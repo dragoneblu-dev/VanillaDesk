@@ -136,7 +136,7 @@ Object.assign(UI, {
                         // Aggiunge il Badge numerico
                         if (item.badge !== undefined && item.badge !== null) {
                             const bColor = item.badgeColor || 'var(--accent-color)';
-                            innerHTML += `<span style="background:${bColor}; color:white; font-size:0.7rem; font-weight:bold; padding:2px 6px; border-radius:10px; margin-left:auto;">${item.badge}</span>`;
+                            innerHTML += `<span style="background:${bColor}; color:var(--accent-color-tx); font-size:0.7rem; font-weight:bold; padding:2px 6px; border-radius:10px; margin-left:auto;">${item.badge}</span>`;
                         }
                         // Aggiunge la scorciatoia da tastiera
                         else if (item.shortcut) {

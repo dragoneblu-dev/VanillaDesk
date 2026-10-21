@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VanillaDesk - Graph View</title>
+
+    <!-- Risorse condivise di VanillaDesk -->
+    <link rel="stylesheet" href="../css/variables.css">
+    <link rel="stylesheet" href="../css/main.css">
+    <link rel="stylesheet" href="../css/ui-components.css">
+    <link rel="stylesheet" href="../css/colors.css">
+    <link rel="stylesheet" href="../css/modals.css">
+    <link rel="stylesheet" href="graph.css">
+
+    <!-- Script Core di VanillaDesk per la coerenza dei dati -->
+    <script src="../js/i18n.js"></script>
+    <script src="../js/icons.js"></script>
+    <script src="../js/state.js"></script>
+    <script src="../js/crypto-utils.js"></script>
+    <script src="../js/store.js"></script>
+    <script src="../js/store-workspace.js"></script>
+    <script src="../js/ui/ui-core.js"></script>
+    <script src="../js/ui/ui-notifications.js"></script>
+    <script src="../js/ui/ui-drawer.js"></script>
+
+    <!-- Architettura Modulare Graph View -->
+    <script src="graph-core.js"></script>
+    <script src="graph-data.js"></script>
+    <script src="graph-canvas.js"></script>
+    <script src="graph-ui.js"></script>
+</head>
+<body class="light-theme">
+
+    <!-- Header Controlli -->
+    <header class="graph-header">
+        <div class="header-left">
+            <span class="graph-brand-icon">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="6" cy="6" r="3"></circle>
+                    <circle cx="18" cy="6" r="3"></circle>
+                    <circle cx="12" cy="18" r="3"></circle>
+                    <line x1="8.5" y1="7.5" x2="15.5" y2="7.5"></line>
+                    <line x1="7.5" y1="8.5" x2="10.5" y2="15.5"></line>
+                    <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"></line>
+                </svg>
+            </span>
+            <span id="graphWorkspaceLabel" class="graph-workspace-name">Mappa delle Connessioni</span>
+            <span id="graphStatsBadge" class="graph-badge">0 nodi &bull; 0 collegamenti</span>
+        </div>
+
+        <div class="header-center">
+            <div class="graph-search-box">
+                <span class="search-icon">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="11" cy="11" r="8"></circle>
+                        <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                    </svg>
+                </span>
+                <input type="text" id="graphSearchInput" placeholder="Cerca nota o #tag nel grafo (Invio per centrare)..." autocomplete="off">
+                <button id="graphSearchClear" class="graph-clear-btn" style="display:none;">✕</button>
+            </div>
+        </div>
+
+        <div class="header-right">
+            <!-- Centra visuale -->
+            <button class="btn" id="btnFitGraph" onclick="GraphCanvas.fitToView()" title="Centra ed adatta l'intero grafo allo schermo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                </svg>
+                <span>Centra</span>
+            </button>
+
+            <!-- Riavvia disposizione fisica compatta -->
+            <button class="btn" id="btnRestartPhysics" onclick="GraphCanvas.restartSimulation()" title="Compatta verso il centro e riavvia simulazione">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                </svg>
+            </button>
+
+            <div class="separator"></div>
+
+            <!-- Apri Cassetto Filtri & Forze -->
+            <button class="btn btn-primary" id="btnGraphSettings" onclick="GraphUI.openFilterDrawer()" title="Filtri, colorazione e parametri fisici del grafo">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="3"></circle>
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                </svg>
+                <span>Filtri & Forze</span>
+            </button>
+        </div>
+    </header>
+
+    <!-- Canvas Viewport -->
+    <main class="graph-main">
+        <canvas id="graphCanvas"></canvas>
+
+        <!-- Tooltip Hover Nodo -->
+        <div id="graphTooltip" class="graph-tooltip"></div>
+
+        <!-- Legenda dinamica in basso a sinistra -->
+        <div id="graphLegendContainer" class="graph-legend"></div>
+    </main>
+
+    <!-- Drawer Laterale Universale (Filtri, Parametri Fisici e Dettagli) -->
+    <div id="advGlobalDrawer" class="adv-drawer">
+        <div class="adv-drawer-header">
+            <div class="adv-drawer-title" id="advDrawerTitle">Impostazioni Grafo</div>
+            <button class="close-modal-btn" onclick="UI.closeDrawer()">✕</button>
+        </div>
+        <div id="advDrawerBody" class="adv-drawer-body"></div>
+        <div id="advDrawerFooter" class="adv-drawer-footer"></div>
+    </div>
+
+    <!-- Container Notifiche Toast -->
+    <div id="adv-toast-container" class="toast-container"></div>
+
+</body>
+</html>

@@ -7,6 +7,7 @@
  * FIX CONTRACT RESILIENCE: isRelationalTable supporta istanze in fase di inizializzazione
  * o fixture di test prima del popolamento esplicito dell'array columns.
  * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto a findNext/findPrevious per note senza tag/proprietà valorizzata.
+ * FIX DATE RANGE & NOTE LINK MATCHING: Risoluzione simmetrica delle date intervallo e note_link nella navigazione tra riscontri.
  */
 
 const AppState = {
@@ -180,7 +181,7 @@ const AppState = {
                         isValidMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
                     } else {
                         const satisfiesAll = activePropFilters.every(f => {
-                            let cellVal = sysRow.cells[f.colId];
+                            const cellVal = sysRow.cells[f.colId];
                             
                             // Keyword magica: basta che il campo non sia vuoto
                             if (f.realValue === '*EXISTS*') {
@@ -214,9 +215,20 @@ const AppState = {
                             // Date Range con oggetto {start, end}
                             if (typeof cellVal === 'object' && cellVal !== null) {
                                 const searchLower = String(f.realValue).toLowerCase();
+                                const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
+                                if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
                                 const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
                                 const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
                                 return !!(startMatch || endMatch);
+                            }
+
+                            // Note Link con oggetto {noteId, title, anchor}
+                            if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
+                                const searchLower = String(f.realValue).toLowerCase();
+                                const titleStr = (cellVal.title || '').toLowerCase();
+                                if (titleStr.includes(searchLower)) return true;
+                                if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
+                                return false;
                             }
 
                             // Testo/Numero semplice

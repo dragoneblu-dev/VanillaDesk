@@ -287,7 +287,7 @@ Object.assign(AdvancedTimeline, {
 
                 const dayText = showDayNumber ? currDate.getDate() : '';
                 const dayStr = isToday && colWidth >= 16 
-                    ? `<span style="background:var(--accent-color); color:white; border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px;">${currDate.getDate()}</span>` 
+                    ? `<span style="background:var(--accent-color); color:var(--accent-color-tx); border-radius:50%; width:20px; height:20px; display:inline-flex; align-items:center; justify-content:center; margin-top:2px;">${currDate.getDate()}</span>` 
                     : `<div style="padding-top:2px; font-size:${colWidth < 20 ? '0.65rem' : '0.75rem'};">${dayText}</div>`;
 
                 headerDays += `<div class="adv-timeline-day-block" style="width:${colWidth}px; background:transparent; border-right:1px solid var(--border-color); position:relative;">
