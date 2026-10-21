@@ -10,6 +10,7 @@
  * Gestione TOC per capitoli (H1, H2, H3) indipendente dallo stato expanded delle sotto-note.
  * FEAT ADAPTIVE TRUNCATION TOOLTIP: L'attributo 'title' viene calcolato e applicato al solo passaggio del mouse
  * ESCLUSIVAMENTE se il testo risulta effettivamente tagliato dai limiti di larghezza della sidebar.
+ * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto completo al filtro delle note prive di tag o proprietà valorizzata.
  */
 
 Object.assign(UI, {
@@ -288,12 +289,25 @@ Object.assign(UI, {
     },
 
     _checkNotePropertyMatch: (sysRow, activePropFilters) => {
-        if (!sysRow || !sysRow.cells) return false;
-
         return activePropFilters.every(f => {
-            const cellVal = sysRow.cells[f.colId];
-            
-            // 1. Controllo di presenza (*EXISTS*) coerente su tutti i tipi di proprietà
+            const cellVal = (sysRow && sysRow.cells) ? sysRow.cells[f.colId] : undefined;
+
+            // 1. Controllo assenza (*EMPTY*): il campo non deve avere valore
+            if (f.realValue === '*EMPTY*') {
+                if (cellVal === undefined || cellVal === null || cellVal === '') return true;
+                if (Array.isArray(cellVal)) return cellVal.length === 0;
+                if (typeof cellVal === 'boolean') return false;
+                if (typeof cellVal === 'object') {
+                    const startEmpty = !cellVal.start || String(cellVal.start).trim() === '';
+                    const endEmpty = !cellVal.end || String(cellVal.end).trim() === '';
+                    return startEmpty && endEmpty;
+                }
+                return String(cellVal).trim() === '';
+            }
+
+            if (!sysRow || !sysRow.cells) return false;
+
+            // 2. Controllo di presenza (*EXISTS*) coerente su tutti i tipi di proprietà
             if (f.realValue === '*EXISTS*') {
                 if (cellVal === undefined || cellVal === null || cellVal === '') return false;
                 if (Array.isArray(cellVal)) return cellVal.length > 0;
@@ -305,17 +319,17 @@ Object.assign(UI, {
                 return String(cellVal).trim() !== '';
             }
 
-            // 2. Booleani (Checkbox)
+            // 3. Booleani (Checkbox)
             if (typeof f.realValue === 'boolean') {
                 return (cellVal === true || cellVal === 'true') === f.realValue;
             }
 
-            // 3. Array (Multi-select o Relazioni)
+            // 4. Array (Multi-select o Relazioni)
             if (Array.isArray(cellVal)) {
                 return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
             }
 
-            // 4. Date Range con oggetto {start, end}
+            // 5. Date Range con oggetto {start, end}
             if (typeof cellVal === 'object' && cellVal !== null) {
                 const searchLower = String(f.realValue).toLowerCase();
                 const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
@@ -323,7 +337,7 @@ Object.assign(UI, {
                 return !!(startMatch || endMatch);
             }
 
-            // 5. Testo, Numeri e Singoli Valori
+            // 6. Testo, Numeri e Singoli Valori
             return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
         });
     },
@@ -438,7 +452,7 @@ Object.assign(UI, {
 
             if (activePropFilters.length > 0) {
                 if (!propsDb || !Array.isArray(propsDb.rows)) {
-                    noteDirectMatch = false;
+                    noteDirectMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
                 } else {
                     const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
                     noteDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);
@@ -582,7 +596,7 @@ Object.assign(UI, {
 
         if (activePropFilters.length > 0) {
             if (!propsDb || !Array.isArray(propsDb.rows)) {
-                nodeDirectMatch = false;
+                nodeDirectMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
             } else {
                 const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === node.id);
                 nodeDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);

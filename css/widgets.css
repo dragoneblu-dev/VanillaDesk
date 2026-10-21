@@ -90,6 +90,7 @@
 .editor-container.read-mode .adv-widget-shell .adv-table-footer-controls .adv-add-btn,
 .editor-container.read-mode .adv-widget-shell .columns-opt-btn,
 .editor-container.read-mode .adv-widget-shell .columns-drag-handle,
+.editor-container.read-mode .adv-widget-shell .btnbar-drag-handle,
 .editor-container.read-mode .adv-widget-shell .journal-search-input,
 .editor-container.read-mode .adv-widget-shell .journal-search-wrapper,
 .editor-container.read-mode .widget-type-audio audio,
@@ -239,7 +240,7 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 .journal-content { flex: 1; outline: none; min-height: 24px; padding-top: 2px; cursor: text; user-select: text; transition: opacity 0.3s; }
 .journal-content:empty:before { content: attr(placeholder); color: var(--text-secondary); opacity: 0.5; pointer-events: none; }
 
-/* NUOVO: BOTTONE PRIORITA' NEL GAP VUOTO */
+/* BOTTONE PRIORITA' NEL GAP VUOTO */
 .journal-priority-btn {
     position: absolute;
     left: -14px;
@@ -297,17 +298,17 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
     background: rgba(0,0,0,0.02); 
 }
 
-/* Maniglia di Spostamento Drag: posizionata in alto a sinistra del riquadro */
+/* Maniglia di Spostamento Drag: posizionata esternamente a sinistra con ponte continuo di hover */
 .columns-drag-handle { 
     position: absolute; 
-    top: -6px; 
-    left: -6px; 
+    top: 0px; 
+    left: -32px; 
     opacity: 0; 
     pointer-events: none; 
-    z-index: 20; 
+    z-index: 25; 
     border-radius: 4px; 
     padding: 4px; 
-    width: 26px; 
+    width: 24px; 
     height: 26px; 
     color: var(--text-secondary); 
     display: flex; 
@@ -315,7 +316,20 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
     justify-content: center; 
     cursor: grab; 
     transition: opacity 0.2s, color 0.2s, background-color 0.2s, transform 0.1s; 
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08); 
     user-select: none;
+}
+
+/* Corridoio / Ponte invisibile continuo tra il riquadro del testo e la maniglia esterna */
+.columns-drag-handle::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    left: 0;
+    right: -14px;
+    background: transparent;
+    pointer-events: auto;
 }
 
 .columns-drag-handle:active {
@@ -324,13 +338,13 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 
 .adv-columns-container-wrap:hover .columns-drag-handle, 
 .adv-columns-container-wrap:focus-within .columns-drag-handle { 
-    border-color: var(--accent-color); 
     opacity: 0.85; 
     pointer-events: auto !important; 
 }
 
 .columns-drag-handle:hover { 
     opacity: 1 !important; 
+    transform: scale(1.08); 
     color: var(--text-primary); 
     background: var(--item-hover); 
     border-color: var(--accent-color); 
@@ -339,8 +353,8 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 /* Pulsante Opzioni Ingranaggio: posizionato in alto a destra del riquadro */
 .columns-opt-btn { 
     position: absolute; 
-    top: -6px; 
-    right: -6px; 
+    top: 6px; 
+    right: 0px; 
     opacity: 0; 
     pointer-events: none; 
     z-index: 20; 
@@ -392,6 +406,7 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 .adv-columns-independent .col-resizer:hover, .adv-columns-independent .col-resizer.resizing { opacity: 0.5; }
 
 @media (max-width: 768px) {
+    .columns-drag-handle { left: 6px; }
     .adv-columns-independent { grid-template-columns: 1fr !important; grid-row-gap: 30px; }
     .adv-columns-independent > div.col-box { padding: 0 !important; }
     .col-resizer { display: none !important; }
@@ -419,4 +434,91 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 .adv-copy-snippet.snippet-masked:focus-within {
     border-color: var(--accent-color);
     background: var(--bg-color);
+}
+
+/* =========================================================================
+   WIDGET BUTTON BAR (MACRO)
+   ========================================================================= */
+
+.adv-btnbar-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+    align-items: center;
+    position: relative;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.adv-btnbar-container.is-edit {
+    padding: 10px;
+    border: 1px dashed var(--border-color);
+    border-radius: 6px;
+    background: rgba(0, 0, 0, 0.01);
+}
+
+.adv-btnbar-container.is-edit:hover,
+.adv-btnbar-container.is-edit:focus-within {
+    border-color: var(--border-color);
+    background: rgba(0, 0, 0, 0.02);
+}
+
+/* Maniglia di Spostamento Drag per Barra Pulsanti: top: 0px, left: -24px con ponte hover continuo */
+.btnbar-drag-handle {
+    position: absolute;
+    top: 0px;
+    left: -24px;
+    opacity: 0;
+    pointer-events: none;
+    z-index: 25;
+    border-radius: 4px;
+    padding: 4px;
+    width: 22px;
+    height: 24px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: grab;
+    transition: opacity 0.2s ease, color 0.2s ease, background-color 0.2s ease, transform 0.1s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    user-select: none;
+}
+
+/* Corridoio / ponte continuo per il mouse tra il riquadro pulsanti e la maniglia esterna */
+.btnbar-drag-handle::after {
+    content: '';
+    position: absolute;
+    top: -6px;
+    bottom: -6px;
+    left: 0;
+    right: -10px;
+    background: transparent;
+    pointer-events: auto;
+}
+
+
+.btnbar-drag-handle:active {
+    cursor: grabbing;
+}
+
+.adv-btnbar-container:hover .btnbar-drag-handle,
+.adv-btnbar-container:focus-within .btnbar-drag-handle {
+    opacity: 0.85;
+    border: 1px solid var(--border-color);
+    background: var(--bg-color);
+    pointer-events: auto !important;
+}
+
+.btnbar-drag-handle:hover {
+    opacity: 1 !important;
+    transform: scale(1.08);
+    color: var(--text-primary);
+    background: var(--item-hover);
+    border-color: var(--accent-color);
+}
+
+@media (max-width: 768px) {
+    .btnbar-drag-handle {
+        left: 4px;
+    }
 }

@@ -1,11 +1,12 @@
 /**
  * state.js
  * Variabili di stato globale dell'applicazione. Fonte assoluta della verità in RAM.
- * FIX: Logica di match potenziata per gestire *EXISTS* e ricerche testuali fluide.
+ * FIX: Logica di match potenziata per gestire *EXISTS*, *EMPTY* e ricerche testuali fluide.
  * FEAT TYPE GUARDS: Introdotti AppState.isRelationalTable e AppState.getRelationalDatabaseIds
  * per risolvere alla radice il polimorfismo spurio in AppState.databases.
  * FIX CONTRACT RESILIENCE: isRelationalTable supporta istanze in fase di inizializzazione
  * o fixture di test prima del popolamento esplicito dell'array columns.
+ * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto a findNext/findPrevious per note senza tag/proprietà valorizzata.
  */
 
 const AppState = {
@@ -172,11 +173,11 @@ const AppState = {
             // 1. Controllo Filtri Proprietà (Tag)
             if (activePropFilters.length > 0) {
                 if (!propsDb) {
-                    isValidMatch = false;
+                    isValidMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
                 } else {
                     const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
                     if (!sysRow) {
-                        isValidMatch = false;
+                        isValidMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
                     } else {
                         const satisfiesAll = activePropFilters.every(f => {
                             let cellVal = sysRow.cells[f.colId];
@@ -186,6 +187,18 @@ const AppState = {
                                 if (cellVal === undefined || cellVal === null || cellVal === '') return false;
                                 if (Array.isArray(cellVal) && cellVal.length === 0) return false;
                                 return true;
+                            }
+
+                            // Keyword magica: il campo deve essere vuoto / non valorizzato
+                            if (f.realValue === '*EMPTY*') {
+                                if (cellVal === undefined || cellVal === null || cellVal === '') return true;
+                                if (Array.isArray(cellVal)) return cellVal.length === 0;
+                                if (typeof cellVal === 'boolean') return false;
+                                if (typeof cellVal === 'object') {
+                                    return (!cellVal.start || String(cellVal.start).trim() === '') &&
+                                           (!cellVal.end || String(cellVal.end).trim() === '');
+                                }
+                                return String(cellVal).trim() === '';
                             }
 
                             // Booleani

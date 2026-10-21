@@ -278,11 +278,11 @@ const ButtonManager = {
             });
         }
 
-        // Estetica originale con position: relative per il contenitore e absolute per la maniglia
-        let html = `<div style="display:flex; flex-wrap:wrap; gap:10px; align-items:center; ${isEdit ? 'padding:10px; border:1px dashed var(--border-color); border-radius:6px; background:rgba(0,0,0,0.01); position:relative;' : 'padding:5px 0; border:none; background:transparent;'}">`;
+        // Struttura pulita: classi CSS dedicate senza stili inline per la maniglia
+        let html = `<div class="adv-btnbar-container ${isEdit ? 'is-edit' : ''}">`;
 
         if (isEdit) {
-            html += `<div class="widget-drag-handle" title="Trascina la Barra Pulsanti" draggable="true" ondragstart="ButtonManager.handleDragStart(event, '${id}')" style="cursor:grab; opacity:0.3; padding:5px; font-weight:bold; position:absolute; top:-10px; left:-10px; background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:4px; z-index:10; display:flex;">${Icons.dragHandle || '⠿'}</div>`;
+            html += `<span class="widget-drag-handle adv-drag-handle btnbar-drag-handle" title="Trascina la Barra Pulsanti" draggable="true" ondragstart="ButtonManager.handleDragStart(event, '${id}')">${Icons.dragHandle || '⠿'}</span>`;
         }
 
         state.buttons.forEach(btn => {
@@ -301,14 +301,14 @@ const ButtonManager = {
 
             if (isEdit) {
                 html += `
-                    <div class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${btn.color || '#2563eb'}; border-color: ${btn.color || '#2563eb'}; color: white; ${btnStyle} display:inline-flex; align-items:center; gap:8px;" title="Clicca sul testo per configurare">
+                    <div class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${effectiveColor}; border-color: ${effectiveColor}; color: white; ${btnStyle} display:inline-flex; align-items:center; gap:8px;" title="Clicca sul testo per configurare">
                         <span class="adv-btn-icon-trigger" style="cursor:pointer;" title="Esegui Azione" onclick="event.stopPropagation(); ButtonManager.execute('${id}', '${btn.id}', true)">${btn.icon || Icons.play}</span>
                         <span style="cursor:pointer; flex:1;" onclick="ButtonManager.openConfig(event, '${id}', '${btn.id}')">${safeLabel}</span>
                     </div>
                 `;
             } else {
                 html += `
-                    <button class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${btn.color || '#2563eb'}; border-color: ${btn.color || '#2563eb'}; color: white; ${btnStyle}" onclick="ButtonManager.execute('${id}', '${btn.id}', false)" title="Esegui Azione">
+                    <button class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${effectiveColor}; border-color: ${effectiveColor}; color: white; ${btnStyle}" onclick="ButtonManager.execute('${id}', '${btn.id}', false)" title="Esegui Azione">
                         <span style="display:inline-flex; align-items:center; gap:8px; pointer-events:none;">${btn.icon || ''} ${safeLabel}</span>
                     </button>
                 `;

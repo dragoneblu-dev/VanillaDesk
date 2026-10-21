@@ -11,6 +11,7 @@
  * FIX RELATION LABELS: Risoluzione semantica dei record collegati (nessun ID 'sys_r_*' esposto all'utente).
  * UX COMPACT PILL MENU: Spaziatura compatta ottimizzata (padding 2px 4px) per l'elenco delle opzioni a pillola.
  * FIX REATTIVITÀ PILLS: Invocazione diretta di renderPills() all'aggiunta e rimozione filtri.
+ * FEAT EMPTY FILTER VALUE (*EMPTY*): Supporto al filtraggio per sole note senza tag/proprietà valorizzata.
  */
 
 const SidebarManager = {
@@ -162,12 +163,12 @@ const SidebarManager = {
             propsDb.columns.forEach(col => {
                 if (col.id === 'sys_c_note') return;
 
-                // 1. Ricerca sul NOME DELLA COLONNA (Filtro *EXISTS*)
+                // 1. Ricerca sul NOME DELLA COLONNA (Filtro *EXISTS* e Filtro *EMPTY*)
                 if (!lowerTerm || col.name.toLowerCase().includes(lowerTerm)) {
-                    const isAlreadyActive = AppState.activePropertyFilters && AppState.activePropertyFilters.some(f => f.colId === col.id && f.realValue === '*EXISTS*');
-                    if (!isAlreadyActive) {
+                    const isExistsActive = AppState.activePropertyFilters && AppState.activePropertyFilters.some(f => f.colId === col.id && f.realValue === '*EXISTS*');
+                    if (!isExistsActive) {
                         suggestions.push({
-                            type: 'column',
+                            type: 'column_exists',
                             colId: col.id,
                             colName: col.name,
                             displayValue: `Qualsiasi valore in "${col.name}"`,
@@ -178,7 +179,7 @@ const SidebarManager = {
                 }
 
                 // 2. Estrazione e risoluzione dei valori unici (con decodifica delle relazioni)
-                let uniqueValuesMap = new Map(); // Mappa: realValue -> displayValue
+                let uniqueValuesMap = new Map();
                 
                 if (col.type === 'select' || col.type === 'multi-select') {
                     (propsDb.selectOptions[col.id] || []).forEach(v => {
@@ -268,9 +269,9 @@ const SidebarManager = {
                 const safeRealValue = typeof sug.realValue === 'string' ? sug.realValue.replace(/"/g, '&quot;').replace(/'/g, "\\'") : sug.realValue;
                 const safeColName = sug.colName.replace(/'/g, "\\'");
 
-                if (sug.type === 'column') {
+                if (sug.type === 'column_exists') {
                     html += `
-                        <div class="adv-filter-autocomplete-item" style="display:flex; align-items:center; gap:8px;" onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.select('${sug.colId}', '${safeRealValue}', '${safeColName}', '🏷️ ${safeColName}')">
+                        <div class="adv-filter-autocomplete-item" style="display:flex; align-items:center; gap:8px;" onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.select('${sug.colId}', '${safeRealValue}', '${safeColName}', '🏷️ ${safeColName}: Qualsiasi')">
                             <span style="color:var(--text-primary); font-weight:bold; font-size:0.8rem;">🏷️ ${sug.colName}</span>
                             <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7;">(${sug.displayValue})</span>
                         </div>
@@ -321,10 +322,14 @@ const SidebarManager = {
                 const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
                 const colorClass = (propsDb && propsDb.selectColors && propsDb.selectColors[colId] && propsDb.selectColors[colId][realValue]) ? propsDb.selectColors[colId][realValue] : 'default-color';
                 
-                // Formato standard conciso: "Proprietà: Valore" oppure "🏷️ Proprietà" se *EXISTS*
-                const formattedVisualText = realValue === '*EXISTS*' 
-                    ? `🏷️ ${colName}` 
-                    : `${colName}: ${visualPillText.replace(/^[🏷️\s]+/, '')}`;
+                let formattedVisualText = '';
+                if (realValue === '*EXISTS*') {
+                    formattedVisualText = `🏷️ ${colName}: Qualsiasi`;
+                } else if (realValue === '*EMPTY*') {
+                    formattedVisualText = `🚫 ${colName}: Vuoto`;
+                } else {
+                    formattedVisualText = `${colName}: ${visualPillText.replace(/^[🏷️🚫\s]+/, '')}`;
+                }
 
                 AppState.activePropertyFilters.push({ 
                     colId: colId, 
@@ -364,9 +369,14 @@ const SidebarManager = {
             const filter = AppState.activePropertyFilters[index];
             filter.realValue = newValue;
             filter.colorClass = newColorClass || 'default-color';
-            filter.visualText = newValue === '*EXISTS*' 
-                ? `🏷️ ${filter.colName}` 
-                : `${filter.colName}: ${displayValue}`;
+
+            if (newValue === '*EXISTS*') {
+                filter.visualText = `${filter.colName}: Qualsiasi`;
+            } else if (newValue === '*EMPTY*') {
+                filter.visualText = `${filter.colName}: Vuoto`;
+            } else {
+                filter.visualText = `${filter.colName}: ${displayValue}`;
+            }
 
             SidebarManager.SearchAutocomplete.renderPills();
 
@@ -401,6 +411,12 @@ const SidebarManager = {
                     label: `Qualsiasi valore (*EXISTS*)` + (filter.realValue === '*EXISTS*' ? chk : ''),
                     onClick: () => {
                         SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, '*EXISTS*', colName, 'default-color');
+                    }
+                },
+                {
+                    label: `Nessun valore (Vuoto)` + (filter.realValue === '*EMPTY*' ? chk : ''),
+                    onClick: () => {
+                        SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, '*EMPTY*', colName, 'default-color');
                     }
                 },
                 { type: 'divider' }
