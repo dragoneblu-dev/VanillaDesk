@@ -5,6 +5,9 @@
  * esclusivamente gli attributi width dei tag <col> presenti nel <colgroup>,
  * risolvendo in modo assoluto i problemi con intestazioni unite (colspan).
  * RESTORE DRAG RIGHE/COLONNE: Reintegrati e blindati i listener document su dragenter, dragover e drop.
+ * FIX CLICK ACCIDENTALE RESIZE: Inizializzazione differita del layout; la conversione da 'auto'
+ * a 'percent' avviene ESCLUSIVAMENTE se viene rilevato un reale spostamento del mouse (>= 3px).
+ * FEAT CONTINUITÀ PROPORZIONI: Le percentuali di ridimensionamento partono dalle larghezze naturali preesistenti.
  */
 
 Object.assign(TableManager.Drag, {
@@ -119,49 +122,16 @@ Object.assign(TableManager.Drag, {
         e.preventDefault(); 
         e.stopPropagation();
 
-        TableManager._stripLegacyWidths(table);
-
-        const { grid, cellData } = TableManager.getGridMap(table);
+        const { cellData } = TableManager.getGridMap(table);
         const cellPos = cellData.get(cell);
 
         if (!cellPos) return;
 
-        // Identifica l'indice matematico della colonna trascinata
-        const targetColIndex = cellPos.maxX; 
-
+        // Memorizza i riferimenti geometrici senza alterare anticipatamente il layout né il DOM
         TableManager.resizingTable = table;
-        TableManager.resizeColIndex = targetColIndex;
+        TableManager.resizeColIndex = cellPos.maxX;
         TableManager.startX = e.pageX;
-        TableManager.tableWidth = table.getBoundingClientRect().width;
-        TableManager.isPercent = table.style.width === '100%' || !table.style.width;
-
-        if (table.style.tableLayout !== 'fixed' || !table.querySelector('colgroup')) {
-            TableManager.currentTable = table;
-            TableManager.setLayoutMode(TableManager.isPercent ? 'percent' : 'pixel', true);
-        }
-
-        const colgroup = table.querySelector('colgroup');
-        if (!colgroup || !colgroup.children[targetColIndex]) {
-            TableManager.resizingTable = null;
-            return;
-        }
-
-        const targetColEl = colgroup.children[targetColIndex];
-
-        if (TableManager.isPercent) {
-            TableManager.resizeNextColIndex = targetColIndex + 1;
-            const nextColEl = colgroup.children[TableManager.resizeNextColIndex];
-            
-            if (!nextColEl) {
-                TableManager.resizingTable = null;
-                return;
-            }
-
-            TableManager.startPctLeft = parseFloat(targetColEl.style.width) || (targetColEl.getBoundingClientRect().width / TableManager.tableWidth * 100);
-            TableManager.startPctRight = parseFloat(nextColEl.style.width) || (nextColEl.getBoundingClientRect().width / TableManager.tableWidth * 100);
-        } else {
-            TableManager.startWidthPx = parseFloat(targetColEl.style.width) || targetColEl.getBoundingClientRect().width;
-        }
+        TableManager.hasMoved = false;
 
         document.body.style.cursor = 'col-resize';
         document.body.style.userSelect = 'none';
@@ -171,9 +141,46 @@ Object.assign(TableManager.Drag, {
         if (!TableManager.resizingTable) return;
         
         const diff = e.pageX - TableManager.startX;
+
+        // Soglia di 3px per distinguere un click accidentale da un'intenzione reale di spostamento
+        if (!TableManager.hasMoved) {
+            if (Math.abs(diff) < 3) return;
+            TableManager.hasMoved = true;
+
+            const table = TableManager.resizingTable;
+            TableManager.tableWidth = table.getBoundingClientRect().width;
+            TableManager.isPercent = table.style.width === '100%' || !table.style.width;
+
+            // Conversione del layout solo all'effettivo superamento della soglia di movimento
+            if (table.style.tableLayout !== 'fixed' || !table.querySelector('colgroup')) {
+                TableManager.currentTable = table;
+                TableManager.setLayoutMode(TableManager.isPercent ? 'percent' : 'pixel', true);
+            }
+
+            const colgroup = table.querySelector('colgroup');
+            if (!colgroup || !colgroup.children[TableManager.resizeColIndex]) {
+                TableManager.resizingTable = null;
+                return;
+            }
+
+            const targetColEl = colgroup.children[TableManager.resizeColIndex];
+
+            if (TableManager.isPercent) {
+                TableManager.resizeNextColIndex = TableManager.resizeColIndex + 1;
+                const nextColEl = colgroup.children[TableManager.resizeNextColIndex];
+                if (!nextColEl) {
+                    TableManager.resizingTable = null;
+                    return;
+                }
+                TableManager.startPctLeft = parseFloat(targetColEl.style.width) || (targetColEl.getBoundingClientRect().width / TableManager.tableWidth * 100);
+                TableManager.startPctRight = parseFloat(nextColEl.style.width) || (nextColEl.getBoundingClientRect().width / TableManager.tableWidth * 100);
+            } else {
+                TableManager.startWidthPx = parseFloat(targetColEl.style.width) || targetColEl.getBoundingClientRect().width;
+            }
+        }
+
         const table = TableManager.resizingTable;
         const colgroup = table.querySelector('colgroup');
-        
         if (!colgroup) return;
 
         if (TableManager.isPercent && TableManager.resizeNextColIndex !== undefined) {
@@ -182,19 +189,21 @@ Object.assign(TableManager.Drag, {
             let newRight = TableManager.startPctRight - deltaPct;
 
             if (newLeft > 5 && newRight > 5) {
-                colgroup.children[TableManager.resizeColIndex].style.width = newLeft + '%';
-                colgroup.children[TableManager.resizeNextColIndex].style.width = newRight + '%';
+                colgroup.children[TableManager.resizeColIndex].style.width = newLeft.toFixed(2) + '%';
+                colgroup.children[TableManager.resizeNextColIndex].style.width = newRight.toFixed(2) + '%';
             }
         } else if (!TableManager.isPercent) {
             let newWidth = TableManager.startWidthPx + diff;
             if (newWidth < 30) newWidth = 30;
-            colgroup.children[TableManager.resizeColIndex].style.width = newWidth + 'px';
+            colgroup.children[TableManager.resizeColIndex].style.width = Math.round(newWidth) + 'px';
         }
     },
 
     handleMouseUp: (e) => {
         if (!TableManager.resizingTable) return;
         
+        const hadMoved = TableManager.hasMoved;
+
         const hoverResizer = document.getElementById('std-table-hover-resizer');
         if (hoverResizer) {
             hoverResizer.classList.remove('resizing');
@@ -205,12 +214,16 @@ Object.assign(TableManager.Drag, {
         TableManager.resizingTable = null;
         TableManager.resizeColIndex = undefined;
         TableManager.resizeNextColIndex = undefined;
+        TableManager.hasMoved = false;
         
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
 
-        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
-        if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        // Salva lo snapshot e notifica l'autosave solo se vi è stato reale spostamento
+        if (hadMoved) {
+            if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+            if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        }
     },
 
     // ==========================================================

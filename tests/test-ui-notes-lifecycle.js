@@ -1,13 +1,13 @@
 /**
  * tests/test-ui-notes-lifecycle.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
- * Modulo testato: ui-notes-lifecycle.js
+ * Moduli testati: ui-notes-lifecycle.js, ui-notes-nav.js, ui-notes-header.js
  * Responsabilità: Creazione note, selezione, aggiornamento titolo,
  * gestione note cestinate in sola lettura, navigazione verso la Home,
- * tracciamento dirty state e ripristino da banner.
+ * stack di cronologia lineare (History Stack), tracciamento dirty state e ripristino da banner.
  */
 
-describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
+describe("UI Notes Lifecycle, Navigation & Header Components", () => {
 
     const setupLifecycleDOM = () => {
         let sandbox = document.getElementById('testSandBox');
@@ -33,6 +33,14 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
             scrollContent.appendChild(titleInput);
         }
 
+        let headerProps = document.getElementById('noteHeaderProperties');
+        if (!headerProps) {
+            headerProps = document.createElement('div');
+            headerProps.id = 'noteHeaderProperties';
+            headerProps.className = 'note-header-properties';
+            scrollContent.appendChild(headerProps);
+        }
+
         let contentDiv = document.getElementById('noteContent');
         if (!contentDiv) {
             contentDiv = document.createElement('div');
@@ -47,6 +55,27 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
             editBtn = document.createElement('button');
             editBtn.id = 'editToggleBtn';
             sandbox.appendChild(editBtn);
+        }
+
+        let navBack = document.getElementById('navBackBtn');
+        if (!navBack) {
+            navBack = document.createElement('button');
+            navBack.id = 'navBackBtn';
+            sandbox.appendChild(navBack);
+        }
+
+        let navForward = document.getElementById('navForwardBtn');
+        if (!navForward) {
+            navForward = document.createElement('button');
+            navForward.id = 'navForwardBtn';
+            sandbox.appendChild(navForward);
+        }
+
+        let goUp = document.getElementById('goUpBtn');
+        if (!goUp) {
+            goUp = document.createElement('button');
+            goUp.id = 'goUpBtn';
+            sandbox.appendChild(goUp);
         }
 
         let treeContainer = document.getElementById('treeContainer');
@@ -64,7 +93,14 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
         AppState.databases = {};
         AppState.workspaceHandle = null;
 
-        AdvancedTable.ensureSystemPropertiesDB();
+        if (typeof UI !== 'undefined') {
+            UI._navHistory = [];
+            UI._navHistoryIndex = -1;
+        }
+
+        if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.ensureSystemPropertiesDB === 'function') {
+            AdvancedTable.ensureSystemPropertiesDB();
+        }
     };
 
     test("Lifecycle: Creazione nuova nota la imposta come attiva ed editabile", () => {
@@ -129,7 +165,7 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
         Assert.strictEqual(banner.style.display, 'flex');
     });
 
-    test("Lifecycle: goHome chiude l'editor e azzera la nota corrente", () => {
+    test("Lifecycle & Nav: goHome chiude l'editor, azzera la nota corrente e traccia la Dashboard in cronologia", () => {
         setupLifecycleDOM();
         AppState.currentNoteId = 'n_active';
 
@@ -137,6 +173,7 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
 
         Assert.strictEqual(AppState.currentNoteId, null);
         Assert.isFalse(AppState.isEditMode);
+        Assert.isTrue(UI._navHistory.includes(null));
     });
 
     test("Lifecycle: Tracciamento dello stato di modifica (Dirty State Tracking)", async () => {
@@ -175,7 +212,7 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
         Assert.isTrue(new Date(note.updatedAt).getTime() >= new Date(initialDate).getTime());
     });
 
-    test("Lifecycle: Ripristino nota dal banner di pericolo (restoreNoteFromBanner)", async () => {
+    test("Header & Trash: Ripristino nota dal banner di pericolo (restoreNoteFromBanner)", async () => {
         setupLifecycleDOM();
 
         const trashed = {
@@ -219,6 +256,37 @@ describe("UI Notes Lifecycle: Ciclo di Vita delle Note & Transizioni", () => {
         // Tutti gli antenati lungo il ramo devono essere espansi per rivelare la selezione
         Assert.isTrue(father.expanded === true);
         Assert.isTrue(grandpa.expanded === true);
+    });
+
+    test("Nav: Stack cronologico gestisce correttamente navHistoryBack e navHistoryForward", async () => {
+        setupLifecycleDOM();
+
+        const n1 = { id: 'n_hist_1', parentId: null, title: 'Nota 1', content: '<p>1</p>', createdAt: new Date().toISOString() };
+        const n2 = { id: 'n_hist_2', parentId: null, title: 'Nota 2', content: '<p>2</p>', createdAt: new Date().toISOString() };
+        const n3 = { id: 'n_hist_3', parentId: null, title: 'Nota 3', content: '<p>3</p>', createdAt: new Date().toISOString() };
+        AppState.notes.push(n1, n2, n3);
+
+        await UI.selectNote('n_hist_1');
+        await UI.selectNote('n_hist_2');
+        await UI.selectNote('n_hist_3');
+
+        Assert.strictEqual(AppState.currentNoteId, 'n_hist_3');
+        Assert.strictEqual(UI._navHistoryIndex, 2);
+
+        // Navigazione Indietro verso Nota 2
+        UI.navHistoryBack();
+        Assert.strictEqual(AppState.currentNoteId, 'n_hist_2');
+        Assert.strictEqual(UI._navHistoryIndex, 1);
+
+        // Navigazione Indietro verso Nota 1
+        UI.navHistoryBack();
+        Assert.strictEqual(AppState.currentNoteId, 'n_hist_1');
+        Assert.strictEqual(UI._navHistoryIndex, 0);
+
+        // Navigazione Avanti verso Nota 2
+        UI.navHistoryForward();
+        Assert.strictEqual(AppState.currentNoteId, 'n_hist_2');
+        Assert.strictEqual(UI._navHistoryIndex, 1);
     });
 
 });

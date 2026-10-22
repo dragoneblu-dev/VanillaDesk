@@ -1,52 +1,52 @@
 /**
  * tests/test-editor-paste.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
- * Modulo testato: editor-paste.js
- * Conteggio test case: 26
+ * Moduli testati: editor-paste.js, editor-copy.js, editor-paste-parser.js
+ * Conteggio test case: 28
  */
 
-describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaziature (26 Test)", () => {
+describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
 
     // =========================================================================
     // 1. FORMATTAZIONE TESTO PIANO (_formatPlainTextForHTML)
     // =========================================================================
 
-    test("EditorPaste: _formatPlainTextForHTML gestisce input nulli o vuoti", () => {
+    test("PasteParser: _formatPlainTextForHTML gestisce input nulli o vuoti", () => {
         Assert.strictEqual(Editor._formatPlainTextForHTML(null), "");
         Assert.strictEqual(Editor._formatPlainTextForHTML(""), "");
     });
 
-    test("EditorPaste: _formatPlainTextForHTML non avvolge testo a riga singola in <p> (Inline Preservation)", () => {
+    test("PasteParser: _formatPlainTextForHTML non avvolge testo a riga singola in <p> (Inline Preservation)", () => {
         const res = Editor._formatPlainTextForHTML("testo semplice");
         Assert.strictEqual(res, "testo semplice");
         Assert.isFalse(res.includes("<p>"));
     });
 
-    test("EditorPaste: _formatPlainTextForHTML esegue l'escape di entità HTML pericolose", () => {
+    test("PasteParser: _formatPlainTextForHTML esegue l'escape di entità HTML pericolose", () => {
         const res = Editor._formatPlainTextForHTML("<script>alert('xss')</script> & \"tag\"");
         Assert.isTrue(res.includes("&lt;script&gt;"));
         Assert.isTrue(res.includes("&amp;"));
         Assert.isFalse(res.includes("<script>"));
     });
 
-    test("EditorPaste: _formatPlainTextForHTML converte tabulazioni in 4 spazi non comprimibili", () => {
+    test("PasteParser: _formatPlainTextForHTML converte tabulazioni in 4 spazi non comprimibili", () => {
         const res = Editor._formatPlainTextForHTML("col1\tcol2");
         Assert.strictEqual(res, "col1&nbsp;&nbsp;&nbsp;&nbsp;col2");
     });
 
-    test("EditorPaste: _formatPlainTextForHTML preserva sequenze di spazi multipli con &nbsp;", () => {
+    test("PasteParser: _formatPlainTextForHTML preserva sequenze di spazi multipli con &nbsp;", () => {
         const res = Editor._formatPlainTextForHTML("parola    quattro_spazi");
         Assert.strictEqual(res, "parola&nbsp;&nbsp;&nbsp;&nbsp;quattro_spazi");
     });
 
-    test("EditorPaste: _formatPlainTextForHTML crea blocchi <p> conformi solo per testi su più righe", () => {
+    test("PasteParser: _formatPlainTextForHTML crea blocchi <p> conformi solo per testi su più righe", () => {
         const res = Editor._formatPlainTextForHTML("Riga 1\n\nRiga 2");
         Assert.isTrue(res.includes("<p>Riga 1</p>"));
         Assert.isTrue(res.includes("<p><br></p>"));
         Assert.isTrue(res.includes("<p>Riga 2</p>"));
     });
 
-    test("EditorPaste: _formatPlainTextForHTML converte righe numerate plain text in <ol><li> nativi", () => {
+    test("PasteParser: _formatPlainTextForHTML converte righe numerate plain text in <ol><li> nativi", () => {
         const input = "1. Primo punto\n2. Secondo punto\n3. Terzo punto";
         const res = Editor._formatPlainTextForHTML(input);
         Assert.isTrue(res.startsWith("<ol>"));
@@ -57,7 +57,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.isFalse(res.includes("1. Primo punto")); // Marcatore duplicato rimosso
     });
 
-    test("EditorPaste: _formatPlainTextForHTML converte punti elenco plain text (-, *, •) in <ul><li>", () => {
+    test("PasteParser: _formatPlainTextForHTML converte punti elenco plain text (-, *, •) in <ul><li>", () => {
         const input = "- Elemento A\n* Elemento B\n• Elemento C";
         const res = Editor._formatPlainTextForHTML(input);
         Assert.isTrue(res.startsWith("<ul>"));
@@ -67,7 +67,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.isTrue(res.includes("<li>Elemento C</li>"));
     });
 
-    test("EditorPaste: _formatPlainTextForHTML raggruppa correttamente elenchi intervallati da paragrafi", () => {
+    test("PasteParser: _formatPlainTextForHTML raggruppa correttamente elenchi intervallati da paragrafi", () => {
         const input = "Introduzione\n1. Passo Uno\n2. Passo Due\nConclusione";
         const res = Editor._formatPlainTextForHTML(input);
         Assert.isTrue(res.includes("<p>Introduzione</p>"));
@@ -79,7 +79,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
     // 2. PARSER ELENCHI MICROSOFT WORD MsoList (_convertWordListsToHTML)
     // =========================================================================
 
-    test("EditorPaste: _convertWordListsToHTML converte MsoListParagraph numerati in <ol> e rimuove mso-list:Ignore", () => {
+    test("PasteParser: _convertWordListsToHTML converte MsoListParagraph numerati in <ol> e rimuove mso-list:Ignore", () => {
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p class="MsoListParagraphCxSpFirst" style="mso-list:l0 level1 lfo1;">
@@ -104,7 +104,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.isFalse(items[0].textContent.includes("1."));
     });
 
-    test("EditorPaste: _convertWordListsToHTML converte MsoListParagraph puntati in <ul>", () => {
+    test("PasteParser: _convertWordListsToHTML converte MsoListParagraph puntati in <ul>", () => {
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p class="MsoListParagraph" style="mso-list:l1 level1 lfo2;">
@@ -123,7 +123,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.isFalse(li.textContent.includes("·"));
     });
 
-    test("EditorPaste: _convertWordListsToHTML riconosce e converte paragrafi con marcatore numerico testuale puro", () => {
+    test("PasteParser: _convertWordListsToHTML riconosce e converte paragrafi con marcatore numerico testuale puro", () => {
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p>1.\tElemento tabulato</p>
@@ -139,7 +139,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.strictEqual(ol.children[0].textContent.trim(), "Elemento tabulato");
     });
 
-    test("EditorPaste: _convertWordListsToHTML non tocca paragrafi normali che non sono elenchi", () => {
+    test("PasteParser: _convertWordListsToHTML non tocca paragrafi normali che non sono elenchi", () => {
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p>Paragrafo normale senza marcatore.</p>
@@ -157,7 +157,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
     // 3. PULIZIA E SANIFICAZIONE RICH TEXT (Word, Google Docs, Tabelle)
     // =========================================================================
 
-    test("EditorPaste: pulizia rimuove contenitori fittizi Google Docs (docs-internal-guid)", () => {
+    test("PasteParser: pulizia rimuove contenitori fittizi Google Docs (docs-internal-guid)", () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(`
             <b id="docs-internal-guid-12345" style="font-weight:normal;">
@@ -182,7 +182,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.isTrue(doc.body.textContent.includes("Testo dentro wrapper Docs"));
     });
 
-    test("EditorPaste: converte stili inline font-weight:bold e font-style:italic in <b> e <i>", () => {
+    test("PasteParser: converte stili inline font-weight:bold e font-style:italic in <b> e <i>", () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(`
             <p>
@@ -211,7 +211,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.isTrue(doc.body.querySelector('i') !== null);
     });
 
-    test("EditorPaste: srotola tag <p> annidati dentro <li> tipici di Google Docs", () => {
+    test("PasteParser: srotola tag <p> annidati dentro <li> tipici di Google Docs", () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(`
             <ul>
@@ -231,7 +231,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.strictEqual(doc.body.querySelector('li').innerHTML, "Elemento annidato da Docs");
     });
 
-    test("EditorPaste: srotola <p> e garantisce <br> nelle celle vuote delle tabelle", () => {
+    test("PasteParser: srotola <p> e garantisce <br> nelle celle vuote delle tabelle", () => {
         const parser = new DOMParser();
         const doc = parser.parseFromString(`
             <table>
@@ -261,7 +261,29 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
     });
 
     // =========================================================================
-    // 4. PRESERVAZIONE DEGLI SPAZI E ALLINEAMENTO PASTEDTEXT
+    // 4. PARSER TABELLE EXCEL / GOOGLE SHEETS
+    // =========================================================================
+
+    test("PasteParser: _isExcelOrSpreadsheetPaste riconosce tabelle HTML con signature Excel/Google Sheets", () => {
+        const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><body><table><tr><td>1</td><td>2</td></tr></table></body></html>`;
+        Assert.isTrue(Editor._isExcelOrSpreadsheetPaste(excelHTML, "1\t2"));
+
+        const wordDocHTML = `<html><body><p>Testo Word</p><table><tr><td>1</td></tr></table></body></html>`;
+        Assert.isFalse(Editor._isExcelOrSpreadsheetPaste(wordDocHTML, "Testo Word\n1"));
+    });
+
+    test("PasteParser: _createSimpleTableFromExcel genera markup conforme di tabella semplice", () => {
+        const tableHtml = `<table><tr><td>Intestazione 1</td><td>Intestazione 2</td></tr><tr><td>Valore A</td><td>Valore B</td></tr></table>`;
+        const res = Editor._createSimpleTableFromExcel(tableHtml, "Intestazione 1\tIntestazione 2\nValore A\tValore B");
+
+        Assert.isTrue(res !== null);
+        Assert.isTrue(res.includes('data-widget-type="simple-table"'));
+        Assert.isTrue(res.includes('<th contenteditable="true">Intestazione 1</th>'));
+        Assert.isTrue(res.includes('<td contenteditable="true">Valore A</td>'));
+    });
+
+    // =========================================================================
+    // 5. PRESERVAZIONE DEGLI SPAZI E ALLINEAMENTO PASTEDTEXT
     // =========================================================================
 
     test("EditorPaste: preserva fedelmente spazi multipli e spazi terminali per testo inline", () => {
@@ -314,7 +336,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
     });
 
     // =========================================================================
-    // 5. ISOLAMENTO CONTROLLI NATIVI E INTERCETTORE COPIA
+    // 6. ISOLAMENTO CONTROLLI NATIVI E INTERCETTORE COPIA (EditorCopy)
     // =========================================================================
 
     test("EditorPaste: input numerici .adv-number-input convertono automaticamente la virgola in punto", () => {
@@ -344,7 +366,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.strictEqual(input.value, "123.45");
     });
 
-    test("EditorPaste: copia di tabelle semplici serializza TSV pulito per Excel", () => {
+    test("EditorCopy: copia di tabelle semplici serializza TSV pulito per Excel", () => {
         const table = document.createElement('table');
         table.innerHTML = `
             <tr><td>Nome</td><td>Importo</td></tr>
@@ -358,7 +380,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
         Assert.strictEqual(tsv, "Nome\tImporto\nProdotto A\t100");
     });
 
-    test("EditorPaste: copia rimuove elementi di controllo e maniglie (.adv-col-resizer, .adv-tools)", () => {
+    test("EditorCopy: copia rimuove elementi di controllo e maniglie (.adv-col-resizer, .adv-tools)", () => {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = `
             <div>
@@ -378,7 +400,7 @@ describe("EditorPaste: Plain Text, Word MsoList, Google Docs Sanitization & Spaz
     });
 
     // =========================================================================
-    // 6. SANIFICAZIONE INCOLLA PER NOTE INLINE E SEGNALIBRI
+    // 7. SANIFICAZIONE INCOLLA PER NOTE INLINE E SEGNALIBRI
     // =========================================================================
 
     test("EditorPaste: intercettore su mini-editor purifica l'HTML consentendo solo <b>, <i>, <u> e <br>", () => {

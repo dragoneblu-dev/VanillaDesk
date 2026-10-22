@@ -6,6 +6,8 @@
  * se la prima riga della tabella conteneva celle unite (colspan).
  * FEAT DISTRIBUTE COLS: Distribuzione uniforme della larghezza delle colonne al 100%.
  * FEAT STICKY HEADER: Toggle per fissare l'intestazione allo scorrimento verticale.
+ * FEAT CONTINUITÀ PROPORZIONI: La conversione da 'auto' a 'percent' rileva a freddo
+ * le larghezze naturali preesistenti evitando la ridistribuzione a parti uguali.
  */
 
 window.TableManager = {
@@ -138,7 +140,7 @@ window.TableManager = {
     `,
 
     _stripLegacyWidths: (table) => {
-        // Pulisce brutalmente tutti gli stili width dalle celle, lasciando il controllo al <colgroup>
+        // Pulisce tutti gli stili width dalle celle, lasciando il controllo al <colgroup>
         const allCells = table.querySelectorAll('td, th');
         allCells.forEach(c => {
             c.removeAttribute('width');
@@ -166,47 +168,45 @@ window.TableManager = {
         const table = TableManager.editingTable || TableManager.currentTable;
         if (!table) return;
 
-        TableManager._stripLegacyWidths(table);
-
-        const tableWidth = table.getBoundingClientRect().width;
         const { grid, cellData } = TableManager.getGridMap(table);
         const colCount = grid[0] ? grid[0].length : 0;
+        if (colCount <= 0) return;
 
         if (mode === 'auto') {
+            TableManager._stripLegacyWidths(table);
             table.style.width = '100%';
             table.style.tableLayout = 'auto';
             const existingColgroup = table.querySelector('colgroup');
             if (existingColgroup) existingColgroup.remove();
         }
         else if (mode === 'percent' || mode === 'pixel') {
-            table.style.width = mode === 'percent' ? '100%' : 'max-content';
-            table.style.tableLayout = 'fixed';
-
-            const colgroup = TableManager._ensureColgroup(table, colCount);
-
-            // Troviamo la larghezza naturale per ogni colonna
+            // Misurazione naturale a freddo prima di alterare il layout a 'fixed'
+            const tableWidth = table.getBoundingClientRect().width || 1;
             const colWidths = [];
+
             for (let x = 0; x < colCount; x++) {
                 let repCell = null;
-                // Cerca una cella pura (colspan=1) per misurarne l'ampiezza
                 for (let y = 0; y < grid.length; y++) {
                     let cell = grid[y][x];
                     if (cell && cellData.get(cell).x === x && cellData.get(cell).w === 1) {
                         repCell = cell; break;
                     }
                 }
-                
-                // Se la colonna non ha celle pure (es. tutto fuso), calcola una media proporzionale
-                if (repCell) {
-                    colWidths[x] = repCell.getBoundingClientRect().width;
-                } else {
-                    colWidths[x] = tableWidth / colCount; 
-                }
+                colWidths[x] = repCell ? repCell.getBoundingClientRect().width : (tableWidth / colCount);
             }
 
-            // Applichiamo le larghezze ESCLUSIVAMENTE al tag <col>
+            const totalWidth = colWidths.reduce((sum, w) => sum + w, 0) || tableWidth;
+
+            TableManager._stripLegacyWidths(table);
+            table.style.width = mode === 'percent' ? '100%' : 'max-content';
+            table.style.tableLayout = 'fixed';
+
+            const colgroup = TableManager._ensureColgroup(table, colCount);
+
             for (let x = 0; x < colCount; x++) {
-                let wStr = mode === 'percent' ? ((colWidths[x] / tableWidth) * 100) + '%' : colWidths[x] + 'px';
+                let wStr = mode === 'percent' 
+                    ? ((colWidths[x] / totalWidth) * 100).toFixed(2) + '%' 
+                    : Math.round(colWidths[x]) + 'px';
                 colgroup.children[x].style.width = wStr;
             }
         }

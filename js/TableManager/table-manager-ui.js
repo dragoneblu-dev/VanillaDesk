@@ -10,6 +10,7 @@
  * (Allineamento Sinistra/Centro/Destra compatto, Sfondo Cella, Dividi se fusa) sia l'intera Tabella,
  * con opzioni per la distribuzione uniforme delle colonne e l'intestazione fissa (Sticky Header).
  * FIX ROW SCOPE: Dichiarazione esplicita di row = cell.parentElement in performAction per setRowType e colorRow.
+ * FIX RESIZER HOVER ACCIDENTALE: L'hover-resizer segue il mouse durante il drag solo se il movimento reale è iniziato (hasMoved === true).
  */
 
 Object.assign(TableManager, {
@@ -115,7 +116,7 @@ Object.assign(TableManager, {
 
                 // 1. Se stiamo trascinando una colonna, passa il controllo al modulo Drag
                 if (TableManager.resizingTable) {
-                    if (resizer) {
+                    if (resizer && TableManager.hasMoved) {
                         resizer.style.left = (e.pageX - 4) + 'px'; 
                     }
                     if (typeof TableManager.Drag.handleMouseMove === 'function') {

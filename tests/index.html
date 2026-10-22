@@ -235,6 +235,8 @@
     <script src="../js/ui/ui-menu.js"></script>
     <script src="../js/ui/ui-minimap.js"></script>
     <script src="../js/ui/ui-tree.js"></script>
+    <script src="../js/ui/ui-notes-nav.js"></script>
+    <script src="../js/ui/ui-notes-header.js"></script>
     <script src="../js/ui/ui-notes-lifecycle.js"></script>
     <script src="../js/ui/ui-notes-info.js"></script>
     <script src="../js/ui/ui-notes-utils.js"></script>
@@ -260,6 +262,8 @@
     <script src="../js/editor-format-blocks.js"></script>
     <script src="../js/editor-bookmarks.js"></script>
     <script src="../js/editor-inline-notes.js"></script>
+    <script src="../js/editor-copy.js"></script>
+    <script src="../js/editor-paste-parser.js"></script>
     <script src="../js/editor-paste.js"></script>
     <script src="../js/code-highlighter.js"></script>
 
@@ -419,6 +423,7 @@
     <div id="testSandBox" style="position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; overflow: hidden; pointer-events: none;">
         <div id="editorScrollContent">
             <input id="noteTitle" value="">
+            <div id="noteHeaderProperties" class="note-header-properties" style="display:none;"></div>
             <div id="noteContent" class="editor-content" contenteditable="true"></div>
         </div>
         <div id="emptyNoteOverlay"></div>
@@ -434,6 +439,12 @@
         <div id="txBar" class="btn-color-bar"></div>
         <span id="breadcrumb"></span>
         <button id="btnNoteProperties"></button>
+        <button id="btnNoteInfo"></button>
+        <button id="editToggleBtn"></button>
+        <button id="navBackBtn"></button>
+        <button id="navForwardBtn"></button>
+        <button id="goUpBtn"></button>
+        <div id="treeContainer"></div>
     </div>
 
     <div class="container">
