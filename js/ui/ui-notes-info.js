@@ -2,6 +2,9 @@
  * ui-notes-info.js
  * Sottomodulo di UI.
  * Gestione del pannello delle Informazioni, Auditing e Backlinks (Menzioni in Entrata e Uscita).
+ * FEAT ADAPTIVE SUBNOTES MATRIX: La matrice delle sotto-note visualizza come colonne unicamente
+ * le proprietà che possiedono almeno un valore reale in almeno una sotto-nota.
+ * Le proprietà completamente vuote vengono raccolte in un riquadro discreto in calce.
  */
 
 Object.assign(UI, {
@@ -45,16 +48,52 @@ Object.assign(UI, {
             if (tgtId && tgtId !== note.id) outlinks.add(tgtId);
         });
 
-        // 4. Calcolo Auditing Sotto-note (Matrice)
+        // 4. Calcolo Auditing Sotto-note (Matrice con Adaptive Column Pruning)
         const children = Store.getChildren(note.id);
         let subNotesHtml = '';
 
         if (children.length > 0) {
             const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
-            const colsToRender = propsDb ? propsDb.columns.filter(c => c.id !== 'sys_c_note' && !c.hidden) : [];
+            const allCandidateCols = propsDb ? propsDb.columns.filter(c => c.id !== 'sys_c_note' && !c.hidden) : [];
 
+            // Helper per determinare se una cella contiene un valore informativo reale
+            const isValued = (val) => {
+                if (val === undefined || val === null || val === '') return false;
+                if (Array.isArray(val)) return val.length > 0 && val.some(item => item !== undefined && item !== null && String(item).trim() !== '');
+                if (typeof val === 'boolean') return val === true; // Un checkbox non spuntato ovunque non è informativo
+                if (typeof val === 'object') {
+                    if (val.start || val.end) return true;
+                    if (val.noteId || val.title) return true;
+                    return Object.keys(val).length > 0;
+                }
+                return String(val).trim() !== '';
+            };
+
+            // Suddivisione deterministica tra colonne con almeno un valore e colonne interamente vuote
+            const populatedCols = [];
+            const unpopulatedCols = [];
+
+            allCandidateCols.forEach(col => {
+                let hasValueInAnyChild = false;
+                if (propsDb && propsDb.rows) {
+                    for (const child of children) {
+                        const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === child.id);
+                        if (sysRow && isValued(sysRow.cells[col.id])) {
+                            hasValueInAnyChild = true;
+                            break;
+                        }
+                    }
+                }
+                if (hasValueInAnyChild) {
+                    populatedCols.push(col);
+                } else {
+                    unpopulatedCols.push(col);
+                }
+            });
+
+            // Costruzione intestazione colonne (solo colonne valorizzate)
             let thHtml = `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">${I18n.t('notes_info.subnotes_col_title')}</th>`;
-            colsToRender.forEach(c => {
+            populatedCols.forEach(c => {
                 thHtml += `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">${c.name.replace(/</g, '&lt;')}</th>`;
             });
 
@@ -65,7 +104,7 @@ Object.assign(UI, {
 
                 if (propsDb) {
                     const sysRow = propsDb.rows.find(r => r.cells['sys_c_note'] === child.id);
-                    colsToRender.forEach(c => {
+                    populatedCols.forEach(c => {
                         let displayVal = '-';
                         if (sysRow) {
                             let rawVal = sysRow.cells[c.id];
@@ -100,6 +139,27 @@ Object.assign(UI, {
                 `;
             });
 
+            // Riquadro discreto in calce per segnalare le proprietà esistenti ma non valorizzate
+            let unpopulatedFooterHtml = '';
+            if (unpopulatedCols.length > 0) {
+                let chipsHtml = '';
+                unpopulatedCols.forEach(c => {
+                    chipsHtml += `<span class="adv-select-pill default-color" style="opacity:0.75; font-size:0.72rem; padding:2px 7px; border:1px dashed var(--border-color); background:transparent;">🏷️ ${c.name.replace(/</g, '&lt;')}</span>`;
+                });
+
+                const unpopulatedTitle = I18n.t('notes_info.unpopulated_props_title', { count: unpopulatedCols.length }) || `Altre proprietà disponibili ma non valorizzate (${unpopulatedCols.length}):`;
+                unpopulatedFooterHtml = `
+                    <div style="margin-top:10px; padding:10px 12px; background:var(--box-bg, rgba(0,0,0,0.02)); border:1px dashed var(--border-color); border-radius:6px;">
+                        <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
+                            ${unpopulatedTitle}
+                        </div>
+                        <div style="display:flex; flex-wrap:wrap; gap:5px; align-items:center;">
+                            ${chipsHtml}
+                        </div>
+                    </div>
+                `;
+            }
+
             subNotesHtml = `
                 <div class="adv-scroll-container" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); margin-top: 10px;">
                     <table style="width:100%; border-collapse:collapse; text-align:left;">
@@ -111,6 +171,7 @@ Object.assign(UI, {
                         </tbody>
                     </table>
                 </div>
+                ${unpopulatedFooterHtml}
             `;
         } else {
             subNotesHtml = `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">${I18n.t('notes_info.subnotes_empty')}</div>`;

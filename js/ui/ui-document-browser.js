@@ -9,6 +9,7 @@
  * per intercettazione corretta del Simple-Table Wrapper.
  * FEAT INSTANT NOTE CREATION (PKM PATTERN): Creazione istantanea al volo di una nuova sotto-nota
  * digitando il titolo nel campo di ricerca con conferma tramite click o tasto Invio.
+ * REFACTOR I18N: Tutte le stringhe per l'utente sono internazionalizzate dinamicamente tramite I18n.
  */
 
 UI.DocumentBrowser = {
@@ -27,8 +28,8 @@ UI.DocumentBrowser = {
         UI.DocumentBrowser.initTooltip();
 
         const placeholderText = mode === 'link' 
-            ? "Cerca elemento o digita per creare una nuova nota (Invio)..."
-            : "Cerca nota, capitolo, tabella, codice...";
+            ? I18n.t('doc_browser.search_placeholder_link')
+            : I18n.t('doc_browser.search_placeholder_citation');
 
         const html = `
             <input type="text" id="docBrowserSearch" class="modern-input" placeholder="${placeholderText}" autocomplete="off" style="margin-bottom:15px; width:100%;">
@@ -150,11 +151,11 @@ UI.DocumentBrowser = {
                 }
                 return UI.DocumentBrowser._trimEmptyTrailingTags(target.outerHTML);
             }
-            return `<p style="color:var(--danger-color); font-style:italic;">[Il blocco originale è stato eliminato]</p>`;
+            return `<p style="color:var(--danger-color); font-style:italic;">${I18n.t('doc_browser.block_deleted')}</p>`;
         }
 
         if (refType === 'chapter') {
-            if (!target) return `<p style="color:var(--danger-color); font-style:italic;">[Il capitolo originale non è stato trovato]</p>`;
+            if (!target) return `<p style="color:var(--danger-color); font-style:italic;">${I18n.t('doc_browser.chapter_not_found')}</p>`;
             let capturedHTML = target.outerHTML;
             let captureLevel = parseInt(target.tagName.charAt(1));
             let curr = target.nextElementSibling;
@@ -184,7 +185,7 @@ UI.DocumentBrowser = {
         if (!note) return;
 
         let extracted = UI.DocumentBrowser.extractLiveHTML(note.content || '', item.refId, item.refType);
-        if (!extracted) extracted = `<span style="color:var(--text-secondary); font-style:italic;">Contenuto vuoto o non trovato.</span>`;
+        if (!extracted) extracted = `<span style="color:var(--text-secondary); font-style:italic;">${I18n.t('doc_browser.empty_or_not_found')}</span>`;
         
         content.innerHTML = extracted;
         
@@ -255,7 +256,7 @@ UI.DocumentBrowser = {
                 noteId: note.id,
                 refId: null,
                 refType: 'note',
-                title: note.title || 'Senza Titolo',
+                title: note.title || I18n.t('editor.untitled'),
                 icon: note.isRecordNote ? Icons.recordPage : Icons.file,
                 color: note.isRecordNote ? 'var(--record-color, #10b981)' : 'var(--text-primary)'
             });
@@ -291,7 +292,7 @@ UI.DocumentBrowser = {
                     let title = '', icon = '', type = 'element', color = 'var(--text-secondary)';
 
                     if (tag.startsWith('h')) {
-                        title = el.innerText.trim() || 'Intestazione vuota';
+                        title = el.innerText.trim() || I18n.t('doc_browser.empty_heading');
                         icon = `<span style="font-family:monospace; font-weight:bold;">#</span>`; 
                         type = 'chapter';
                         color = 'var(--text-primary)';
@@ -300,39 +301,39 @@ UI.DocumentBrowser = {
                         
                         if (wType === 'database' || wType === 'pivot') {
                             const s = AppState.databases[elId];
-                            title = s ? s.title : 'Database';
+                            title = s ? s.title : I18n.t('editor.database');
                             icon = wType === 'pivot' ? Icons.tablePivot : Icons.tableDatabase;
                             color = 'var(--accent-color)';
                         } else if (wType === 'journal') {
                             const s = AppState.databases[elId];
-                            title = s ? s.title : 'Diario / Log';
+                            title = s ? s.title : I18n.t('journal.default_title');
                             icon = Icons.journal;
                         } else if (wType === 'code') {
                             const s = AppState.databases[elId];
-                            title = s && s.title ? s.title : 'Blocco di Codice';
+                            title = s && s.title ? s.title : I18n.t('doc_browser.block_code');
                             icon = Icons.code;
                         } else if (wType === 'buttonbar') {
-                            title = 'Barra Pulsanti';
+                            title = I18n.t('doc_browser.button_bar');
                             icon = Icons.play;
                         } else if (wType === 'columns') {
-                            title = 'Testo a Colonne';
+                            title = I18n.t('doc_browser.columns_text');
                             icon = Icons.columns || `<span style="font-family:monospace; font-weight:bold;">||</span>`;
                         } else if (wType === 'simple-table' || el.classList.contains('simple-table-wrapper')) {
-                            title = 'Tabella'; 
+                            title = I18n.t('doc_browser.table'); 
                             icon = Icons.tableSimple;
                         }
                     } else if (tag === 'ul' || tag === 'ol') {
                         title = el.innerText.replace(/\n/g, ' / ').substring(0, 30) + '...'; 
                         icon = Icons.viewList;
                     } else if (tag === 'pre') {
-                        title = 'Codice'; icon = Icons.code;
+                        title = I18n.t('doc_browser.code'); icon = Icons.code;
                     } else if (tag === 'blockquote') {
-                        title = 'Citazione'; icon = Icons.citation;
+                        title = I18n.t('doc_browser.citation'); icon = Icons.citation;
                     } else if (tag === 'table') {
-                        title = 'Tabella'; icon = Icons.tableSimple;
+                        title = I18n.t('doc_browser.table'); icon = Icons.tableSimple;
                     }
 
-                    if (!title) title = 'Elemento';
+                    if (!title) title = I18n.t('doc_browser.element');
                     if (!icon) icon = `<span style="font-family:monospace; font-weight:bold;">&lt;&gt;</span>`;
 
                     const myItemId = 'docb_' + elId;
@@ -445,8 +446,8 @@ UI.DocumentBrowser = {
         if (typeof UI.showToast !== 'undefined') {
             const parentNote = currentParentId ? Store.getNote(currentParentId) : null;
             const msg = parentNote 
-                ? `Nota "${cleanTitle}" creata come sotto-nota di "${parentNote.title}" e collegata!`
-                : `Nota "${cleanTitle}" creata e collegata!`;
+                ? I18n.t('doc_browser.toast_created_subnote', { title: cleanTitle, parent: parentNote.title })
+                : I18n.t('doc_browser.toast_created_root', { title: cleanTitle });
             UI.showToast(msg, "success");
         }
     },
@@ -491,8 +492,10 @@ UI.DocumentBrowser = {
 
             if (!exactExists) {
                 const parentNote = AppState.currentNoteId ? Store.getNote(AppState.currentNoteId) : null;
-                const parentTitle = parentNote ? UI.escapeHTML(parentNote.title || 'Senza Titolo') : null;
-                const hierarchyNotice = parentTitle ? ` come sotto-nota di <b>${parentTitle}</b>` : ` alla radice del Workspace`;
+                const parentTitle = parentNote ? UI.escapeHTML(parentNote.title || I18n.t('editor.untitled')) : null;
+                const hierarchyNotice = parentTitle 
+                    ? I18n.t('doc_browser.create_as_subnote', { parent: parentTitle })
+                    : I18n.t('doc_browser.create_at_root');
 
                 createOptionEl = document.createElement('div');
                 createOptionEl.className = 'node-wrapper';
@@ -501,7 +504,7 @@ UI.DocumentBrowser = {
                     <div class="node-content" style="border: 1px dashed var(--accent-color); background: rgba(37, 99, 235, 0.08); padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
                         <span style="display:inline-flex; color:var(--accent-color); font-weight:bold; font-size:1.1rem;">+</span>
                         <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem;">
-                            Crea nuova nota: <b style="color:var(--text-primary);">"${UI.escapeHTML(query)}"</b>
+                            ${I18n.t('doc_browser.create_note_title', { title: UI.escapeHTML(query) })}
                             <span style="font-size:0.75rem; color:var(--text-secondary); display:block;">${hierarchyNotice}</span>
                         </div>
                         <span style="font-size:0.7rem; font-family:monospace; background:rgba(37,99,235,0.15); color:var(--accent-color); padding:2px 5px; border-radius:4px; font-weight:bold;">Invio ↵</span>
@@ -519,7 +522,7 @@ UI.DocumentBrowser = {
             if (createOptionEl) {
                 listEl.appendChild(createOptionEl);
             } else {
-                listEl.innerHTML = '<div style="padding:20px; color:var(--text-secondary); text-align:center; font-style:italic;">Nessun risultato trovato.</div>'; 
+                listEl.innerHTML = `<div style="padding:20px; color:var(--text-secondary); text-align:center; font-style:italic;">${I18n.t('doc_browser.no_results')}</div>`; 
             }
             return; 
         }

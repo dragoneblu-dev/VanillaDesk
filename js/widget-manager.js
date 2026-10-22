@@ -1,12 +1,13 @@
 /**
  * WidgetManager.js
  * Registro Centrale per l'architettura a Componenti.
- * FIX UX: La funzione insertLineBreakAfter (Usata anche dalle citazioni) sposta lo scroll
+ * FIX UX: La funzione insertLineBreakAfter sposta lo scroll
  * in modo che l'utente veda immediatamente il nuovo paragrafo inserito.
- * FIX BLOAT DRAG&DROP: L'spostamento dei widget applica ora Editor.minifyHTMLForStorage 
+ * FIX BLOAT DRAG&DROP: Lo spostamento dei widget applica Editor.minifyHTMLForStorage 
  * prima di iniettare il payload HTML, prevenendo crescite esponenziali del file JSON in RAM.
  * FEAT CTRL+A WIDGET TITLE ISOLATION: Intercettazione mirata di Ctrl+A / Cmd+A sui titoli editabili dei widget
  * per selezionare esclusivamente il testo del titolo senza estendere la selezione al documento principale.
+ * REFACTOR I18N: Sostituzione integrale di stringhe hardcoded con chiavi del dizionario i18n.
  */
 
 const LegacyMigrator = {
@@ -26,11 +27,11 @@ const LegacyMigrator = {
             
             if (wrapper.classList.contains('adv-journal-wrapper')) {
                 type = 'journal';
-                title = 'Diario / Log';
+                title = I18n.t('journal.default_title');
                 icon = Icons.journal;
             } else if (wrapper.classList.contains('code-wrapper')) {
                 type = 'code';
-                title = 'Codice';
+                title = I18n.t('code_widget.default_title');
                 icon = Icons.code;
             }
 
@@ -52,13 +53,13 @@ const LegacyMigrator = {
                     } else if (state.isLinkedView) {
                         type = 'database';
                         icon = Icons.link;
-                        title = state.title || 'Vista Collegata';
+                        title = state.title || I18n.t('adv_menus.other_linked_views');
                     } else {
                         icon = '';
-                        title = state.title || 'Nuovo Database';
+                        title = state.title || I18n.t('widget_manager.default_db');
                     }
                 } else {
-                    title = 'Caricamento...';
+                    title = I18n.t('widget_manager.loading');
                 }
             }
 
@@ -73,7 +74,7 @@ const LegacyMigrator = {
                     innerContent = pre.outerHTML;
                     if (!AppState.databases) AppState.databases = {};
                     let state = AppState.databases[wrapper.id];
-                    if (!state) state = { title: 'Codice', language: pre.getAttribute('data-language') || 'none' };
+                    if (!state) state = { title: I18n.t('code_widget.default_title'), language: pre.getAttribute('data-language') || 'none' };
                     
                     let raw = pre.innerText;
                     if (raw.endsWith('\n')) raw = raw.slice(0, -1);
@@ -87,8 +88,8 @@ const LegacyMigrator = {
 
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header" style="display:flex;">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="display:flex;">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="display:flex;">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="display:flex;">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="display:flex;">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;">${icon}</span>
                     <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${title}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
@@ -110,10 +111,10 @@ const LegacyMigrator = {
 
             oldCit.innerHTML = `
                 <div class="widget-header adv-table-header compact-header" style="display:flex;">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="display:flex;">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="display:flex;">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="display:flex;">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="display:flex;">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;">${Icons.link}</span>
-                    <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Riferimento Testuale</span>
+                    <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('widget_manager.text_reference')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body citation-body adv-scroll-container editor-content">${innerContent}</div>
@@ -169,15 +170,15 @@ const WidgetManager = {
 
                 WidgetManager.updateShellUI(currentId, {
                     icon: Icons.youtube,
-                    title: 'Video YouTube',
+                    title: I18n.t('widget_manager.youtube_video'),
                     optionsId: `adv-opt-btn-${currentId}`,
                     onOptionsClick: (e) => {
                         e.stopPropagation();
                         UI.Menu.closeAll(true);
                         UI.Menu.buildContextMenu(`adv-opt-btn-${currentId}`, [
-                            { icon: Icons.globe, label: 'Apri nel Browser', onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
+                            { icon: Icons.globe, label: I18n.t('widget_manager.open_in_browser'), onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
                             { type: 'divider' },
-                            { icon: Icons.trash, label: 'Rimuovi Video', danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(currentId)) }
+                            { icon: Icons.trash, label: I18n.t('widget_manager.remove_video'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(currentId)) }
                         ]);
                     },
                     onDragStart: (e) => {
@@ -212,10 +213,10 @@ const WidgetManager = {
         
         shell.innerHTML = `
             <div class="widget-header adv-table-header" style="display:flex;">
-                <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="display:none;">${Icons.dragHandle}</span>
-                <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="display:none;">${Icons.dotsVertical}</span>
+                <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="display:none;">${Icons.dragHandle}</span>
+                <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="display:none;">${Icons.dotsVertical}</span>
                 <span class="widget-icon" style="display:inline-flex;"></span>
-                <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('widget_manager.loading')}</span>
                 <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
             </div>
             <div class="widget-body">${contentHTML}</div>
@@ -249,7 +250,7 @@ const WidgetManager = {
         if (typeof AppState === 'undefined' || typeof Store === 'undefined') return;
         
         if (AppState.currentNoteId === targetNoteId) {
-            alert("Questo elemento è già nella nota selezionata.");
+            alert(I18n.t('widget_manager.already_in_note'));
             return;
         }
 
@@ -293,7 +294,7 @@ const WidgetManager = {
         Store.triggerAutoSave(true);
 
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast(`Spostamento in "${targetNote.title}" completato con successo.`, 'success');
+            UI.showToast(I18n.t('widget_manager.move_success', { title: targetNote.title }), 'success');
         }
     },
 
@@ -325,7 +326,7 @@ const WidgetManager = {
         if (dragHandle) {
             dragHandle.style.display = isEdit ? 'flex' : 'none';
             dragHandle.setAttribute('draggable', 'true');
-            dragHandle.setAttribute('title', 'Trascina per spostare');
+            dragHandle.setAttribute('title', I18n.t('widget_manager.drag_to_move'));
             dragHandle.ondragstart = (e) => { if (config.onDragStart) config.onDragStart(e, id); };
             dragHandle.ondragend = (e) => { if (config.onDragEnd) config.onDragEnd(e); };
         }
@@ -333,7 +334,7 @@ const WidgetManager = {
         const optionsBtn = shell.querySelector('.widget-options-btn');
         if (optionsBtn) {
             optionsBtn.style.display = isEdit ? 'flex' : 'none';
-            optionsBtn.setAttribute('title', 'Opzioni');
+            optionsBtn.setAttribute('title', I18n.t('widget_manager.options'));
             optionsBtn.onclick = (e) => { if (config.onOptionsClick) config.onOptionsClick(e, id); };
             if (config.optionsId) optionsBtn.id = config.optionsId;
         }
