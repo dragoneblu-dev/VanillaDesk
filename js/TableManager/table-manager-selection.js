@@ -2,11 +2,12 @@
  * table-manager-selection.js
  * Motore per la selezione multipla (Range Selection) delle celle nelle tabelle semplici.
  * FIX SELEZIONE CELLE UNITE: Gestione precisa del Bounding Box visivo tramite Grid Map 2D.
- * FIX UX: Aggiunto pulsante rapido per il Grassetto coerente con la toolbar principale.
  * FEATURE CTRL+CLICK: Supporto per la selezione multipla non adiacente (Sparse Selection).
  * FIX DRAWER CONFLICT: Il motore di selezione ignora totalmente le tabelle presenti nel pannello laterale (Drawer).
  * REFACTOR UX CONTESTO: La toolbar fluttuante orizzontale compare ESCLUSIVAMENTE quando sono selezionate 
  * due o più celle, rimanendo perfettamente opaca e ad alto contrasto. Su cella singola la toolbar viene nascosta.
+ * FIX TOOLBAR INTEGRATION: Rimozione pulsante B ridondante dal menu fluttuante e protezione della selezione
+ * al click sugli strumenti e palette colori della toolbar principale.
  * FIX DIFENSIVO: Verifica sicura sull'esistenza di Editor.saveSnapshot per evitare eccezioni in ambienti modulari o headless.
  */
 
@@ -37,7 +38,7 @@ Object.assign(TableManager.Selection, {
         
         // Ignora sia i Database Avanzati che qualsiasi tabella dentro il Drawer laterale
         if (!cell || cell.closest('.adv-table') || cell.closest('.adv-drawer')) {
-            if (!e.target.closest('#adv-tbl-selection-popover') && !e.target.closest('.color-swatch')) {
+            if (!e.target.closest('#adv-tbl-selection-popover') && !e.target.closest('.color-swatch') && !e.target.closest('#editorToolbar') && !e.target.closest('.color-picker-group') && !e.target.closest('.adv-dropdown')) {
                 TableManager.Selection.clearSelection();
             }
             return;
@@ -116,9 +117,18 @@ Object.assign(TableManager.Selection, {
     },
 
     handleClickOutside: (e) => {
-        if (!e.target.closest('table:not(.adv-table)') && !e.target.closest('#adv-tbl-selection-popover')) {
-            TableManager.Selection.clearSelection();
+        // Protezione della selezione se l'utente clicca sulla toolbar dell'editor o sui relativi popup di colore/formato
+        if (e.target.closest('#editorToolbar') || 
+            e.target.closest('.color-picker-group') || 
+            e.target.closest('.adv-dropdown') || 
+            e.target.closest('.adv-context-menu') || 
+            e.target.closest('.color-dropdown') || 
+            e.target.closest('#adv-tbl-selection-popover') || 
+            e.target.closest('table:not(.adv-table)')) {
+            return;
         }
+
+        TableManager.Selection.clearSelection();
     },
 
     updateSelection: (endCell) => {
@@ -361,8 +371,6 @@ Object.assign(TableManager.Selection, {
             Editor.saveSnapshot();
         }
 
-        // Estraiamo la mappa della griglia *prima* di rimuovere gli attributi
-        // per avere le coordinate fisiche (x, y) della cella da dividere.
         const { cellData } = TableManager.getGridMap(table);
         const pos = cellData.get(cell);
 
@@ -386,9 +394,6 @@ Object.assign(TableManager.Selection, {
             const targetRow = table.rows[startY + r];
             if (!targetRow) continue;
 
-            // Troviamo il punto di inserimento corretto:
-            // Cerchiamo la prima cella fisica della riga target che, nella mappa originale,
-            // si trovava a destra o nella stessa posizione (x >= startX) rispetto alla cella divisa.
             let insertBeforeNode = null;
             for (let i = 0; i < targetRow.cells.length; i++) {
                 const cNode = targetRow.cells[i];
@@ -427,7 +432,6 @@ Object.assign(TableManager.Selection, {
         const singleCell = TableManager.Selection.selectedCells[0];
         const table = singleCell.closest('table');
         
-        // Controlla se la selezione forma un blocco perfetto o se sono celle sparse (CTRL+Click)
         const isContiguous = TableManager.Selection.isContiguous(TableManager.Selection.selectedCells, table);
 
         let isMergeSafe = true;
@@ -463,10 +467,8 @@ Object.assign(TableManager.Selection, {
             `;
         }
 
+        // REFACTOR: Rimosso pulsante Grassetto duplicato, delegato nativamente alla toolbar principale
         popover.innerHTML = `
-            <button onclick="TableManager.UI.performAction('toggleBold')" title="Grassetto (Tutte le celle selezionate)"><b style="font-size:0.9rem; line-height:1;">B</b></button>
-            <div style="width:1px; height:16px; background:var(--border-color); margin: 0 4px;"></div>
-
             <button onclick="TableManager.UI.performAction('alignCell', 'text-left')" title="Allinea a Sinistra">${Icons.alignLeft}</button>
             <button onclick="TableManager.UI.performAction('alignCell', 'text-center')" title="Allinea al Centro">${Icons.alignCenter}</button>
             <button onclick="TableManager.UI.performAction('alignCell', 'text-right')" title="Allinea a Destra">${Icons.alignRight}</button>

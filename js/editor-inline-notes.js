@@ -3,7 +3,7 @@
  * Sottomodulo di Editor.
  * Gestione degli appunti nascosti nel testo (Footnotes).
  * Protezione atomica contenteditable="false" per salvaguardare il contenitore dalle fusioni accidentali.
- * Salvataggio normalizzato tramite la funzione unica centralizzata Editor.sanitizeMiniText.
+ * Salvataggio normalizzato tramite la funzione centralizzata Editor.sanitizeMiniText, preservando tutti gli spazi digitati o incollati.
  * FIX ANCORAGGIO CURSORE: Inserimento della selezione a offset 1 dopo il \u200B per impedire
  * che caratteri digitati a fine riga finiscano prima del cuscinetto protettivo.
  * FEAT FULL HEIGHT DRAWER: Layout a tutta altezza (height: 100%, flex: 1) per consentire all'area
@@ -129,9 +129,10 @@ Object.assign(Editor, {
         const input = document.getElementById('inlineNoteInput');
         if (!input || !Editor.currentInlineNote) return;
 
+        // Pulizia centralizzata senza alcun trim forzato degli spazi
         const newHTML = typeof Editor.sanitizeMiniText === 'function' 
             ? Editor.sanitizeMiniText(input.innerHTML) 
-            : input.innerHTML.trim();
+            : input.innerHTML;
 
         Editor.saveSnapshot();
         

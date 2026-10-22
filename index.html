@@ -71,8 +71,10 @@
                     </svg>
                 </button>
                 <div class="separator"></div>
+            </div>
 
-                <!-- Sezione Navigazione Cronologica e Gerarchica -->
+            <!-- Controlli di Navigazione Cronologica e Gerarchica (sempre visibili, anche sulla Dashboard) -->
+            <div id="navHistoryControls" style="display:flex; align-items:center; gap:4px;">
                 <button class="icon-btn" onclick="UI.navHistoryBack()" id="navBackBtn">
                     <script>document.write(Icons.navBack || Icons.arrowLeft); document.getElementById('navBackBtn').title = I18n.t('toolbar.nav_back') || 'Torna indietro (Alt+←)';</script>
                 </button>

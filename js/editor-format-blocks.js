@@ -7,6 +7,8 @@
  * FEAT SNIPPET RISERVATO: Supporto all'inserimento di snippet mascherati (password/credenziali)
  * tramite riciclo dell'elemento nativo e classe CSS 'snippet-masked'.
  * FEAT TOOLTIP DATABASE: Aggiunto title descrittivo sulla voce di menu Database per illustrare le viste supportate.
+ * FEAT MULTI-CELL FORMATTING: Intercettazione in Editor.exec dei comandi bold, italic, underline, strikeThrough
+ * per applicare o rimuovere la formattazione a tutte le celle selezionate in TableManager.
  */
 
 Object.assign(Editor, {
@@ -175,8 +177,6 @@ Object.assign(Editor, {
         range.deleteContents();
 
         if (isEmptyBlock) {
-            // FIX INLINE BLOCK NESTING: Svuotiamo il paragrafo e inseriamo lo span al suo interno
-            // Mantenendo il tag P originale, l'editor non andrà in crash strutturale.
             targetBlock.innerHTML = '';
             targetBlock.appendChild(wrapper);
         } else {
@@ -274,6 +274,67 @@ Object.assign(Editor, {
     },
 
     exec: (cmd, val = null) => {
+        // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (B, I, U, S)
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 TableManager.Selection.selectedCells && 
+                                 TableManager.Selection.selectedCells.length > 0;
+
+        const formattingCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
+
+        if (hasSelectedCells && formattingCommands.includes(cmd)) {
+            Editor.saveSnapshot();
+
+            const targetTag = cmd === 'bold' ? 'b' : (cmd === 'italic' ? 'i' : (cmd === 'underline' ? 'u' : 's'));
+            const matchingTags = cmd === 'bold' ? ['b', 'strong'] : (cmd === 'italic' ? ['i', 'em'] : (cmd === 'underline' ? ['u'] : ['s', 'strike', 'del']));
+
+            const cells = TableManager.Selection.selectedCells;
+
+            // 1. Verifica se TUTTE le celle selezionate hanno già questo stile applicato
+            let allHaveTag = true;
+            let cellsWithContentCount = 0;
+
+            cells.forEach(cell => {
+                const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                if (!textOnly) return;
+                cellsWithContentCount++;
+
+                const hasTag = matchingTags.some(t => cell.querySelector(t) !== null);
+                if (!hasTag) {
+                    allHaveTag = false;
+                }
+            });
+
+            if (cellsWithContentCount === 0) allHaveTag = false;
+
+            // 2. TOGGLE SEMANTICO SULLE CELLE
+            cells.forEach(cell => {
+                // Rimuove eventuali tag esistenti dello stesso tipo
+                matchingTags.forEach(t => {
+                    cell.querySelectorAll(t).forEach(el => {
+                        const parent = el.parentNode;
+                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                        el.remove();
+                    });
+                });
+
+                // Se non tutte le celle avevano il tag, lo applichiamo (Toggle ON)
+                if (!allHaveTag) {
+                    const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                    if (textOnly || cell.querySelector('img, audio, input, svg')) {
+                        const tagEl = document.createElement(targetTag);
+                        while (cell.firstChild) tagEl.appendChild(cell.firstChild);
+                        cell.appendChild(tagEl);
+                    }
+                }
+            });
+
+            Editor.healWidgetWrappers();
+            Store.triggerAutoSave();
+            Editor.updateToolbarFormatting();
+            return;
+        }
+
         Editor.saveSnapshot();
         document.execCommand(cmd, false, val);
         
@@ -395,7 +456,6 @@ Object.assign(Editor, {
             TableManager.editCurrentTable(el);
         } else if (el.tagName === 'UL' || el.tagName === 'OL') {
             if (typeof UI !== 'undefined' && UI.Menu) {
-                // Simulate click on the list toolbar button
                 const btn = document.getElementById('btnListMenu');
                 if (btn) Editor.openListMenu(null, 'btnListMenu');
             }

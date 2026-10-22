@@ -7,7 +7,7 @@
  * FIX SNIPPET & INLINE WIDGETS: Protezione assoluta dalle andate a capo (\n) negli snippet e
  * prevenzione dello split del DOM nativo del browser tramite BR-Shielding.
  * PURIFICAZIONE ISTANTANEA ALL'INCOLLA: Intercettore in fase di cattura su #inlineNoteInput e #bookmarkCommentInput
- * che applica immediatamente la funzione unica Editor.sanitizeMiniText.
+ * con preservazione rigorosa di tutti gli spazi iniziali, finali e intermedi nel testo semplice.
  * FIX CELLE TABELLA GOOGLE DOCS & WORD: Srotolamento di <p> interni a <td>/<th>, purificazione degli stili
  * inline non conformi e pulizia spazi/BR orfani a inizio e fine cella.
  * FIX INCOLLA TITOLI SU NOTA VUOTA: Rimozione del paragrafo vuoto target per evitare fusioni del browser,
@@ -1410,20 +1410,25 @@ document.addEventListener('paste', (e) => {
     const pastedHTML = clipboardData.getData('text/html');
     const pastedText = clipboardData.getData('text/plain') || '';
 
-    let textToClean = '';
+    let cleanHTML = '';
     if (pastedHTML) {
-        textToClean = pastedHTML;
+        cleanHTML = typeof Editor.sanitizeMiniText === 'function'
+            ? Editor.sanitizeMiniText(pastedHTML)
+            : pastedHTML;
     } else {
-        textToClean = pastedText
+        // Testo semplice: preservazione rigorosa di tutti gli spazi iniziali, intermedi e finali
+        let formatted = pastedText
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;')
-            .replace(/\r\n|\n|\r/g, '<br>');
-    }
+            .replace(/>/g, '&gt;');
 
-    const cleanHTML = typeof Editor.sanitizeMiniText === 'function'
-        ? Editor.sanitizeMiniText(textToClean)
-        : pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+        formatted = formatted.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
+        formatted = formatted.replace(/ {2,}/g, m => '&nbsp;'.repeat(m.length));
+        if (formatted.startsWith(' ')) formatted = '&nbsp;' + formatted.slice(1);
+        if (formatted.endsWith(' ')) formatted = formatted.slice(0, -1) + '&nbsp;';
+        formatted = formatted.replace(/\r\n|\n|\r/g, '<br>');
+        cleanHTML = formatted;
+    }
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {

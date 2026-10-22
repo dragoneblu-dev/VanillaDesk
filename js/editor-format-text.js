@@ -15,6 +15,8 @@
  * ZERO-FONT UNIFICATION: Eliminazione integrale del tag legacy <font> sostituito ovunque da <span> standard W3C,
  * garantendo la preservazione assoluta delle classi di stile VanillaDesk (ff-*, fs-*, hl-c*, tx-c*).
  * WIDGET PROTECTION: Esclusione categorica di tutti i widget complessi di VanillaDesk dalla gomma formattazioni.
+ * FEAT MULTI-CELL FORMATTING: Supporto a Maiuscolo/Minuscolo (toggleCase) e Carattere/Dimensione (applyTextFormat)
+ * applicati simultaneamente a tutte le celle selezionate in TableManager con snapshot forzato per Undo/Redo immediato.
  */
 
 Object.assign(Editor, {
@@ -31,11 +33,14 @@ Object.assign(Editor, {
         let activeFF = 'ff-default';
         let activeFS = 'fs-standard';
 
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-            let node = sel.anchorNode;
-            if (node.nodeType === 3) node = node.parentNode;
-            const span = node.closest('span[class*="ff-"], span[class*="fs-"]');
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 TableManager.Selection.selectedCells && 
+                                 TableManager.Selection.selectedCells.length > 0;
+
+        if (hasSelectedCells) {
+            const firstCell = TableManager.Selection.selectedCells[0];
+            const span = firstCell.querySelector('span[class*="ff-"], span[class*="fs-"]');
             if (span) {
                 if (span.classList.contains('ff-serif')) activeFF = 'ff-serif';
                 else if (span.classList.contains('ff-cursive')) activeFF = 'ff-cursive';
@@ -43,6 +48,21 @@ Object.assign(Editor, {
 
                 if (span.classList.contains('fs-small')) activeFS = 'fs-small';
                 else if (span.classList.contains('fs-large')) activeFS = 'fs-large';
+            }
+        } else {
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0) {
+                let node = sel.anchorNode;
+                if (node.nodeType === 3) node = node.parentNode;
+                const span = node.closest('span[class*="ff-"], span[class*="fs-"]');
+                if (span) {
+                    if (span.classList.contains('ff-serif')) activeFF = 'ff-serif';
+                    else if (span.classList.contains('ff-cursive')) activeFF = 'ff-cursive';
+                    else if (span.classList.contains('ff-easyreading')) activeFF = 'ff-easyreading';
+
+                    if (span.classList.contains('fs-small')) activeFS = 'fs-small';
+                    else if (span.classList.contains('fs-large')) activeFS = 'fs-large';
+                }
             }
         }
 
@@ -289,7 +309,7 @@ Object.assign(Editor, {
                     }
                     if (currentP.childNodes.length > 0) {
                         const cleanT = currentP.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-                        if (cleanT !== '' || currentP.querySelector('img, audio, iframe, input') || bq.children.length === 0) {
+                        if (cleanT !== '' || currentP.querySelector('img, audio, iframe, input, svg') || bq.children.length === 0) {
                             bq.appendChild(currentP);
                         }
                     }
@@ -322,6 +342,56 @@ Object.assign(Editor, {
     },
 
     toggleCase: () => {
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 TableManager.Selection.selectedCells && 
+                                 TableManager.Selection.selectedCells.length > 0;
+
+        // GESTIONE MULTICELLA TABELLA (Preserva la struttura HTML interna mutando solo i nodi testuali con snapshot forzato)
+        if (hasSelectedCells) {
+            Editor.saveSnapshot(true);
+            const cells = TableManager.Selection.selectedCells;
+
+            // 1. Verifica se tutto il testo presente nelle celle è già in maiuscolo
+            let allText = '';
+            cells.forEach(cell => {
+                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
+                let tNode;
+                while ((tNode = walker.nextNode())) {
+                    allText += tNode.nodeValue || '';
+                }
+            });
+
+            if (!allText.trim()) return;
+
+            const isAllUpper = allText === allText.toUpperCase();
+            const shouldBeUpper = !isAllUpper;
+
+            // 2. Converte esclusivamente i nodi di testo senza alterare tag, classi o stili
+            cells.forEach(cell => {
+                const walker = document.createTreeWalker(cell, NodeFilter.SHOW_TEXT, null, false);
+                let tNode;
+                while ((tNode = walker.nextNode())) {
+                    if (tNode.nodeValue) {
+                        tNode.nodeValue = shouldBeUpper ? tNode.nodeValue.toUpperCase() : tNode.nodeValue.toLowerCase();
+                    }
+                }
+            });
+
+            if (AppState.currentNoteId) {
+                const note = Store.getNote(AppState.currentNoteId);
+                if (note) {
+                    note.content = Editor.getCleanHTML();
+                    note._isDirty = true;
+                    note.updatedAt = new Date().toISOString();
+                }
+            }
+
+            Store.triggerAutoSave();
+            Editor.updateUndoRedoUI();
+            return;
+        }
+
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
         const text = selection.toString();
@@ -332,6 +402,79 @@ Object.assign(Editor, {
     },
 
     applyTextFormat: (prefix, className) => {
+        // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Font Family & Font Size con snapshot forzato)
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 TableManager.Selection.selectedCells && 
+                                 TableManager.Selection.selectedCells.length > 0;
+
+        if (hasSelectedCells) {
+            Editor.saveSnapshot(true);
+            const cells = TableManager.Selection.selectedCells;
+
+            cells.forEach(cell => {
+                if (prefix === 'ff') {
+                    // Rimuove qualsiasi classe di font-family precedente
+                    cell.querySelectorAll('[class*="ff-"]').forEach(el => {
+                        Array.from(el.classList).filter(c => c.startsWith('ff-')).forEach(c => el.classList.remove(c));
+                    });
+
+                    // Se non è il font di default, applica la classe specifica
+                    if (className !== 'ff-default') {
+                        const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                        if (textOnly || cell.querySelector('img, audio, input, svg')) {
+                            const span = document.createElement('span');
+                            span.className = className;
+                            while (cell.firstChild) span.appendChild(cell.firstChild);
+                            cell.appendChild(span);
+                        }
+                    }
+                } else if (prefix === 'fs') {
+                    // Rimuove qualsiasi classe di font-size precedente
+                    cell.querySelectorAll('[class*="fs-"]').forEach(el => {
+                        Array.from(el.classList).filter(c => c.startsWith('fs-')).forEach(c => el.classList.remove(c));
+                    });
+
+                    // Se è small o large, applica la classe corrispondente
+                    if (className === 'fs-small' || className === 'fs-large') {
+                        const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                        if (textOnly || cell.querySelector('img, audio, input, svg')) {
+                            const span = document.createElement('span');
+                            span.className = className;
+                            while (cell.firstChild) span.appendChild(cell.firstChild);
+                            cell.appendChild(span);
+                        }
+                    }
+                }
+
+                // Pulizia di span rimasti privi di attributi
+                cell.querySelectorAll('span').forEach(sp => {
+                    if (sp.classList.length === 0 && !sp.hasAttribute('style') && sp.attributes.length === 0) {
+                        const parent = sp.parentNode;
+                        while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+                        sp.remove();
+                    }
+                });
+            });
+
+            Editor.healWidgetWrappers();
+
+            if (AppState.currentNoteId) {
+                const note = Store.getNote(AppState.currentNoteId);
+                if (note) {
+                    note.content = Editor.getCleanHTML();
+                    note._isDirty = true;
+                    note.updatedAt = new Date().toISOString();
+                }
+            }
+
+            Store.triggerAutoSave();
+            if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
+            Editor.updateToolbarFormatting();
+            Editor.updateUndoRedoUI();
+            return;
+        }
+
         Editor.saveSnapshot();
         Editor.restoreSelection();
 

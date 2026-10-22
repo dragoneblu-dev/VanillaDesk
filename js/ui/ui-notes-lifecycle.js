@@ -16,13 +16,15 @@
  * RECORD NOTE TITLE PROPAGATION: Propagazione immediata e ridisegno reattivo della tabella quando il titolo della record_note viene modificato.
  * RESET TOC COLLAPSE ON ACCESS: Ripristino automatico dell'indice dei capitoli quando si seleziona e apre la nota.
  * FEAT BATCH TRASH PROGRESS: Segnalazione visiva dell'avanzamento reale su disco durante l'eliminazione ricorsiva di rami con molte sotto-note.
+ * FEAT DASHBOARD HISTORY NAVIGATION: Integrazione dello stato Home/Dashboard nella cronologia di navigazione lineare (Alt+← / Alt+→).
+ * INITIAL STATE SYNC: Inizializzazione all'avvio con tutti i pulsanti di cronologia disattivati finché non vi sono spostamenti reali.
  */
 
 Object.assign(UI, {
     updateCurrentNoteTimer: null,
     _lastHighlightedWidget: null,
 
-    // Cronologia di Navigazione Note (History Stack)
+    // Cronologia di Navigazione Note e Dashboard (History Stack)
     _navHistory: [],
     _navHistoryIndex: -1,
 
@@ -46,12 +48,18 @@ Object.assign(UI, {
             btnForward.style.cursor = canGoForward ? 'pointer' : 'default';
         }
 
-        if (btnUp && AppState.currentNoteId) {
-            const currentNote = Store.getNote(AppState.currentNoteId);
-            const canGoUp = currentNote && (currentNote.parentId || (currentNote.isRecordNote && currentNote.linkedTableId));
-            btnUp.disabled = !canGoUp;
-            btnUp.style.opacity = canGoUp ? '1' : '0.3';
-            btnUp.style.cursor = canGoUp ? 'pointer' : 'default';
+        if (btnUp) {
+            if (AppState.currentNoteId) {
+                const currentNote = Store.getNote(AppState.currentNoteId);
+                const canGoUp = currentNote && (currentNote.parentId || (currentNote.isRecordNote && currentNote.linkedTableId));
+                btnUp.disabled = !canGoUp;
+                btnUp.style.opacity = canGoUp ? '1' : '0.3';
+                btnUp.style.cursor = canGoUp ? 'pointer' : 'default';
+            } else {
+                btnUp.disabled = true;
+                btnUp.style.opacity = '0.3';
+                btnUp.style.cursor = 'default';
+            }
         }
     },
 
@@ -62,6 +70,13 @@ Object.assign(UI, {
         while (UI._navHistoryIndex > 0) {
             UI._navHistoryIndex--;
             const candidateId = UI._navHistory[UI._navHistoryIndex];
+
+            // Se lo stato nella cronologia è la Dashboard (null)
+            if (candidateId === null) {
+                UI.goHome(true);
+                return;
+            }
+
             const note = Store.getNote(candidateId);
             if (note && !note.deletedAt) {
                 UI.selectNote(candidateId, null, null, false, true);
@@ -70,7 +85,7 @@ Object.assign(UI, {
         }
 
         // Se tutte le note precedenti sono state rimosse, porta alla Home
-        UI.goHome();
+        UI.goHome(true);
     },
 
     navHistoryForward: () => {
@@ -80,6 +95,13 @@ Object.assign(UI, {
         while (UI._navHistoryIndex < UI._navHistory.length - 1) {
             UI._navHistoryIndex++;
             const candidateId = UI._navHistory[UI._navHistoryIndex];
+
+            // Se lo stato successivo è la Dashboard (null)
+            if (candidateId === null) {
+                UI.goHome(true);
+                return;
+            }
+
             const note = Store.getNote(candidateId);
             if (note && !note.deletedAt) {
                 UI.selectNote(candidateId, null, null, false, true);
@@ -615,7 +637,7 @@ Object.assign(UI, {
                 }
             }
 
-            // 2. JIT COMPONENT RECONCILIATION: Allinea i database e widget referenziati all'accesso della nota
+            // 2. JIT COMPONENT RECONCILIATION
             if (typeof Store.syncWidgetsForNote === 'function' && note.content) {
                 await Store.syncWidgetsForNote(note.content);
             }
@@ -851,7 +873,7 @@ Object.assign(UI, {
         }, 160);
     },
 
-    goHome: () => {
+    goHome: (isHistoryNavigation = false) => {
         AppState.isSwitchingNote = true;
         if (typeof UI.updateCurrentNoteTimer !== 'undefined') clearTimeout(UI.updateCurrentNoteTimer);
 
@@ -879,6 +901,18 @@ Object.assign(UI, {
             if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
                 Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(true);
+            }
+        }
+
+        // GESTIONE CRONOLOGIA DI NAVIGAZIONE VERSO LA DASHBOARD (null)
+        if (!isHistoryNavigation) {
+            if (UI._navHistoryIndex < UI._navHistory.length - 1) {
+                UI._navHistory = UI._navHistory.slice(0, UI._navHistoryIndex + 1);
+            }
+            if (UI._navHistory.length === 0 || UI._navHistory[UI._navHistory.length - 1] !== null) {
+                UI._navHistory.push(null);
+                if (UI._navHistory.length > 80) UI._navHistory.shift();
+                UI._navHistoryIndex = UI._navHistory.length - 1;
             }
         }
 
@@ -1278,5 +1312,12 @@ Object.assign(UI, {
         } else {
             handleResolution();
         }
+    }
+});
+
+// Sincronizzazione atomica iniziale all'avvio dell'applicazione
+document.addEventListener('DOMContentLoaded', () => {
+    if (typeof UI !== 'undefined' && typeof UI.updateNavHistoryUI === 'function') {
+        UI.updateNavHistoryUI();
     }
 });

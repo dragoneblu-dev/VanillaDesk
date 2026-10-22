@@ -17,6 +17,8 @@
  * prevenendo che lo snapshot automatico di inattività sposti il cursore a inizio blocco durante la navigazione.
  * FIX LIST CARET RECOVERY: Al ripristino Undo/Redo in prossimità di liste UL/OL, il cursore viene fatto atterrare
  * direttamente dentro il <li> della lista invece che su noteContent, eliminando la creazione di <p></p> parassiti da parte di Blink.
+ * FIX MULTI-CELL HISTORY RESILIENCE: Depurazione automatica della classe transitoria .adv-cell-selected
+ * dagli snapshot e azzeramento selettore TableManager.Selection al ripristino per garantire il funzionamento perfetto di Ctrl+Z e Ctrl+Y.
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -126,6 +128,9 @@ Object.assign(Editor, {
     _buildHistorySnapshot: (liveEditorElement) => {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = liveEditorElement.innerHTML;
+
+        // Pulizia della classe temporanea di selezione multicella per non inquinare lo snapshot storico
+        tempDiv.querySelectorAll('.adv-cell-selected').forEach(c => c.classList.remove('adv-cell-selected'));
 
         tempDiv.querySelectorAll('img').forEach(img => {
             const src = img.getAttribute('src');
@@ -340,6 +345,11 @@ Object.assign(Editor, {
     },
 
     _restoreSnapshotWithCursor: (htmlData) => {
+        // Pulizia preliminare della selezione multicella per non lasciare classi o popover orfani
+        if (typeof TableManager !== 'undefined' && TableManager.Selection && typeof TableManager.Selection.clearSelection === 'function') {
+            TableManager.Selection.clearSelection();
+        }
+
         const editor = document.getElementById('noteContent');
         const scrollArea = document.querySelector('.editor-scroll-content');
         

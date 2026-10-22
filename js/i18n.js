@@ -1824,6 +1824,7 @@ export_dialog: {
             compress_error: "Error during image compression: "
         },
 toolbar: {
+    graph_view: "Connection Map (Graph View)",
     page_properties_count: "Page Properties / Tags ({count} set)",
     page_info_count: "Note Information and Links ({count} incoming mentions)",
     undo: "Undo Last Edit (Ctrl+Z)",
@@ -3168,6 +3169,7 @@ export_dialog: {
             compress_error: "Error durante la compresión: "
         },
 toolbar: {
+    graph_view: "Mapa de Conexiones (Graph View)",
     page_properties_count: "Propiedades / Etiquetas de página ({count} asignadas)",
     page_info_count: "Información y enlaces de nota ({count} menciones entrantes)",
     undo: "Deshacer última edición (Ctrl+Z)",
@@ -4513,6 +4515,7 @@ export_dialog: {
             compress_error: "Fehler beim Komprimieren: "
         },
 toolbar: {
+    graph_view: "Verbindungskarte (Graph View)",
     page_properties_count: "Seiteneigenschaften / Tags ({count} ausgefüllt)",
     page_info_count: "Hinweisinformationen und Links ({count} eingehende Erwähnungen)",
     undo: "Letzte Änderung rückgängig machen (Strg+Z)",

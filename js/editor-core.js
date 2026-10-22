@@ -12,7 +12,7 @@
  * FIX ARCHITETTURA: Ricollocato _getRawText nativamente in editor-core per garantire disponibilità globale.
  * FIX RESTORE SELECTION: Invocazione del focus prima dell'assegnazione del range per evitare il reset all'inizio del blocco.
  * FEAT HEAL FONT ARTIFACTS: Rimozione chirurgica degli span parassiti con style="font-size: ..." generati da WebKit su unione blocchi.
- * PROCEDURA UNICA SANITIZZAZIONE: Motore centralizzato per note inline e segnalibri limitato alle sole 4 opzioni permesse (Bold, Italic, Underline, Bullet).
+ * PROCEDURA UNICA SANITIZZAZIONE: Motore centralizzato per note inline e segnalibri limitato alle sole 4 opzioni permesse (Bold, Italic, Underline, Bullet), senza trim distruttivo degli spazi.
  * FEAT BROKEN IMAGES: Generazione di un segnaposto visivo vettoriale chiaro ed evidente per immagini rimosse dal disco o non trovate.
  * FEAT RAW HTML SOURCE EDITOR: Editor a tutto schermo del codice sorgente liofilizzato per modifiche massive esterne (Ctrl+Shift+E).
  * FIX RAW HTML SOURCE CODING: Popolamento esplicito di ta.value e corretta codifica delle entità HTML senza decodifiche spurie.
@@ -85,8 +85,9 @@ const Editor = {
         Editor.markImageBroken(img, ref);
     },
 
-    // Sanificazione centralizzata e rigorosa per testi di note in linea e segnalibri:
+    // Sanificazione centralizzata per testi di note in linea e segnalibri:
     // Permette ESCLUSIVAMENTE le 4 opzioni della toolbar: Grassetto (b), Corsivo (i), Sottolineato (u), Lista puntata (•) e i ritorni a capo (<br>).
+    // Preserva intatti gli spazi intenzionali dell'utente senza trim distruttivi.
     sanitizeMiniText: (rawHTML) => {
         if (!rawHTML || typeof rawHTML !== 'string') return '';
 
@@ -191,11 +192,11 @@ const Editor = {
             });
         }
 
-        // 5. Compattazione interlinea e rimozione a capo iniziali/finali
+        // 5. Compattazione interlinea e rimozione SOLO di ritorni a capo orfani iniziali/finali (senza toccare gli spazi dell'utente)
         let result = container.innerHTML;
         result = result.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
-        result = result.replace(/^(<br\s*\/?>|\s|&nbsp;)+/gi, '')
-                       .replace(/(<br\s*\/?>|\s|&nbsp;)+$/gi, '');
+        result = result.replace(/^(<br\s*\/?>)+/gi, '')
+                       .replace(/(<br\s*\/?>)+$/gi, '');
 
         return result;
     },

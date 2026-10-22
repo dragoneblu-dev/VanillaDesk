@@ -7,6 +7,8 @@
  * FIX TRANSCLUSION: L'anteprima dei Widget deidratati ora innesca una reidratazione temporanea.
  * FIX LABELS: Assegnazione corretta del Titolo Reale ai Blocchi di Codice e dicitura esplicita "Tabella" 
  * per intercettazione corretta del Simple-Table Wrapper.
+ * FEAT INSTANT NOTE CREATION (PKM PATTERN): Creazione istantanea al volo di una nuova sotto-nota
+ * digitando il titolo nel campo di ricerca con conferma tramite click o tasto Invio.
  */
 
 UI.DocumentBrowser = {
@@ -14,16 +16,22 @@ UI.DocumentBrowser = {
     expandedNodes: new Set(),
     callback: null,
     mode: 'link', // 'link' o 'citation'
+    currentSearchQuery: '',
 
     open: (mode, title, onSelectCallback, targetToFocus = null) => {
         UI.DocumentBrowser.mode = mode;
         UI.DocumentBrowser.callback = onSelectCallback;
         UI.DocumentBrowser.expandedNodes.clear();
+        UI.DocumentBrowser.currentSearchQuery = '';
 
         UI.DocumentBrowser.initTooltip();
 
+        const placeholderText = mode === 'link' 
+            ? "Cerca elemento o digita per creare una nuova nota (Invio)..."
+            : "Cerca nota, capitolo, tabella, codice...";
+
         const html = `
-            <input type="text" id="docBrowserSearch" class="modern-input" placeholder="Cerca nota, capitolo, tabella, codice..." autocomplete="off" style="margin-bottom:15px; width:100%;">
+            <input type="text" id="docBrowserSearch" class="modern-input" placeholder="${placeholderText}" autocomplete="off" style="margin-bottom:15px; width:100%;">
             <div id="docBrowserList" class="adv-scroll-container" style="flex:1; overflow-y:auto; overflow-x:hidden; border: 1px solid var(--border-color); background: var(--sidebar-bg); border-radius: 4px; padding: 5px; min-height: 180px;"></div>
         `;
 
@@ -47,6 +55,12 @@ UI.DocumentBrowser = {
             if (searchInput) {
                 searchInput.focus();
                 searchInput.oninput = (e) => UI.DocumentBrowser.filter(e.target.value);
+                searchInput.onkeydown = (e) => {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        UI.DocumentBrowser.handleEnterKey();
+                    }
+                };
             }
         }, 50);
     },
@@ -177,7 +191,6 @@ UI.DocumentBrowser = {
         content.querySelectorAll('[contenteditable="true"]').forEach(el => el.setAttribute('contenteditable', 'false'));
         content.querySelectorAll('.adv-table-wrapper, .adv-journal-wrapper, .code-wrapper').forEach(el => el.style.pointerEvents = 'none');
 
-        // FIX ANTEPRIMA WIDGET: Reidratazione confinata in sola lettura per impedire "gusci vuoti"
         if (typeof WidgetManager !== 'undefined') {
             content.querySelectorAll(WidgetManager.blockSelector).forEach(wrapper => {
                 const trueId = wrapper.id;
@@ -254,7 +267,6 @@ UI.DocumentBrowser = {
                 temp.innerHTML = note.content;
                 
                 const widgetSel = typeof WidgetManager !== 'undefined' ? WidgetManager.blockSelector : '.adv-widget-shell';
-                // Aggiunto ".simple-table-wrapper" al query selector per intercettare il vero wrapper della tabella
                 const elements = temp.querySelectorAll(`h1, h2, h3, ul, ol, blockquote, pre, .simple-table-wrapper, ${widgetSel}`);
 
                 let h1Id = null, h2Id = null, h3Id = null;
@@ -284,7 +296,6 @@ UI.DocumentBrowser = {
                         type = 'chapter';
                         color = 'var(--text-primary)';
                     } else if (el.classList.contains('adv-table-wrapper') || el.classList.contains('adv-widget-shell')) {
-                        // Riconoscimento rigoroso del tipo di Widget
                         const wType = el.getAttribute('data-widget-type') || (el.classList.contains('adv-journal-wrapper') ? 'journal' : 'database');
                         
                         if (wType === 'database' || wType === 'pivot') {
@@ -298,7 +309,6 @@ UI.DocumentBrowser = {
                             icon = Icons.journal;
                         } else if (wType === 'code') {
                             const s = AppState.databases[elId];
-                            // FIX: Lettura del titolo reale del blocco codice se presente nel database
                             title = s && s.title ? s.title : 'Blocco di Codice';
                             icon = Icons.code;
                         } else if (wType === 'buttonbar') {
@@ -308,7 +318,6 @@ UI.DocumentBrowser = {
                             title = 'Testo a Colonne';
                             icon = Icons.columns || `<span style="font-family:monospace; font-weight:bold;">||</span>`;
                         } else if (wType === 'simple-table' || el.classList.contains('simple-table-wrapper')) {
-                            // FIX: Assicura un'etichetta dignitosa per le Tabelle Semplici avvolte
                             title = 'Tabella'; 
                             icon = Icons.tableSimple;
                         }
@@ -320,7 +329,6 @@ UI.DocumentBrowser = {
                     } else if (tag === 'blockquote') {
                         title = 'Citazione'; icon = Icons.citation;
                     } else if (tag === 'table') {
-                        // Fallback per vecchie tabelle scoperte
                         title = 'Tabella'; icon = Icons.tableSimple;
                     }
 
@@ -382,14 +390,143 @@ UI.DocumentBrowser = {
         else UI.DocumentBrowser.renderTree();
     },
 
+    /**
+     * Crea istantaneamente una nuova nota con il titolo digitato e la collega nell'editor
+     */
+    createAndSelectNote: (titleQuery) => {
+        const cleanTitle = (titleQuery || '').trim();
+        if (!cleanTitle) return;
+
+        const currentParentId = AppState.currentNoteId || null;
+        const now = new Date().toISOString();
+        const newNoteId = Store.generateId();
+        const initialRevId = Store.generateId();
+
+        const newNote = {
+            id: newNoteId,
+            parentId: currentParentId,
+            title: cleanTitle,
+            content: "<p><br></p>",
+            isMarked: false,
+            expanded: true,
+            createdAt: now,
+            updatedAt: now,
+            revId: initialRevId,
+            _baseRevId: initialRevId,
+            _isDraft: true,
+            _isDirty: true
+        };
+
+        AppState.notes.push(newNote);
+
+        if (currentParentId) {
+            const parent = Store.getNote(currentParentId);
+            if (parent) parent.expanded = true;
+        }
+
+        if (typeof AdvancedTable !== 'undefined') {
+            AdvancedTable.syncSystemPropertiesRow(newNoteId);
+        }
+
+        if (typeof UI.renderTree !== 'undefined') UI.renderTree();
+        if (typeof Store !== 'undefined') Store.triggerAutoSave(true);
+
+        UI.closeDrawer();
+
+        if (UI.DocumentBrowser.callback) {
+            UI.DocumentBrowser.callback({
+                noteId: newNoteId,
+                title: cleanTitle,
+                refId: null,
+                refType: 'note'
+            });
+        }
+
+        if (typeof UI.showToast !== 'undefined') {
+            const parentNote = currentParentId ? Store.getNote(currentParentId) : null;
+            const msg = parentNote 
+                ? `Nota "${cleanTitle}" creata come sotto-nota di "${parentNote.title}" e collegata!`
+                : `Nota "${cleanTitle}" creata e collegata!`;
+            UI.showToast(msg, "success");
+        }
+    },
+
+    handleEnterKey: () => {
+        const query = (UI.DocumentBrowser.currentSearchQuery || '').trim();
+        if (!query) return;
+
+        // Se c'è una sola nota nei risultati visibili che corrisponde esattamente al termine, selezionala
+        const exactMatch = UI.DocumentBrowser.allItems.find(i => 
+            i.refType === 'note' && i.title.trim().toLowerCase() === query.toLowerCase()
+        );
+
+        if (exactMatch) {
+            UI.DocumentBrowser.hidePreview();
+            if (UI.DocumentBrowser.callback) {
+                UI.DocumentBrowser.callback(exactMatch);
+            }
+            return;
+        }
+
+        // Se siamo in modalità creazione link, crea la nuova nota
+        if (UI.DocumentBrowser.mode === 'link') {
+            UI.DocumentBrowser.createAndSelectNote(query);
+        }
+    },
+
     renderTree: (filteredIds = null) => {
         const listEl = document.getElementById('docBrowserList');
         if (!listEl) return;
         listEl.innerHTML = '';
         
-        if (UI.DocumentBrowser.allItems.length === 0 || (filteredIds && filteredIds.size === 0)) { 
-            listEl.innerHTML = '<div style="padding:20px; color:var(--text-secondary); text-align:center; font-style:italic;">Nessun risultato.</div>'; 
+        const query = (UI.DocumentBrowser.currentSearchQuery || '').trim();
+        const isLinkMode = UI.DocumentBrowser.mode === 'link';
+
+        // Blocco opzione di creazione istantanea per nuove note
+        let createOptionEl = null;
+        if (isLinkMode && query.length > 0) {
+            const exactExists = UI.DocumentBrowser.allItems.some(i => 
+                i.refType === 'note' && i.title.trim().toLowerCase() === query.toLowerCase()
+            );
+
+            if (!exactExists) {
+                const parentNote = AppState.currentNoteId ? Store.getNote(AppState.currentNoteId) : null;
+                const parentTitle = parentNote ? UI.escapeHTML(parentNote.title || 'Senza Titolo') : null;
+                const hierarchyNotice = parentTitle ? ` come sotto-nota di <b>${parentTitle}</b>` : ` alla radice del Workspace`;
+
+                createOptionEl = document.createElement('div');
+                createOptionEl.className = 'node-wrapper';
+                createOptionEl.style.marginBottom = '8px';
+                createOptionEl.innerHTML = `
+                    <div class="node-content" style="border: 1px dashed var(--accent-color); background: rgba(37, 99, 235, 0.08); padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 8px;">
+                        <span style="display:inline-flex; color:var(--accent-color); font-weight:bold; font-size:1.1rem;">+</span>
+                        <div style="flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:0.85rem;">
+                            Crea nuova nota: <b style="color:var(--text-primary);">"${UI.escapeHTML(query)}"</b>
+                            <span style="font-size:0.75rem; color:var(--text-secondary); display:block;">${hierarchyNotice}</span>
+                        </div>
+                        <span style="font-size:0.7rem; font-family:monospace; background:rgba(37,99,235,0.15); color:var(--accent-color); padding:2px 5px; border-radius:4px; font-weight:bold;">Invio ↵</span>
+                    </div>
+                `;
+                createOptionEl.onclick = () => {
+                    UI.DocumentBrowser.createAndSelectNote(query);
+                };
+            }
+        }
+
+        const hasNoMatches = UI.DocumentBrowser.allItems.length === 0 || (filteredIds && filteredIds.size === 0);
+
+        if (hasNoMatches) {
+            if (createOptionEl) {
+                listEl.appendChild(createOptionEl);
+            } else {
+                listEl.innerHTML = '<div style="padding:20px; color:var(--text-secondary); text-align:center; font-style:italic;">Nessun risultato trovato.</div>'; 
+            }
             return; 
+        }
+
+        // Se sono presenti sia la creazione che corrispondenze parziali, mostra prima il blocco crea
+        if (createOptionEl) {
+            listEl.appendChild(createOptionEl);
         }
 
         const buildNodeHTML = (item) => {
@@ -463,7 +600,8 @@ UI.DocumentBrowser = {
     },
 
     filter: (query) => {
-        const lower = query.trim().toLowerCase();
+        UI.DocumentBrowser.currentSearchQuery = query || '';
+        const lower = (query || '').trim().toLowerCase();
         
         if (!lower) {
             UI.DocumentBrowser.renderTree(null);

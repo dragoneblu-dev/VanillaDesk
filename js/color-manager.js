@@ -7,6 +7,9 @@
  * FIX DOM (ExecCommand): Lo scraper ora analizza tutti i nodi (*) proteggendo però i Widget tramite Firewall.
  * FIX EREDITÀ COLORI: Risalita DOM per identificare il vero colore di sfondo tra span nidificati.
  * FIX TOGGLE: Il tasto principale ora agisce come interruttore (ON/OFF) se il colore selezionato è già attivo.
+ * FEAT MULTI-CELL COLORING: Quando sono selezionate più celle di una tabella semplice (TableManager.Selection),
+ * l'applicazione del colore testo ed evidenziatore agisce direttamente e simultaneamente su tutte le celle,
+ * con salvataggio atomico della cronologia di Undo (Ctrl+Z) e Redo (Ctrl+Y).
  */
 
 const ColorManager = {
@@ -86,6 +89,19 @@ const ColorManager = {
 
     // Identifica se il nodo di partenza della selezione possiede già il colore target
     _isSelectionAlreadyColored: (type, targetClass) => {
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 TableManager.Selection.selectedCells && 
+                                 TableManager.Selection.selectedCells.length > 0;
+
+        if (hasSelectedCells) {
+            const cells = TableManager.Selection.selectedCells;
+            return cells.every(cell => {
+                const spanWithClass = cell.querySelector(`.${targetClass}`);
+                return !!spanWithClass;
+            });
+        }
+
         const sel = window.getSelection();
         if (!sel.rangeCount || sel.isCollapsed) return false;
 
@@ -168,6 +184,70 @@ const ColorManager = {
     },
 
     applyColor: (type, colorClass) => {
+        // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Colore Testo ed Evidenziatore)
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 TableManager.Selection.selectedCells && 
+                                 TableManager.Selection.selectedCells.length > 0;
+
+        if (hasSelectedCells) {
+            // Forza l'inserimento dello snapshot di partenza per garantire l'Undo (Ctrl+Z)
+            Editor.saveSnapshot(true);
+            const cells = TableManager.Selection.selectedCells;
+
+            cells.forEach(cell => {
+                // 1. Rimuove le classi e stili del tipo specificato (text o highlight) da tutti gli elementi interni alla cella
+                if (type === 'text') {
+                    cell.querySelectorAll('[class*="tx-c"], [color]').forEach(el => {
+                        Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
+                        el.removeAttribute('color');
+                        el.style.color = '';
+                    });
+                } else {
+                    cell.querySelectorAll('[class*="hl-c"]').forEach(el => {
+                        Array.from(el.classList).filter(c => c.startsWith('hl-c')).forEach(c => el.classList.remove(c));
+                        el.style.backgroundColor = '';
+                    });
+                }
+
+                // 2. Se è stato specificato un colore (non null/rimozione), avvolge tutto il contenuto utile
+                if (colorClass) {
+                    const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                    if (textOnly || cell.querySelector('img, audio, input, svg')) {
+                        const span = document.createElement('span');
+                        span.className = colorClass;
+                        while (cell.firstChild) span.appendChild(cell.firstChild);
+                        cell.appendChild(span);
+                    }
+                }
+
+                // 3. Pulizia di span rimasti vuoti o privi di attributi
+                cell.querySelectorAll('span').forEach(sp => {
+                    if (sp.classList.length === 0 && !sp.hasAttribute('style') && sp.attributes.length === 0) {
+                        const parent = sp.parentNode;
+                        while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+                        sp.remove();
+                    }
+                });
+            });
+
+            Editor.healWidgetWrappers();
+
+            if (AppState.currentNoteId) {
+                const note = Store.getNote(AppState.currentNoteId);
+                if (note) {
+                    note.content = Editor.getCleanHTML();
+                    note._isDirty = true;
+                    note.updatedAt = new Date().toISOString();
+                }
+            }
+
+            Store.triggerAutoSave();
+            Editor.updateToolbarFormatting();
+            Editor.updateUndoRedoUI();
+            return;
+        }
+
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         Editor.restoreSelection();
 
