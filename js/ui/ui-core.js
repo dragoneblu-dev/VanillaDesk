@@ -4,8 +4,9 @@
  * FEEDBACK VISIVO HEADER: Sincronizzazione automatica della classe header-unsaved
  * per colorare l'intera prima riga di rosso quando la sessione è ripristinata o non salvata su disco.
  * FEAT WORKSPACE GUIDE: Modale esplicativo guidato per nuovi utenti prima della selezione della cartella.
- * FEAT GRAPH VIEW DISPATCH: Metodo openGraphView per aprire la mappa delle connessioni in una finestra standalone
- * con targeting nominale bidirezionale e notifica via BroadcastChannel per finestre già attive.
+ * FEAT GRAPH VIEW DISPATCH: Apertura nativa a schermo intero (In-App Fullscreen) con zero latenza,
+ * focalizzazione automatica del nodo corrente e chiusura istantanea su selezione.
+ * FEAT DUAL TITLE HEADER: Metodo updateHeaderTitles per visualizzare Workspace (riga 1) e Documento attivo (riga 2).
  */
 
 window.UI = {
@@ -29,35 +30,15 @@ window.UI = {
             Store.saveToFile();
         }
 
-        // Assegna il nome univoco alla finestra principale per consentire alle schede figlie di riportarvi il focus
-        if (!window.name) {
-            window.name = 'VanillaDeskMain';
-        }
-
         const noteParam = targetNoteId || AppState.currentNoteId;
-        const targetUrl = noteParam ? `graph/index.html#note=${encodeURIComponent(noteParam)}` : `graph/index.html`;
 
-        const graphWin = window.open(targetUrl, 'VanillaDeskGraph');
-        if (graphWin) {
-            try {
-                graphWin.focus();
-                // Se la finestra era già aperta ed è accessibile via script, centra immediatamente il nodo
-                if (graphWin.GraphCanvas && typeof graphWin.GraphCanvas.focusNode === 'function' && noteParam) {
-                    graphWin.GraphCanvas.focusNode(noteParam);
-                }
-            } catch (_) {}
-        }
-
-        // Notifica asincrona via BroadcastChannel: garantisce la selezione anche se il riferimento window è differito
-        if (noteParam) {
-            try {
-                const channel = new BroadcastChannel('vanilladesk_sync');
-                channel.postMessage({
-                    type: 'focus_graph_node',
-                    noteId: noteParam
-                });
-                channel.close();
-            } catch (_) {}
+        // Apertura nativa a schermo intero integrata dentro VanillaDesk
+        if (typeof GraphApp !== 'undefined' && typeof GraphApp.open === 'function') {
+            GraphApp.open(noteParam);
+        } else {
+            // Fallback finestra esterna in caso di caricamento differito degli script
+            const targetUrl = noteParam ? `graph/index.html#note=${encodeURIComponent(noteParam)}` : `graph/index.html`;
+            window.open(targetUrl, 'VanillaDeskGraph');
         }
 
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
@@ -124,9 +105,44 @@ window.UI = {
         }
     },
 
+    updateHeaderTitles: (workspaceName = null, noteTitle = null) => {
+        const container = document.getElementById('fileNameDisplay');
+        if (!container) return;
+
+        const defaultNoWs = typeof I18n !== 'undefined' ? I18n.t('common.no_workspace') : 'Nessun Workspace';
+        const ws = (workspaceName !== null && workspaceName !== undefined) 
+            ? workspaceName 
+            : (AppState.fileName || defaultNoWs);
+
+        let noteText = '';
+        if (noteTitle !== null && noteTitle !== undefined) {
+            noteText = noteTitle.trim() || (typeof I18n !== 'undefined' ? I18n.t('editor.untitled') : 'Senza Titolo');
+        } else if (AppState.currentNoteId) {
+            const currentNote = typeof Store !== 'undefined' ? Store.getNote(AppState.currentNoteId) : null;
+            noteText = currentNote ? (currentNote.title || (typeof I18n !== 'undefined' ? I18n.t('editor.untitled') : 'Senza Titolo')) : '';
+        } else {
+            noteText = typeof I18n !== 'undefined' ? I18n.t('home_dashboard.title') : 'Dashboard Workspace';
+        }
+
+        const wsSpan = container.querySelector('.header-workspace-name');
+        const noteSpan = container.querySelector('.header-note-name');
+
+        if (wsSpan && noteSpan) {
+            wsSpan.textContent = ws;
+            noteSpan.textContent = noteText;
+        } else {
+            container.innerHTML = `
+                <span class="header-workspace-name">${UI.escapeHTML(ws)}</span>
+                <span class="header-note-name">${UI.escapeHTML(noteText)}</span>
+            `;
+        }
+
+        const homeTooltip = typeof I18n !== 'undefined' ? I18n.t('toolbar.breadcrumb_home') : 'Torna alla Home';
+        container.title = homeTooltip;
+    },
+
     updateFileName: (name) => { 
-        const el = document.getElementById('fileNameDisplay'); 
-        if (el) el.textContent = name; 
+        UI.updateHeaderTitles(name, null);
     },
 
     promptWorkspaceGuide: () => {

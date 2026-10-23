@@ -255,7 +255,7 @@ window.GraphData = {
         // 7. Dimensionamento proporzionale al numero di connessioni
         GraphData.nodes.forEach(node => {
             const deg = node.degree || 0;
-            const baseRadius = node.type === 'note' ? 6 : (node.type === 'record_note' ? 5 : 4);
+            const baseRadius = node.type === 'note' ? 4 : (node.type === 'record_note' ? 4 : 3);
             node.radius = Math.min(18, baseRadius + Math.sqrt(deg) * 2);
         });
 

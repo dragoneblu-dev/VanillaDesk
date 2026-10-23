@@ -5,6 +5,12 @@
  * FEAT ADAPTIVE SUBNOTES MATRIX: La matrice delle sotto-note visualizza come colonne unicamente
  * le proprietà che possiedono almeno un valore reale in almeno una sotto-nota.
  * Le proprietà completamente vuote vengono raccolte in un riquadro discreto in calce.
+ * FIX STICKY THEAD BACKGROUND: Assegnato sfondo solido opaco (var(--sidebar-bg)) ai tag th e thead
+ * per impedire la sovrapposizione visiva del testo delle note durante lo scorrimento verticale.
+ * FIX MULTI-VIEW PER PAGE: Censimento completo di viste multiple ospitate nella stessa pagina.
+ * FEAT DEDICATED VIEW ICONS: Icone e badge tipologici specifici per ogni tipo di vista (Kanban, Calendario,
+ * Timeline, WBS, Grafico, Pivot e Tabella) allineati al design system dell'applicazione.
+ * FIX CHART ICON: Utilizzo diretto dell'icona nativa Icons.tablePivot (barre verticali) per le viste Grafico.
  */
 
 Object.assign(UI, {
@@ -91,10 +97,10 @@ Object.assign(UI, {
                 }
             });
 
-            // Costruzione intestazione colonne (solo colonne valorizzate)
-            let thHtml = `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">${I18n.t('notes_info.subnotes_col_title')}</th>`;
+            // Costruzione intestazione colonne sticky con sfondo solido e opaco var(--sidebar-bg)
+            let thHtml = `<th style="position:sticky; top:0; z-index:10; text-align:left; color:var(--text-secondary); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border-color); background:var(--sidebar-bg);">${I18n.t('notes_info.subnotes_col_title')}</th>`;
             populatedCols.forEach(c => {
-                thHtml += `<th style="text-align:left; color:var(--text-secondary); font-weight:600; padding:8px; border-bottom:1px solid var(--border-color); background:rgba(0,0,0,0.02);">${c.name.replace(/</g, '&lt;')}</th>`;
+                thHtml += `<th style="position:sticky; top:0; z-index:10; text-align:left; color:var(--text-secondary); font-weight:600; padding:8px 10px; border-bottom:1px solid var(--border-color); background:var(--sidebar-bg);">${c.name.replace(/</g, '&lt;')}</th>`;
             });
 
             let trHtml = '';
@@ -163,7 +169,7 @@ Object.assign(UI, {
             subNotesHtml = `
                 <div class="adv-scroll-container" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); margin-top: 10px;">
                     <table style="width:100%; border-collapse:collapse; text-align:left;">
-                        <thead style="position:sticky; top:0; z-index:10; box-shadow: 0 1px 2px rgba(0,0,0,0.05);">
+                        <thead style="position:sticky; top:0; z-index:10; background:var(--sidebar-bg); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <tr>${thHtml}</tr>
                         </thead>
                         <tbody>
@@ -175,6 +181,155 @@ Object.assign(UI, {
             `;
         } else {
             subNotesHtml = `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">${I18n.t('notes_info.subnotes_empty')}</div>`;
+        }
+
+        // 5. RILEVAMENTO RIGOROSO DELLE VISTE COLLEGATE ALLO SHADOW DATABASE (SYS_PROPERTIES_DB)
+        const shadowDbViewIds = new Map(); // dbId -> dbState
+
+        if (AppState.databases) {
+            Object.entries(AppState.databases).forEach(([id, db]) => {
+                if (!db) return;
+                // Vengono censite esclusivamente le Linked Views e Pivot la cui sorgente sia categoricamente SYS_PROPERTIES_DB
+                const isShadowLinked = db.isLinkedView && db.sourceTableId === 'SYS_PROPERTIES_DB';
+                const isShadowPivot = db.isPivot && db.sourceTableId === 'SYS_PROPERTIES_DB';
+                const isDirectShadow = id === 'SYS_PROPERTIES_DB';
+
+                if (isShadowLinked || isShadowPivot || isDirectShadow) {
+                    shadowDbViewIds.set(id, db);
+                }
+            });
+        }
+
+        const pagesWithShadowViews = [];
+        const seenWidgetIds = new Set();
+
+        if (shadowDbViewIds.size > 0 && AppState.notes) {
+            // Ispezione sicura delle aperture dei tag <div> per individuare tutti i wrapper reali dei widget
+            const divTagRegex = /<div\b[^>]*>/gi;
+
+            AppState.notes.forEach(n => {
+                if (n.deletedAt || !n.content) return;
+
+                let tagMatch;
+                divTagRegex.lastIndex = 0;
+                while ((tagMatch = divTagRegex.exec(n.content)) !== null) {
+                    const tagStr = tagMatch[0];
+                    const isTableOrPivotWrapper = tagStr.includes('adv-table-wrapper') || 
+                                                  tagStr.includes('widget-type-database') || 
+                                                  tagStr.includes('widget-type-pivot');
+
+                    if (isTableOrPivotWrapper) {
+                        const idMatch = tagStr.match(/\bid=["']([^"']+)["']/i);
+                        if (idMatch) {
+                            const rawDbId = idMatch[1].split('_cited_')[0];
+
+                            // Verifica che l'ID estratto appartenga a SYS_PROPERTIES_DB e non sia già stato aggiunto
+                            if (shadowDbViewIds.has(rawDbId) && !seenWidgetIds.has(rawDbId)) {
+                                seenWidgetIds.add(rawDbId);
+                                const targetDbState = shadowDbViewIds.get(rawDbId);
+                                const viewType = targetDbState.viewType || 'table';
+                                const isPivot = !!targetDbState.isPivot;
+                                const isChart = isPivot && !!(targetDbState.chartConfig && targetDbState.chartConfig.visible);
+
+                                // Risoluzione dinamica dell'icona specifica e della denominazione di layout
+                                let iconSvg = Icons.tableDatabase;
+                                let typeName = I18n.t('table.view_table') || 'Tabella';
+
+                                if (isChart) {
+                                    // Utilizzo diretto dell'icona Icons.tablePivot (istogramma a barre verticali)
+                                    iconSvg = Icons.tablePivot;
+
+                                    const chartType = targetDbState.chartConfig?.type;
+                                    typeName = chartType 
+                                        ? `Grafico (${chartType.toUpperCase()})` 
+                                        : 'Grafico Analitico';
+                                } else if (isPivot) {
+                                    iconSvg = Icons.tablePivot;
+                                    typeName = 'Tabella Pivot';
+                                } else if (viewType === 'board') {
+                                    iconSvg = Icons.viewBoard;
+                                    typeName = I18n.t('table.view_board') || 'Bacheca Kanban';
+                                } else if (viewType === 'calendar') {
+                                    iconSvg = Icons.viewCalendar;
+                                    typeName = I18n.t('table.view_calendar') || 'Calendario';
+                                } else if (viewType === 'timeline') {
+                                    iconSvg = Icons.viewTimeline;
+                                    typeName = I18n.t('table.view_timeline') || 'Timeline';
+                                } else if (viewType === 'tree') {
+                                    iconSvg = Icons.treeNode;
+                                    typeName = I18n.t('table.view_tree') || 'Gerarchia WBS';
+                                }
+
+                                pagesWithShadowViews.push({
+                                    noteId: n.id,
+                                    noteTitle: n.title || I18n.t('editor.untitled'),
+                                    widgetId: rawDbId,
+                                    viewTitle: targetDbState.title || typeName,
+                                    viewTypeName: typeName,
+                                    iconSvg: iconSvg
+                                });
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        let shadowViewsHtml = '';
+        const sectionTitle = I18n.t('notes_info.sys_db_section_title') || "Gestione Globale Tag & Proprietà";
+
+        if (pagesWithShadowViews.length > 0) {
+            let linksHtml = '';
+            pagesWithShadowViews.forEach(item => {
+                const safePageTitle = UI.escapeHTML(item.noteTitle);
+                const safeViewTitle = UI.escapeHTML(item.viewTitle);
+                const safeViewType = UI.escapeHTML(item.viewTypeName);
+
+                linksHtml += `
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding:8px 10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; cursor:pointer; transition:all 0.15s ease;"
+                         onmouseenter="this.style.background='var(--item-hover)'; this.style.borderColor='var(--accent-color)';"
+                         onmouseleave="this.style.background='var(--bg-color)'; this.style.borderColor='var(--border-color)';"
+                         onclick="UI.selectNote('${item.noteId}', null, '${item.widgetId}'); UI.closeDrawer();">
+                        <div style="display:flex; align-items:center; gap:8px; overflow:hidden;">
+                            <span style="color:var(--accent-color); display:inline-flex;">${item.iconSvg}</span>
+                            <div style="display:flex; flex-direction:column; overflow:hidden;">
+                                <span style="font-weight:600; font-size:0.85rem; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${safePageTitle}</span>
+                                <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${safeViewTitle} <span style="opacity:0.6;">(${safeViewType})</span></span>
+                            </div>
+                        </div>
+                        <span style="font-size:0.75rem; color:var(--accent-color); font-weight:bold; display:inline-flex; align-items:center; gap:2px;">
+                            ${Icons.arrowRightUp}
+                        </span>
+                    </div>
+                `;
+            });
+
+            const foundDesc = I18n.t('notes_info.sys_db_pages_found_desc') || "Per filtrare, analizzare o modificare in massa tutte le proprietà delle note del Workspace, puoi consultare le seguenti pagine dedicate:";
+            shadowViewsHtml = `
+                <div>
+                    <h4 style="margin:0 0 10px 0; color:var(--text-primary); font-size:0.95rem; border-bottom:1px solid var(--border-color); padding-bottom:5px; display:flex; align-items:center; gap:6px;">
+                        ${Icons.tableDatabase} ${sectionTitle}
+                    </h4>
+                    <div style="font-size:0.8rem; color:var(--text-secondary); margin-bottom:10px; line-height:1.4;">${foundDesc}</div>
+                    <div style="display:flex; flex-direction:column; gap:6px;">
+                        ${linksHtml}
+                    </div>
+                </div>
+            `;
+        } else {
+            const hintTitle = I18n.t('notes_info.sys_db_empty_hint_title') || "Vuoi un'analisi approfondita o modifiche massive?";
+            const hintDesc = I18n.t('notes_info.sys_db_empty_hint_desc') || "Puoi inserire in qualsiasi nota una tabella o vista analitica di tutte le note: clicca su <b>Blocchi ➔ Vista / Pivot / Grafico</b> e scegli <b>Tag e Proprietà Pagina</b> come origine dati.";
+
+            shadowViewsHtml = `
+                <div style="background:rgba(37, 99, 235, 0.04); border:1px dashed rgba(37, 99, 235, 0.3); border-radius:8px; padding:12px 14px;">
+                    <div style="display:flex; align-items:center; gap:6px; color:var(--accent-color); font-weight:bold; font-size:0.85rem; margin-bottom:5px;">
+                        <span>💡</span> <span>${hintTitle}</span>
+                    </div>
+                    <div style="font-size:0.8rem; color:var(--text-secondary); line-height:1.45;">
+                        ${hintDesc}
+                    </div>
+                </div>
+            `;
         }
 
         // COSTRUZIONE HTML DRAWER
@@ -266,6 +421,9 @@ Object.assign(UI, {
                     <div style="font-size:0.8rem; color:var(--text-secondary);">${I18n.t('notes_info.subnotes_audit_desc')}</div>
                     ${subNotesHtml}
                 </div>
+
+                <!-- Sezione Analisi Globale Shadow Database (Tutte le Viste Reali Censite) -->
+                ${shadowViewsHtml}
             </div>
         `;
 

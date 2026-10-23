@@ -16,6 +16,9 @@
  * - H2 nativo (<h2>): Ctrl+Alt+2 o Ctrl+Shift+2
  * - H3 nativo (<h3>): Ctrl+Alt+3 o Ctrl+Shift+3 (esclusiva da tastiera)
  * - Paragrafo normale (<p>): Ctrl+Alt+0
+ * FEAT SHORTCUTS COLORAZIONE TESTO ED EVIDENZIATORE:
+ * - Ctrl+Shift+H: Applica/Rimuove (Toggle) l'ultimo Evidenziatore usato
+ * - Ctrl+Alt+H: Applica/Rimuove (Toggle) l'ultimo Colore Testo usato
  * FEAT CTRL+CLICK DIRECT NAVIGATION: Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
  * FIX CARET DEAD ZONE ON CLICK & KEYDOWN: Normalizzazione immediata del cursore per impedire digitazioni
  * tra il bordo di una shell inline e il cuscinetto \u200B.
@@ -251,6 +254,7 @@ Object.assign(EventsGlobal, {
         document.addEventListener('keydown', (e) => {
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
             const key = e.key ? e.key.toLowerCase() : '';
+            const isKeyH = key === 'h' || e.code === 'KeyH';
 
             // SCORCIATOIE NAVIGAZIONE CRONOLOGICA LINEARE: Alt+Left (Indietro) e Alt+Right (Avanti)
             if (e.altKey && !isCtrlOrCmd && !e.shiftKey) {
@@ -409,14 +413,28 @@ Object.assign(EventsGlobal, {
             }
 
             if (isCtrlOrCmd && AppState.isEditMode) {
-                // FORMATTAZIONI STANDARD DI TESTO (SOLO SE SHIFT NON È PREMUTO per non confliggere con scorciatoie come Ctrl+Shift+B)
-                if (!e.shiftKey && key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
-                if (!e.shiftKey && key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
-                if (!e.shiftKey && key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
-                if (!e.shiftKey && key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
+                // FORMATTAZIONI STANDARD DI TESTO
+                if (!e.shiftKey && !e.altKey && key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
+                if (!e.shiftKey && !e.altKey && key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
+                if (!e.shiftKey && !e.altKey && key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
+                if (!e.shiftKey && !e.altKey && key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
+
+                // SCORCIATOIE RAPIDE COLORAZIONE: Evidenziatore (Ctrl+Shift+H) e Testo (Ctrl+Alt+H)
+                if (e.shiftKey && !e.altKey && isKeyH) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof ColorManager !== 'undefined') ColorManager.applyLast('highlight');
+                    return;
+                }
+                if (e.altKey && !e.shiftKey && isKeyH) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    if (typeof ColorManager !== 'undefined') ColorManager.applyLast('text');
+                    return;
+                }
                 
                 // MULTI-CURSORE
-                if (key === 'd') { 
+                if (!e.shiftKey && !e.altKey && key === 'd') { 
                     e.preventDefault(); 
                     Editor.triggerMultiCursor(); 
                     return; 
@@ -428,12 +446,12 @@ Object.assign(EventsGlobal, {
                 if (e.key === 'ArrowDown') { e.preventDefault(); Editor.moveBlock(1); return; }
             }
 
-            if (isCtrlOrCmd && !e.shiftKey && key === 'z') {
+            if (isCtrlOrCmd && !e.shiftKey && !e.altKey && key === 'z') {
                 e.preventDefault();
                 Editor.undo();
                 return;
             }
-            if ((isCtrlOrCmd && key === 'y') || (isCtrlOrCmd && e.shiftKey && key === 'z')) {
+            if ((isCtrlOrCmd && !e.shiftKey && !e.altKey && key === 'y') || (isCtrlOrCmd && e.shiftKey && !e.altKey && key === 'z')) {
                 e.preventDefault();
                 Editor.redo();
                 return;
@@ -615,7 +633,7 @@ Object.assign(EventsGlobal, {
                 const now = new Date().toLocaleString();
                 if (e.target.checked) e.target.setAttribute('checked', 'true');
                 else e.target.removeAttribute('checked');
-                e.target.setAttribute('title', `Modificato: ${now}`);
+                e.target.setAttribute('title', `Modificato il: ${now}`);
 
                 if (AppState.currentNoteId && !AppState.isSwitchingNote) {
                     const note = Store.getNote(AppState.currentNoteId);
@@ -641,7 +659,6 @@ Object.assign(EventsGlobal, {
 
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
-            // =========================================================================
             // NAVIGAZIONE RAPIDA DA CLICK SU HASHTAG
             // - In Read Mode: singolo click sinistro lancia direttamente la ricerca
             // - In Edit Mode: Ctrl + Click sinistro lancia la ricerca senza bloccare l'editing
@@ -672,9 +689,7 @@ Object.assign(EventsGlobal, {
                 }
             }
 
-            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI):
-            // Leggiamo textContent anziché innerText per evitare che le proprietà CSS
-            // di mascheramento (-webkit-text-security) copino i pallini al posto della password reale.
+            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI)
             if (target.closest('.snippet-copy-btn')) {
                 e.preventDefault();
                 e.stopPropagation();

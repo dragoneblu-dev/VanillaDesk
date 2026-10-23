@@ -1,18 +1,20 @@
 /**
  * graph/graph.css
- * Foglio di stile per la Graph View indipendente di VanillaDesk.
- * Integrazione controlli Drawer, bottoni icona trasparenti nel tema e stato del canvas.
+ * Foglio di stile per la Graph View integrata a schermo intero di VanillaDesk.
+ * Integrazione overlay massimizzato, controlli Drawer, bottoni icona e canvas reattivo.
  */
 
-html, body {
-    margin: 0;
-    padding: 0;
-    width: 100%;
-    height: 100%;
-    overflow: hidden;
+.graph-fullscreen-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    z-index: 500;
     background: var(--bg-color, #ffffff);
-    color: var(--text-primary, #111827);
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
 }
 
 .graph-header {
@@ -25,6 +27,7 @@ html, body {
     padding: 0 16px;
     box-sizing: border-box;
     z-index: 10;
+    flex-shrink: 0;
 }
 
 .header-left, .header-right {
@@ -58,6 +61,7 @@ html, body {
     padding: 2px 8px;
     border-radius: 12px;
     border: 1px solid var(--border-color, #e5e7eb);
+    white-space: nowrap;
 }
 
 .graph-search-box {
@@ -117,6 +121,7 @@ html, body {
     height: calc(100% - 52px);
     overflow: hidden;
     cursor: grab;
+    flex: 1;
 }
 
 .graph-main.is-dragging {

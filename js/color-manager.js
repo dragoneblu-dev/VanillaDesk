@@ -10,6 +10,9 @@
  * FEAT MULTI-CELL COLORING: Quando sono selezionate più celle di una tabella semplice (TableManager.Selection),
  * l'applicazione del colore testo ed evidenziatore agisce direttamente e simultaneamente su tutte le celle,
  * con salvataggio atomico della cronologia di Undo (Ctrl+Z) e Redo (Ctrl+Y).
+ * FEAT PERSISTENCE: Memorizzazione persistente in localStorage degli ultimi colori usati (pronotes_last_hl, pronotes_last_tx).
+ * FIX KEYBOARD SHORTCUT SELECTION: Preserva la selezione attiva del browser senza collassarla all'invocazione da tastiera.
+ * FIX TEXT COLOR TOGGLE UNWRAP: Risolto annidamento genitore su foreColor neutro azzerando il colore temporaneo del genitore.
  */
 
 const ColorManager = {
@@ -36,6 +39,14 @@ const ColorManager = {
     removeTx: {rgb: 'rgb(254, 0, 0)', hex: '#fe0000'},
 
     init: () => {
+        // Recupero persistente delle ultime tinte utilizzate da localStorage
+        try {
+            const savedHl = localStorage.getItem('pronotes_last_hl');
+            const savedTx = localStorage.getItem('pronotes_last_tx');
+            if (savedHl) ColorManager.lastHighlight = savedHl;
+            if (savedTx) ColorManager.lastText = savedTx;
+        } catch (_) {}
+
         const preventFocusLoss = (e) => { e.preventDefault(); Editor.saveSelection(); };
         document.querySelectorAll('.btn-color-main, .btn-color-arrow').forEach(el => el.addEventListener('mousedown', preventFocusLoss));
         ColorManager.updateToolbarIcon('highlight', ColorManager.lastHighlight);
@@ -68,7 +79,8 @@ const ColorManager = {
             }
         }
 
-        let html = `<div class="adv-dropdown-title" style="margin-bottom: 4px; padding: 0 4px;">${type === 'highlight' ? 'Evidenziatore' : 'Colore Testo'}</div>`;
+        const titleText = type === 'highlight' ? 'Evidenziatore (Ctrl+Shift+H)' : 'Colore Testo (Ctrl+Alt+H)';
+        let html = `<div class="adv-dropdown-title" style="margin-bottom: 4px; padding: 0 4px;">${titleText}</div>`;
         html += `<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px;">`;
         
         for(let i = 1; i <= 10; i++) {
@@ -149,10 +161,16 @@ const ColorManager = {
 
     selectColor: (type, colorClass) => {
         if (type === 'highlight') {
-            if(colorClass) ColorManager.lastHighlight = colorClass;
+            if (colorClass) {
+                ColorManager.lastHighlight = colorClass;
+                try { localStorage.setItem('pronotes_last_hl', colorClass); } catch (_) {}
+            }
             ColorManager.updateToolbarIcon('highlight', colorClass || 'bg-none');
         } else {
-            if(colorClass) ColorManager.lastText = colorClass;
+            if (colorClass) {
+                ColorManager.lastText = colorClass;
+                try { localStorage.setItem('pronotes_last_tx', colorClass); } catch (_) {}
+            }
             ColorManager.updateToolbarIcon('text', colorClass || 'tx-auto');
         }
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
@@ -248,13 +266,22 @@ const ColorManager = {
             return;
         }
 
-        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
-        Editor.restoreSelection();
-
-        const selection = window.getSelection();
-        if (!selection.rangeCount || selection.isCollapsed) return;
-
         const editor = document.getElementById('noteContent');
+        const sel = window.getSelection();
+
+        // GESTIONE ATTENTA DELLA SELEZIONE ATTIVA:
+        // Se il cursore o la selezione è attiva dentro l'editor e non collassata,
+        // memorizziamo questo range senza collassarlo con restoreSelection()
+        if (sel.rangeCount > 0 && !sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            Editor.savedRange = sel.getRangeAt(0).cloneRange();
+        } else if (Editor.savedRange && (!sel.rangeCount || sel.isCollapsed)) {
+            Editor.restoreSelection();
+        }
+
+        if (!sel.rangeCount || sel.isCollapsed) return;
+
+        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+
         document.execCommand('styleWithCSS', false, true);
 
         // 1. Converte tutte le classi attuali in colori finti, ESCLUDENDO l'infrastruttura Widget
@@ -292,6 +319,16 @@ const ColorManager = {
                 const bg = cleanStr(el.style.backgroundColor);
                 if (bg === cleanStr(ColorManager.removeHl.rgb) || bg === cleanStr(ColorManager.removeHl.hex)) {
                     el.style.backgroundColor = '';
+                    // Neutralizza l'eventuale background temporaneo dei genitori per evitare ripristini spuri
+                    let p = el.parentNode;
+                    while (p && p.id !== 'noteContent') {
+                        for (let cls in ColorManager.magicHl) {
+                            if (p.style && (cleanStr(p.style.backgroundColor) === cleanStr(ColorManager.magicHl[cls].rgb) || cleanStr(p.style.backgroundColor) === cleanStr(ColorManager.magicHl[cls].hex))) {
+                                p.style.backgroundColor = '';
+                            }
+                        }
+                        p = p.parentNode;
+                    }
                 } else {
                     for (let cls in ColorManager.magicHl) {
                         if (bg === cleanStr(ColorManager.magicHl[cls].rgb) || bg === cleanStr(ColorManager.magicHl[cls].hex)) {
@@ -304,6 +341,16 @@ const ColorManager = {
                 const fg = cleanStr(el.style.color) || fgAttr;
                 if (fg === cleanStr(ColorManager.removeTx.rgb) || fg === cleanStr(ColorManager.removeTx.hex)) { 
                     el.style.color = ''; el.removeAttribute('color'); 
+                    // Neutralizza l'eventuale colore temporaneo dei genitori per evitare che riassegnino la classe .tx-c*
+                    let p = el.parentNode;
+                    while (p && p.id !== 'noteContent') {
+                        for (let cls in ColorManager.magicTx) {
+                            if (p.style && (cleanStr(p.style.color) === cleanStr(ColorManager.magicTx[cls].rgb) || cleanStr(p.style.color) === cleanStr(ColorManager.magicTx[cls].hex))) {
+                                p.style.color = '';
+                            }
+                        }
+                        p = p.parentNode;
+                    }
                 } else {
                     for (let cls in ColorManager.magicTx) {
                         if (fg === cleanStr(ColorManager.magicTx[cls].rgb) || fg === cleanStr(ColorManager.magicTx[cls].hex)) {
@@ -326,7 +373,7 @@ const ColorManager = {
                 if (el.getAttribute('color') === '') el.removeAttribute('color');
 
                 if (el.tagName === 'SPAN' || el.tagName === 'FONT') {
-                    if (el.attributes.length === 0 || (el.tagName === 'SPAN' && el.classList.length === 0 && !el.hasAttribute('style'))) {
+                    if (el.attributes.length === 0 || (el.classList.length === 0 && !el.hasAttribute('style'))) {
                         const parent = el.parentNode;
                         while (el.firstChild) parent.insertBefore(el.firstChild, el);
                         parent.removeChild(el);

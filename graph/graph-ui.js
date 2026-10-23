@@ -3,11 +3,10 @@
  * Modulo Interfaccia Utente per Graph View:
  * - Ricerca istantanea con evidenziazione in tempo reale e scorrimento ciclico con Invio.
  * - Cassetto laterale dei filtri: selettore della modalità di Colorazione Nodi (Tipo, Cartella, Tag Primario).
- * - Chiusura automatica del pannello Drawer al click all'esterno (parità con VanillaDesk).
  * - Aggiornamento opzioni tramite pipeline formale GraphCanvas.updateData (zero balzi all'angolo 0,0).
  * - Slider tarabili con estensione fino a 1200 per repulsione e 0.001 per gravità.
  * - Slider distinti per configurare le distanze delle molle: Note/Citazioni, Cartelle/Gerarchie e Tag (#).
- * - Rimozione totale dei riferimenti a nodi o link orfani.
+ * - Risolto conflitto listener capture per garantire l'apertura e chiusura fluida del Drawer.
  */
 
 window.GraphUI = {
@@ -44,19 +43,6 @@ window.GraphUI = {
                 }
             });
         }
-
-        // Chiusura automatica del Drawer laterale quando si clicca all'esterno (parità ergonomica con VanillaDesk)
-        document.addEventListener('click', (e) => {
-            const drawer = document.getElementById('advGlobalDrawer');
-            if (drawer && drawer.classList.contains('open')) {
-                // Se il click non è all'interno del drawer né sul pulsante di apertura, chiudi il drawer
-                if (!e.target.closest('#advGlobalDrawer') && !e.target.closest('#btnGraphSettings')) {
-                    if (typeof UI !== 'undefined' && typeof UI.closeDrawer === 'function') {
-                        UI.closeDrawer();
-                    }
-                }
-            }
-        }, true);
     },
 
     handleSearch: (query) => {
@@ -215,7 +201,6 @@ window.GraphUI = {
     },
 
     updateOption: (key, value) => {
-        console.log(`[VanillaDesk Graph] Aggiornamento opzione: ${key} = ${value}`);
         GraphData.options[key] = value;
         GraphData.buildGraph();
 
@@ -225,7 +210,6 @@ window.GraphUI = {
 
         GraphCanvas.render();
         GraphApp.saveGraphConfig();
-        //console.log(`[VanillaDesk Graph] Canvas aggiornato con successo.`);
     },
 
     updatePhysics: (key, value) => {

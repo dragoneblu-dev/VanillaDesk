@@ -3,6 +3,7 @@
  * Sottomodulo di UI.
  * Gestione essenziale del ciclo di vita della nota: Creazione, Selezione JIT su disco,
  * Aggiornamento Real-time del contenuto/titolo e Cancellazione sicura nel Cestino.
+ * Sincronizzazione atomica del titolo nell'header superiore su due righe (Workspace + Nota attiva).
  */
 
 Object.assign(UI, {
@@ -160,6 +161,9 @@ Object.assign(UI, {
 
         // Assegnazione sincrona immediata dell'ID della nota selezionata per garantire la coerenza dello stato
         AppState.currentNoteId = id;
+
+        // Allinea la riga superiore dell'header con il nome della nota appena aperta
+        UI.updateHeaderTitles(AppState.fileName, note.title);
 
         // GESTIONE CRONOLOGIA DI NAVIGAZIONE LINEARE (HISTORY STACK)
         if (!isHistoryNavigation && !note.deletedAt) {
@@ -463,6 +467,9 @@ Object.assign(UI, {
             note.title = titleInput.value;
             note._isDirty = true;
         }
+
+        // Sincronizza reattivamente in tempo reale il titolo della nota nell'header su due righe
+        UI.updateHeaderTitles(AppState.fileName, note.title);
 
         const treeTitleContainer = document.querySelector(`.node-wrapper[data-id="${AppState.currentNoteId}"] > .node-content .node-title`);
         if (treeTitleContainer) {

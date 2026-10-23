@@ -51,6 +51,11 @@ header.header-unsaved .brand span#fileNameDisplay {
     color: #991b1b !important;
 }
 
+header.header-unsaved .header-workspace-name,
+header.header-unsaved .header-note-name {
+    color: #991b1b !important;
+}
+
 header.header-unsaved .icon-btn {
     color: #991b1b !important;
 }
@@ -94,6 +99,13 @@ header.header-unsaved .btn:not(.btn-primary):hover {
     color: #fca5a5 !important;
 }
 
+[data-theme="dark"] header.header-unsaved .header-workspace-name,
+[data-theme="dark"] header.header-unsaved .header-note-name,
+[data-theme="notion-dark"] header.header-unsaved .header-workspace-name,
+[data-theme="notion-dark"] header.header-unsaved .header-note-name {
+    color: #fca5a5 !important;
+}
+
 [data-theme="dark"] header.header-unsaved .icon-btn,
 [data-theme="notion-dark"] header.header-unsaved .icon-btn {
     color: #fca5a5 !important;
@@ -130,6 +142,43 @@ header.header-unsaved .btn:not(.btn-primary):hover {
     display: flex;
     align-items: center;
     gap: 10px;
+}
+
+/* --- TITOLI A DUE RIGHE NELL'HEADER (WORKSPACE + PAGINA ATTIVA) --- */
+.brand-header-titles {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    line-height: 1.15;
+    max-width: 280px;
+    user-select: none;
+    cursor: pointer;
+    overflow: hidden;
+}
+
+.brand-header-titles:hover .header-note-name {
+    color: var(--accent-color);
+}
+
+.header-workspace-name {
+    font-size: 0.7rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.header-note-name {
+    font-size: 0.88rem;
+    font-weight: 700;
+    color: var(--text-primary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: color 0.15s ease;
 }
 
 .status-pill {
@@ -848,8 +897,8 @@ details > summary { list-style: none; }
         margin-left: 0; transform: translateX(-100%);
     }
 
-    .brand span#fileNameDisplay {
-        max-width: 200px;
+    .brand .brand-header-titles {
+        max-width: 180px;
     }
     
     .status-pill {
@@ -867,8 +916,8 @@ details > summary { list-style: none; }
         margin-left: 0; transform: translateX(-100%);
     }
 
-    .brand span#fileNameDisplay {
-        max-width: 120px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    .brand .brand-header-titles {
+        max-width: 120px;
     }
 
     header {

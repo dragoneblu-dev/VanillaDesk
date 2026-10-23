@@ -5,6 +5,10 @@
  * Gestione dello Snooze resiliente per i promemoria da segnalibro tramite registro dati sicuro.
  * FIX LAYOUT PROGRESS MODAL: Forzatura esplicita di layout a colonna flessibile per centrare
  * stabilmente l'icona della clessidra all'interno del riquadro modale.
+ * FIX ALARM BEEP INTERVAL LEAK: Assegnazione esplicita dell'ID di setInterval a UI.Alarm.beepInterval
+ * e fail-safe con auto-estinzione quando activeToasts è vuoto per garantire l'interruzione immediata dell'audio su Stop/Snooze.
+ * FIX DUPLICATE RACE CONDITION: Risolta finestra cieca dei 10ms nel rilevamento duplicati con querySelectorAll('.toast-msg:not(.toast-exit)')
+ * garantendo il corretto rifiuto sincrono di toast identici.
  */
 
 Object.assign(UI, {
@@ -17,8 +21,14 @@ Object.assign(UI, {
             document.body.appendChild(container);
         }
 
-        const existingToasts = Array.from(container.querySelectorAll('.toast-msg'));
-        const isDuplicate = existingToasts.some(t => t.innerText.includes(message.replace(/<[^>]*>?/gm, '')));
+        // Seleziona tutti i toast attivi escludendo solo quelli già in fase di dissolvenza/uscita (.toast-exit)
+        const existingToasts = Array.from(container.querySelectorAll('.toast-msg:not(.toast-exit)'));
+        const cleanMessage = String(message).replace(/<[^>]*>?/gm, '').trim();
+        const isDuplicate = existingToasts.some(t => {
+            const existingText = (t.innerText || t.textContent || '').trim();
+            return existingText.includes(cleanMessage);
+        });
+
         if (isDuplicate) return null;
 
         const toastId = 'toast_' + Date.now() + Math.random().toString(36).substring(2, 5);
@@ -66,6 +76,7 @@ Object.assign(UI, {
         if (!isPersistent) {
             setTimeout(() => {
                 if (document.body.contains(toast)) {
+                    toast.classList.add('toast-exit');
                     toast.classList.remove('show');
                     setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
                 }
@@ -211,7 +222,16 @@ Object.assign(UI, {
                 }
 
                 if (!UI.Alarm.beepInterval) {
-                    setInterval(() => {
+                    UI.Alarm.beepInterval = setInterval(() => {
+                        // Fail-safe difensivo: se non ci sono più toast di allarme attivi, interrompi il loop
+                        if (!UI.Alarm.audioCtx || UI.Alarm.activeToasts.size === 0) {
+                            if (UI.Alarm.beepInterval) {
+                                clearInterval(UI.Alarm.beepInterval);
+                                UI.Alarm.beepInterval = null;
+                            }
+                            return;
+                        }
+
                         const osc = UI.Alarm.audioCtx.createOscillator();
                         const gain = UI.Alarm.audioCtx.createGain();
                         
@@ -236,6 +256,7 @@ Object.assign(UI, {
             if (!toastId) return; 
             const toast = document.getElementById(toastId);
             if (toast) {
+                toast.classList.add('toast-exit');
                 toast.classList.remove('show');
                 setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
             }
@@ -250,9 +271,30 @@ Object.assign(UI, {
             }
         },
 
-        stop: (toastId) => {
-            delete UI.Alarm._alarmData[toastId];
-            UI.Alarm._removeToastAndCheckAudio(toastId);
+        stop: (toastId = null) => {
+            if (toastId) {
+                delete UI.Alarm._alarmData[toastId];
+                UI.Alarm._removeToastAndCheckAudio(toastId);
+            } else {
+                UI.Alarm.stopAll();
+            }
+        },
+
+        stopAll: () => {
+            if (UI.Alarm.beepInterval) {
+                clearInterval(UI.Alarm.beepInterval);
+                UI.Alarm.beepInterval = null;
+            }
+            UI.Alarm.activeToasts.forEach(tId => {
+                const toast = document.getElementById(tId);
+                if (toast) {
+                    toast.classList.add('toast-exit');
+                    toast.classList.remove('show');
+                    setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
+                }
+            });
+            UI.Alarm.activeToasts.clear();
+            UI.Alarm._alarmData = {};
         },
 
         snooze: (toastId, minutes = 5) => {

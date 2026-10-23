@@ -10,9 +10,7 @@
  * prevenendo la distruzione accidentale del DOM e consentendo il click singolo sui campi interattivi.
  * PERF & DOM SHIELD UPDATE DATE RANGE: Estesa l'uscita immediata (early-exit) a updateDateRange per
  * campi data con intervallo (hasEndDate), prevenendo ricalcoli, autosave e re-render inutili al semplice blur.
- * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano in modo intelligente su tutti i tipi:
- * - Numeri: confronto matematico.
- * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
+ * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano in modo intelligente su tutti i tipi.
  * LIVE REFRESH DA DISCO: forceRecalculate ricarica i dati freschi dal file system (evitando sovrascritture concorrenti).
  * FEAT CLEAR SELECTION: Aggiunta funzione clearSelectedRows per azzerare tutte le righe selezionate.
  * FEAT INTERVAL ALGEBRA: Supporto completo e unificato per filtri su intervalli temporali e range con delimitatore ➔.
@@ -28,9 +26,44 @@
  * immediata del Drawer sulla nuova riga duplicata e visualizzazione del banner informativo.
  * PERF INVERTED INDEX O(1): Mantenimento atomico di AdvancedTable._rowIndices e getRow() nei metodi CRUD.
  * FIX RIGHE ORFANE ADDCOLUMN: Rimozione del refuso di assegnazione non dichiarata (newRowCellsEmpty).
+ * FEAT CENTRALIZED SHADOW DB SHIELD: Metodo isSystemDatabaseProtected per bloccare l'inserimento,
+ * la duplicazione e l'eliminazione di righe su SYS_PROPERTIES_DB da qualsiasi vista con alert esplicito.
  */
 
 Object.assign(AdvancedTable, {
+
+    // =========================================================================
+    // GUARDIA CENTRALIZZATA DI PROTEZIONE RIGHE PER LO SHADOW DATABASE
+    // =========================================================================
+    isSystemDatabaseProtected: (tableId, notifyUser = true) => {
+        if (!tableId) return false;
+        const realTableId = (typeof AdvancedTable._resolveSourceId === 'function')
+            ? AdvancedTable._resolveSourceId(tableId)
+            : tableId.split('_cited_')[0];
+
+        if (realTableId === 'SYS_PROPERTIES_DB') {
+            if (notifyUser) {
+                const msg = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
+                    ? I18n.t('table.sys_db_mutation_blocked')
+                    : "⚠️ Operazione non consentita:\nQuesto database rappresenta la struttura di sistema delle Proprietà e Tag delle Note.\nI record corrispondono alle pagine del Workspace e non possono essere aggiunti o rimossi manualmente da questa vista.";
+                alert(msg);
+            }
+            return true;
+        }
+
+        const state = AdvancedTable.getState ? AdvancedTable.getState(realTableId) : null;
+        if (state && state.isSystemDB) {
+            if (notifyUser) {
+                const msg = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
+                    ? I18n.t('table.sys_db_mutation_blocked')
+                    : "⚠️ Operazione non consentita:\nQuesto database rappresenta la struttura di sistema delle Proprietà e Tag delle Note.\nI record corrispondono alle pagine del Workspace e non possono essere aggiunti o rimossi manualmente da questa vista.";
+                alert(msg);
+            }
+            return true;
+        }
+
+        return false;
+    },
 
     // Helper interno per l'estrazione millimetrica degli intervalli temporali in millisecondi
     _parseDateStringToMs: (str) => {
@@ -280,6 +313,9 @@ Object.assign(AdvancedTable, {
         if (e) e.stopPropagation();
         if (!tableId) return;
         
+        // GUARDIA CENTRALE: Blocco inserimento manuale righe sullo Shadow Database
+        if (AdvancedTable.isSystemDatabaseProtected(tableId)) return;
+
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
 
@@ -323,6 +359,10 @@ Object.assign(AdvancedTable, {
     // =========================================================================
     duplicateRecord: async (tableId, rowId) => {
         if (!tableId || !rowId) return;
+
+        // GUARDIA CENTRALE: Blocco duplicazione righe sullo Shadow Database
+        if (AdvancedTable.isSystemDatabaseProtected(tableId)) return;
+
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         let state = AdvancedTable.getState(realTableId);
         if (!state || !Array.isArray(state.rows)) return;
@@ -457,6 +497,9 @@ Object.assign(AdvancedTable, {
     },
 
     deleteRecord: (tableId, rowId) => {
+        // GUARDIA CENTRALE: Blocco eliminazione riga sullo Shadow Database
+        if (AdvancedTable.isSystemDatabaseProtected(tableId)) return;
+
         if (!confirm("Sei sicuro di voler eliminare definitivamente questo record dal database? L'operazione non può essere annullata.")) return;
         
         const realTableId = AdvancedTable._resolveSourceId(tableId);
@@ -500,6 +543,9 @@ Object.assign(AdvancedTable, {
 
     createRecordAtDate: async (tableId, timestampMs, dateColIdOverride = null, groupColId = null, groupValue = null) => {
         if (!tableId) return;
+
+        // GUARDIA CENTRALE: Blocco inserimento righe da data (Calendario / Timeline) sullo Shadow Database
+        if (AdvancedTable.isSystemDatabaseProtected(tableId)) return;
 
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
@@ -632,6 +678,10 @@ Object.assign(AdvancedTable, {
 
     deleteSelectedRows: (tableId, force = false) => {
         if (!tableId) return;
+
+        // GUARDIA CENTRALE: Blocco eliminazione massiva righe sullo Shadow Database
+        if (AdvancedTable.isSystemDatabaseProtected(tableId)) return;
+
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
 

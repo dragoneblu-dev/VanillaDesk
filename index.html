@@ -4,7 +4,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Editor di Appunti Locale</title>
+    <title>VanillaDesk</title>
     <link rel="icon"
         href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📝</text></svg>">
 
@@ -21,6 +21,7 @@
     <link rel="stylesheet" href="css/advanced-table-timeline.css">
     <link rel="stylesheet" href="css/code.css">
     <link rel="stylesheet" href="css/modals.css">
+    <link rel="stylesheet" href="graph/graph.css">
     
     <link rel="stylesheet" href="css/custom.css">
 
@@ -34,12 +35,15 @@
 
     <header>
         <div class="brand">
-            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="flex-shrink:0;">
                 <path
                     d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z">
                 </path>
             </svg>
-            <span id="fileNameDisplay" onclick="UI.goHome()" style="cursor:pointer;" title=""><script>document.write(I18n.t('common.no_workspace')); document.getElementById('fileNameDisplay').title = I18n.t('toolbar.breadcrumb_home');</script></span>
+            <div id="fileNameDisplay" class="brand-header-titles" onclick="UI.goHome()" style="cursor:pointer;" title="">
+                <span class="header-workspace-name"><script>document.write(I18n.t('common.no_workspace'));</script></span>
+                <span class="header-note-name"><script>document.write(I18n.t('home_dashboard.title')); document.getElementById('fileNameDisplay').title = I18n.t('toolbar.breadcrumb_home');</script></span>
+            </div>
             <button id="editToggleBtn" class="btn" style="margin-left: 15px;" onclick="UI.toggleEditMode()">
                 <script>document.write(Icons.edit)</script> <script>document.write(I18n.t('common.edit'))</script>
             </button>
@@ -303,7 +307,7 @@
                             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor"
                                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                 <line x1="8" y1="6" x2="21" y2="6"></line>
-                                <line x1="8" y1="12" x2="21" y2="12"></line>
+                                <line x1="8" y1="12" x2="21" y2="6"></line>
                                 <line x1="8" y1="18" x2="21" y2="18"></line>
                                 <line x1="3" y1="6" x2="3.01" y2="6"></line>
                                 <line x1="3" y1="12" x2="3.01" y2="12"></line>
@@ -384,6 +388,78 @@
 
                 </div>
             </div>
+        </main>
+    </div>
+
+    <!-- VISTA MAPPA DELLE CONNESSIONI INTEGRATA A SCHERMO INTERO -->
+    <div id="graphFullscreenView" class="graph-fullscreen-overlay" style="display:none;">
+        <header class="graph-header">
+            <div class="header-left">
+                <span class="graph-brand-icon">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="6" cy="6" r="3"></circle>
+                        <circle cx="18" cy="6" r="3"></circle>
+                        <circle cx="12" cy="18" r="3"></circle>
+                        <line x1="8.5" y1="7.5" x2="15.5" y2="7.5"></line>
+                        <line x1="7.5" y1="8.5" x2="10.5" y2="15.5"></line>
+                        <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"></line>
+                    </svg>
+                </span>
+                <span id="graphWorkspaceLabel" class="graph-workspace-name">Mappa delle Connessioni</span>
+                <span id="graphStatsBadge" class="graph-badge">0 nodi &bull; 0 collegamenti</span>
+            </div>
+
+            <div class="header-center">
+                <div class="graph-search-box">
+                    <span class="search-icon">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                        </svg>
+                    </span>
+                    <input type="text" id="graphSearchInput" placeholder="Cerca nota o #tag nel grafo (Invio per centrare)..." autocomplete="off">
+                    <button id="graphSearchClear" class="graph-clear-btn" style="display:none;">✕</button>
+                </div>
+            </div>
+
+            <div class="header-right">
+                <button class="btn" id="btnFitGraph" onclick="event.stopPropagation(); GraphCanvas.fitToView()" title="Centra ed adatta l'intero grafo allo schermo">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
+                    </svg>
+                    <span>Centra</span>
+                </button>
+
+                <button class="btn" id="btnRestartPhysics" onclick="event.stopPropagation(); GraphCanvas.restartSimulation()" title="Compatta verso il centro e riavvia simulazione">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
+                    </svg>
+                </button>
+
+                <div class="separator"></div>
+
+                <!-- Pulsante Filtri & Forze con stopPropagation esplicito -->
+                <button class="btn" id="btnGraphSettings" onclick="event.stopPropagation(); GraphUI.openFilterDrawer()" title="Filtri, colorazione e parametri fisici del grafo">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <circle cx="12" cy="12" r="3"></circle>
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+                    </svg>
+                    <span>Filtri & Forze</span>
+                </button>
+
+                <div class="separator"></div>
+
+                <!-- Tasto Chiudi Vista Grafo -->
+                <button class="btn btn-primary" id="btnCloseGraph" onclick="event.stopPropagation(); GraphApp.close()" title="Chiudi Mappa del Grafo (Esc)">
+                    <span>✕ Chiudi (Esc)</span>
+                </button>
+            </div>
+        </header>
+
+        <main class="graph-main">
+            <canvas id="graphCanvas"></canvas>
+            <div id="graphTooltip" class="graph-tooltip"></div>
+            <div id="graphLegendContainer" class="graph-legend"></div>
         </main>
     </div>
 
@@ -501,6 +577,12 @@
     <script src="lib/chart.umd.js"></script>
     <script src="lib/chartjs-plugin-datalabels.min.js"></script>
     <script src="js/AdvancedTable/advanced-table-charts.js"></script>
+
+    <!-- Modulo Mappa delle Connessioni (Graph View Integrata) -->
+    <script src="graph/graph-data.js"></script>
+    <script src="graph/graph-canvas.js"></script>
+    <script src="graph/graph-ui.js"></script>
+    <script src="graph/graph-core.js"></script>
 
     <!-- Script di Servizio -->
     <script src="js/ui/ui-document-browser.js"></script>

@@ -16,7 +16,8 @@
 }
 
 .adv-board-col-wrapper { 
-    flex: 1; 
+    flex: 0 0 auto; 
+    width: max-content;
     min-width: 280px; 
     max-width: 380px; 
     background: var(--sidebar-bg); 
@@ -49,6 +50,8 @@
 .adv-board-card { 
     flex-shrink: 0; 
     min-height: min-content; 
+    width: 100%;
+    box-sizing: border-box;
     background: var(--bg-color); 
     border: 1px solid var(--border-color); 
     border-radius: 6px; 
@@ -83,14 +86,14 @@
     justify-content: space-between; 
     align-items: flex-start; 
     gap: 10px; 
-    margin-bottom: 2px; 
+    margin-bottom: 4px; 
 }
 
 .adv-board-prop-col { 
     display: flex; 
     flex-direction: column; 
     gap: 2px; 
-    margin-bottom: 2px; 
+    margin-bottom: 4px; 
 }
 
 .adv-board-prop-label { 
@@ -98,19 +101,31 @@
     font-size: 0.6rem; 
     text-transform: uppercase; 
     opacity: 0.8; 
-    white-space: nowrap; 
+    white-space: normal; 
+    word-break: break-word; 
+    overflow-wrap: anywhere; 
     margin-top: 2px; 
+    flex: 0 1 45%; 
+    min-width: 0; 
+    line-height: 1.25;
+}
+
+.adv-board-prop-col .adv-board-prop-label { 
+    max-width: 100%; 
+    flex: 0 0 auto;
 }
 
 .adv-board-prop-val-row { 
     font-size: 0.8rem; 
     text-align: right; 
     word-break: break-word; 
+    overflow-wrap: anywhere; 
     display: flex; 
     justify-content: flex-end; 
     flex-wrap: wrap; 
     gap: 4px; 
-    width: 100%; 
+    flex: 1 1 55%; 
+    min-width: 0; 
 }
 
 .adv-board-prop-val-col { 
@@ -119,9 +134,33 @@
     flex-wrap: wrap; 
     gap: 4px; 
     width: 100%; 
+    word-break: break-word; 
+    overflow-wrap: anywhere; 
+    min-width: 0;
 }
 
-.adv-board-card .adv-select-container { justify-content: flex-end; }
+.adv-board-card .adv-select-container { 
+    justify-content: flex-end; 
+    min-width: 0;
+    max-width: 100%;
+}
+
+.adv-board-card .adv-relation-container {
+    justify-content: flex-end;
+    padding: 0;
+    min-width: 0;
+    max-width: 100%;
+}
+
+.adv-board-card .adv-select-pill { 
+    white-space: normal; 
+    word-break: break-word; 
+    overflow-wrap: anywhere; 
+    max-width: 100%; 
+    text-align: right; 
+    line-height: 1.2;
+}
+
 .adv-board-card .adv-cell-date input, 
 .adv-board-card .adv-cell-number input, 
 .adv-board-card .adv-cell-text { text-align: right; }

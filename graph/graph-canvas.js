@@ -11,8 +11,8 @@
  * - Scala Nodi Sub-Lineare Bounded (max 22px a schermo allo zoom ravvicinato).
  * - Differenziazione Cromatica Linee: Collegamenti Gerarchici (Cartelle) in ambra/arancio, riferimenti testuali in grigio, tag tratteggiati.
  * - Frecce Direzionali sui Collegamenti (source ➔ target).
- * - Doppio Click su Tag (#tag): filtra istantaneamente le note in VanillaDesk e porta in primo piano la finestra.
- * - Doppio Click su Nota: apre la nota in VanillaDesk e riporta la finestra madre in primo piano.
+ * - Doppio Click su Tag (#tag): filtra istantaneamente le note in VanillaDesk.
+ * - Doppio Click su Nota: apre la nota in VanillaDesk e chiude la vista del grafo.
  * - Persistenza Topologica Continua: sincronizzazione immediata delle coordinate modificate manualmente o via simulazione.
  */
 
@@ -65,7 +65,7 @@ window.GraphCanvas = {
 
     resize: () => {
         const c = GraphCanvas.canvas;
-        if (!c) return;
+        if (!c || !c.parentElement) return;
         const rect = c.parentElement.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
 
@@ -78,8 +78,12 @@ window.GraphCanvas = {
         GraphCanvas.nodes = nodes;
         GraphCanvas.links = links;
 
-        const cw = GraphCanvas.canvas.parentElement.clientWidth || window.innerWidth;
-        const ch = GraphCanvas.canvas.parentElement.clientHeight || (window.innerHeight - 52);
+        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientWidth 
+            : window.innerWidth;
+        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientHeight 
+            : (window.innerHeight - 52);
         const center = { x: cw / 2, y: ch / 2 };
 
         let unpositionedCount = 0;
@@ -97,8 +101,6 @@ window.GraphCanvas = {
             }
         });
 
-        //console.log(`[VanillaDesk Graph] updateData: ${nodes.length} nodi, ${links.length} collegamenti. Nodi non posizionati: ${unpositionedCount}`);
-
         if (isInitialWarmup || unpositionedCount > 0) {
             GraphCanvas.warmupSimulation(200);
         } else {
@@ -112,7 +114,6 @@ window.GraphCanvas = {
     },
 
     warmupSimulation: (ticks = 200) => {
-        console.log(`[VanillaDesk Graph] Calcolo disposizione stabile a freddo (${ticks} ticks sincroni)...`);
         GraphCanvas.physics.alpha = 1.0;
         for (let i = 0; i < ticks; i++) {
             GraphCanvas.tickPhysics();
@@ -132,14 +133,15 @@ window.GraphCanvas = {
                 }
             });
         }
-
-        console.log(`[VanillaDesk Graph] Disposizione stabilizzata.`);
     },
 
     restartSimulation: () => {
-        console.log(`[VanillaDesk Graph] Riavvio e ri-compattazione disposizione fisica...`);
-        const cw = GraphCanvas.canvas.parentElement.clientWidth || window.innerWidth;
-        const ch = GraphCanvas.canvas.parentElement.clientHeight || (window.innerHeight - 52);
+        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientWidth 
+            : window.innerWidth;
+        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientHeight 
+            : (window.innerHeight - 52);
         const center = { x: cw / 2, y: ch / 2 };
 
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
@@ -170,7 +172,6 @@ window.GraphCanvas = {
                 GraphCanvas.animFrameId = requestAnimationFrame(step);
             } else {
                 GraphCanvas.animFrameId = null;
-                // Al termine dell'assestamento fisico, salva le posizioni stabili
                 if (GraphData && GraphData.persistentPositions) {
                     GraphCanvas.nodes.forEach(n => {
                         if (n.x !== 0 || n.y !== 0) {
@@ -192,8 +193,12 @@ window.GraphCanvas = {
         const links = GraphCanvas.links;
         const nLen = nodes.length;
 
-        const cw = GraphCanvas.canvas.parentElement.clientWidth || window.innerWidth;
-        const ch = GraphCanvas.canvas.parentElement.clientHeight || (window.innerHeight - 52);
+        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientWidth 
+            : window.innerWidth;
+        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientHeight 
+            : (window.innerHeight - 52);
         const centerX = cw / 2;
         const centerY = ch / 2;
 
@@ -363,7 +368,7 @@ window.GraphCanvas = {
     render: () => {
         const ctx = GraphCanvas.ctx;
         const c = GraphCanvas.canvas;
-        if (!ctx || !c) return;
+        if (!ctx || !c || !c.parentElement) return;
 
         const dpr = window.devicePixelRatio || 1;
         const w = c.parentElement.clientWidth;
@@ -386,7 +391,7 @@ window.GraphCanvas = {
         const activeSelected = GraphCanvas.selectedNode;
         const activeNeighbors = activeSelected ? GraphData.neighborsMap.get(activeSelected.id) : null;
         const activeHover = GraphCanvas.hoveredNode;
-        const searchMatches = GraphUI.activeSearchMatches;
+        const searchMatches = (typeof GraphUI !== 'undefined') ? GraphUI.activeSearchMatches : null;
         const curZoom = GraphCanvas.transform.zoom;
 
         const viewLeft = -GraphCanvas.transform.x / curZoom - 50;
@@ -622,7 +627,6 @@ window.GraphCanvas = {
 
         window.addEventListener('mouseup', () => {
             if (GraphCanvas.draggedNode) {
-                // Sincronizza stabilmente la posizione manuale scelta dall'utente nella memoria persistente
                 if (GraphData && GraphData.persistentPositions) {
                     GraphData.persistentPositions.set(GraphCanvas.draggedNode.id, {
                         x: GraphCanvas.draggedNode.x,
@@ -673,7 +677,6 @@ window.GraphCanvas = {
                 if (node.type === 'note' || node.type === 'record_note') {
                     GraphApp.openNoteInOpener(node.id);
                 } else if (node.type === 'tag') {
-                    // Preimposta ed esegue il filtro su questo tag in VanillaDesk portando la finestra in primo piano
                     GraphApp.filterTagInOpener(node.title);
                 }
             }
@@ -743,8 +746,12 @@ window.GraphCanvas = {
         const w = (maxX - minX) + pad * 2 || 300;
         const h = (maxY - minY) + pad * 2 || 300;
 
-        const cw = GraphCanvas.canvas.parentElement.clientWidth || window.innerWidth;
-        const ch = GraphCanvas.canvas.parentElement.clientHeight || (window.innerHeight - 52);
+        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientWidth 
+            : window.innerWidth;
+        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientHeight 
+            : (window.innerHeight - 52);
 
         const scale = Math.min(cw / w, ch / h);
         GraphCanvas.transform.zoom = Math.min(1.1, Math.max(0.02, scale));
@@ -756,15 +763,19 @@ window.GraphCanvas = {
 
     focusNode: (nodeId) => {
         let node = GraphCanvas.nodes.find(n => n.id === nodeId);
-        // Se il nodo non è trovato (es. nota appena creata in VanillaDesk), sincronizza al volo con l'opener
-        if (!node && typeof GraphApp !== 'undefined' && typeof GraphApp.reloadFromOpener === 'function') {
-            GraphApp.reloadFromOpener();
+        if (!node && typeof GraphData !== 'undefined' && typeof GraphData.buildGraph === 'function') {
+            GraphData.buildGraph();
+            GraphCanvas.updateData(GraphData.nodes, GraphData.links, false);
             node = GraphCanvas.nodes.find(n => n.id === nodeId);
         }
         if (!node) return;
 
-        const cw = GraphCanvas.canvas.parentElement.clientWidth || window.innerWidth;
-        const ch = GraphCanvas.canvas.parentElement.clientHeight || (window.innerHeight - 52);
+        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientWidth 
+            : window.innerWidth;
+        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
+            ? GraphCanvas.canvas.parentElement.clientHeight 
+            : (window.innerHeight - 52);
 
         GraphCanvas.transform.zoom = 1.2;
         GraphCanvas.transform.x = cw / 2 - node.x * GraphCanvas.transform.zoom;
@@ -789,9 +800,9 @@ window.GraphCanvas = {
         if (node.folderName) extraInfo += ` &bull; Cartella: <b>${UI.escapeHTML(node.folderName)}</b>`;
         if (node.primaryTag) extraInfo += ` &bull; Tag: <b>#${UI.escapeHTML(node.primaryTag)}</b>`;
 
-        let actionHint = 'Click: isola connessioni &bull; Doppio Click: apri nota in VanillaDesk';
+        let actionHint = 'Click: isola connessioni &bull; Doppio Click: apri nota';
         if (node.type === 'tag') {
-            actionHint = 'Doppio Click: filtra note con questo tag in VanillaDesk';
+            actionHint = 'Doppio Click: filtra note con questo tag';
         }
 
         tip.innerHTML = `

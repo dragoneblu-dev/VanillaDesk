@@ -128,7 +128,8 @@ export_dialog: {
             view_board: "Bacheca Kanban",
             view_calendar: "Calendario",
             view_timeline: "Timeline (Gantt)",
-            view_tree: "Gerarchia WBS"
+            view_tree: "Gerarchia WBS",
+            sys_db_mutation_blocked: "⚠️ Operazione non consentita:\nQuesto database rappresenta la struttura di sistema delle Proprietà e Tag delle Note.\nI record corrispondono alle pagine del Workspace e non possono essere aggiunti o rimossi manualmente da questa vista."
         },
         conflict: {
             title: "Conflitto di Modifica Rilevato",
@@ -489,8 +490,8 @@ toolbar: {
     underline: "Sottolineato (Ctrl+U)",
     strikethrough: "Barrato",
     toggle_case: "Maiuscolo/Minuscolo (Ctrl+K)",
-    highlight_color: "Evidenziatore",
-    text_color: "Colore Testo",
+    highlight_color: "Evidenziatore (Ctrl+Shift+H)",
+    text_color: "Colore Testo (Ctrl+Alt+H)",
     typography: "Carattere e Dimensione",
     h1: "Titolo Principale (Ctrl+Shift+1 / Ctrl+Alt+1)",
     h2: "Titolo Secondario (Ctrl+Shift+2 / Ctrl+Alt+2)",
@@ -990,7 +991,11 @@ notes_info: {
     yes: "Sì",
     no: "No",
     unpopulated_props_title: "Altre proprietà disponibili ma non valorizzate ({count}):",
-    all_props_empty_hint: "Nessuna proprietà o tag risulta attualmente valorizzato in queste sotto-note."
+    all_props_empty_hint: "Nessuna proprietà o tag risulta attualmente valorizzato in queste sotto-note.",
+    sys_db_section_title: "Gestione Globale Tag & Proprietà",
+    sys_db_pages_found_desc: "Per filtrare, analizzare o modificare in massa tutte le proprietà delle note del Workspace, puoi consultare le seguenti pagine dedicate:",
+    sys_db_empty_hint_title: "Vuoi un'analisi approfondita o modifiche massive?",
+    sys_db_empty_hint_desc: "Puoi inserire in qualsiasi nota una tabella o vista analitica di tutte le note: clicca su <b>Blocchi ➔ Vista / Pivot / Grafico</b> e scegli <b>Tag e Proprietà Pagina</b> come origine dati."
 },
 doc_browser: {
     search_placeholder_link: "Cerca elemento o digita per creare una nuova nota (Invio)...",
@@ -1509,7 +1514,8 @@ export_dialog: {
             view_board: "Kanban Board",
             view_calendar: "Calendar",
             view_timeline: "Timeline (Gantt)",
-            view_tree: "WBS Hierarchy"
+            view_tree: "WBS Hierarchy",
+            sys_db_mutation_blocked: "⚠️ Operation not allowed:\nThis database represents the system structure for Note Properties & Tags.\nRecords correspond to Workspace pages and cannot be added or deleted manually from this view."
         },
         conflict: {
             title: "Edit Conflict Detected",
@@ -1870,8 +1876,8 @@ toolbar: {
     underline: "Underline (Ctrl+U)",
     strikethrough: "Strikethrough",
     toggle_case: "Toggle Case (Ctrl+K)",
-    highlight_color: "Highlighter",
-    text_color: "Text Color",
+    highlight_color: "Highlighter (Ctrl+Shift+H)",
+    text_color: "Text Color (Ctrl+Alt+H)",
     typography: "Font & Size",
     h1: "Heading 1 (Ctrl+Shift+1 / Ctrl+Alt+1)",
     h2: "Heading 2 (Ctrl+Shift+2 / Ctrl+Alt+2)",
@@ -2370,7 +2376,11 @@ notes_info: {
     yes: "Yes",
     no: "No",
     unpopulated_props_title: "Other available unvalued properties ({count}):",
-    all_props_empty_hint: "No properties or tags are currently valued in these sub-notes."
+    all_props_empty_hint: "No properties or tags are currently valued in these sub-notes.",
+    sys_db_section_title: "Global Tags & Properties Management",
+    sys_db_pages_found_desc: "To filter, analyze, or bulk edit all note properties in the Workspace, check out these dedicated pages:",
+    sys_db_empty_hint_title: "Want in-depth analysis or bulk edits?",
+    sys_db_empty_hint_desc: "You can embed a table or analytics view of all notes into any page: click <b>Blocks ➔ View / Pivot / Chart</b> and choose <b>Page Properties & Tags</b> as the data source."
 },
 doc_browser: {
     search_placeholder_link: "Search item or type to create a new note (Enter)...",
@@ -2889,7 +2899,8 @@ export_dialog: {
             view_board: "Tablero Kanban",
             view_calendar: "Calendario",
             view_timeline: "Cronograma (Gantt)",
-            view_tree: "Jerarquía WBS"
+            view_tree: "Jerarquía WBS",
+            sys_db_mutation_blocked: "⚠️ Operación no permitida:\nEsta base de datos representa la estructura del sistema de Propiedades y Etiquetas de las Notas.\nLos registros corresponden a las páginas del Workspace y no se pueden agregar ni eliminar manualmente desde esta vista."
         },
         conflict: {
             title: "Conflicto de Edición Detectado",
@@ -3250,8 +3261,8 @@ toolbar: {
     underline: "Subrayado (Ctrl+U)",
     strikethrough: "Tachado",
     toggle_case: "Mayúsculas/Minúsculas (Ctrl+K)",
-    highlight_color: "Resaltador",
-    text_color: "Color del Texto",
+    highlight_color: "Resaltador (Ctrl+Shift+H)",
+    text_color: "Color del Texto (Ctrl+Alt+H)",
     typography: "Tipografía y Tamaño",
     h1: "Título Principal (Ctrl+Shift+1 / Ctrl+Alt+1)",
     h2: "Título Secundario (Ctrl+Shift+2 / Ctrl+Alt+2)",
@@ -3751,7 +3762,11 @@ notes_info: {
     yes: "Sí",
     no: "No",
     unpopulated_props_title: "Otras propiedades disponibles sin valor ({count}):",
-    all_props_empty_hint: "Ninguna propiedad o etiqueta tiene valor asignado actualmente en estas subnotas."
+    all_props_empty_hint: "Ninguna propiedad o etiqueta tiene valor asignado actualmente en estas subnotas.",
+    sys_db_section_title: "Gestión Global de Etiquetas y Propiedades",
+    sys_db_pages_found_desc: "Para filtrar, analizar o editar en masa todas las propiedades de las notas del Workspace, puedes consultar estas páginas dedicadas:",
+    sys_db_empty_hint_title: "¿Deseas un análisis detallado o modificaciones masivas?",
+    sys_db_empty_hint_desc: "Puedes incrustar una tabla o vista analítica de todas las notas en cualquier página: haz clic en <b>Bloques ➔ Vista / Pivot / Gráfico</b> y elige <b>Etiquetas y Propiedades de Página</b> como origen de datos."
 },
 doc_browser: {
     search_placeholder_link: "Buscar elemento o escribir para crear una nueva nota (Intro)...",
@@ -4270,7 +4285,8 @@ export_dialog: {
             view_board: "Kanban-Board",
             view_calendar: "Kalender",
             view_timeline: "Zeitachse (Gantt)",
-            view_tree: "WBS-Hierarchie"
+            view_tree: "WBS-Hierarchie",
+            sys_db_mutation_blocked: "⚠️ Vorgang nicht zulässig:\nDiese Datenbank stellt die Systemstruktur der Notizeigenschaften & Tags dar.\nDie Datensätze entsprechen den Workspace-Seiten und können in dieser Ansicht nicht manuell hinzugefügt oder gelöscht werden."
         },
         conflict: {
             title: "Bearbeitungskonflikt erkannt",
@@ -4631,8 +4647,8 @@ toolbar: {
     underline: "Unterstrichen (Strg+U)",
     strikethrough: "Durchgestrichen",
     toggle_case: "Groß-/Kleinschreibung (Strg+K)",
-    highlight_color: "Textmarker",
-    text_color: "Textfarbe",
+    highlight_color: "Textmarker (Ctrl+Shift+H)",
+    text_color: "Textfarbe (Ctrl+Alt+H)",
     typography: "Schriftart & Größe",
     h1: "Hauptüberschrift (Ctrl+Shift+1 / Ctrl+Alt+1)",
     h2: "Unterüberschrift (Ctrl+Shift+2 / Ctrl+Alt+2)",
@@ -5131,7 +5147,11 @@ notes_info: {
     yes: "Ja",
     no: "Nein",
     unpopulated_props_title: "Weitere verfügbare, nicht ausgefüllte Eigenschaften ({count}):",
-    all_props_empty_hint: "In diesen Unter-Notizen sind derzeit keine Eigenschaften oder Tags ausgefüllt."
+    all_props_empty_hint: "In diesen Unter-Notizen sind derzeit keine Eigenschaften oder Tags ausgefüllt.",
+    sys_db_section_title: "Globale Verwaltung von Tags & Eigenschaften",
+    sys_db_pages_found_desc: "Um alle Notizeigenschaften im Workspace zu filtern, zu analysieren oder massenhaft zu bearbeiten, kannst du folgende Seiten aufrufen:",
+    sys_db_empty_hint_title: "Möchtest du detaillierte Analysen oder Massenbearbeitungen?",
+    sys_db_empty_hint_desc: "Du kannst in jede Notiz eine Tabelle oder Analyseansicht aller Notizen einbetten: Klicke auf <b>Blöcke ➔ Ansicht / Pivot / Diagramm</b> und wähle <b>Seiteneigenschaften & Tags</b> als Datenquelle."
 },
 doc_browser: {
     search_placeholder_link: "Element suchen oder tippen, um neue Notiz zu erstellen (Eingabe)...",

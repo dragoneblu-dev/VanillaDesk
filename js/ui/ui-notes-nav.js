@@ -3,6 +3,7 @@
  * Sottomodulo di UI.
  * Gestione della navigazione: Cronologia di navigazione lineare (History Stack),
  * transizione verso la Dashboard (goHome) e risoluzione salti verso i widget (jumpToWidget).
+ * Sincronizzazione automatica del titolo nell'header su due righe al ritorno alla Dashboard.
  */
 
 Object.assign(UI, {
@@ -148,6 +149,9 @@ Object.assign(UI, {
         AppState.isEditMode = false;
 
         document.querySelectorAll('.node-content').forEach(el => el.classList.remove('active'));
+
+        // Allinea la seconda riga dell'header indicando chiaramente che si è tornati sulla Dashboard
+        UI.updateHeaderTitles(AppState.fileName, null);
 
         // Reset badge, proprietà e stato cronologia
         UI.checkAndUpdatePropertiesIcon(null);
