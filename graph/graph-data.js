@@ -7,7 +7,7 @@
  * - Architettura Nativa VanillaDesk: riconosce solo collegamenti univoci reali (<a data-note-id="...">),
  *   citazioni (<blockquote data-ref-note="...">), gerarchie padre-figlio e tag censiti.
  * - Zero Nodi Fantasma: se un link punta a una nota eliminata o inesistente, viene ignorato.
- * - Colorazione Deterministica e Legenda Dinamica (Tipo Elemento, Cartella, Tag e Tipologia Collegamento).
+ * - Colorazione Deterministica e Legenda Dinamica con Voci Interattive (Toggle rapidi).
  */
 
 window.GraphData = {
@@ -274,13 +274,24 @@ window.GraphData = {
         if (!legendContainer) return;
 
         const colorMode = GraphData.options.colorMode || 'type';
+        const opts = GraphData.options;
 
         let nodesLegendHtml = '';
         if (colorMode === 'type') {
             nodesLegendHtml = `
-                <div class="legend-item"><span class="legend-dot" style="background:#2563eb;"></span> Nota</div>
-                <div class="legend-item"><span class="legend-dot" style="background:#10b981;"></span> Record DB</div>
-                <div class="legend-item"><span class="legend-dot" style="background:#8b5cf6;"></span> Tag (#)</div>
+                <div class="legend-item" title="Note ordinarie del Workspace">
+                    <span class="legend-dot" style="background:#2563eb;"></span> Nota
+                </div>
+                <div class="legend-item interactive ${opts.showRecordNotes ? '' : 'inactive'}" 
+                     onclick="GraphUI.toggleOption('showRecordNotes')" 
+                     title="Clicca per mostrare/nascondere le Pagine Record di Database">
+                    <span class="legend-dot" style="background:#10b981;"></span> Record DB
+                </div>
+                <div class="legend-item interactive ${opts.showTags ? '' : 'inactive'}" 
+                     onclick="GraphUI.toggleOption('showTags')" 
+                     title="Clicca per mostrare/nascondere i Nodi Tag (#)">
+                    <span class="legend-dot" style="background:#8b5cf6;"></span> Tag (#)
+                </div>
             `;
         } else if (colorMode === 'folder') {
             const entries = Array.from(GraphData.folderColorMap.entries()).slice(0, 5);
@@ -296,16 +307,22 @@ window.GraphData = {
             nodesLegendHtml += `<div class="legend-item"><span class="legend-dot" style="background:#6b7280;"></span> Senza Tag</div>`;
         }
 
-        // Legenda dei tipi di collegamento
+        // Legenda dei tipi di collegamento con scorciatoie interattive
         const linksLegendHtml = `
             <div style="width:1px; height:14px; background:var(--border-color); margin: 0 4px;"></div>
-            <div class="legend-item" title="Relazione Cartella / Padre-Figlio">
+            <div class="legend-item interactive ${opts.showHierarchy ? '' : 'inactive'}" 
+                 onclick="GraphUI.toggleOption('showHierarchy')" 
+                 title="Clicca per mostrare/nascondere i collegamenti gerarchici tra Cartelle e Note">
                 <span style="display:inline-block; width:16px; height:2px; background:#f59e0b; margin-right:2px;"></span> Cartella
             </div>
-            <div class="legend-item" title="Collegamento testuale o Citazione">
-                <span style="display:inline-block; width:16px; height:2px; background:var(--text-secondary); opacity:0.6; margin-right:2px;"></span> Link
+            <div class="legend-item interactive ${opts.showCitations ? '' : 'inactive'}" 
+                 onclick="GraphUI.toggleOption('showCitations')" 
+                 title="Clicca per mostrare/nascondere i collegamenti da Citazioni Live (Transclusion)">
+                <span style="display:inline-block; width:16px; height:2px; background:var(--text-secondary); opacity:0.6; margin-right:2px;"></span> Citazioni
             </div>
-            <div class="legend-item" title="Collegamento a Tag">
+            <div class="legend-item interactive ${opts.showTags ? '' : 'inactive'}" 
+                 onclick="GraphUI.toggleOption('showTags')" 
+                 title="Clicca per mostrare/nascondere i collegamenti ai Tag (#)">
                 <span style="display:inline-block; width:16px; height:0px; border-top:2px dashed #8b5cf6; margin-right:2px;"></span> Tag
             </div>
         `;

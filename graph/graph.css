@@ -1,7 +1,8 @@
 /**
  * graph/graph.css
  * Foglio di stile per la Graph View integrata a schermo intero di VanillaDesk.
- * Integrazione overlay massimizzato, controlli Drawer, bottoni icona e canvas reattivo.
+ * Integrazione overlay massimizzato, controlli Drawer, bottoni icona, canvas reattivo
+ * e legenda interattiva cliccabile per la gestione rapida dei filtri topologici.
  */
 
 .graph-fullscreen-overlay {
@@ -159,22 +160,40 @@
     left: 16px;
     background: var(--bg-color, #ffffff);
     border: 1px solid var(--border-color, #e5e7eb);
-    padding: 8px 12px;
+    padding: 6px 12px;
     border-radius: 8px;
     box-shadow: 0 4px 14px rgba(0, 0, 0, 0.08);
     display: flex;
-    gap: 12px;
+    align-items: center;
+    gap: 10px;
     font-size: 0.75rem;
     color: var(--text-secondary, #6b7280);
-    pointer-events: none;
     user-select: none;
     z-index: 5;
+    pointer-events: auto;
 }
 
 .legend-item {
     display: flex;
     align-items: center;
     gap: 5px;
+    transition: opacity 0.15s ease, background-color 0.15s ease, color 0.15s ease;
+}
+
+.legend-item.interactive {
+    cursor: pointer;
+    padding: 3px 6px;
+    border-radius: 4px;
+}
+
+.legend-item.interactive:hover {
+    background: var(--item-hover, rgba(0, 0, 0, 0.05));
+    color: var(--text-primary, #111827);
+}
+
+.legend-item.inactive {
+    opacity: 0.35;
+    text-decoration: line-through;
 }
 
 .legend-dot {
@@ -182,6 +201,7 @@
     height: 8px;
     border-radius: 50%;
     display: inline-block;
+    flex-shrink: 0;
 }
 
 /* --- STILI CONTROLLI DRAWER & ICON BUTTONS (RISPETTO DEL TEMA) --- */

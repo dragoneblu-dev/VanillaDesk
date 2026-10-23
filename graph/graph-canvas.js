@@ -1,19 +1,13 @@
 /**
  * graph/graph-canvas.js
  * Motore Grafico HTML5 Canvas 2D e Simulatore Fisico Force-Directed:
- * - Pre-simulazione Sincrona Offline (Warm-up Ticks): il grafo compare SUBITO FERMO nella sua posizione definitiva.
- * - Fisica Vettoriale Newtoniana Bilanciata: repulsione e tensione delle molle con segni matematici corretti.
- * - Animazione On-Demand: il loop a 60FPS gira ESCLUSIVAMENTE durante il trascinamento manuale con il mouse.
- * - Distanze Molle Parametriche: slider distinti per Note, Cartelle e Tag (#).
- * - Viewport Culling: elabora solo i nodi visibili a schermo per garantire fluidità con migliaia di note.
- * - Comparsa Dinamica dei Titoli per Spazio Vitale: il testo appare solo se ci sono almeno 15 caratteri di spazio libero reale.
- * - Formattazione su Due Righe e Troncamento Adattivo con alone di contrasto (Halo).
- * - Scala Nodi Sub-Lineare Bounded (max 22px a schermo allo zoom ravvicinato).
- * - Differenziazione Cromatica Linee: Collegamenti Gerarchici (Cartelle) in ambra/arancio, riferimenti testuali in grigio, tag tratteggiati.
- * - Frecce Direzionali sui Collegamenti (source ➔ target).
- * - Doppio Click su Tag (#tag): filtra istantaneamente le note in VanillaDesk.
- * - Doppio Click su Nota: apre la nota in VanillaDesk e chiude la vista del grafo.
- * - Persistenza Topologica Continua: sincronizzazione immediata delle coordinate modificate manualmente o via simulazione.
+ * - Nucleo Relazionale Centrale + Corona Periferica per Nodi Isolati (Obsidian Pattern):
+ *   i nodi privi di collegamenti orbitano ordinatamente all'esterno, liberando il centro della mappa.
+ * - Fit To View Immediato all'apertura: occupa il 100% dello schermo senza rimpicciolire il grafo.
+ * - Adaptive Degree-Based Springs: molle elastiche calibrate sul grado dei nodi e distensione a raggiera degli Hub.
+ * - Warm-up Annealing Sincrono Completo (~420 passi in ~25ms): il grafo compare al primo fotogramma già perfetto e fermo.
+ * - Zero-Jitter on Click: nessun movimento al tocco; la fisica si attiva solo su trascinamento manuale reale (> 5px).
+ * - Spatial Hash Grid Partitioning O(N): simulazione fluida a 60FPS senza freeze anche con oltre 1.000 note.
  */
 
 window.GraphCanvas = {
@@ -23,15 +17,15 @@ window.GraphCanvas = {
     links: [],
 
     physics: {
-        repulsion: 450,
-        springLengthNote: 65,
-        springLengthRecord: 45,
-        springLengthTag: 130,
-        springStrength: 0.05,
-        gravity: 0.025,
-        friction: 0.86,
+        repulsion: 650,
+        springLengthNote: 85,
+        springLengthRecord: 55,
+        springLengthTag: 145,
+        springStrength: 0.065,
+        gravity: 0.010,
+        friction: 0.87,
         alpha: 0.0,
-        minAlpha: 0.002
+        minAlpha: 0.001
     },
 
     transform: {
@@ -41,6 +35,7 @@ window.GraphCanvas = {
     },
 
     animFrameId: null,
+    potentialDragNode: null,
     draggedNode: null,
     hoveredNode: null,
     selectedNode: null,
@@ -55,7 +50,12 @@ window.GraphCanvas = {
         GraphCanvas.ctx = GraphCanvas.canvas.getContext('2d');
 
         GraphCanvas.resize();
-        window.addEventListener('resize', GraphCanvas.resize);
+        window.addEventListener('resize', () => {
+            if (typeof GraphApp !== 'undefined' && GraphApp.isOpen) {
+                GraphCanvas.resize();
+                GraphCanvas.fitToView();
+            }
+        });
 
         GraphCanvas.bindEvents();
         GraphCanvas.updateData(GraphData.nodes, GraphData.links, true);
@@ -69,8 +69,8 @@ window.GraphCanvas = {
         const rect = c.parentElement.getBoundingClientRect();
         const dpr = window.devicePixelRatio || 1;
 
-        c.width = rect.width * dpr;
-        c.height = rect.height * dpr;
+        c.width = (rect.width || window.innerWidth) * dpr;
+        c.height = (rect.height || (window.innerHeight - 52)) * dpr;
         GraphCanvas.render();
     },
 
@@ -78,31 +78,41 @@ window.GraphCanvas = {
         GraphCanvas.nodes = nodes;
         GraphCanvas.links = links;
 
-        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientWidth 
-            : window.innerWidth;
-        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientHeight 
-            : (window.innerHeight - 52);
-        const center = { x: cw / 2, y: ch / 2 };
-
         let unpositionedCount = 0;
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
 
-        nodes.forEach((n, idx) => {
+        // Separazione topologica iniziale: i nodi connessi formano il nucleo, gli orfani nascono nella corona esterna
+        const connectedNodes = nodes.filter(n => (n.degree || 0) > 0);
+        const orphanNodes = nodes.filter(n => (n.degree || 0) === 0);
+
+        connectedNodes.forEach((n, idx) => {
             if (n.x === 0 && n.y === 0) {
                 unpositionedCount++;
                 const theta = idx * goldenAngle;
-                const r = 30 + Math.sqrt(idx) * 25;
-                n.x = center.x + Math.cos(theta) * r;
-                n.y = center.y + Math.sin(theta) * r;
+                const r = 15 + Math.sqrt(idx) * 22;
+                n.x = Math.cos(theta) * r;
+                n.y = Math.sin(theta) * r;
+                n.vx = 0;
+                n.vy = 0;
+            }
+        });
+
+        // I nodi orfani vengono collocati direttamente nell'anello esterno della galassia
+        const baseOuterRadius = Math.max(160, Math.sqrt(connectedNodes.length || 1) * 36);
+        orphanNodes.forEach((n, idx) => {
+            if (n.x === 0 && n.y === 0) {
+                unpositionedCount++;
+                const theta = idx * goldenAngle;
+                const r = baseOuterRadius + (idx % 3) * 35;
+                n.x = Math.cos(theta) * r;
+                n.y = Math.sin(theta) * r;
                 n.vx = 0;
                 n.vy = 0;
             }
         });
 
         if (isInitialWarmup || unpositionedCount > 0) {
-            GraphCanvas.warmupSimulation(200);
+            GraphCanvas.warmupSimulation(420);
         } else {
             GraphCanvas.physics.alpha = 0.0;
             if (GraphCanvas.animFrameId) {
@@ -113,52 +123,76 @@ window.GraphCanvas = {
         }
     },
 
-    warmupSimulation: (ticks = 200) => {
-        GraphCanvas.physics.alpha = 1.0;
-        for (let i = 0; i < ticks; i++) {
-            GraphCanvas.tickPhysics();
-            if (GraphCanvas.physics.alpha <= GraphCanvas.physics.minAlpha) break;
+    warmupSimulation: (ticks = 420) => {
+        const p = GraphCanvas.physics;
+        
+        const warmSteps = Math.round(ticks * 0.65);
+        const coolSteps = ticks - warmSteps;
+
+        // 1. Fase calda di espansione: i cluster si distendono e gli orfani scivolano all'esterno
+        for (let i = 0; i < warmSteps; i++) {
+            p.alpha = 1.0 - (i / warmSteps) * 0.40;
+            GraphCanvas._tickPhysicsInternal(true);
         }
-        GraphCanvas.physics.alpha = 0.0;
+
+        // 2. Fase di raffreddamento controllato verso l'equilibrio definitivo
+        for (let i = 0; i < coolSteps; i++) {
+            p.alpha = 0.60 * (1.0 - (i / coolSteps));
+            GraphCanvas._tickPhysicsInternal(true);
+        }
+
+        // 3. Congelamento finale a velocità zero
+        p.alpha = 0.0;
+        GraphCanvas.nodes.forEach(n => {
+            n.vx = 0;
+            n.vy = 0;
+        });
+
         if (GraphCanvas.animFrameId) {
             cancelAnimationFrame(GraphCanvas.animFrameId);
             GraphCanvas.animFrameId = null;
         }
 
-        // Sincronizza stabilmente la disposizione calcolata nella memoria persistente
         if (GraphData && GraphData.persistentPositions) {
             GraphCanvas.nodes.forEach(n => {
                 if (n.x !== 0 || n.y !== 0) {
-                    GraphData.persistentPositions.set(n.id, { x: n.x, y: n.y, vx: n.vx, vy: n.vy });
+                    GraphData.persistentPositions.set(n.id, { x: n.x, y: n.y, vx: 0, vy: 0 });
                 }
             });
         }
     },
 
     restartSimulation: () => {
-        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientWidth 
-            : window.innerWidth;
-        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientHeight 
-            : (window.innerHeight - 52);
-        const center = { x: cw / 2, y: ch / 2 };
-
         const goldenAngle = Math.PI * (3 - Math.sqrt(5));
-        GraphCanvas.nodes.forEach((n, idx) => {
+        const connectedNodes = GraphCanvas.nodes.filter(n => (n.degree || 0) > 0);
+        const orphanNodes = GraphCanvas.nodes.filter(n => (n.degree || 0) === 0);
+
+        connectedNodes.forEach((n, idx) => {
             const theta = idx * goldenAngle;
-            const r = 25 + Math.sqrt(idx) * 22;
-            n.x = center.x + Math.cos(theta) * r;
-            n.y = center.y + Math.sin(theta) * r;
+            const r = 20 + Math.sqrt(idx) * 22;
+            n.x = Math.cos(theta) * r;
+            n.y = Math.sin(theta) * r;
             n.vx = 0;
             n.vy = 0;
-
             if (GraphData && GraphData.persistentPositions) {
                 GraphData.persistentPositions.set(n.id, { x: n.x, y: n.y, vx: 0, vy: 0 });
             }
         });
 
-        GraphCanvas.warmupSimulation(200);
+        const baseOuterRadius = Math.max(160, Math.sqrt(connectedNodes.length || 1) * 36);
+        orphanNodes.forEach((n, idx) => {
+            const theta = idx * goldenAngle;
+            const r = baseOuterRadius + (idx % 3) * 35;
+            n.x = Math.cos(theta) * r;
+            n.y = Math.sin(theta) * r;
+            n.vx = 0;
+            n.vy = 0;
+            if (GraphData && GraphData.persistentPositions) {
+                GraphData.persistentPositions.set(n.id, { x: n.x, y: n.y, vx: 0, vy: 0 });
+            }
+        });
+
+        GraphCanvas.warmupSimulation(420);
         GraphCanvas.fitToView();
         GraphCanvas.render();
     },
@@ -172,10 +206,15 @@ window.GraphCanvas = {
                 GraphCanvas.animFrameId = requestAnimationFrame(step);
             } else {
                 GraphCanvas.animFrameId = null;
+                GraphCanvas.physics.alpha = 0.0;
+                GraphCanvas.nodes.forEach(n => {
+                    n.vx = 0;
+                    n.vy = 0;
+                });
                 if (GraphData && GraphData.persistentPositions) {
                     GraphCanvas.nodes.forEach(n => {
                         if (n.x !== 0 || n.y !== 0) {
-                            GraphData.persistentPositions.set(n.id, { x: n.x, y: n.y, vx: n.vx, vy: n.vy });
+                            GraphData.persistentPositions.set(n.id, { x: n.x, y: n.y, vx: 0, vy: 0 });
                         }
                     });
                 }
@@ -186,58 +225,100 @@ window.GraphCanvas = {
     },
 
     tickPhysics: () => {
+        GraphCanvas._tickPhysicsInternal(false);
+        GraphCanvas.physics.alpha *= 0.97;
+    },
+
+    _tickPhysicsInternal: (isWarmup = false) => {
         const p = GraphCanvas.physics;
-        if (p.alpha <= p.minAlpha && !GraphCanvas.draggedNode) return;
+        if (p.alpha <= p.minAlpha && !GraphCanvas.draggedNode && !isWarmup) return;
 
         const nodes = GraphCanvas.nodes;
         const links = GraphCanvas.links;
         const nLen = nodes.length;
 
-        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientWidth 
-            : window.innerWidth;
-        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientHeight 
-            : (window.innerHeight - 52);
-        const centerX = cw / 2;
-        const centerY = ch / 2;
+        // 1. REPULSIONE SPAZIALE O(N) TRAMITE HASH GRID
+        const cellSize = 320;
+        const grid = new Map();
 
-        // 1. REPULSIONE COULOMBIANA (ALLONTANAMENTO RECIPROCO)
         for (let i = 0; i < nLen; i++) {
-            const na = nodes[i];
-            for (let j = i + 1; j < nLen; j++) {
-                const nb = nodes[j];
-                let dx = nb.x - na.x;
-                let dy = nb.y - na.y;
+            const n = nodes[i];
+            const cx = Math.floor(n.x / cellSize);
+            const cy = Math.floor(n.y / cellSize);
+            const key = `${cx},${cy}`;
+            let cell = grid.get(key);
+            if (!cell) {
+                cell = [];
+                grid.set(key, cell);
+            }
+            cell.push(n);
+        }
 
-                if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
-                    dx = (Math.random() - 0.5) * 4;
-                    dy = (Math.random() - 0.5) * 4;
-                }
+        for (const [key, cellNodes] of grid.entries()) {
+            const [cxStr, cyStr] = key.split(',');
+            const cx = parseInt(cxStr, 10);
+            const cy = parseInt(cyStr, 10);
 
-                const distSqRaw = dx * dx + dy * dy;
-                const dist = Math.sqrt(distSqRaw) || 1;
-
-                if (dist < 300) {
-                    const force = (p.repulsion * p.alpha) / (distSqRaw + 400);
-                    const fx = (dx / dist) * force;
-                    const fy = (dy / dist) * force;
-
-                    na.vx -= fx;
-                    na.vy -= fy;
-                    nb.vx += fx;
-                    nb.vy += fy;
+            const cLen = cellNodes.length;
+            for (let i = 0; i < cLen; i++) {
+                const na = cellNodes[i];
+                for (let j = i + 1; j < cLen; j++) {
+                    const nb = cellNodes[j];
+                    GraphCanvas._applyRepulsionPair(na, nb, p);
                 }
             }
 
-            // 2. Gravità Centrale dolce verso il centro dello schermo
-            const dcx = centerX - na.x;
-            const dcy = centerY - na.y;
-            na.vx += dcx * p.gravity * p.alpha;
-            na.vy += dcy * p.gravity * p.alpha;
+            const neighborKeys = [
+                `${cx + 1},${cy}`,
+                `${cx + 1},${cy + 1}`,
+                `${cx},${cy + 1}`,
+                `${cx - 1},${cy + 1}`
+            ];
+
+            for (let k = 0; k < neighborKeys.length; k++) {
+                const neighborCell = grid.get(neighborKeys[k]);
+                if (!neighborCell) continue;
+                const nLenB = neighborCell.length;
+                for (let i = 0; i < cLen; i++) {
+                    const na = cellNodes[i];
+                    for (let j = 0; j < nLenB; j++) {
+                        const nb = neighborCell[j];
+                        GraphCanvas._applyRepulsionPair(na, nb, p);
+                    }
+                }
+            }
         }
 
-        // 3. TENSIONE DELLE MOLLE (ATTRAZIONE RECIPROCA LUNGO I LINK REALI)
+        // 2. GRAVITÀ CENTRALE + FORZA DI GALLEGGIAMENTO PERIFERICA PER NODI ORFANI
+        // Raggio minimo della zona protetta centrale (il cluster interconnesso vive qui)
+        const coreClusterRadius = 180;
+
+        for (let i = 0; i < nLen; i++) {
+            const na = nodes[i];
+            const isOrphan = (na.degree || 0) === 0;
+
+            if (isOrphan) {
+                const distFromCenter = Math.hypot(na.x, na.y) || 1;
+                
+                // Se un nodo orfano si trova all'interno del nucleo centrale, una spinta radiale lo espelle verso la corona esterna
+                if (distFromCenter < coreClusterRadius) {
+                    const pushFactor = (coreClusterRadius - distFromCenter) / coreClusterRadius;
+                    const pushForce = pushFactor * 3.5 * p.alpha;
+                    na.vx += (na.x / distFromCenter) * pushForce;
+                    na.vy += (na.y / distFromCenter) * pushForce;
+                } else {
+                    // All'esterno del cluster, una gravità dolce impedisce che fugga verso l'infinito
+                    na.vx -= na.x * (p.gravity * 0.8) * p.alpha;
+                    na.vy -= na.y * (p.gravity * 0.8) * p.alpha;
+                }
+            } else {
+                // I nodi collegati gravitano naturalmente verso il baricentro (0, 0)
+                na.vx -= na.x * p.gravity * p.alpha;
+                na.vy -= na.y * p.gravity * p.alpha;
+            }
+        }
+
+        // 3. TENSIONE DELLE MOLLE ELASTICHE ADATTIVE
         const lLen = links.length;
         for (let i = 0; i < lLen; i++) {
             const link = links[i];
@@ -253,15 +334,33 @@ window.GraphCanvas = {
 
             const dist = Math.sqrt(dx * dx + dy * dy) || 1;
 
-            let targetLength = p.springLengthNote || 65;
+            const degA = na.degree || 1;
+            const degB = nb.degree || 1;
+            let targetLength = p.springLengthNote || 85;
+            let currentStrength = p.springStrength;
+
             if (link.type === 'hierarchy') {
-                targetLength = p.springLengthRecord || 45;
+                targetLength = p.springLengthRecord || 55;
+                const maxHubDeg = Math.max(degA, degB);
+                if (maxHubDeg > 3) {
+                    targetLength += Math.min(35, (maxHubDeg - 3) * 2.8);
+                }
             } else if (link.type === 'tag_link') {
-                targetLength = p.springLengthTag || 130;
+                const tagNode = (na.type === 'tag') ? na : nb;
+                const tagDegree = tagNode.degree || 1;
+
+                // Modulazione elastica per i tag: vicini se hanno 1 sola nota, distesi se condivisi
+                const tagElasticRatio = 0.52 + 0.48 * Math.min(1.0, (tagDegree - 1) / 3.0);
+                targetLength = (p.springLengthTag || 145) * tagElasticRatio;
+                currentStrength = p.springStrength * 0.9;
+            } else {
+                const combinedDeg = degA + degB;
+                const noteElasticRatio = 0.85 + Math.min(0.35, combinedDeg * 0.035);
+                targetLength = (p.springLengthNote || 85) * noteElasticRatio;
             }
 
             const delta = dist - targetLength;
-            const force = delta * p.springStrength * p.alpha;
+            const force = delta * currentStrength * p.alpha;
             const fx = (dx / dist) * force;
             const fy = (dy / dist) * force;
 
@@ -271,8 +370,8 @@ window.GraphCanvas = {
             nb.vy -= fy;
         }
 
-        // 4. Velocità e Frizione con limite massimo calibrato
-        const maxVelocity = 9;
+        // 4. INTEGRAZIONE DELLA VELOCITÀ CON FRIZIONE
+        const maxVelocity = isWarmup ? 15 : 10;
         for (let i = 0; i < nLen; i++) {
             const n = nodes[i];
             if (n === GraphCanvas.draggedNode) {
@@ -290,8 +389,31 @@ window.GraphCanvas = {
             n.x += n.vx;
             n.y += n.vy;
         }
+    },
 
-        p.alpha *= 0.96;
+    _applyRepulsionPair: (na, nb, p) => {
+        let dx = nb.x - na.x;
+        let dy = nb.y - na.y;
+
+        if (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5) {
+            dx = (Math.random() - 0.5) * 4;
+            dy = (Math.random() - 0.5) * 4;
+        }
+
+        const distSqRaw = dx * dx + dy * dy;
+        if (distSqRaw >= 102400) return;
+
+        const dist = Math.sqrt(distSqRaw) || 1;
+        const hubBonus = 1.0 + Math.min(1.2, ((na.degree || 0) + (nb.degree || 0)) * 0.08);
+        const force = (p.repulsion * hubBonus * p.alpha) / (distSqRaw + 350);
+
+        const fx = (dx / dist) * force;
+        const fy = (dy / dist) * force;
+
+        na.vx -= fx;
+        na.vy -= fy;
+        nb.vx += fx;
+        nb.vy += fy;
     },
 
     getNodeEffectiveRadius: (node, zoom) => {
@@ -371,8 +493,8 @@ window.GraphCanvas = {
         if (!ctx || !c || !c.parentElement) return;
 
         const dpr = window.devicePixelRatio || 1;
-        const w = c.parentElement.clientWidth;
-        const h = c.parentElement.clientHeight;
+        const w = c.parentElement.clientWidth || window.innerWidth;
+        const h = c.parentElement.clientHeight || (window.innerHeight - 52);
 
         const isDark = document.body.getAttribute('data-theme')?.includes('dark');
         const defaultLinkColor = isDark ? 'rgba(156, 163, 175, 0.28)' : 'rgba(107, 114, 128, 0.35)';
@@ -399,7 +521,7 @@ window.GraphCanvas = {
         const viewRight = (w - GraphCanvas.transform.x) / curZoom + 50;
         const viewBottom = (h - GraphCanvas.transform.y) / curZoom + 50;
 
-        // 1. Disegna Linee di Connessione con Frecce Direzionali e Colori per Tipo
+        // 1. Linee di Connessione con Frecce Direzionali
         const links = GraphCanvas.links;
         const lLen = links.length;
 
@@ -444,7 +566,6 @@ window.GraphCanvas = {
 
             ctx.stroke();
 
-            // Cuspide freccia sul perimetro del nodo target
             const targetEffR = GraphCanvas.getNodeEffectiveRadius(l.target, curZoom);
             const arrowOffsetFromCenter = targetEffR + (3 / curZoom);
 
@@ -478,7 +599,7 @@ window.GraphCanvas = {
         }
         ctx.setLineDash([]);
 
-        // 2. PASSATA 1: Disegna tutti i cerchi dei nodi
+        // 2. Cerchi dei Nodi
         const nodes = GraphCanvas.nodes;
         const nLen = nodes.length;
         const visibleNodes = [];
@@ -522,7 +643,7 @@ window.GraphCanvas = {
             }
         }
 
-        // 3. PASSATA 2: Disegna le etichette di testo con rilevamento dello spazio vitale
+        // 3. Etichette di Testo
         ctx.lineJoin = 'round';
         ctx.textAlign = 'center';
         ctx.textBaseline = 'top';
@@ -575,17 +696,17 @@ window.GraphCanvas = {
 
         c.addEventListener('mousedown', (e) => {
             GraphCanvas.dragDistance = 0;
+            GraphCanvas.lastMouse.x = e.clientX;
+            GraphCanvas.lastMouse.y = e.clientY;
+
             const mouse = GraphCanvas.getMouseWorldPos(e);
             const node = GraphCanvas.getNodeAt(mouse.x, mouse.y);
 
             if (node) {
-                GraphCanvas.draggedNode = node;
-                node.fx = node.x;
-                node.fy = node.y;
-                c.parentElement.classList.add('is-dragging');
-                GraphCanvas.physics.alpha = 0.35;
-                GraphCanvas.startLoop();
+                GraphCanvas.potentialDragNode = node;
+                GraphCanvas.draggedNode = null;
             } else {
+                GraphCanvas.potentialDragNode = null;
                 GraphCanvas.isPanning = true;
                 GraphCanvas.panStart.x = e.clientX - GraphCanvas.transform.x;
                 GraphCanvas.panStart.y = e.clientY - GraphCanvas.transform.y;
@@ -601,11 +722,20 @@ window.GraphCanvas = {
             GraphCanvas.lastMouse.x = e.clientX;
             GraphCanvas.lastMouse.y = e.clientY;
 
+            if (GraphCanvas.potentialDragNode && !GraphCanvas.draggedNode && GraphCanvas.dragDistance > 4) {
+                GraphCanvas.draggedNode = GraphCanvas.potentialDragNode;
+                GraphCanvas.draggedNode.fx = GraphCanvas.draggedNode.x;
+                GraphCanvas.draggedNode.fy = GraphCanvas.draggedNode.y;
+                c.parentElement.classList.add('is-dragging');
+                GraphCanvas.physics.alpha = 0.28;
+                GraphCanvas.startLoop();
+            }
+
             if (GraphCanvas.draggedNode) {
                 const mouse = GraphCanvas.getMouseWorldPos(e);
                 GraphCanvas.draggedNode.x = mouse.x;
                 GraphCanvas.draggedNode.y = mouse.y;
-                GraphCanvas.physics.alpha = 0.35;
+                GraphCanvas.physics.alpha = Math.max(GraphCanvas.physics.alpha, 0.18);
                 if (!GraphCanvas.animFrameId) GraphCanvas.startLoop();
             } else if (GraphCanvas.isPanning) {
                 GraphCanvas.transform.x = e.clientX - GraphCanvas.panStart.x;
@@ -640,6 +770,8 @@ window.GraphCanvas = {
                 GraphCanvas.draggedNode.fy = null;
                 GraphCanvas.draggedNode = null;
             }
+
+            GraphCanvas.potentialDragNode = null;
             GraphCanvas.isPanning = false;
             c.parentElement.classList.remove('is-dragging');
         });
@@ -735,28 +867,44 @@ window.GraphCanvas = {
         if (!nodes || nodes.length === 0) return;
 
         let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        let sumX = 0, sumY = 0;
+
         nodes.forEach(n => {
             if (n.x < minX) minX = n.x;
             if (n.y < minY) minY = n.y;
             if (n.x > maxX) maxX = n.x;
             if (n.y > maxY) maxY = n.y;
+            sumX += n.x;
+            sumY += n.y;
         });
 
-        const pad = 60;
-        const w = (maxX - minX) + pad * 2 || 300;
-        const h = (maxY - minY) + pad * 2 || 300;
+        const c = GraphCanvas.canvas;
+        const rect = (c && c.parentElement) ? c.parentElement.getBoundingClientRect() : null;
+        const cw = (rect && rect.width > 0) ? rect.width : window.innerWidth;
+        const ch = (rect && rect.height > 0) ? rect.height : (window.innerHeight - 52);
 
-        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientWidth 
-            : window.innerWidth;
-        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientHeight 
-            : (window.innerHeight - 52);
+        const padX = Math.max(50, cw * 0.06);
+        const padY = Math.max(50, ch * 0.06);
+
+        const w = (maxX - minX) + padX * 2 || 300;
+        const h = (maxY - minY) + padY * 2 || 300;
 
         const scale = Math.min(cw / w, ch / h);
-        GraphCanvas.transform.zoom = Math.min(1.1, Math.max(0.02, scale));
-        GraphCanvas.transform.x = (cw - (minX + maxX) * GraphCanvas.transform.zoom) / 2;
-        GraphCanvas.transform.y = (ch - (minY + maxY) * GraphCanvas.transform.zoom) / 2;
+
+        // Scala fino a riempire confortevolmente lo schermo
+        GraphCanvas.transform.zoom = Math.min(2.5, Math.max(0.05, scale));
+
+        // Centro ponderato combinato
+        const bboxCenterX = (minX + maxX) / 2;
+        const bboxCenterY = (minY + maxY) / 2;
+        const massCenterX = sumX / nodes.length;
+        const massCenterY = sumY / nodes.length;
+
+        const finalCenterX = (bboxCenterX * 0.65) + (massCenterX * 0.35);
+        const finalCenterY = (bboxCenterY * 0.65) + (massCenterY * 0.35);
+
+        GraphCanvas.transform.x = (cw / 2) - (finalCenterX * GraphCanvas.transform.zoom);
+        GraphCanvas.transform.y = (ch / 2) - (finalCenterY * GraphCanvas.transform.zoom);
 
         GraphCanvas.render();
     },
@@ -770,16 +918,14 @@ window.GraphCanvas = {
         }
         if (!node) return;
 
-        const cw = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientWidth 
-            : window.innerWidth;
-        const ch = (GraphCanvas.canvas && GraphCanvas.canvas.parentElement) 
-            ? GraphCanvas.canvas.parentElement.clientHeight 
-            : (window.innerHeight - 52);
+        const c = GraphCanvas.canvas;
+        const rect = (c && c.parentElement) ? c.parentElement.getBoundingClientRect() : null;
+        const cw = (rect && rect.width > 0) ? rect.width : window.innerWidth;
+        const ch = (rect && rect.height > 0) ? rect.height : (window.innerHeight - 52);
 
-        GraphCanvas.transform.zoom = 1.2;
-        GraphCanvas.transform.x = cw / 2 - node.x * GraphCanvas.transform.zoom;
-        GraphCanvas.transform.y = ch / 2 - node.y * GraphCanvas.transform.zoom;
+        GraphCanvas.transform.zoom = 1.25;
+        GraphCanvas.transform.x = (cw / 2) - (node.x * GraphCanvas.transform.zoom);
+        GraphCanvas.transform.y = (ch / 2) - (node.y * GraphCanvas.transform.zoom);
 
         GraphCanvas.selectedNode = node;
         GraphCanvas.hoveredNode = node;

@@ -184,17 +184,17 @@
                         <script>document.write(I18n.t('onboarding.desc'))</script>
                     </p>
                     <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
-                        <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.createWorkspace(true)">
+                        <button class="btn" style="padding: 10px 20px; font-size: 1rem; border-color: var(--accent-color); color: var(--accent-color); font-weight: bold;" onclick="Store.createWorkspace(true)">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folderOpen)</script>
                             </span> <script>document.write(I18n.t('menu.new_workspace'))</script>
                         </button>
-                        <button class="btn" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.openWorkspace()">
+                        <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.openWorkspace()">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.folder)</script>
                             </span> <script>document.write(I18n.t('menu.open_workspace'))</script>
                         </button>
-                        <button id="btnRecoverSession" class="btn" style="padding: 10px 20px; font-size: 1rem; display:none; background: rgba(37, 99, 235, 0.1); border-color: var(--accent-color); color: var(--accent-color); font-weight: bold;" onclick="Store.restoreRecoveredSession()">
+                        <button id="btnRecoverSession" class="btn" style="padding: 10px 20px; font-size: 1rem; display:none;" onclick="Store.restoreRecoveredSession()">
                             <span style="display:inline-block; margin-right:5px;">
                                 <script>document.write(Icons.restore)</script>
                             </span> <script>document.write(I18n.t('onboarding.btn_recover'))</script>

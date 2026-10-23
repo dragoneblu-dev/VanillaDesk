@@ -338,20 +338,20 @@ Object.assign(UI, {
                 
                 <!-- Statistiche -->
                 <div style="display:grid; grid-template-columns: repeat(4, 1fr); gap:10px;">
-                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
-                        <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${wordCount}</div>
+                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:1.4rem; font-weight:bold; color:var(--text-primary);">${wordCount}</div>
                         <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_words')}</div>
                     </div>
-                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
-                        <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${I18n.t('notes_info.stat_read_time_min', { time: readTimeMinutes })}</div>
+                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:1.4rem; font-weight:bold; color:var(--text-primary);">${I18n.t('notes_info.stat_read_time_min', { time: readTimeMinutes })}</div>
                         <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_read_time')}</div>
                     </div>
-                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
-                        <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${chapterCount}</div>
+                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:1.4rem; font-weight:bold; color:var(--text-primary);">${chapterCount}</div>
                         <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_chapters')}</div>
                     </div>
-                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:15px; border-radius:8px; text-align:center;">
-                        <div style="font-size:1.5rem; font-weight:bold; color:var(--text-primary);">${widgetCount}</div>
+                    <div style="background:var(--item-hover); border:1px solid var(--border-color); padding:10px; border-radius:8px; text-align:center;">
+                        <div style="font-size:1.4rem; font-weight:bold; color:var(--text-primary);">${widgetCount}</div>
                         <div style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; margin-top:5px;">${I18n.t('notes_info.stat_widgets')}</div>
                     </div>
                 </div>

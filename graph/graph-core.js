@@ -6,7 +6,8 @@
  * - Gestione dinamica del Drawer: aggancia temporaneamente #advGlobalDrawer all'overlay massimizzato
  *   all'apertura e lo ripristina dentro .layout alla chiusura per garantire visibilità e funzionamento perfetto dei filtri.
  * - Invocazione affidabile di loadGraphConfig() all'apertura del grafo per ripristinare le forze fisiche configurate.
- * - Ciclo di vita controllato: apertura a tutto schermo con focus dinamico del nodo e chiusura istantanea su Escape o pulsante.
+ * - Apertura e Inquadratura Panoramica (fitToView): mostra sempre l'intera costellazione adattata a pieno schermo,
+ *   selezionando visivamente il targetNoteId (se specificato) senza alterare la telecamera globale.
  * - Navigazione reattiva: al doppio click su nota o tag (#), chiude il grafo e attiva istantaneamente la pagina in VanillaDesk.
  */
 
@@ -33,7 +34,7 @@ window.GraphApp = {
             wsLabel.innerText = AppState.fileName || 'Mappa delle Connessioni';
         }
 
-        // 3. Inizializza il canvas e la UI se non ancora fatto, oppure ridimensiona
+        // 3. Inizializza il canvas e la UI se non ancora fatto
         if (!GraphCanvas.canvas) {
             GraphCanvas.canvas = document.getElementById('graphCanvas');
             if (GraphCanvas.canvas) {
@@ -51,25 +52,33 @@ window.GraphApp = {
         // 4. Carica le impostazioni fisiche e i filtri salvati prima del calcolo
         await GraphApp.loadGraphConfig();
 
-        // 5. Calcola le dimensioni reali dello schermo ora che l'overlay è display:flex
-        GraphCanvas.resize();
-
-        // 6. Costruisce la topologia dai dati vivi in RAM
+        // 5. Costruisce la topologia dai dati vivi in RAM
         GraphData.buildGraph();
 
-        // 7. Inietta nodi e link nel canvas
-        GraphCanvas.updateData(GraphData.nodes, GraphData.links, false);
+        // 6. Inietta nodi e link nel canvas eseguendo il warm-up completo a 420 passi
+        GraphCanvas.updateData(GraphData.nodes, GraphData.links, true);
 
-        // 8. Centratura o focalizzazione nodo specifico
+        // Se è presente una nota attiva nel workspace, pre-selezionala visivamente
         if (targetNoteId) {
-            setTimeout(() => {
-                GraphCanvas.focusNode(targetNoteId);
-            }, 60);
+            const targetNode = GraphCanvas.nodes.find(n => n.id === targetNoteId);
+            if (targetNode) {
+                GraphCanvas.selectedNode = targetNode;
+                GraphCanvas.hoveredNode = targetNode;
+            }
         } else {
-            GraphCanvas.fitToView();
+            GraphCanvas.selectedNode = null;
+            GraphCanvas.hoveredNode = null;
         }
 
-        GraphCanvas.render();
+        // 7. Sincronizzazione geometrica a doppio frame (Double rAF):
+        // Esegue SEMPRE fitToView per riempire confortevolmente lo schermo senza rimpicciolire il grafo
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                GraphCanvas.resize();
+                GraphCanvas.fitToView();
+                GraphCanvas.render();
+            });
+        });
     },
 
     close: () => {
@@ -195,7 +204,6 @@ window.GraphApp = {
 // Chiusura automatica su tasto Escape da tastiera
 document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && GraphApp.isOpen) {
-        // Se c'è un cassetto drawer aperto sopra il grafo, lascia chiudere prima il cassetto
         const drawer = document.getElementById('advGlobalDrawer');
         if (drawer && drawer.classList.contains('open')) {
             return;

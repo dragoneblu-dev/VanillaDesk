@@ -7,6 +7,7 @@
  * - Slider tarabili con estensione fino a 1200 per repulsione e 0.001 per gravità.
  * - Slider distinti per configurare le distanze delle molle: Note/Citazioni, Cartelle/Gerarchie e Tag (#).
  * - Risolto conflitto listener capture per garantire l'apertura e chiusura fluida del Drawer.
+ * - Scorciatoie di attivazione/disattivazione filtri al click sulla legenda (toggleOption).
  */
 
 window.GraphUI = {
@@ -198,6 +199,24 @@ window.GraphUI = {
         `;
 
         UI.openDrawer("Impostazioni & Forze del Grafo", bodyHTML, footerHTML);
+    },
+
+    toggleOption: (key) => {
+        const currentVal = !!GraphData.options[key];
+        GraphUI.updateOption(key, !currentVal);
+
+        // Se il drawer laterale è aperto, allinea anche la casella di controllo associata
+        const chkMap = {
+            showTags: 'chkShowTags',
+            showRecordNotes: 'chkShowRecordNotes',
+            showHierarchy: 'chkShowHierarchy',
+            showCitations: 'chkShowCitations'
+        };
+        const chkId = chkMap[key];
+        if (chkId) {
+            const chkEl = document.getElementById(chkId);
+            if (chkEl) chkEl.checked = !currentVal;
+        }
     },
 
     updateOption: (key, value) => {

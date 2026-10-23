@@ -55,7 +55,7 @@
     --tx-c4: #ff8600;
     --tx-c5: #b1b100;
     --tx-c6: #09ae40; /*#00ae49;*/
-    --tx-c7: #0f8ddf;
+    --tx-c7: #0f6ddf;
     --tx-c8: #853bc7;
     --tx-c9: #c52779;
     --tx-c10: #db0000;
@@ -112,8 +112,8 @@
     --hl-c3: #603b2c; /* Marrone */
     --hl-c4: #995216; /* Arancione */
     --hl-c5: #a09800; /* Giallo senape */
-    --hl-c6: #2c6c3c; /* Verde */
-    --hl-c7: #264da1; /* Blu */
+    --hl-c6: #2c6c2c; /* Verde */
+    --hl-c7: #263da1; /* Blu */
     --hl-c8: #4f2d78; /* Viola */
     --hl-c9: #812d61; /* Rosa */
     --hl-c10: #7b2525; /* Rosso */
@@ -135,7 +135,7 @@
     --tx-c3: #d3b4a4;
     --tx-c4: #ffa344;
     --tx-c5: #ffff10;
-    --tx-c6: #4dff5c;
+    --tx-c6: #5cff5c;
     --tx-c7: #52a9ff;
     --tx-c8: #d797ff;
     --tx-c9: #ff8ad8;
@@ -170,8 +170,8 @@
     --hl-c3: #603b2c; /* Marrone */
     --hl-c4: #995216; /* Arancione */
     --hl-c5: #a8a800; /* Giallo */
-    --hl-c6: #2c6c3c; /* Verde */
-    --hl-c7: #264da1; /* Blu */
+    --hl-c6: #2c6c2c; /* Verde */
+    --hl-c7: #263da1; /* Blu */
     --hl-c8: #4f2d78; /* Viola */
     --hl-c9: #812d61; /* Rosa */
     --hl-c10: #7b2525; /* Rosso */
@@ -193,7 +193,7 @@
     --tx-c3: #d3b4a4;
     --tx-c4: #ffa344;
     --tx-c5: #ffff10;
-    --tx-c6: #4dff5c;
+    --tx-c6: #5cff5c;
     --tx-c7: #52a9ff;
     --tx-c8: #d797ff;
     --tx-c9: #ff8ad8;
