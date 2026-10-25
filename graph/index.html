@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>VanillaDesk - Graph View</title>
 
-    <!-- Risorse condivise di VanillaDesk -->
     <link rel="stylesheet" href="../css/variables.css">
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/ui-components.css">
@@ -13,7 +12,6 @@
     <link rel="stylesheet" href="../css/modals.css">
     <link rel="stylesheet" href="graph.css">
 
-    <!-- Script Core di VanillaDesk per la coerenza dei dati -->
     <script src="../js/i18n.js"></script>
     <script src="../js/icons.js"></script>
     <script src="../js/state.js"></script>
@@ -24,7 +22,6 @@
     <script src="../js/ui/ui-notifications.js"></script>
     <script src="../js/ui/ui-drawer.js"></script>
 
-    <!-- Architettura Modulare Graph View -->
     <script src="graph-core.js"></script>
     <script src="graph-data.js"></script>
     <script src="graph-canvas.js"></script>
@@ -32,7 +29,6 @@
 </head>
 <body class="light-theme">
 
-    <!-- Header Controlli -->
     <header class="graph-header">
         <div class="header-left">
             <span class="graph-brand-icon">
@@ -47,6 +43,7 @@
             </span>
             <span id="graphWorkspaceLabel" class="graph-workspace-name">Mappa delle Connessioni</span>
             <span id="graphStatsBadge" class="graph-badge">0 nodi &bull; 0 collegamenti</span>
+
         </div>
 
         <div class="header-center">
@@ -63,7 +60,6 @@
         </div>
 
         <div class="header-right">
-            <!-- Centra visuale -->
             <button class="btn" id="btnFitGraph" onclick="GraphCanvas.fitToView()" title="Centra ed adatta l'intero grafo allo schermo">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
@@ -71,7 +67,6 @@
                 <span>Centra</span>
             </button>
 
-            <!-- Riavvia disposizione fisica compatta -->
             <button class="btn" id="btnRestartPhysics" onclick="GraphCanvas.restartSimulation()" title="Compatta verso il centro e riavvia simulazione">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
@@ -80,7 +75,6 @@
 
             <div class="separator"></div>
 
-            <!-- Apri Cassetto Filtri & Forze -->
             <button class="btn btn-primary" id="btnGraphSettings" onclick="GraphUI.openFilterDrawer()" title="Filtri, colorazione e parametri fisici del grafo">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                     <circle cx="12" cy="12" r="3"></circle>
@@ -91,18 +85,12 @@
         </div>
     </header>
 
-    <!-- Canvas Viewport -->
     <main class="graph-main">
         <canvas id="graphCanvas"></canvas>
-
-        <!-- Tooltip Hover Nodo -->
         <div id="graphTooltip" class="graph-tooltip"></div>
-
-        <!-- Legenda dinamica in basso a sinistra -->
         <div id="graphLegendContainer" class="graph-legend"></div>
     </main>
 
-    <!-- Drawer Laterale Universale (Filtri, Parametri Fisici e Dettagli) -->
     <div id="advGlobalDrawer" class="adv-drawer">
         <div class="adv-drawer-header">
             <div class="adv-drawer-title" id="advDrawerTitle">Impostazioni Grafo</div>
@@ -112,7 +100,6 @@
         <div id="advDrawerFooter" class="adv-drawer-footer"></div>
     </div>
 
-    <!-- Container Notifiche Toast -->
     <div id="adv-toast-container" class="toast-container"></div>
 
 </body>

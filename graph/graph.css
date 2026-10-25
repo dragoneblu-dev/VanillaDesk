@@ -1,8 +1,7 @@
 /**
  * graph/graph.css
  * Foglio di stile per la Graph View integrata a schermo intero di VanillaDesk.
- * Integrazione overlay massimizzato, controlli Drawer, bottoni icona, canvas reattivo
- * e legenda interattiva cliccabile per la gestione rapida dei filtri topologici.
+ * Include selettore a due stati per Grafo Globale/Locale, legenda interattiva e controlli.
  */
 
 .graph-fullscreen-overlay {
@@ -34,13 +33,13 @@
 .header-left, .header-right {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
 
 .header-center {
     flex: 1;
-    max-width: 480px;
-    margin: 0 15px;
+    max-width: 440px;
+    margin: 0 12px;
 }
 
 .graph-brand-icon {
@@ -63,6 +62,42 @@
     border-radius: 12px;
     border: 1px solid var(--border-color, #e5e7eb);
     white-space: nowrap;
+}
+
+/* --- SELETTORE MODALITÀ GRAFO A DUE STATI (GLOBALE VS LOCALE 3X) --- */
+.graph-mode-pill {
+    display: inline-flex;
+    align-items: center;
+    background: var(--bg-color, #ffffff);
+    border: 1px solid var(--border-color, #e5e7eb);
+    border-radius: 6px;
+    padding: 2px;
+    gap: 2px;
+}
+
+.graph-mode-btn {
+    background: transparent;
+    border: none;
+    padding: 4px 10px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: var(--text-secondary, #6b7280);
+    cursor: pointer;
+    border-radius: 4px;
+    transition: all 0.15s ease;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.graph-mode-btn:hover {
+    color: var(--text-primary, #111827);
+    background: var(--item-hover, rgba(0, 0, 0, 0.04));
+}
+
+.graph-mode-btn.active {
+    background: var(--accent-color);
+    color: var(--accent-color-tx);
 }
 
 .graph-search-box {

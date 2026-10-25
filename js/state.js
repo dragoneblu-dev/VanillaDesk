@@ -291,7 +291,9 @@ const AppState = {
 
         const targetMark = marks[index];
         if (targetMark) {
+            // Delega la formattazione e il contrasto esclusivamente alla classe CSS active-highlight
             targetMark.classList.add('active-highlight');
+            targetMark.style.backgroundColor = '';
             
             let curr = targetMark;
             while (curr && curr.id !== 'noteContent') {

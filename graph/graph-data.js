@@ -2,12 +2,13 @@
  * graph/graph-data.js
  * Modulo Estrattore Topologico del Grafo di VanillaDesk:
  * - Scansiona AppState.notes e SYS_PROPERTIES_DB per estrarre Nodi e Connessioni reali.
+ * - Supporto per Grafo Globale e Grafo Locale (profondità fissa 3x tramite BFS).
  * - PRESERVAZIONE COORDINATE PERSISTENTE: Mantiene inalterate le coordinate (x, y) dei nodi
  *   anche quando vengono temporaneamente nascosti tramite i filtri visivi (Tag, Record).
  * - Architettura Nativa VanillaDesk: riconosce solo collegamenti univoci reali (<a data-note-id="...">),
  *   citazioni (<blockquote data-ref-note="...">), gerarchie padre-figlio e tag censiti.
  * - Zero Nodi Fantasma: se un link punta a una nota eliminata o inesistente, viene ignorato.
- * - Colorazione Deterministica e Legenda Dinamica con Voci Interattive (Toggle rapidi).
+ * - Colorazione Deterministica e Legenda Dinamica con scorciatoie cliccabili per i filtri.
  */
 
 window.GraphData = {
@@ -17,14 +18,16 @@ window.GraphData = {
     neighborsMap: new Map(),
     folderColorMap: new Map(),
     tagColorMap: new Map(),
-    persistentPositions: new Map(), // Memoria persistente delle coordinate (x, y, vx, vy)
+    persistentPositions: new Map(),
 
     options: {
+        graphMode: 'global', // 'global' | 'local'
+        localRootId: null,   // id della nota focale per il grafo locale
         showTags: true,
         showRecordNotes: true,
         showHierarchy: true,
         showCitations: true,
-        colorMode: 'type' // 'type' | 'folder' | 'tag'
+        colorMode: 'type'    // 'type' | 'folder' | 'tag'
     },
 
     _getDistinctColor: (index) => {
@@ -259,14 +262,87 @@ window.GraphData = {
             node.radius = Math.min(18, baseRadius + Math.sqrt(deg) * 2);
         });
 
-        // 8. Aggiornamento contatore badge
+        // 8. FILTRO GRAFO LOCALE (Local Graph via BFS con profondità fissa a 3 passi)
+        if (GraphData.options.graphMode === 'local') {
+            GraphData._applyLocalGraphFilter();
+        }
+
+        // 9. Aggiornamento contatore badge
         const statsBadge = document.getElementById('graphStatsBadge');
         if (statsBadge) {
             statsBadge.innerText = `${GraphData.nodes.length} nodi • ${GraphData.links.length} collegamenti`;
         }
 
-        // 9. Aggiornamento legenda
+        // 10. Aggiornamento legenda
         GraphData.updateLegendUI();
+    },
+
+    /**
+     * Esegue l'attraversamento BFS per isolare la rete contestuale
+     * attorno alla nota focale con profondità fissa a 3 passi di separazione.
+     */
+    _applyLocalGraphFilter: () => {
+        let rootId = GraphData.options.localRootId;
+        
+        if (!rootId || !GraphData.nodeMap.has(rootId)) {
+            rootId = AppState.currentNoteId;
+        }
+        if (!rootId || !GraphData.nodeMap.has(rootId)) {
+            const firstNote = GraphData.nodes.find(n => n.type === 'note');
+            rootId = firstNote ? firstNote.id : (GraphData.nodes[0]?.id || null);
+        }
+
+        if (!rootId || !GraphData.nodeMap.has(rootId)) return;
+
+        GraphData.options.localRootId = rootId;
+
+        // Profondità fissa ottimale a 3 passi per coprire l'intero contesto locale senza disperdersi
+        const fixedDepth = 3;
+        const visitedDistances = new Map();
+        const queue = [{ id: rootId, dist: 0 }];
+        visitedDistances.set(rootId, 0);
+
+        while (queue.length > 0) {
+            const { id, dist } = queue.shift();
+            if (dist >= fixedDepth) continue;
+
+            const neighbors = GraphData.neighborsMap.get(id) || new Set();
+            neighbors.forEach(neighborId => {
+                if (!visitedDistances.has(neighborId)) {
+                    visitedDistances.set(neighborId, dist + 1);
+                    queue.push({ id: neighborId, dist: dist + 1 });
+                }
+            });
+        }
+
+        const allowedNodeIds = new Set(visitedDistances.keys());
+
+        GraphData.nodes = GraphData.nodes.filter(n => allowedNodeIds.has(n.id));
+
+        GraphData.nodeMap.clear();
+        GraphData.nodes.forEach(n => GraphData.nodeMap.set(n.id, n));
+
+        GraphData.links = GraphData.links.filter(l => 
+            allowedNodeIds.has(l.source.id) && allowedNodeIds.has(l.target.id)
+        );
+
+        GraphData.neighborsMap.clear();
+        GraphData.nodes.forEach(n => {
+            n.degree = 0;
+            GraphData.neighborsMap.set(n.id, new Set());
+        });
+
+        GraphData.links.forEach(l => {
+            l.source.degree = (l.source.degree || 0) + 1;
+            l.target.degree = (l.target.degree || 0) + 1;
+            GraphData.neighborsMap.get(l.source.id)?.add(l.target.id);
+            GraphData.neighborsMap.get(l.target.id)?.add(l.source.id);
+        });
+
+        const rootNode = GraphData.nodeMap.get(rootId);
+        if (rootNode) {
+            rootNode._isLocalRoot = true;
+        }
     },
 
     updateLegendUI: () => {

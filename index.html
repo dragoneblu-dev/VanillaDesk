@@ -77,7 +77,7 @@
                 <div class="separator"></div>
             </div>
 
-            <!-- Controlli di Navigazione Cronologica e Gerarchica (sempre visibili, anche sulla Dashboard) -->
+            <!-- Controlli di Navigazione Cronologica e Gerarchica -->
             <div id="navHistoryControls" style="display:flex; align-items:center; gap:4px;">
                 <button class="icon-btn" onclick="UI.navHistoryBack()" id="navBackBtn">
                     <script>document.write(Icons.navBack || Icons.arrowLeft); document.getElementById('navBackBtn').title = I18n.t('toolbar.nav_back') || 'Torna indietro (Alt+←)';</script>
@@ -89,7 +89,6 @@
                     <script>document.write(Icons.goUp || Icons.cornerUpLeft); document.getElementById('goUpBtn').title = I18n.t('toolbar.go_up');</script>
                 </button>
                 <div class="separator"></div>
-
             </div>
 
             <button class="icon-btn active" id="sidebarToggleBtn" onclick="UI.toggleSidebar()">
@@ -407,6 +406,16 @@
                 </span>
                 <span id="graphWorkspaceLabel" class="graph-workspace-name">Mappa delle Connessioni</span>
                 <span id="graphStatsBadge" class="graph-badge">0 nodi &bull; 0 collegamenti</span>
+
+                <!-- CONTROLLI RAPIDI MODALITÀ GRAFO A DUE STATI: GLOBALE VS LOCALE (3X) -->
+                <div class="graph-mode-pill" style="margin-left: 6px;">
+                    <button id="btnGraphModeGlobal" class="graph-mode-btn active" onclick="GraphUI.setGraphMode('global')" title="Visualizza l'intero Workspace">
+                        Globale
+                    </button>
+                    <button id="btnGraphModeLocal" class="graph-mode-btn" onclick="GraphUI.setGraphMode('local')" title="Visualizza la rete contestuale della nota focale (3x)">
+                        Locale
+                    </button>
+                </div>
             </div>
 
             <div class="header-center">
@@ -573,7 +582,7 @@
     <script src="js/manual/sec-macros.js"></script>
     <script src="js/manual/sec-system.js"></script>
 
-    <!-- Script Librerie Esterne per Dashboard (Caricate localmente) -->
+    <!-- Script Librerie Esterne per Dashboard -->
     <script src="lib/chart.umd.js"></script>
     <script src="lib/chartjs-plugin-datalabels.min.js"></script>
     <script src="js/AdvancedTable/advanced-table-charts.js"></script>

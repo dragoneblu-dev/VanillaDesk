@@ -1,13 +1,15 @@
 /**
  * graph/graph-ui.js
  * Modulo Interfaccia Utente per Graph View:
+ * - Selettore Rapido Header a due stati: "Grafo Globale" vs "Grafo Locale" (profondità fissa 3x).
  * - Ricerca istantanea con evidenziazione in tempo reale e scorrimento ciclico con Invio.
- * - Cassetto laterale dei filtri: selettore della modalità di Colorazione Nodi (Tipo, Cartella, Tag Primario).
- * - Aggiornamento opzioni tramite pipeline formale GraphCanvas.updateData (zero balzi all'angolo 0,0).
+ * - Cassetto laterale dei filtri snello ed essenziale: Colorazione dei nodi, filtri ed elasticità fisica
+ *   (privo di controlli ridondanti o duplicati già presenti nell'header).
+ * - Sincronizzazione atomica con GraphCanvas.restartSimulation() al cambio di modalità o nodo focale.
  * - Slider tarabili con estensione fino a 1200 per repulsione e 0.001 per gravità.
  * - Slider distinti per configurare le distanze delle molle: Note/Citazioni, Cartelle/Gerarchie e Tag (#).
  * - Risolto conflitto listener capture per garantire l'apertura e chiusura fluida del Drawer.
- * - Scorciatoie di attivazione/disattivazione filtri al click sulla legenda (toggleOption).
+ * - Legenda interattiva cliccabile per l'attivazione/disattivazione rapida dei filtri.
  */
 
 window.GraphUI = {
@@ -43,6 +45,63 @@ window.GraphUI = {
                     searchInput.focus();
                 }
             });
+        }
+
+        GraphUI.syncHeaderModeControls();
+    },
+
+    syncHeaderModeControls: () => {
+        const btnGlobal = document.getElementById('btnGraphModeGlobal');
+        const btnLocal = document.getElementById('btnGraphModeLocal');
+
+        const isLocal = GraphData.options.graphMode === 'local';
+
+        if (btnGlobal && btnLocal) {
+            if (isLocal) {
+                btnGlobal.classList.remove('active');
+                btnLocal.classList.add('active');
+            } else {
+                btnGlobal.classList.add('active');
+                btnLocal.classList.remove('active');
+            }
+        }
+    },
+
+    setGraphMode: (mode) => {
+        if (GraphData.options.graphMode === mode) return;
+
+        GraphData.options.graphMode = mode;
+        if (mode === 'local' && !GraphData.options.localRootId) {
+            GraphData.options.localRootId = AppState.currentNoteId || (GraphData.nodes.find(n => n.type === 'note')?.id || null);
+        }
+
+        GraphUI.syncHeaderModeControls();
+        
+        // Ricostruisce la topologia appropriata (completa o filtrata a 3x)
+        GraphData.buildGraph();
+
+        // Riavvia direttamente la simulazione topologica prelevando i nuovi nodi allineati
+        GraphCanvas.restartSimulation();
+        GraphApp.saveGraphConfig();
+
+        if (typeof UI !== 'undefined' && UI.showToast) {
+            const label = mode === 'local' ? "Grafo Locale (Rete contestuale 3x)" : "Grafo Globale (Intero Workspace)";
+            UI.showToast(label, "info");
+        }
+    },
+
+    setLocalRoot: (nodeId) => {
+        GraphData.options.localRootId = nodeId;
+        GraphData.options.graphMode = 'local';
+        GraphUI.syncHeaderModeControls();
+        
+        GraphData.buildGraph();
+        GraphCanvas.restartSimulation();
+        GraphApp.saveGraphConfig();
+
+        const node = GraphData.nodeMap.get(nodeId);
+        if (node && typeof UI !== 'undefined' && UI.showToast) {
+            UI.showToast(`Centro Grafo Locale: ${node.title}`, "info");
         }
     },
 
@@ -161,25 +220,25 @@ window.GraphUI = {
                         <div>
                             <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                                 <span>Distanza Collegamenti Note / Citazioni</span>
-                                <b id="valSpringNote">${phys.springLengthNote || 65}</b>
+                                <b id="valSpringNote">${phys.springLengthNote || 85}</b>
                             </div>
-                            <input type="range" min="20" max="250" step="5" value="${phys.springLengthNote || 65}" style="width:100%;" oninput="GraphUI.updatePhysics('springLengthNote', this.value)">
+                            <input type="range" min="20" max="250" step="5" value="${phys.springLengthNote || 85}" style="width:100%;" oninput="GraphUI.updatePhysics('springLengthNote', this.value)">
                         </div>
 
                         <div>
                             <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
                                 <span>Distanza Cartelle / Gerarchia</span>
-                                <b id="valSpringRecord">${phys.springLengthRecord || 45}</b>
+                                <b id="valSpringRecord">${phys.springLengthRecord || 55}</b>
                             </div>
-                            <input type="range" min="20" max="200" step="5" value="${phys.springLengthRecord || 45}" style="width:100%;" oninput="GraphUI.updatePhysics('springLengthRecord', this.value)">
+                            <input type="range" min="20" max="200" step="5" value="${phys.springLengthRecord || 55}" style="width:100%;" oninput="GraphUI.updatePhysics('springLengthRecord', this.value)">
                         </div>
 
                         <div>
                             <div style="display:flex; justify-content:space-between; margin-bottom:4px;">
-                                <span>Distanza Collegamenti Tag (#)</span>
-                                <b id="valSpringTag">${phys.springLengthTag || 130}</b>
+                                <span>Distanza Massima Tag (#)</span>
+                                <b id="valSpringTag">${phys.springLengthTag || 140}</b>
                             </div>
-                            <input type="range" min="30" max="350" step="5" value="${phys.springLengthTag || 130}" style="width:100%;" oninput="GraphUI.updatePhysics('springLengthTag', this.value)">
+                            <input type="range" min="30" max="350" step="5" value="${phys.springLengthTag || 140}" style="width:100%;" oninput="GraphUI.updatePhysics('springLengthTag', this.value)">
                         </div>
 
                         <div>
@@ -205,7 +264,6 @@ window.GraphUI = {
         const currentVal = !!GraphData.options[key];
         GraphUI.updateOption(key, !currentVal);
 
-        // Se il drawer laterale è aperto, allinea anche la casella di controllo associata
         const chkMap = {
             showTags: 'chkShowTags',
             showRecordNotes: 'chkShowRecordNotes',
@@ -222,11 +280,7 @@ window.GraphUI = {
     updateOption: (key, value) => {
         GraphData.options[key] = value;
         GraphData.buildGraph();
-
-        // Incanala formalmente attraverso updateData: se tutti i nodi hanno coordinate già note,
-        // non altera il grafo; se vi sono nuovi nodi, li posiziona ed esegue il warm-up senza proiezioni a (0,0)
         GraphCanvas.updateData(GraphData.nodes, GraphData.links, false);
-
         GraphCanvas.render();
         GraphApp.saveGraphConfig();
     },

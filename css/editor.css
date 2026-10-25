@@ -205,9 +205,54 @@ input.title-input[readonly] { cursor: default; }
 .editor-content blockquote { border-left: 3px solid var(--accent-color); margin: 10px 0; padding-left: 15px; color: var(--text-secondary); font-style: italic; background: rgba(0, 0, 0, 0.02); padding-top: 5px; padding-bottom: 5px; border-radius: 0 4px 4px 0; }
 
 .highlighted-text { background-color: var(--highlight-bg); color: var(--highlight-text); border-radius: 2px; padding: 0 2px; }
-mark.search-highlight { background-color: #fef08a; color: black; padding: 0 2px; border-radius: 2px; }
-[data-theme="dark"] mark.search-highlight { background-color: #f8d122; color: white; }
-mark.active-highlight { background-color: var(--marked-border) !important; color: black !important; font-weight: bold; border-radius: 4px; outline: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.5); }
+
+/* =========================================================================
+   EVIDENZIAZIONI RICERCA AD ALTO CONTRASTO (CERTIFICATE PER TUTTI I TEMI)
+   Garantiscono la perfetta leggibilità anche per hashtag #Capitolo su temi scuri.
+   ========================================================================= */
+mark.search-highlight { 
+    background-color: #fef08a !important; 
+    color: #000000 !important; 
+    padding: 0 3px; 
+    border-radius: 3px; 
+    font-weight: 600;
+    text-shadow: none !important;
+}
+
+[data-theme="dark"] mark.search-highlight,
+[data-theme="notion-dark"] mark.search-highlight { 
+    background-color: #d6ba03 !important; 
+    color: #000000 !important; 
+    text-shadow: none !important;
+}
+
+/* Riscontro attivo selezionato: arancione vivo con contorno bianco netto anti-confusione */
+mark.active-highlight { 
+    background-color: #f97316 !important; 
+    color: #ffffff !important; 
+    font-weight: 700 !important; 
+    border-radius: 4px; 
+    outline: 2px solid #ffffff !important; 
+    box-shadow: 0 0 10px rgba(0, 0, 0, 0.6) !important; 
+    text-shadow: none !important;
+}
+
+[data-theme="dark"] mark.active-highlight,
+[data-theme="notion-dark"] mark.active-highlight { 
+    background-color: #ff8600 !important; 
+    color: #000000 !important; 
+    outline: 2px solid #ffffff !important;
+    text-shadow: none !important;
+}
+
+/* GARANZIA DI CONTRASTO TOTALE: Qualsiasi tag o classe interna (es. .tag-hash) eredita il colore scuro leggibile */
+mark.search-highlight *,
+mark.active-highlight *,
+.tag-hash mark.search-highlight,
+.tag-hash mark.active-highlight {
+    color: inherit !important;
+    background-color: transparent !important;
+}
 
 .editor-content ul, .editor-content ol { padding-left: 25px; margin: 5px 0; }
 .editor-content li { margin-bottom: 2px; padding-left: 5px; }
@@ -229,8 +274,6 @@ mark.active-highlight { background-color: var(--marked-border) !important; color
     gap: 4px;
     z-index: 1000;
     color: var(--text-primary); 
-    
-    /* Trasparenza adattiva ridotta per garantire nitidezza e contrasto immediati */
     opacity: 0.8;
     transition: opacity 0.2s ease, box-shadow 0.2s ease;
 }

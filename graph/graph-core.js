@@ -34,7 +34,7 @@ window.GraphApp = {
             wsLabel.innerText = AppState.fileName || 'Mappa delle Connessioni';
         }
 
-        // 3. Inizializza il canvas e la UI se non ancora fatto
+        // 3. Inizializza il canvas e la UI se non ancora fatto, oppure ridimensiona
         if (!GraphCanvas.canvas) {
             GraphCanvas.canvas = document.getElementById('graphCanvas');
             if (GraphCanvas.canvas) {
@@ -52,13 +52,18 @@ window.GraphApp = {
         // 4. Carica le impostazioni fisiche e i filtri salvati prima del calcolo
         await GraphApp.loadGraphConfig();
 
-        // 5. Costruisce la topologia dai dati vivi in RAM
+        // 5. Configura la nota focale per il grafo locale se fornita
+        if (targetNoteId) {
+            GraphData.options.localRootId = targetNoteId;
+        }
+
+        // 6. Costruisce la topologia dai dati vivi in RAM
         GraphData.buildGraph();
 
-        // 6. Inietta nodi e link nel canvas eseguendo il warm-up completo a 420 passi
+        // 7. Inietta nodi e link nel canvas eseguendo il warm-up completo
         GraphCanvas.updateData(GraphData.nodes, GraphData.links, true);
 
-        // Se è presente una nota attiva nel workspace, pre-selezionala visivamente
+        // Pre-seleziona visivamente il nodo della nota attiva se presente
         if (targetNoteId) {
             const targetNode = GraphCanvas.nodes.find(n => n.id === targetNoteId);
             if (targetNode) {
@@ -70,7 +75,11 @@ window.GraphApp = {
             GraphCanvas.hoveredNode = null;
         }
 
-        // 7. Sincronizzazione geometrica a doppio frame (Double rAF):
+        if (typeof GraphUI !== 'undefined' && typeof GraphUI.syncHeaderModeControls === 'function') {
+            GraphUI.syncHeaderModeControls();
+        }
+
+        // 8. Sincronizzazione geometrica a doppio frame (Double rAF):
         // Esegue SEMPRE fitToView per riempire confortevolmente lo schermo senza rimpicciolire il grafo
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {

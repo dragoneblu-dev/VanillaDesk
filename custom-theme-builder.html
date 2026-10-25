@@ -1,0 +1,1745 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VanillaDesk - Personalizzazione Tema (custom.css Builder)</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+
+    <!-- Fogli di stile nativi di VanillaDesk -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/colors.css">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/editor.css">
+    <link rel="stylesheet" href="css/tables.css">
+    <link rel="stylesheet" href="css/advanced-table.css">
+    <link rel="stylesheet" href="css/code.css">
+    <link rel="stylesheet" href="css/widgets.css">
+
+    <!-- Foglio di stile personalizzato utente caricato nativamente dal browser -->
+    <link rel="stylesheet" id="userCustomCssLink" href="css/custom.css">
+
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: #111827;
+            color: #f3f4f6;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+        }
+
+        .studio-header {
+            height: 52px;
+            background: #1f2937;
+            border-bottom: 1px solid #374151;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 18px;
+            flex-shrink: 0;
+            z-index: 10;
+        }
+
+        .studio-brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 0.95rem;
+            color: #ffffff;
+        }
+
+        .studio-brand span {
+            color: #38bdf8;
+            font-size: 0.75rem;
+            font-weight: 600;
+            background: rgba(56, 189, 248, 0.12);
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+        }
+
+        .studio-status-badge {
+            font-size: 0.72rem;
+            color: #9ca3af;
+            background: #111827;
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid #374151;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .studio-status-badge.connected {
+            border-color: #059669;
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .studio-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .studio-body {
+            flex: 1;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* PANNELLO CONTROLLI (SINISTRA) */
+        .controls-panel {
+            width: 480px;
+            min-width: 420px;
+            background: #1f2937;
+            border-right: 1px solid #374151;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 16px;
+            box-sizing: border-box;
+            gap: 16px;
+        }
+
+        .control-section {
+            background: #111827;
+            border: 1px solid #374151;
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .control-section.focused-section {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.25) !important;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #374151;
+            padding-bottom: 6px;
+            margin-bottom: 2px;
+        }
+
+        .section-title {
+            font-size: 0.82rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #38bdf8;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .control-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 10px;
+            font-size: 0.82rem;
+        }
+
+        .control-label {
+            color: #9ca3af;
+            font-size: 0.78rem;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .control-label small {
+            font-size: 0.68rem;
+            color: #6b7280;
+            margin-top: 1px;
+        }
+
+        .color-input-group {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .color-picker-native {
+            width: 28px;
+            height: 28px;
+            border: none;
+            padding: 0;
+            border-radius: 4px;
+            background: transparent;
+            cursor: pointer;
+        }
+
+        .color-text-input {
+            width: 90px;
+            height: 26px;
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            color: #f3f4f6;
+            padding: 0 6px;
+            font-family: monospace;
+            font-size: 0.75rem;
+            outline: none;
+        }
+
+        .color-text-input:focus {
+            border-color: #38bdf8;
+        }
+
+        .btn-reset-field {
+            background: transparent;
+            border: 1px solid #4b5563;
+            color: #9ca3af;
+            border-radius: 4px;
+            width: 24px;
+            height: 26px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            font-size: 0.75rem;
+            transition: all 0.15s;
+        }
+
+        .btn-reset-field:hover {
+            color: #f87171;
+            border-color: #f87171;
+        }
+
+        .toggle-btn-group {
+            display: flex;
+            gap: 4px;
+        }
+
+        .toggle-btn {
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            color: #9ca3af;
+            border-radius: 4px;
+            padding: 3px 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all 0.15s;
+        }
+
+        .toggle-btn:hover {
+            color: #ffffff;
+            border-color: #9ca3af;
+        }
+
+        .toggle-btn.active {
+            background: #0284c7;
+            border-color: #38bdf8;
+            color: #ffffff;
+        }
+
+        .select-input {
+            background: #1f2937;
+            border: 1px solid #4b5563;
+            border-radius: 4px;
+            color: #f3f4f6;
+            padding: 3px 6px;
+            font-size: 0.78rem;
+            outline: none;
+        }
+
+        /* ANTEPRIMA VISIVA (DESTRA) */
+        .preview-panel {
+            flex: 1;
+            background: #0f172a;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .preview-toolbar {
+            height: 44px;
+            background: #1e293b;
+            border-bottom: 1px solid #334155;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 15px;
+            font-size: 0.8rem;
+            color: #94a3b8;
+        }
+
+        .preview-viewport-wrapper {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .mockup-window {
+            width: 100%;
+            max-width: 940px;
+            background: var(--bg-color, #f3f4f6);
+            border-radius: 8px;
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--border-color, #e5e7eb);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            height: max-content;
+            margin-bottom: 30px;
+            color: var(--text-primary);
+        }
+
+        .inspectable {
+            cursor: pointer;
+            position: relative;
+            transition: outline 0.15s ease;
+        }
+
+        .inspectable:hover {
+            outline: 2px dashed #38bdf8 !important;
+            outline-offset: 2px;
+        }
+
+        .inspectable.inspected-active {
+            outline: 2px solid #0284c7 !important;
+            outline-offset: 2px;
+        }
+
+        .btn-studio {
+            padding: 5px 12px;
+            border-radius: 6px;
+            border: 1px solid #4b5563;
+            background: #374151;
+            color: #ffffff;
+            cursor: pointer;
+            font-size: 0.78rem;
+            font-weight: 600;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            transition: background 0.15s, border-color 0.15s;
+        }
+
+        .btn-studio:hover {
+            background: #4b5563;
+        }
+
+        .btn-studio-primary {
+            background: #0284c7;
+            border-color: #38bdf8;
+        }
+
+        .btn-studio-primary:hover {
+            background: #0369a1;
+        }
+
+        .btn-studio-connect {
+            background: #065f46;
+            border-color: #10b981;
+            color: #d1fae5;
+        }
+
+        .btn-studio-connect:hover {
+            background: #047857;
+        }
+
+        .btn-studio-danger {
+            background: rgba(239, 68, 68, 0.2);
+            border-color: #ef4444;
+            color: #fca5a5;
+        }
+
+        .btn-studio-danger:hover {
+            background: rgba(239, 68, 68, 0.3);
+        }
+
+        .studio-toast {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1f2937;
+            border: 1px solid #38bdf8;
+            color: #ffffff;
+            padding: 9px 15px;
+            border-radius: 6px;
+            font-size: 0.8rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: none;
+        }
+    </style>
+
+    <style id="dynamicCustomCSSTag"></style>
+</head>
+<body>
+
+    <header class="studio-header">
+        <div class="studio-brand">
+            🎨 VanillaDesk Custom Theme Studio
+            <span id="studioFileStatus">css/custom.css</span>
+        </div>
+
+        <div class="studio-actions">
+            <!-- Pulsante mostrato su protocollo file:// prima della connessione dell'handle permanente -->
+            <button class="btn-studio btn-studio-connect" id="btnConnectFile" style="display:none;" onclick="Studio.connectLocalFile()">
+                🔗 Connetti css/custom.css
+            </button>
+
+            <span class="studio-status-badge" id="storageModeBadge">
+                Verifica file...
+            </span>
+            <button class="btn-studio" onclick="Studio.copyCSS()">
+                📋 Copia CSS
+            </button>
+            <button class="btn-studio btn-studio-danger" onclick="Studio.resetDefaults()">
+                ↺ Ripristina Standard
+            </button>
+            <button class="btn-studio btn-studio-primary" id="btnSaveCSS" onclick="Studio.saveCSS()">
+                💾 Salva su custom.css
+            </button>
+        </div>
+    </header>
+
+    <div class="studio-body">
+        
+        <!-- PANNELLO CONTROLLI (SINISTRA) -->
+        <aside class="controls-panel adv-scroll-container" id="controlsPanel">
+            
+            <!-- 1. SFONDI GLOBALI DELL'APPLICAZIONE -->
+            <div class="control-section" id="sec-app-backgrounds">
+                <div class="section-header">
+                    <span class="section-title">🖼️ Sfondi Generali Applicazione</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Applicazione / Layout:
+                        <small id="hint-bg-app">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-bg-app-picker" oninput="Studio.syncColor('bgApp', this.value)">
+                        <input type="text" class="color-text-input" id="val-bg-app-text" oninput="Studio.updateParam('bgApp', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('bgApp')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Sidebar Laterale:
+                        <small id="hint-sidebar-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-sidebar-bg-picker" oninput="Studio.syncColor('sidebarBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-sidebar-bg-text" oninput="Studio.updateParam('sidebarBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('sidebarBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Area Editor (Note):
+                        <small id="hint-bg-editor">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-bg-editor-picker" oninput="Studio.syncColor('bgEditor', this.value)">
+                        <input type="text" class="color-text-input" id="val-bg-editor-text" oninput="Studio.updateParam('bgEditor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('bgEditor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Bordi di Separazione:
+                        <small id="hint-border">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-border-picker" oninput="Studio.syncColor('border', this.value)">
+                        <input type="text" class="color-text-input" id="val-border-text" oninput="Studio.updateParam('border', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('border')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. ACCENTO & TESTO BASE -->
+            <div class="control-section" id="sec-global">
+                <div class="section-header">
+                    <span class="section-title">🌐 Colore Accento & Testo Base</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Colore Accento Primario:
+                        <small id="hint-accent">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-accent-picker" oninput="Studio.syncColor('accent', this.value)">
+                        <input type="text" class="color-text-input" id="val-accent-text" oninput="Studio.updateParam('accent', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('accent')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Testo Principale (Corpo):
+                        <small id="hint-tx-primary">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-tx-primary-picker" oninput="Studio.syncColor('txPrimary', this.value)">
+                        <input type="text" class="color-text-input" id="val-tx-primary-text" oninput="Studio.updateParam('txPrimary', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('txPrimary')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. TITOLO NOTA -->
+            <div class="control-section" id="sec-note-title">
+                <div class="section-header">
+                    <span class="section-title">📝 Titolo della Pagina (Nota)</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Colore Titolo:
+                        <small id="hint-title-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-title-color-picker" oninput="Studio.syncColor('titleColor', this.value)">
+                        <input type="text" class="color-text-input" id="val-title-color-text" oninput="Studio.updateParam('titleColor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('titleColor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">Stile Tipografico:</span>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn" id="btn-title-bold" onclick="Studio.toggleStyle('titleBold')">B</button>
+                        <button class="toggle-btn" id="btn-title-italic" onclick="Studio.toggleStyle('titleItalic')">I</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">Font Family:</span>
+                    <select class="select-input" id="sel-title-font" onchange="Studio.updateParam('titleFont', this.value)">
+                        <option value="inherit">Predefinito (Sans-serif)</option>
+                        <option value="'Georgia', serif">Serif (Elegante)</option>
+                        <option value="'Menlo', monospace">Monospace (Tecnico)</option>
+                        <option value="'EasyReading PRO', sans-serif">EasyReading PRO</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- 4. INTESTAZIONI (H1, H2, H3) -->
+            <div class="control-section" id="sec-headings">
+                <div class="section-header">
+                    <span class="section-title">📌 Intestazioni (H1, H2, H3)</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        <b>H1</b> - Colore & Stile:
+                        <small id="hint-h1-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-h1-color-picker" oninput="Studio.syncColor('h1Color', this.value)">
+                        <input type="text" class="color-text-input" id="val-h1-color-text" oninput="Studio.updateParam('h1Color', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('h1Color')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn" id="btn-h1-bold" onclick="Studio.toggleStyle('h1Bold')">B</button>
+                        <button class="toggle-btn" id="btn-h1-italic" onclick="Studio.toggleStyle('h1Italic')">I</button>
+                        <button class="toggle-btn" id="btn-h1-border" onclick="Studio.toggleStyle('h1Border')" title="Bordo inferiore">―</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        <b>H2</b> - Colore & Stile:
+                        <small id="hint-h2-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-h2-color-picker" oninput="Studio.syncColor('h2Color', this.value)">
+                        <input type="text" class="color-text-input" id="val-h2-color-text" oninput="Studio.updateParam('h2Color', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('h2Color')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn" id="btn-h2-bold" onclick="Studio.toggleStyle('h2Bold')">B</button>
+                        <button class="toggle-btn" id="btn-h2-italic" onclick="Studio.toggleStyle('h2Italic')">I</button>
+                        <button class="toggle-btn" id="btn-h2-border" onclick="Studio.toggleStyle('h2Border')" title="Bordo inferiore tratteggiato">╌</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        <b>H3</b> - Colore & Stile:
+                        <small id="hint-h3-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-h3-color-picker" oninput="Studio.syncColor('h3Color', this.value)">
+                        <input type="text" class="color-text-input" id="val-h3-color-text" oninput="Studio.updateParam('h3Color', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('h3Color')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn" id="btn-h3-bold" onclick="Studio.toggleStyle('h3Bold')">B</button>
+                        <button class="toggle-btn" id="btn-h3-italic" onclick="Studio.toggleStyle('h3Italic')">I</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. TABELLE DATABASE AVANZATE (RDBMS) -->
+            <div class="control-section" id="sec-database-tables">
+                <div class="section-header">
+                    <span class="section-title">🗄️ Tabelle Database Relazionali (RDBMS)</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Intestazioni DB (&lt;th&gt;):
+                        <small id="hint-db-th-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-db-th-bg-picker" oninput="Studio.syncColor('dbThBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-db-th-bg-text" oninput="Studio.updateParam('dbThBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('dbThBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Testo Intestazioni DB (&lt;th&gt;):
+                        <small id="hint-db-th-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-db-th-color-picker" oninput="Studio.syncColor('dbThColor', this.value)">
+                        <input type="text" class="color-text-input" id="val-db-th-color-text" oninput="Studio.updateParam('dbThColor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('dbThColor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">Stile Intestazioni Database:</span>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn" id="btn-db-th-bold" onclick="Studio.toggleStyle('dbThBold')">B</button>
+                        <button class="toggle-btn" id="btn-db-th-upper" onclick="Studio.toggleStyle('dbThUpper')" title="Tutto Maiuscolo">AA</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Testo Celle Dati DB (&lt;td&gt;):
+                        <small id="hint-db-td-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-db-td-color-picker" oninput="Studio.syncColor('dbTdColor', this.value)">
+                        <input type="text" class="color-text-input" id="val-db-td-color-text" oninput="Studio.updateParam('dbTdColor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('dbTdColor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Riga DB in Hover:
+                        <small id="hint-db-row-hover">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-db-row-hover-picker" oninput="Studio.syncColor('dbRowHover', this.value)">
+                        <input type="text" class="color-text-input" id="val-db-row-hover-text" oninput="Studio.updateParam('dbRowHover', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('dbRowHover')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 6. TABELLE SEMPLICI HTML -->
+            <div class="control-section" id="sec-tables">
+                <div class="section-header">
+                    <span class="section-title">📊 Tabelle Semplici HTML</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Intestazioni (&lt;th&gt;):
+                        <small id="hint-th-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-th-bg-picker" oninput="Studio.syncColor('thBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-th-bg-text" oninput="Studio.updateParam('thBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('thBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Testo Intestazioni (&lt;th&gt;):
+                        <small id="hint-th-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-th-color-picker" oninput="Studio.syncColor('thColor', this.value)">
+                        <input type="text" class="color-text-input" id="val-th-color-text" oninput="Studio.updateParam('thColor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('thColor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">Stile Intestazioni Tabella:</span>
+                    <div class="toggle-btn-group">
+                        <button class="toggle-btn" id="btn-th-bold" onclick="Studio.toggleStyle('thBold')">B</button>
+                        <button class="toggle-btn" id="btn-th-upper" onclick="Studio.toggleStyle('thUpper')" title="Tutto Maiuscolo">AA</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Testo Celle Dati (&lt;td&gt;):
+                        <small id="hint-td-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-td-color-picker" oninput="Studio.syncColor('tdColor', this.value)">
+                        <input type="text" class="color-text-input" id="val-td-color-text" oninput="Studio.updateParam('tdColor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('tdColor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Righe Alternate (Zebra):
+                        <small id="hint-zebra-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-zebra-bg-picker" oninput="Studio.syncColor('zebraBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-zebra-bg-text" oninput="Studio.updateParam('zebraBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('zebraBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 7. CITAZIONI, NOTE E GRASSETTO -->
+            <div class="control-section" id="sec-blocks">
+                <div class="section-header">
+                    <span class="section-title">💬 Citazioni, Grassetto & Tag</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Colore Grassetto (&lt;b&gt;):
+                        <small id="hint-bold-color">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-bold-color-picker" oninput="Studio.syncColor('boldColor', this.value)">
+                        <input type="text" class="color-text-input" id="val-bold-color-text" oninput="Studio.updateParam('boldColor', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('boldColor')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Bordo Citazione (&lt;blockquote&gt;):
+                        <small id="hint-quote-border">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-quote-border-picker" oninput="Studio.syncColor('quoteBorder', this.value)">
+                        <input type="text" class="color-text-input" id="val-quote-border-text" oninput="Studio.updateParam('quoteBorder', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('quoteBorder')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Citazione:
+                        <small id="hint-quote-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-quote-bg-picker" oninput="Studio.syncColor('quoteBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-quote-bg-text" oninput="Studio.updateParam('quoteBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('quoteBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Tag / Hashtag (#):
+                        <small id="hint-tag-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-tag-bg-picker" oninput="Studio.syncColor('tagBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-tag-bg-text" oninput="Studio.updateParam('tagBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('tagBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 8. CODICE -->
+            <div class="control-section" id="sec-code">
+                <div class="section-header">
+                    <span class="section-title">&lt;/&gt; Blocchi di Codice (Code)</span>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Sfondo Codice (&lt;pre&gt;):
+                        <small id="hint-code-bg">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-code-bg-picker" oninput="Studio.syncColor('codeBg', this.value)">
+                        <input type="text" class="color-text-input" id="val-code-bg-text" oninput="Studio.updateParam('codeBg', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('codeBg')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+
+                <div class="control-row">
+                    <span class="control-label">
+                        Colore Testo Codice:
+                        <small id="hint-code-tx">Nativo del tema</small>
+                    </span>
+                    <div class="color-input-group">
+                        <input type="color" class="color-picker-native" id="val-code-tx-picker" oninput="Studio.syncColor('codeTx', this.value)">
+                        <input type="text" class="color-text-input" id="val-code-tx-text" oninput="Studio.updateParam('codeTx', this.value)">
+                        <button class="btn-reset-field" onclick="Studio.resetField('codeTx')" title="Ripristina valore nativo">↺</button>
+                    </div>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- ANTEPRIMA VISIVA LIVE (DESTRA) -->
+        <main class="preview-panel">
+            <div class="preview-toolbar">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span>Tema Attivo:</span>
+                    <select class="select-input" id="previewThemeSelector" onchange="Studio.changePreviewTheme(this.value)">
+                        <option value="light">Carta Avorio (Default)</option>
+                        <option value="white">Bianco Puro</option>
+                        <option value="pastel">Fresco Pastello</option>
+                        <option value="dark">Blu Lavagna (Dark)</option>
+                        <option value="notion-dark">Notte Stellata (Notion Dark)</option>
+                    </select>
+                </div>
+                <div id="previewHint">Clicca su qualsiasi elemento per configurarlo a sinistra</div>
+            </div>
+
+            <div class="preview-viewport-wrapper adv-scroll-container">
+                
+                <div class="mockup-window" id="mockupWindow">
+                    
+                    <!-- Header applicazione -->
+                    <div id="previewAppHeader" class="inspectable" onclick="Studio.focusSection('sec-app-backgrounds', this)" style="height: 48px; background: var(--sidebar-bg); border-bottom: 1px solid var(--border-color); display:flex; align-items:center; justify-content:space-between; padding: 0 15px;">
+                        <div style="display:flex; align-items:center; gap:10px;">
+                            <span style="font-weight:bold; color:var(--text-primary); font-size:0.9rem;">📝 VanillaDesk</span>
+                            <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8;">Workspace / Note Personali</span>
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            <span style="background:var(--item-active); color:var(--accent-color); padding:3px 8px; border-radius:12px; font-size:0.75rem; font-weight:bold;">Modifica</span>
+                        </div>
+                    </div>
+
+                    <!-- Layout: Sidebar + Editor -->
+                    <div style="display:flex; min-height:600px;">
+                        
+                        <div id="previewSidebar" class="inspectable" onclick="Studio.focusSection('sec-app-backgrounds', this)" style="width: 200px; background: var(--sidebar-bg); border-right: 1px solid var(--border-color); padding: 12px; display:flex; flex-direction:column; gap:6px; font-size:0.82rem; color:var(--text-secondary);">
+                            <div style="font-weight:bold; font-size:0.7rem; text-transform:uppercase; color:var(--text-secondary); margin-bottom:4px;">NOTE</div>
+                            <div style="padding:4px 8px; border-radius:4px; background:var(--item-active); color:var(--accent-color); font-weight:600;">📄 Progetto VanillaDesk</div>
+                            <div style="padding:4px 8px; border-radius:4px;">📄 Database Attività</div>
+                            <div style="padding:4px 8px; border-radius:4px;">📄 Note Riunione</div>
+                        </div>
+
+                        <div style="flex:1; background: var(--editor-bg); padding: 30px; box-sizing: border-box; display:flex; flex-direction:column; gap:15px;" class="editor-content monospace" id="previewEditorContent">
+                            
+                            <!-- Titolo Nota -->
+                            <input type="text" class="title-input inspectable" id="preview-note-title" value="Progetto VanillaDesk - Note & Specifiche" readonly onclick="Studio.focusSection('sec-note-title', this)">
+
+                            <!-- Tag & Link -->
+                            <div style="display:flex; gap:8px; align-items:center;">
+                                <span class="tag-hash inspectable" id="preview-tag-1" onclick="Studio.focusSection('sec-blocks', this)">#architettura</span>
+                                <span class="tag-hash inspectable" id="preview-tag-2" onclick="Studio.focusSection('sec-blocks', this)">#release-2026</span>
+                                <a class="internal-link">↪ Specifiche Tecniche</a>
+                            </div>
+
+                            <!-- Paragrafo normale con grassetto -->
+                            <p class="inspectable" id="preview-p" onclick="Studio.focusSection('sec-global', this)">
+                                VanillaDesk è un ambiente di lavoro ibrido progettato per garantire <b class="inspectable" id="preview-bold" onclick="event.stopPropagation(); Studio.focusSection('sec-blocks', this)">prestazioni estreme a latenza zero</b>, combinando la flessibilità di un elaboratore di testi alla precisione di un database relazionale in-memory.
+                            </p>
+
+                            <!-- H1 -->
+                            <h1 class="inspectable" id="preview-h1" onclick="Studio.focusSection('sec-headings', this)">Architettura del Motore Locale</h1>
+                            <p>
+                                I dati risiedono fisicamente sul disco rigido locale del computer. Il sistema adotta <b>crittografia AES-GCM</b> a 256-bit nativa per la massima riservatezza.
+                            </p>
+
+                            <!-- H2 -->
+                            <h2 class="inspectable" id="preview-h2" onclick="Studio.focusSection('sec-headings', this)">Database Relazionali & Viste</h2>
+                            <p>
+                                Le tabelle possono essere trasformate istantaneamente in Kanban, Timeline o Diagrammi ad Albero:
+                            </p>
+
+                            <!-- WIDGET DATABASE RELAZIONALE AVANZATO (RDBMS) -->
+                            <div class="adv-table-wrapper adv-widget-shell inspectable" id="preview-db-wrapper" onclick="Studio.focusSection('sec-database-tables', this)" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 12px; background: var(--bg-color);">
+                                <div class="adv-table-header" style="padding-bottom: 8px; border-bottom: 1px solid var(--border-color); margin-bottom: 10px;">
+                                    <span style="font-weight: bold; color: var(--text-primary); font-size: 1rem;">📊 Database Task & Release</span>
+                                    <span style="font-size: 0.75rem; color: var(--text-secondary); margin-left: auto;">3 Record</span>
+                                </div>
+                                <table class="adv-table" style="width: 100%; border-collapse: collapse;">
+                                    <thead>
+                                        <tr>
+                                            <th class="inspectable" id="preview-db-th-1" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Attività (Titolo)</th>
+                                            <th class="inspectable" id="preview-db-th-2" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Stato (Select)</th>
+                                            <th class="inspectable" id="preview-db-th-3" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Priorità</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr class="inspectable" id="preview-db-tr-1">
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Refactoring Database RDBMS</td>
+                                            <td><span class="adv-select-pill hl-c6">Completato</span></td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Alta</td>
+                                        </tr>
+                                        <tr class="inspectable" id="preview-db-tr-2">
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Ottimizzazione Layout Canvas</td>
+                                            <td><span class="adv-select-pill hl-c4">In Corso</span></td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Critica</td>
+                                        </tr>
+                                        <tr class="inspectable" id="preview-db-tr-3">
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Personalizzazione Temi CSS</td>
+                                            <td><span class="adv-select-pill hl-c7">Pianificato</span></td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-database-tables', this)">Media</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- TABELLA SEMPLICE HTML -->
+                            <h3 class="inspectable" id="preview-h3" onclick="Studio.focusSection('sec-headings', this)">Tabella Semplice Dimostrativa</h3>
+                            <div class="simple-table-wrapper inspectable" id="preview-table-wrapper" onclick="Studio.focusSection('sec-tables', this)">
+                                <table class="table-striped" style="width:100%; border-collapse:collapse;">
+                                    <thead>
+                                        <tr>
+                                            <th id="preview-th-1" class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Parametro</th>
+                                            <th id="preview-th-2" class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Valore Standard</th>
+                                            <th id="preview-th-3" class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Descrizione</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td id="preview-td-1" class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Autosave Debounce</td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">1500 ms</td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Scrittura silente su disco</td>
+                                        </tr>
+                                        <tr id="preview-zebra-tr">
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Crittografia</td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">AES-GCM 256</td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">WebCrypto API nativa</td>
+                                        </tr>
+                                        <tr>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Frameworks</td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Zero (Nessuno)</td>
+                                            <td class="inspectable" onclick="event.stopPropagation(); Studio.focusSection('sec-tables', this)">Vanilla JS ES6+</td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            <!-- Blockquote -->
+                            <blockquote class="inspectable" id="preview-quote" onclick="Studio.focusSection('sec-blocks', this)">
+                                <b>Nota Architetturale:</b> La longevità del software è garantita dall'assenza totale di framework e dipendenze esterne: solo puro, solido JavaScript Vanilla.
+                            </blockquote>
+
+                            <!-- Blocco Codice -->
+                            <div class="widget-type-code inspectable" id="preview-code-wrapper" onclick="Studio.focusSection('sec-code', this)">
+                                <pre class="code-content" id="preview-code-pre">// Calcolo dinamico dello scostamento temporale
+function calcolaGiorniRimanenti(dataScadenza) {
+    const oggi = new Date();
+    const scadenza = new Date(dataScadenza);
+    return Math.ceil((scadenza - oggi) / (1000 * 60 * 60 * 24));
+}</pre>
+                            </div>
+
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <div id="studioToast" class="studio-toast"></div>
+
+    <script>
+        const DB_NAME = 'VanillaDeskThemeStudio';
+        const STORE_NAME = 'handles';
+
+        const Studio = {
+            fileHandle: null,
+            userOverrides: {}, 
+            computedDefaults: {},
+
+            propKeys: [
+                'bgApp', 'sidebarBg', 'bgEditor', 'border',
+                'accent', 'txPrimary',
+                'titleColor', 'titleBold', 'titleItalic', 'titleFont',
+                'h1Color', 'h1Bold', 'h1Italic', 'h1Border',
+                'h2Color', 'h2Bold', 'h2Italic', 'h2Border',
+                'h3Color', 'h3Bold', 'h3Italic',
+                'dbThBg', 'dbThColor', 'dbThBold', 'dbThUpper', 'dbTdColor', 'dbRowHover',
+                'thBg', 'thColor', 'thBold', 'thUpper', 'tdColor', 'zebraBg',
+                'boldColor', 'quoteBorder', 'quoteBg', 'tagBg',
+                'codeBg', 'codeTx'
+            ],
+
+            initIDB: () => {
+                return new Promise((resolve) => {
+                    const req = indexedDB.open(DB_NAME, 1);
+                    req.onupgradeneeded = (e) => {
+                        const db = e.target.result;
+                        if (!db.objectStoreNames.contains(STORE_NAME)) {
+                            db.createObjectStore(STORE_NAME);
+                        }
+                    };
+                    req.onsuccess = () => resolve(req.result);
+                    req.onerror = () => resolve(null);
+                });
+            },
+
+            getSavedHandle: async () => {
+                try {
+                    const db = await Studio.initIDB();
+                    if (!db) return null;
+                    return new Promise((resolve) => {
+                        const tx = db.transaction(STORE_NAME, 'readonly');
+                        const store = tx.objectStore(STORE_NAME);
+                        const req = store.get('custom_css_handle');
+                        req.onsuccess = () => resolve(req.result || null);
+                        req.onerror = () => resolve(null);
+                    });
+                } catch (_) { return null; }
+            },
+
+            saveHandleToIDB: async (handle) => {
+                try {
+                    const db = await Studio.initIDB();
+                    if (!db) return;
+                    const tx = db.transaction(STORE_NAME, 'readwrite');
+                    tx.objectStore(STORE_NAME).put(handle, 'custom_css_handle');
+                } catch (_) {}
+            },
+
+            init: async () => {
+                const savedTheme = localStorage.getItem('theme') || 'light';
+                const themeSelector = document.getElementById('previewThemeSelector');
+                if (themeSelector) themeSelector.value = savedTheme;
+                Studio.applyMockupTheme(savedTheme);
+
+                const savedSize = localStorage.getItem('pronotes_fontsize');
+                if (savedSize) {
+                    document.documentElement.style.setProperty('--reading-font-size', savedSize + 'px');
+                }
+
+                await Studio.autoLoadCSS();
+                Studio.refreshComputedThemeValues();
+                Studio.applyDynamicCSS();
+            },
+
+            autoLoadCSS: async () => {
+                let loadedText = '';
+                const isFileProtocol = window.location.protocol === 'file:';
+
+                // Canale A: Server Web (HTTP/HTTPS)
+                if (!isFileProtocol) {
+                    try {
+                        const response = await fetch('css/custom.css');
+                        if (response.ok) {
+                            loadedText = await response.text();
+                        }
+                    } catch (_) {}
+                }
+
+                // Canale B: File System Access API memorizzata in IndexedDB
+                if (!loadedText) {
+                    const handle = await Studio.getSavedHandle();
+                    if (handle) {
+                        try {
+                            const perm = await handle.queryPermission({ mode: 'readwrite' });
+                            if (perm === 'granted' || (await handle.requestPermission({ mode: 'readwrite' })) === 'granted') {
+                                Studio.fileHandle = handle;
+                                const file = await handle.getFile();
+                                loadedText = await file.text();
+                                Studio.updateFileStatusBadge("File collegato al disco");
+                                const badge = document.getElementById('storageModeBadge');
+                                if (badge) {
+                                    badge.textContent = "💾 custom.css Connesso";
+                                    badge.classList.add('connected');
+                                }
+                            }
+                        } catch (_) {}
+                    }
+                }
+
+                if (isFileProtocol && !Studio.fileHandle) {
+                    const connectBtn = document.getElementById('btnConnectFile');
+                    if (connectBtn) connectBtn.style.display = 'inline-flex';
+                    const badge = document.getElementById('storageModeBadge');
+                    if (badge) badge.textContent = "⚠️ Da connettere a custom.css";
+                }
+
+                if (loadedText) {
+                    Studio.parseExistingCSS(loadedText);
+                }
+            },
+
+            connectLocalFile: async () => {
+                try {
+                    if (window.showOpenFilePicker) {
+                        const [handle] = await window.showOpenFilePicker({
+                            types: [{ description: 'File CSS (custom.css)', accept: { 'text/css': ['.css'] } }]
+                        });
+                        Studio.fileHandle = handle;
+                        await Studio.saveHandleToIDB(handle);
+
+                        const file = await handle.getFile();
+                        const text = await file.text();
+                        Studio.parseExistingCSS(text);
+                        
+                        Studio.refreshComputedThemeValues();
+                        Studio.applyDynamicCSS();
+
+                        Studio.updateFileStatusBadge("File collegato al disco");
+                        const connectBtn = document.getElementById('btnConnectFile');
+                        if (connectBtn) connectBtn.style.display = 'none';
+
+                        const badge = document.getElementById('storageModeBadge');
+                        if (badge) {
+                            badge.textContent = "💾 custom.css Connesso";
+                            badge.classList.add('connected');
+                        }
+                        Studio.showToast(`File "${file.name}" connesso con successo!`);
+                    } else {
+                        alert("Il tuo browser non supporta la File System Access API. Usa Google Chrome, Microsoft Edge, Brave o Opera.");
+                    }
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error(err);
+                }
+            },
+
+            updateFileStatusBadge: (text) => {
+                const badge = document.getElementById('studioFileStatus');
+                if (badge) badge.textContent = text;
+            },
+
+            rgbToHex: (rgbStr) => {
+                if (!rgbStr || typeof rgbStr !== 'string') return '';
+                if (rgbStr.startsWith('#')) return rgbStr;
+
+                const m = rgbStr.match(/rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+                if (!m) return '';
+
+                const r = parseInt(m[1], 10).toString(16).padStart(2, '0');
+                const g = parseInt(m[2], 10).toString(16).padStart(2, '0');
+                const b = parseInt(m[3], 10).toString(16).padStart(2, '0');
+                return `#${r}${g}${b}`;
+            },
+
+            // Ispezione del DOM mockup vivo per ricavare i valori effettivi e isolati per ciascun elemento
+            refreshComputedThemeValues: () => {
+                const mockup = document.getElementById('mockupWindow');
+                const editor = document.getElementById('previewEditorContent');
+                const sidebar = document.getElementById('previewSidebar');
+                if (!mockup || !editor) return;
+
+                const getStyle = (selectorOrEl) => {
+                    const el = typeof selectorOrEl === 'string' ? mockup.querySelector(selectorOrEl) : selectorOrEl;
+                    return el ? window.getComputedStyle(el) : null;
+                };
+
+                const csMockup = window.getComputedStyle(mockup);
+                const csEditor = window.getComputedStyle(editor);
+                const csSidebar = sidebar ? window.getComputedStyle(sidebar) : csMockup;
+
+                const csTitle = getStyle('#preview-note-title');
+                const csH1 = getStyle('#preview-h1');
+                const csH2 = getStyle('#preview-h2');
+                const csH3 = getStyle('#preview-h3');
+
+                const csDbTh = getStyle('#preview-db-th-1');
+                const csDbTd = getStyle('#preview-db-tr-1 td');
+                const csDbRow = getStyle('#preview-db-tr-1');
+
+                const csTh = getStyle('#preview-th-1');
+                const csTd = getStyle('#preview-td-1');
+                const csZebra = getStyle('#preview-zebra-tr');
+
+                const csBold = getStyle('#preview-bold');
+                const csQuote = getStyle('#preview-quote');
+                const csTag = getStyle('#preview-tag-1');
+                const csCode = getStyle('#preview-code-pre');
+
+                // Calcolo rigoroso dei valori calcolati isolati per ciascun singolo elemento
+                Studio.computedDefaults = {
+                    bgApp: Studio.rgbToHex(csMockup.backgroundColor) || '#f3f4f6',
+                    sidebarBg: Studio.rgbToHex(csSidebar.backgroundColor) || '#f9f8f3',
+                    bgEditor: Studio.rgbToHex(csEditor.backgroundColor) || '#f9f8f3',
+                    border: Studio.rgbToHex(csMockup.getPropertyValue('--border-color')) || '#e5e7eb',
+
+                    accent: Studio.rgbToHex(csMockup.getPropertyValue('--accent-color')) || '#4f8b00',
+                    txPrimary: Studio.rgbToHex(csEditor.color) || '#000000',
+
+                    titleColor: Studio.rgbToHex(csTitle ? csTitle.color : '') || '#000000',
+                    titleBold: csTitle ? (parseInt(csTitle.fontWeight, 10) >= 700 || csTitle.fontWeight === 'bold') : true,
+                    titleItalic: csTitle ? (csTitle.fontStyle === 'italic') : false,
+                    titleFont: 'inherit',
+
+                    h1Color: Studio.rgbToHex(csH1 ? csH1.color : '') || '#000000',
+                    h1Bold: csH1 ? (parseInt(csH1.fontWeight, 10) >= 700 || csH1.fontWeight === 'bold') : true,
+                    h1Italic: csH1 ? (csH1.fontStyle === 'italic') : false,
+                    h1Border: false,
+
+                    h2Color: Studio.rgbToHex(csH2 ? csH2.color : '') || '#000000',
+                    h2Bold: csH2 ? (parseInt(csH2.fontWeight, 10) >= 700 || csH2.fontWeight === 'bold') : true,
+                    h2Italic: csH2 ? (csH2.fontStyle === 'italic') : false,
+                    h2Border: false,
+
+                    h3Color: Studio.rgbToHex(csH3 ? csH3.color : '') || '#000000',
+                    h3Bold: csH3 ? (parseInt(csH3.fontWeight, 10) >= 700 || csH3.fontWeight === 'bold') : true,
+                    h3Italic: csH3 ? (csH3.fontStyle === 'italic') : false,
+
+                    // Isolamento DB: il testo th non condivide nulla con il background th
+                    dbThBg: Studio.rgbToHex(csDbTh ? csDbTh.backgroundColor : '') || '#f0efe9',
+                    dbThColor: Studio.rgbToHex(csDbTh ? csDbTh.color : '') || '#566172',
+                    dbThBold: csDbTh ? (parseInt(csDbTh.fontWeight, 10) >= 600 || csDbTh.fontWeight === 'bold') : true,
+                    dbThUpper: csDbTh ? (csDbTh.textTransform === 'uppercase') : false,
+                    dbTdColor: Studio.rgbToHex(csDbTd ? csDbTd.color : '') || '#000000',
+                    dbRowHover: '#edf3d0',
+
+                    // Isolamento Tabelle Semplici: thBg, thColor e tdColor sono entità separate
+                    thBg: Studio.rgbToHex(csTh ? csTh.backgroundColor : '') || '#f0efe9',
+                    thColor: Studio.rgbToHex(csTh ? csTh.color : '') || '#000000',
+                    thBold: csTh ? (parseInt(csTh.fontWeight, 10) >= 600 || csTh.fontWeight === 'bold') : true,
+                    thUpper: csTh ? (csTh.textTransform === 'uppercase') : false,
+                    tdColor: Studio.rgbToHex(csTd ? csTd.color : '') || '#000000',
+                    zebraBg: Studio.rgbToHex(csZebra ? csZebra.backgroundColor : '') || '#f4f3ed',
+
+                    boldColor: Studio.rgbToHex(csBold ? csBold.color : '') || '#000000',
+                    quoteBorder: Studio.rgbToHex(csQuote ? csQuote.borderLeftColor : '') || '#4f8b00',
+                    quoteBg: Studio.rgbToHex(csQuote ? csQuote.backgroundColor : '') || '#f2f0e6',
+                    tagBg: Studio.rgbToHex(csTag ? csTag.backgroundColor : '') || '#e8f3d6',
+
+                    codeBg: Studio.rgbToHex(csCode ? csCode.backgroundColor : '') || '#353535',
+                    codeTx: Studio.rgbToHex(csCode ? csCode.color : '') || '#ffffff'
+                };
+
+                // Popolamento dei controlli con indicatore nativo vs personalizzato
+                Studio.propKeys.forEach(key => {
+                    const isCustom = Studio.userOverrides[key] !== undefined && Studio.userOverrides[key] !== '';
+                    const effectiveVal = isCustom ? Studio.userOverrides[key] : Studio.computedDefaults[key];
+
+                    const kebabKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                    const txtInput = document.getElementById(`val-${kebabKey}-text`);
+                    const pickerInput = document.getElementById(`val-${kebabKey}-picker`);
+                    const hintEl = document.getElementById(`hint-${kebabKey}`);
+
+                    if (txtInput && pickerInput) {
+                        const hexVal = Studio.rgbToHex(effectiveVal) || effectiveVal;
+                        txtInput.value = effectiveVal || '';
+
+                        if (/^#[0-9a-fA-F]{6}$/.test(hexVal)) {
+                            pickerInput.value = hexVal;
+                        }
+
+                        if (hintEl) {
+                            if (isCustom) {
+                                hintEl.textContent = "Personalizzato (in custom.css)";
+                                hintEl.style.color = "#38bdf8";
+                            } else {
+                                hintEl.textContent = `Nativo del tema (${hexVal})`;
+                                hintEl.style.color = "#6b7280";
+                            }
+                        }
+                    }
+
+                    if (typeof Studio.computedDefaults[key] === 'boolean') {
+                        Studio.updateButtonUI(key, effectiveVal);
+                    }
+                });
+            },
+
+            applyMockupTheme: (themeName) => {
+                const mockup = document.getElementById('mockupWindow');
+                mockup.removeAttribute('data-theme');
+                if (themeName !== 'light') {
+                    mockup.setAttribute('data-theme', themeName);
+                }
+            },
+
+            changePreviewTheme: (themeName) => {
+                Studio.applyMockupTheme(themeName);
+                setTimeout(() => {
+                    Studio.refreshComputedThemeValues();
+                    Studio.applyDynamicCSS();
+                }, 40);
+            },
+
+            syncColor: (key, hex) => {
+                Studio.userOverrides[key] = hex;
+                const kebabKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                const txt = document.getElementById(`val-${kebabKey}-text`);
+                if (txt) txt.value = hex;
+
+                const hint = document.getElementById(`hint-${kebabKey}`);
+                if (hint) {
+                    hint.textContent = "Personalizzato (in custom.css)";
+                    hint.style.color = "#38bdf8";
+                }
+                Studio.applyDynamicCSS();
+            },
+
+            updateParam: (key, val) => {
+                if (!val || val.trim() === '') {
+                    delete Studio.userOverrides[key];
+                } else {
+                    Studio.userOverrides[key] = val.trim();
+                }
+
+                const kebabKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                const picker = document.getElementById(`val-${kebabKey}-picker`);
+                const hexVal = Studio.rgbToHex(val) || val;
+
+                if (picker && /^#[0-9a-fA-F]{6}$/.test(hexVal)) {
+                    picker.value = hexVal;
+                }
+
+                const hint = document.getElementById(`hint-${kebabKey}`);
+                if (hint) {
+                    const isCustom = Studio.userOverrides[key] !== undefined;
+                    hint.textContent = isCustom ? "Personalizzato (in custom.css)" : `Nativo del tema (${Studio.computedDefaults[key]})`;
+                    hint.style.color = isCustom ? "#38bdf8" : "#6b7280";
+                }
+                Studio.applyDynamicCSS();
+            },
+
+            resetField: (key) => {
+                delete Studio.userOverrides[key];
+                const kebabKey = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+                const defaultVal = Studio.computedDefaults[key];
+
+                const txt = document.getElementById(`val-${kebabKey}-text`);
+                const picker = document.getElementById(`val-${kebabKey}-picker`);
+                const hint = document.getElementById(`hint-${kebabKey}`);
+
+                if (txt) txt.value = defaultVal || '';
+                const hexVal = Studio.rgbToHex(defaultVal) || defaultVal;
+                if (picker && /^#[0-9a-fA-F]{6}$/.test(hexVal)) picker.value = hexVal;
+
+                if (hint) {
+                    hint.textContent = `Nativo del tema (${hexVal})`;
+                    hint.style.color = "#6b7280";
+                }
+
+                if (typeof defaultVal === 'boolean') {
+                    Studio.updateButtonUI(key, defaultVal);
+                }
+
+                Studio.applyDynamicCSS();
+                Studio.showToast(`Campo "${key}" ripristinato sul valore nativo.`);
+            },
+
+            toggleStyle: (key) => {
+                const currentVal = Studio.userOverrides[key] !== undefined 
+                    ? Studio.userOverrides[key] 
+                    : Studio.computedDefaults[key];
+
+                Studio.userOverrides[key] = !currentVal;
+                Studio.updateButtonUI(key, Studio.userOverrides[key]);
+                Studio.applyDynamicCSS();
+            },
+
+            updateButtonUI: (key, isActive) => {
+                const btnId = `btn-${key.replace(/([A-Z])/g, '-$1').toLowerCase()}`;
+                const btn = document.getElementById(btnId);
+                if (btn) {
+                    if (isActive) btn.classList.add('active');
+                    else btn.classList.remove('active');
+                }
+            },
+
+            focusSection: (sectionId, element) => {
+                document.querySelectorAll('.inspectable').forEach(el => el.classList.remove('inspected-active'));
+                if (element) element.classList.add('inspected-active');
+
+                document.querySelectorAll('.control-section').forEach(s => s.classList.remove('focused-section'));
+                const targetSec = document.getElementById(sectionId);
+                if (targetSec) {
+                    targetSec.classList.add('focused-section');
+                    targetSec.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
+            },
+
+            generateCSSString: () => {
+                const u = Studio.userOverrides;
+                const c = Studio.computedDefaults;
+                const hasCustomRules = Object.keys(u).length > 0;
+
+                const source = hasCustomRules ? u : c;
+
+                let css = `/* =========================================================================\n`;
+                css += `   css/custom.css - Foglio di Stile Personalizzato Utente\n`;
+                css += `   Generato tramite Custom Theme Studio per VanillaDesk\n`;
+                css += `   Data: ${new Date().toLocaleString('it-IT')}\n`;
+                css += `   ========================================================================= */\n\n`;
+
+                // 1. Sfondi e Variabili di Sistema
+                const rootVars = [];
+                if (source.bgApp) rootVars.push(`    --bg-color: ${source.bgApp};`);
+                if (source.sidebarBg) rootVars.push(`    --sidebar-bg: ${source.sidebarBg};`);
+                if (source.bgEditor) rootVars.push(`    --editor-bg: ${source.bgEditor};`);
+                if (source.border) rootVars.push(`    --border-color: ${source.border};`);
+                if (source.accent) rootVars.push(`    --accent-color: ${source.accent};`);
+                if (source.txPrimary) rootVars.push(`    --text-primary: ${source.txPrimary};`);
+
+                if (rootVars.length > 0) {
+                    css += `/* --- VARIABILI GLOBALI APPLICAZIONE --- */\n:root {\n${rootVars.join('\n')}\n}\n\n`;
+                }
+
+                // 2. Titolo Pagina
+                const titleRules = [];
+                if (source.titleColor) titleRules.push(`    color: ${source.titleColor} !important;`);
+                if (source.titleBold !== undefined && source.titleBold) titleRules.push(`    font-weight: 700 !important;`);
+                if (source.titleItalic !== undefined && source.titleItalic) titleRules.push(`    font-style: italic !important;`);
+                if (source.titleFont && source.titleFont !== 'inherit') titleRules.push(`    font-family: ${source.titleFont} !important;`);
+
+                if (titleRules.length > 0) {
+                    css += `/* --- TITOLO DELLA PAGINA --- */\ninput.title-input {\n${titleRules.join('\n')}\n}\n\n`;
+                }
+
+                // 3. Intestazioni
+                const h1Rules = [];
+                if (source.h1Color) h1Rules.push(`    color: ${source.h1Color} !important;`);
+                if (source.h1Bold !== undefined && source.h1Bold) h1Rules.push(`    font-weight: 700 !important;`);
+                if (source.h1Italic !== undefined && source.h1Italic) h1Rules.push(`    font-style: italic !important;`);
+                if (source.h1Border) h1Rules.push(`    border-bottom: 2px solid var(--border-color) !important; padding-bottom: 4px;`);
+
+                if (h1Rules.length > 0) {
+                    css += `/* --- INTESTAZIONE H1 --- */\n.editor-content h1 {\n${h1Rules.join('\n')}\n}\n\n`;
+                }
+
+                const h2Rules = [];
+                if (source.h2Color) h2Rules.push(`    color: ${source.h2Color} !important;`);
+                if (source.h2Bold !== undefined && source.h2Bold) h2Rules.push(`    font-weight: 700 !important;`);
+                if (source.h2Italic !== undefined && source.h2Italic) h2Rules.push(`    font-style: italic !important;`);
+                if (source.h2Border) h2Rules.push(`    border-bottom: 1px dashed var(--border-color) !important; padding-bottom: 4px;`);
+
+                if (h2Rules.length > 0) {
+                    css += `/* --- INTESTAZIONE H2 --- */\n.editor-content h2 {\n${h2Rules.join('\n')}\n}\n\n`;
+                }
+
+                const h3Rules = [];
+                if (source.h3Color) h3Rules.push(`    color: ${source.h3Color} !important;`);
+                if (source.h3Bold !== undefined && source.h3Bold) h3Rules.push(`    font-weight: 700 !important;`);
+                if (source.h3Italic !== undefined && source.h3Italic) h3Rules.push(`    font-style: italic !important;`);
+
+                if (h3Rules.length > 0) {
+                    css += `/* --- INTESTAZIONE H3 --- */\n.editor-content h3 {\n${h3Rules.join('\n')}\n}\n\n`;
+                }
+
+                // 4. Tabelle Database (RDBMS) - Intestazioni e Celle rigorosamente isolate
+                const dbThRules = [];
+                if (source.dbThBg) dbThRules.push(`    background-color: ${source.dbThBg} !important;`);
+                if (source.dbThColor) dbThRules.push(`    color: ${source.dbThColor} !important;`);
+                if (source.dbThBold !== undefined && source.dbThBold) dbThRules.push(`    font-weight: 700 !important;`);
+                if (source.dbThUpper) dbThRules.push(`    text-transform: uppercase !important; letter-spacing: 0.04em; font-size: 0.8rem !important;`);
+
+                if (dbThRules.length > 0) {
+                    css += `/* --- INTESTAZIONI COLONNE DATABASE RDBMS --- */\n.adv-table th {\n${dbThRules.join('\n')}\n}\n\n`;
+                }
+
+                if (source.dbTdColor) {
+                    css += `/* --- TESTO CELLE DATABASE RDBMS --- */\n.adv-table td {\n    color: ${source.dbTdColor} !important;\n}\n\n`;
+                }
+
+                if (source.dbRowHover) {
+                    css += `/* --- RIGHE DATABASE IN HOVER --- */\n.adv-table tbody tr:hover td {\n    background-color: ${source.dbRowHover} !important;\n}\n\n`;
+                }
+
+                // 5. Tabelle Semplici HTML - Intestazioni e Celle rigorosamente isolate
+                const thRules = [];
+                if (source.thBg) thRules.push(`    background-color: ${source.thBg} !important;`);
+                if (source.thColor) thRules.push(`    color: ${source.thColor} !important;`);
+                if (source.thBold !== undefined && source.thBold) thRules.push(`    font-weight: 700 !important;`);
+                if (source.thUpper) thRules.push(`    text-transform: uppercase !important; letter-spacing: 0.04em; font-size: 0.8rem !important;`);
+
+                if (thRules.length > 0) {
+                    css += `/* --- INTESTAZIONI TABELLE SEMPLICI --- */\n.editor-content table:not(.adv-table) th {\n${thRules.join('\n')}\n}\n\n`;
+                }
+
+                if (source.tdColor) {
+                    css += `/* --- TESTO CELLE TABELLE SEMPLICI --- */\n.editor-content table:not(.adv-table) td {\n    color: ${source.tdColor} !important;\n}\n\n`;
+                }
+
+                if (source.zebraBg) {
+                    css += `/* --- RIGHE ALTERNATE TABELLE (ZEBRA) --- */\n.editor-content table.table-striped tbody tr:nth-child(even) {\n    background-color: ${source.zebraBg} !important;\n}\n\n`;
+                }
+
+                // 6. Blocchi, Grassetto & Testo
+                if (source.boldColor) {
+                    css += `/* --- GRASSETTO NEL CORPO TESTO --- */\n.editor-content p b,\n.editor-content p strong {\n    color: ${source.boldColor} !important;\n}\n\n`;
+                }
+
+                const quoteRules = [];
+                if (source.quoteBorder) quoteRules.push(`    border-left-color: ${source.quoteBorder} !important;`);
+                if (source.quoteBg) quoteRules.push(`    background: ${source.quoteBg} !important;`);
+
+                if (quoteRules.length > 0) {
+                    css += `/* --- CITAZIONI (BLOCKQUOTE) --- */\n.editor-content blockquote {\n${quoteRules.join('\n')}\n}\n\n`;
+                }
+
+                if (source.tagBg) {
+                    css += `/* --- TAG ED HASHTAG (#) --- */\n.tag-hash {\n    background: ${source.tagBg} !important;\n}\n\n`;
+                }
+
+                // 7. Codice
+                const codeRules = [];
+                if (source.codeBg) codeRules.push(`    background: ${source.codeBg} !important;`);
+                if (source.codeTx) codeRules.push(`    color: ${source.codeTx} !important;`);
+
+                if (codeRules.length > 0) {
+                    css += `/* --- BLOCCHI DI CODICE --- */\n.editor-content pre.code-content,\n.widget-type-code pre.code-content {\n${codeRules.join('\n')}\n}\n\n`;
+                }
+
+                return css;
+            },
+
+            applyDynamicCSS: () => {
+                if (Object.keys(Studio.userOverrides).length === 0) {
+                    const styleTag = document.getElementById('dynamicCustomCSSTag');
+                    if (styleTag) styleTag.innerHTML = '';
+                    return;
+                }
+                const css = Studio.generateCSSString();
+                const styleTag = document.getElementById('dynamicCustomCSSTag');
+                if (styleTag) {
+                    styleTag.innerHTML = css;
+                }
+            },
+
+            // Parser a blocchi isolati con lookbehind: impedisce che background-color contamini la proprietà color
+            parseExistingCSS: (cssText) => {
+                if (!cssText) return;
+
+                let cleanCss = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
+                if (!cleanCss.includes(':root') && !cleanCss.includes('.editor-content') && !cleanCss.includes('.adv-table')) {
+                    cleanCss = cssText.replace(/\/\*/g, '').replace(/\*\//g, '');
+                }
+
+                // Helper per isolare il blocco di un selettore ed estrarne la specifica proprietà
+                const getBlock = (selectorPattern) => {
+                    const m = cleanCss.match(new RegExp(selectorPattern + '\\s*\\{([^}]+)\\}', 'i'));
+                    return m ? m[1] : '';
+                };
+
+                const getProp = (blockContent, propName) => {
+                    if (!blockContent) return null;
+                    // Lookbehind negativo: assicura che 'color' non corrisponda a 'background-color' o 'border-color'
+                    const regex = new RegExp('(?<![\\w-])' + propName + '\\s*:\\s*([^;!]+)', 'i');
+                    const m = blockContent.match(regex);
+                    return m ? m[1].trim() : null;
+                };
+
+                // 1. Variabili :root
+                const rootBlock = getBlock(':root');
+                if (rootBlock) {
+                    const bgApp = getProp(rootBlock, '--bg-color'); if (bgApp) Studio.userOverrides.bgApp = bgApp;
+                    const sidebarBg = getProp(rootBlock, '--sidebar-bg'); if (sidebarBg) Studio.userOverrides.sidebarBg = sidebarBg;
+                    const bgEditor = getProp(rootBlock, '--editor-bg'); if (bgEditor) Studio.userOverrides.bgEditor = bgEditor;
+                    const border = getProp(rootBlock, '--border-color'); if (border) Studio.userOverrides.border = border;
+                    const accent = getProp(rootBlock, '--accent-color'); if (accent) Studio.userOverrides.accent = accent;
+                    const txPrimary = getProp(rootBlock, '--text-primary'); if (txPrimary) Studio.userOverrides.txPrimary = txPrimary;
+                }
+
+                // 2. Titolo
+                const titleBlock = getBlock('input\\.title-input');
+                if (titleBlock) {
+                    const c = getProp(titleBlock, 'color'); if (c) Studio.userOverrides.titleColor = c;
+                    const fw = getProp(titleBlock, 'font-weight'); if (fw) Studio.userOverrides.titleBold = (fw === 'bold' || parseInt(fw, 10) >= 700);
+                    const fs = getProp(titleBlock, 'font-style'); if (fs) Studio.userOverrides.titleItalic = (fs === 'italic');
+                    const ff = getProp(titleBlock, 'font-family'); if (ff) Studio.userOverrides.titleFont = ff;
+                }
+
+                // 3. Intestazioni
+                const h1Block = getBlock('\\.editor-content\\s+h1');
+                if (h1Block) {
+                    const c = getProp(h1Block, 'color'); if (c) Studio.userOverrides.h1Color = c;
+                    if (h1Block.includes('border-bottom')) Studio.userOverrides.h1Border = true;
+                }
+
+                const h2Block = getBlock('\\.editor-content\\s+h2');
+                if (h2Block) {
+                    const c = getProp(h2Block, 'color'); if (c) Studio.userOverrides.h2Color = c;
+                    if (h2Block.includes('border-bottom')) Studio.userOverrides.h2Border = true;
+                }
+
+                const h3Block = getBlock('\\.editor-content\\s+h3');
+                if (h3Block) {
+                    const c = getProp(h3Block, 'color'); if (c) Studio.userOverrides.h3Color = c;
+                }
+
+                // 4. Tabelle Database (RDBMS) - Isolamento th vs td
+                const dbThBlock = getBlock('\\.adv-table\\s+th');
+                if (dbThBlock) {
+                    const bg = getProp(dbThBlock, 'background-color') || getProp(dbThBlock, 'background');
+                    if (bg) Studio.userOverrides.dbThBg = bg;
+                    const c = getProp(dbThBlock, 'color'); // Non intercetta più background-color!
+                    if (c) Studio.userOverrides.dbThColor = c;
+                    const tt = getProp(dbThBlock, 'text-transform');
+                    if (tt === 'uppercase') Studio.userOverrides.dbThUpper = true;
+                }
+
+                const dbTdBlock = getBlock('\\.adv-table\\s+td');
+                if (dbTdBlock) {
+                    const c = getProp(dbTdBlock, 'color'); if (c) Studio.userOverrides.dbTdColor = c;
+                }
+
+                const dbHoverBlock = getBlock('\\.adv-table\\s+tbody\\s+tr:hover\\s+td');
+                if (dbHoverBlock) {
+                    const bg = getProp(dbHoverBlock, 'background-color') || getProp(dbHoverBlock, 'background');
+                    if (bg) Studio.userOverrides.dbRowHover = bg;
+                }
+
+                // 5. Tabelle Semplici HTML - Isolamento th vs td
+                const thBlock = getBlock('\\.editor-content\\s+table:not\\(\\.adv-table\\)\\s+th') || getBlock('table:not\\(\\.adv-table\\)\\s+th');
+                if (thBlock) {
+                    const bg = getProp(thBlock, 'background-color') || getProp(thBlock, 'background');
+                    if (bg) Studio.userOverrides.thBg = bg;
+                    const c = getProp(thBlock, 'color'); // Non intercetta più background-color!
+                    if (c) Studio.userOverrides.thColor = c;
+                    const tt = getProp(thBlock, 'text-transform');
+                    if (tt === 'uppercase') Studio.userOverrides.thUpper = true;
+                }
+
+                const tdBlock = getBlock('\\.editor-content\\s+table:not\\(\\.adv-table\\)\\s+td') || getBlock('table:not\\(\\.adv-table\\)\\s+td');
+                if (tdBlock) {
+                    const c = getProp(tdBlock, 'color'); if (c) Studio.userOverrides.tdColor = c;
+                }
+
+                const zebraBlock = getBlock('\\.editor-content\\s+table\\.table-striped\\s+tbody\\s+tr:nth-child\\(even\\)');
+                if (zebraBlock) {
+                    const bg = getProp(zebraBlock, 'background-color') || getProp(zebraBlock, 'background');
+                    if (bg) Studio.userOverrides.zebraBg = bg;
+                }
+
+                // 6. Testo, Citazioni, Tag e Codice
+                const boldBlock = getBlock('\\.editor-content\\s+p\\s+b') || getBlock('\\.editor-content\\s+b');
+                if (boldBlock) {
+                    const c = getProp(boldBlock, 'color'); if (c) Studio.userOverrides.boldColor = c;
+                }
+
+                const quoteBlock = getBlock('\\.editor-content\\s+blockquote') || getBlock('blockquote');
+                if (quoteBlock) {
+                    const bg = getProp(quoteBlock, 'background-color') || getProp(quoteBlock, 'background');
+                    if (bg) Studio.userOverrides.quoteBg = bg;
+                    const blc = getProp(quoteBlock, 'border-left-color');
+                    if (blc) Studio.userOverrides.quoteBorder = blc;
+                }
+
+                const tagBlock = getBlock('\\.tag-hash');
+                if (tagBlock) {
+                    const bg = getProp(tagBlock, 'background-color') || getProp(tagBlock, 'background');
+                    if (bg) Studio.userOverrides.tagBg = bg;
+                }
+
+                const codeBlock = getBlock('\\.editor-content\\s+pre\\.code-content') || getBlock('pre\\.code-content');
+                if (codeBlock) {
+                    const bg = getProp(codeBlock, 'background-color') || getProp(codeBlock, 'background');
+                    if (bg) Studio.userOverrides.codeBg = bg;
+                    const c = getProp(codeBlock, 'color');
+                    if (c) Studio.userOverrides.codeTx = c;
+                }
+            },
+
+            saveCSS: async () => {
+                const cssContent = Studio.generateCSSString();
+
+                try {
+                    if (Studio.fileHandle) {
+                        const writable = await Studio.fileHandle.createWritable();
+                        await writable.write(cssContent);
+                        await writable.close();
+                        Studio.showToast("File css/custom.css salvato su disco!");
+                        return;
+                    }
+
+                    if (window.showSaveFilePicker) {
+                        const handle = await window.showSaveFilePicker({
+                            suggestedName: 'custom.css',
+                            types: [{ description: 'CSS Stylesheet', accept: { 'text/css': ['.css'] } }]
+                        });
+                        const writable = await handle.createWritable();
+                        await writable.write(cssContent);
+                        await writable.close();
+                        
+                        Studio.fileHandle = handle;
+                        await Studio.saveHandleToIDB(handle);
+                        
+                        Studio.updateFileStatusBadge("File collegato al disco (Permanente)");
+                        const connectBtn = document.getElementById('btnConnectFile');
+                        if (connectBtn) connectBtn.style.display = 'none';
+
+                        const badge = document.getElementById('storageModeBadge');
+                        if (badge) {
+                            badge.textContent = "💾 File custom.css Connesso";
+                            badge.classList.add('connected');
+                        }
+                        Studio.showToast("File css/custom.css salvato e collegato!");
+                        return;
+                    }
+
+                    const blob = new Blob([cssContent], { type: 'text/css;charset=utf-8;' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = 'custom.css';
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        URL.revokeObjectURL(url);
+                    }, 200);
+                    Studio.showToast("File scaricato. Sostituiscilo nella cartella css/.");
+
+                } catch (err) {
+                    if (err.name !== 'AbortError') console.error("Errore salvataggio:", err);
+                }
+            },
+
+            copyCSS: () => {
+                const css = Studio.generateCSSString();
+                navigator.clipboard.writeText(css).then(() => {
+                    Studio.showToast("Codice CSS copiato negli appunti!");
+                });
+            },
+
+            resetDefaults: () => {
+                if (!confirm("Ripristinare tutti i parametri ai valori standard del tema VanillaDesk?")) return;
+
+                Studio.userOverrides = {};
+                Studio.refreshComputedThemeValues();
+                Studio.applyDynamicCSS();
+                Studio.showToast("Ripristinati i valori nativi del tema.");
+            },
+
+            showToast: (msg) => {
+                const t = document.getElementById('studioToast');
+                if (!t) return;
+                t.innerText = msg;
+                t.style.display = 'block';
+                setTimeout(() => { t.style.display = 'none'; }, 2500);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', Studio.init);
+    </script>
+</body>
+</html>
