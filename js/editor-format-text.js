@@ -636,6 +636,10 @@ Object.assign(Editor, {
 
         const doc = container.ownerDocument || document;
 
+        // Rimozione pulita preventiva di tag non testuali o eseguibili (script, style, meta, link, noscript)
+        container.querySelectorAll('script, style, meta, link, noscript').forEach(el => {
+            if (!isProtectedComplexWidget(el)) el.remove();
+        });
         // ZERO-FONT CONVERSION INIZIALE: Trasforma preventivamente qualsiasi tag FONT in SPAN (escludendo i widget protetti)
         container.querySelectorAll('font').forEach(fontEl => {
             if (isProtectedComplexWidget(fontEl)) return;

@@ -9,6 +9,8 @@
  * FEAT ITEM TITLE: Supporto per la proprietà 'title' per visualizzare descrizioni e tooltip informativi sulle voci di menu.
  * FIX OUTSIDE CLICK PRESERVATION: Supporto per il flag UI.Menu._preventClose per impedire la distruzione
  * intempestiva del menu quando l'utente annulla lo scarto di una modifica su blur.
+ * FIX MODAL PEAK ELEVATION: Supporto per z-index elevato (100005) e ricerca corretta dell'ancora se posizionata
+ * all'interno dell'overlay galleggiante di anteprima (#advRelationPeekModalOverlay).
  */
 
 Object.assign(UI, {
@@ -33,9 +35,17 @@ Object.assign(UI, {
         },
 
         positionAt: (dropdown, anchorId) => {
-            const anchor = document.getElementById(anchorId);
+            const peekOverlay = document.getElementById('advRelationPeekModalOverlay');
+            const anchor = (peekOverlay && typeof anchorId === 'string')
+                ? (Array.from(peekOverlay.querySelectorAll('.adv-select-container, [id]')).find(el => el.id === anchorId) || document.getElementById(anchorId))
+                : (typeof anchorId === 'string' ? document.getElementById(anchorId) : anchorId);
+
             if (!anchor) return;
             const rect = anchor.getBoundingClientRect();
+
+            if (peekOverlay || (anchor && anchor.closest && anchor.closest('#advRelationPeekModalOverlay'))) {
+                dropdown.style.zIndex = '100005';
+            }
 
             dropdown.style.visibility = 'hidden';
             dropdown.style.display = 'flex';

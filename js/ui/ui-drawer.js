@@ -2,7 +2,7 @@
  * ui-drawer.js
  * Sottomodulo di UI.
  * Gestione del motore di navigazione a cassetto (Drawer), dello Stack di History 
- * per l'apertura di sottomenu, e delle feature X-Ray (Ghost) e Docking.
+ * per l'apertura di sottomenu, e delle feature X-Ray (Ghost), Docking e Resizer Continuo.
  * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() alla chiusura del record
  * per aggiornare solo le tabelle RDBMS escludendo widget polimorfi.
  * FIX LONG TEXT DISCARD SAFETY: Intercettazione in closeDrawer per verificare se il testo lungo
@@ -10,11 +10,87 @@
  * che ricorda di salvare con il pulsante o Ctrl+Invio prima di scartare le modifiche.
  * FIX ASYNC TIMER DEFENSIVE GUARD: Verifica difensiva di nullità su advDrawerBody e advDrawerFooter
  * all'interno del timer di chiusura a 300ms, prevenendo eccezioni unhandled nel DOM.
+ * FEAT RESIZABLE DRAWER: Bordo trascinabile continuo con clamp matematico (380px - 90vw)
+ * e salvataggio permanente della larghezza dell'utente in localStorage.
  */
 
 Object.assign(UI, {
     _drawerStack: [],
     _drawerCloseTimer: null,
+    _isDrawerResizing: false,
+    _drawerStartX: 0,
+    _drawerStartWidth: 0,
+
+    initDrawerResize: () => {
+        const drawer = document.getElementById('advGlobalDrawer');
+        if (!drawer) return;
+
+        let resizer = document.getElementById('advDrawerResizer');
+        if (!resizer) {
+            resizer = document.createElement('div');
+            resizer.id = 'advDrawerResizer';
+            resizer.className = 'adv-drawer-resizer';
+            resizer.title = "Trascina per ridimensionare il pannello";
+            drawer.appendChild(resizer);
+        }
+
+        resizer.onmousedown = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+
+            UI._isDrawerResizing = true;
+            UI._drawerStartX = e.pageX;
+            UI._drawerStartWidth = drawer.getBoundingClientRect().width;
+
+            drawer.classList.add('is-resizing');
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+
+            document.addEventListener('mousemove', UI._handleDrawerResizeMove);
+            document.addEventListener('mouseup', UI._handleDrawerResizeEnd);
+        };
+    },
+
+    _handleDrawerResizeMove: (e) => {
+        if (!UI._isDrawerResizing) return;
+
+        const drawer = document.getElementById('advGlobalDrawer');
+        if (!drawer) return;
+
+        const deltaX = e.pageX - UI._drawerStartX;
+        const isDockRight = drawer.classList.contains('dock-right');
+
+        // Se ancorato a destra, muovere il mouse a sinistra aumenta la larghezza
+        let newWidth = isDockRight 
+            ? UI._drawerStartWidth - deltaX 
+            : UI._drawerStartWidth + deltaX;
+
+        const minWidth = 380;
+        const maxWidth = Math.round(window.innerWidth * 0.90);
+
+        if (newWidth < minWidth) newWidth = minWidth;
+        if (newWidth > maxWidth) newWidth = maxWidth;
+
+        drawer.style.width = newWidth + 'px';
+    },
+
+    _handleDrawerResizeEnd: () => {
+        if (!UI._isDrawerResizing) return;
+        UI._isDrawerResizing = false;
+
+        document.removeEventListener('mousemove', UI._handleDrawerResizeMove);
+        document.removeEventListener('mouseup', UI._handleDrawerResizeEnd);
+
+        const drawer = document.getElementById('advGlobalDrawer');
+        if (drawer) {
+            drawer.classList.remove('is-resizing');
+            document.body.style.cursor = '';
+            document.body.style.userSelect = '';
+
+            const currentWidth = Math.round(drawer.getBoundingClientRect().width);
+            localStorage.setItem('pronotes_drawer_width', currentWidth.toString());
+        }
+    },
 
     toggleDrawerDock: () => {
         const drawer = document.getElementById('advGlobalDrawer');
@@ -63,6 +139,19 @@ Object.assign(UI, {
 
         if (drawer && title && body && footer) {
             
+            // Inizializza il resizer sul Drawer se non ancora presente
+            UI.initDrawerResize();
+
+            // Applica la larghezza preferita dall'utente memorizzata su disco
+            const savedWidth = localStorage.getItem('pronotes_drawer_width');
+            if (savedWidth) {
+                const parsedW = parseInt(savedWidth, 10);
+                const maxWidth = Math.round(window.innerWidth * 0.90);
+                if (!isNaN(parsedW) && parsedW >= 380) {
+                    drawer.style.width = Math.min(parsedW, maxWidth) + 'px';
+                }
+            }
+
             // Creiamo un div temporaneo per estrarre il testo puro dai titoli, usato per i controlli logici
             const tempDiv = document.createElement('div');
             tempDiv.innerHTML = titleHTML;

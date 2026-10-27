@@ -8,6 +8,8 @@
  * Sottomenu modifica opzione (tre puntini) con chiusura automatica immediata al click esterno.
  * Evidenziazione completa dell'intera riga per le opzioni selezionate (.adv-select-item.active) con sfondo dedicato,
  * bordo d'accento e indicatore di spunta chiaro per massima leggibilità a colpo d'occhio.
+ * FIX MODAL PEAK ELEVATION: Supporto per z-index elevato (100005 e 100010) e sincronizzazione visiva istantanea
+ * della cella all'interno del Quick Peek Modal (#advRelationPeekModalOverlay).
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
@@ -61,6 +63,12 @@ Object.assign(AdvancedTable, {
 
         dropdown.onmousedown = (ev) => ev.stopPropagation();
         dropdown.onclick = (ev) => ev.stopPropagation();
+
+        // Eleva lo z-index sopra la modale Quick Peek se aperta
+        const peekOverlay = document.getElementById('advRelationPeekModalOverlay');
+        if (peekOverlay) {
+            dropdown.style.zIndex = '100005';
+        }
 
         // Rilevamento Intelligente dell'Ancora DOM
         let anchorId = explicitAnchorId;
@@ -198,7 +206,9 @@ Object.assign(AdvancedTable, {
         dropdown.className = 'adv-dropdown adv-context-menu adv-select-edit-menu';
         dropdown.style.minWidth = '180px';
         dropdown.style.padding = '8px';
-        dropdown.style.zIndex = '10005';
+        
+        const peekOverlay = document.getElementById('advRelationPeekModalOverlay');
+        dropdown.style.zIndex = peekOverlay ? '100010' : '10005';
         
         const safeOptName = optName.replace(/"/g, '&quot;');
         const escapedOpt = optName.replace(/'/g, "\\'");
@@ -303,7 +313,11 @@ Object.assign(AdvancedTable, {
         Store.triggerAutoSave();
 
         // Riapre il menu a tendina solo se è presente un'ancora visibile reale nel DOM
-        const hasAnchor = parentAnchorId || document.getElementById(`adv-sel-${tableId}-${rowId}-${colId}`) || document.getElementById(`adv-sel-rec-${tableId}-${rowId}-${colId}`);
+        const peekOverlay = document.getElementById('advRelationPeekModalOverlay');
+        const hasAnchor = parentAnchorId || 
+                          (peekOverlay && Array.from(peekOverlay.querySelectorAll('.adv-select-container, [id]')).find(el => el.id === `adv-sel-${tableId}-${rowId}-${colId}`)) ||
+                          document.getElementById(`adv-sel-${tableId}-${rowId}-${colId}`) || 
+                          document.getElementById(`adv-sel-rec-${tableId}-${rowId}-${colId}`);
         if (hasAnchor) {
             AdvancedTable.openSelectMenu(null, tableId, rowId, colId, parentAnchorId);
         }
@@ -347,6 +361,32 @@ Object.assign(AdvancedTable, {
             AdvancedTable.openRecordView(tableId, rowId);
         }
 
+        // Aggiornamento reattivo nella modale Quick Peek se aperta
+        const peekModal = document.getElementById('advRelationPeekModalOverlay');
+        if (peekModal) {
+            const targetCellId = `adv-sel-${tableId}-${rowId}-${colId}`;
+            const peekContainer = Array.from(peekModal.querySelectorAll('.adv-select-container')).find(el => el.id === targetCellId);
+            if (peekContainer) {
+                let content = '';
+                let vals = Array.isArray(finalValue) ? [...finalValue] : (finalValue ? [finalValue] : []);
+                if (col.type === 'multi-select' && vals.length > 0) {
+                    vals.sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
+                }
+                if (vals.length > 0) {
+                    vals.forEach(v => {
+                        let colorClass = state.selectColors && state.selectColors[col.id] && state.selectColors[col.id][v] ? state.selectColors[col.id][v] : '';
+                        content += `<span class="adv-select-pill ${colorClass}" data-opt-name="${String(v).replace(/"/g, '&quot;')}">${v}</span>`;
+                    });
+                } else {
+                    content = `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
+                }
+                peekContainer.innerHTML = content;
+            }
+            if (AdvancedTable._activeRelationPeek) {
+                AdvancedTable._activeRelationPeek.isDirty = true;
+            }
+        }
+
         // COMPORTAMENTO DIFFERENZIATO:
         // 1. SELECT SINGOLA: chiusura immediata perché la selezione è completata
         if (col.type === 'select') {
@@ -376,6 +416,10 @@ Object.assign(AdvancedTable, {
 
             AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, partitionedOptions, currentVals, col, anchorId);
             
+            if (peekModal) {
+                dropdown.style.zIndex = '100005';
+            }
+
             document.querySelectorAll('#advCreateSelectInput').forEach(input => {
                 input.value = '';
                 input.focus();
@@ -441,6 +485,32 @@ Object.assign(AdvancedTable, {
             AdvancedTable.openRecordView(tableId, rowId);
         }
 
+        // AGGIORNAMENTO DINAMICO NELLA MODALE DI ANTEPRIMA RELAZIONI (SE APERTA)
+        const peekModal = document.getElementById('advRelationPeekModalOverlay');
+        if (peekModal) {
+            const targetCellId = `adv-sel-${tableId}-${rowId}-${colId}`;
+            const peekContainer = Array.from(peekModal.querySelectorAll('.adv-select-container')).find(el => el.id === targetCellId);
+            if (peekContainer) {
+                let content = '';
+                let vals = Array.isArray(finalValue) ? [...finalValue] : (finalValue ? [finalValue] : []);
+                if (col.type === 'multi-select' && vals.length > 0) {
+                    vals.sort((a, b) => String(a).localeCompare(String(b), undefined, {numeric: true, sensitivity: 'base'}));
+                }
+                if (vals.length > 0) {
+                    vals.forEach(v => {
+                        let colorClass = state.selectColors && state.selectColors[col.id] && state.selectColors[col.id][v] ? state.selectColors[col.id][v] : '';
+                        content += `<span class="adv-select-pill ${colorClass}" data-opt-name="${String(v).replace(/"/g, '&quot;')}">${v}</span>`;
+                    });
+                } else {
+                    content = `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
+                }
+                peekContainer.innerHTML = content;
+            }
+            if (AdvancedTable._activeRelationPeek) {
+                AdvancedTable._activeRelationPeek.isDirty = true;
+            }
+        }
+
         const dropdown = document.getElementById('advSelectDropdown');
         if (dropdown && col.type === 'multi-select') {
             state = AdvancedTable.getState(tableId);
@@ -461,6 +531,10 @@ Object.assign(AdvancedTable, {
 
             AdvancedTable.renderSelectMenuContent(dropdown, tableId, rowId, colId, state, optionsToRender, currentVals, col, anchorId);
             
+            if (peekModal) {
+                dropdown.style.zIndex = '100005';
+            }
+
             document.querySelectorAll('#advCreateSelectInput').forEach(input => {
                 input.value = '';
                 input.focus();

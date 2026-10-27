@@ -13,9 +13,139 @@
  * FIX HORIZONTAL INLINE ENTRY: Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso lo snippet.
  * FIX FORMAT ESCAPE JUMP: Risolto salto anomalo del cursore nei testi formattati/colorati annidati,
  * vincolando l'escape con ArrowRight alla reale fine corsa del testo all'interno dell'intero blocco contenitore.
+ * FEAT VISUAL LINE HOME/END: Gestione deterministica di Home, End, Shift+Home e Shift+End sulle righe visive con soft-wrap.
+ * FEAT PRECISE LINE-BY-LINE SELECTION: Risoluzione del salto a inizio paragrafo su Shift+Frecce tramite raycast geometrico.
  */
 
 Object.assign(Editor, {
+
+    /**
+     * GESTORE VISUALE DI RIGA HOME / END (Soft-Wrap Navigation & Selection)
+     * Intercetta i tasti Home ed End nel testo normale dell'editor per muovere o estendere la selezione
+     * fino all'inizio o alla fine della riga visiva effettiva a schermo (lineboundary),
+     * impedendo che Shift+Home salti all'inizio dell'intero paragrafo logico <p>.
+     */
+    handleHomeEndNavigation: (e) => {
+        if (e.key !== 'Home' && e.key !== 'End') return false;
+        if (e.ctrlKey || e.metaKey || e.altKey) return false;
+
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return false;
+
+        let node = sel.anchorNode;
+        if (!node) return false;
+        if (node.nodeType === Node.TEXT_NODE) node = node.parentNode;
+
+        // Se siamo dentro un input o textarea nativo, lascia fare al browser
+        if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') return false;
+
+        // Se siamo dentro un blocco di codice, la gestione è delegata a handleHomeKey
+        if (node.closest('pre.code-content')) return false;
+
+        const editor = document.getElementById('noteContent');
+        if (!editor || !editor.contains(node)) return false;
+
+        if (typeof sel.modify === 'function') {
+            e.preventDefault();
+            const alter = e.shiftKey ? "extend" : "move";
+            const direction = e.key === 'Home' ? "backward" : "forward";
+            sel.modify(alter, direction, "lineboundary");
+            return true;
+        }
+
+        return false;
+    },
+
+    /**
+     * GESTORE SELEZIONE VERTICALE RIGA PER RIGA (Shift + ArrowUp / ArrowDown)
+     * Calcola la coordinata geometrica della riga visiva precedente o successiva ed estende la selezione
+     * di esattamente una linea alla volta, prevenendo blocchi sui confini di wrap e salti all'inizio del paragrafo.
+     */
+    handleVerticalShiftSelection: (e) => {
+        if (!e.shiftKey) return false;
+        if (e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return false;
+        if (e.ctrlKey || e.metaKey || e.altKey) return false;
+
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return false;
+
+        const focusNode = sel.focusNode;
+        if (!focusNode) return false;
+        const focusEl = focusNode.nodeType === Node.TEXT_NODE ? focusNode.parentNode : focusNode;
+
+        if (focusEl.tagName === 'INPUT' || focusEl.tagName === 'TEXTAREA') return false;
+        if (focusEl.closest('pre.code-content, td, th, .adv-widget-shell:not(.adv-inline-shell)')) return false;
+
+        const editor = document.getElementById('noteContent');
+        if (!editor || !editor.contains(focusEl)) return false;
+
+        // 1. Ricava il rettangolo visivo del carattere attivo al punto di focus
+        const r = document.createRange();
+        try {
+            if (focusNode.nodeType === Node.TEXT_NODE) {
+                const safeStart = Math.min(sel.focusOffset, focusNode.nodeValue.length);
+                const safeEnd = Math.min(safeStart + 1, focusNode.nodeValue.length);
+                r.setStart(focusNode, safeStart);
+                r.setEnd(focusNode, safeEnd > safeStart ? safeEnd : safeStart);
+            } else {
+                r.selectNodeContents(focusEl);
+                r.collapse(true);
+            }
+        } catch (_) {
+            return false;
+        }
+
+        let rect = r.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) {
+            rect = focusEl.getBoundingClientRect();
+        }
+
+        // Calcolo altezza riga effettiva
+        const style = window.getComputedStyle(focusEl);
+        const parsedLineHeight = parseFloat(style.lineHeight);
+        const lineHeight = !isNaN(parsedLineHeight) && parsedLineHeight > 0 ? parsedLineHeight : (rect.height || 22);
+
+        // 2. Calcola le coordinate geometriche della riga visiva bersaglio (sopra o sotto)
+        const targetX = rect.left + 2;
+        const deltaY = (lineHeight * 0.75);
+        const targetY = e.key === 'ArrowUp' ? rect.top - deltaY : rect.bottom + deltaY;
+
+        // 3. Risoluzione della posizione di testo tramite raycast nel documento
+        let targetPoint = null;
+        if (document.caretRangeFromPoint) {
+            targetPoint = document.caretRangeFromPoint(targetX, targetY);
+        } else if (document.caretPositionFromPoint) {
+            const pos = document.caretPositionFromPoint(targetX, targetY);
+            if (pos) {
+                targetPoint = document.createRange();
+                targetPoint.setStart(pos.offsetNode, pos.offset);
+                targetPoint.collapse(true);
+            }
+        }
+
+        if (targetPoint && targetPoint.startContainer && editor.contains(targetPoint.startContainer)) {
+            const destEl = targetPoint.startContainer.nodeType === Node.TEXT_NODE 
+                ? targetPoint.startContainer.parentNode 
+                : targetPoint.startContainer;
+
+            // Non sconfinare in widget complessi protetti
+            if (!destEl.closest('.adv-widget-shell:not(.adv-inline-shell)')) {
+                e.preventDefault();
+                sel.setBaseAndExtent(sel.anchorNode, sel.anchorOffset, targetPoint.startContainer, targetPoint.startOffset);
+                return true;
+            }
+        }
+
+        // 4. Fallback nativo controllato se ci si trova ai limiti assoluti del documento
+        if (typeof sel.modify === 'function') {
+            e.preventDefault();
+            const direction = e.key === 'ArrowUp' ? "backward" : "forward";
+            sel.modify("extend", direction, "line");
+            return true;
+        }
+
+        return false;
+    },
 
     /**
      * SNIPPET HORIZONTAL ESCAPE & ENTRY

@@ -8,6 +8,10 @@
  * FEAT CONTINUOUS EDIT: Attivazione di default (true) al primo avvio o su nuovi Workspace.
  * FIX READ-MODE CHECKLIST: Le checkbox delle To-Do list (.adv-checklist) restano attive e cliccabili
  * anche in modalità lettura (a meno che la nota non sia nel Cestino), consentendo la spunta rapida.
+ * FIX MODAL CLICK CAPTURE: Esclusione di .link-modal-overlay e #advRelationPeekModalOverlay dal listener di chiusura
+ * del Drawer per evitare che l'interazione con le finestre modali chiuda inavvertitamente il pannello laterale.
+ * FIX SIDEBAR TOOLTIP COLLISION: Protezione del tooltip custom (#advCustomTooltip) dall'estinzione accidentale
+ * scatenata dal listener globale di mouseover quando il cursore passa sopra i titoli o icone dei database nella sidebar.
  */
 
 Object.assign(UI, {
@@ -512,7 +516,14 @@ Object.assign(UI, {
                 !e.target.closest('.adv-drawer') && !e.target.closest('.adv-icon-btn') &&
                 !e.target.closest('.adv-dropdown') && !e.target.closest('.adv-dropdown-item') &&
                 !e.target.closest('.inline-note-marker') && !e.target.closest('.btn-color-swatch') &&
-                !e.target.closest('.toolbar button')) {
+                !e.target.closest('.toolbar button') &&
+                !e.target.closest('.link-modal-overlay') &&
+                !e.target.closest('#advRelationPeekModalOverlay')) {
+
+                if (UI._preventDrawerClose) {
+                    console.log("🛡️ [DEBUG-PREFERENCES] Click esterno ignorato: UI._preventDrawerClose attivo.");
+                    return;
+                }
 
                 const footer = document.getElementById('advDrawerFooter');
                 const hasSaveBtn = footer && footer.style.display !== 'none' && footer.querySelector('.btn-primary');
@@ -615,6 +626,11 @@ Object.assign(UI, {
             }
 
             if (!target || !htmlText) {
+                // Se il mouse si trova sopra un nodo della sidebar (ad esempio la voce Database o una sua scritta interna),
+                // non spegnere il tooltip informativo del database gestito direttamente da UI._showDbTooltip!
+                if (e.target.closest && e.target.closest('.node-content')) {
+                    return;
+                }
                 clearTimeout(UI.tooltipTimeout);
                 hideTooltip();
                 return;
@@ -648,6 +664,10 @@ Object.assign(UI, {
         });
 
         document.addEventListener('mouseout', (e) => {
+            // Se stiamo navigando tra elementi interni di un nodo della sidebar, non spegnere il tooltip
+            if (e.target.closest && e.target.closest('.node-content')) {
+                return;
+            }
             if (e.target.closest('[data-tooltip]') || e.target.closest('.inline-note-marker') || e.target.closest('a')) {
                 clearTimeout(UI.tooltipTimeout);
                 hideTooltip();

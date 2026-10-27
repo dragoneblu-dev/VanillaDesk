@@ -82,6 +82,49 @@ z-index: 2;
 .adv-table tr.adv-row-selected td { background-color: rgba(239, 68, 68, 0.1) !important; }
 .adv-table tr.adv-row-selected { box-shadow: inset 0 0 0 1px var(--danger-color); }
 
+/* =========================================================================
+   GESTIONE ZEBRATURA NATIVA E PRIORITÀ COLORI CONDIZIONALI
+   ========================================================================= */
+
+/* 1. Zebratura semitrasparente nativa per .adv-table */
+.adv-table.table-striped tbody tr:nth-child(even) {
+    background-color: rgba(0, 0, 0, 0.025);
+}
+
+[data-theme="dark"] .adv-table.table-striped tbody tr:nth-child(even),
+[data-theme="notion-dark"] .adv-table.table-striped tbody tr:nth-child(even) {
+    background-color: rgba(255, 255, 255, 0.035);
+}
+
+/* 2. Risoluzione specificità per le righe colorate condizionalmente (100% opacità) */
+.adv-table tbody tr.hl-c1 { background-color: var(--hl-c1) !important; }
+.adv-table tbody tr.hl-c2 { background-color: var(--hl-c2) !important; }
+.adv-table tbody tr.hl-c3 { background-color: var(--hl-c3) !important; }
+.adv-table tbody tr.hl-c4 { background-color: var(--hl-c4) !important; }
+.adv-table tbody tr.hl-c5 { background-color: var(--hl-c5) !important; }
+.adv-table tbody tr.hl-c6 { background-color: var(--hl-c6) !important; }
+.adv-table tbody tr.hl-c7 { background-color: var(--hl-c7) !important; }
+.adv-table tbody tr.hl-c8 { background-color: var(--hl-c8) !important; }
+.adv-table tbody tr.hl-c9 { background-color: var(--hl-c9) !important; }
+.adv-table tbody tr.hl-c10 { background-color: var(--hl-c10) !important; }
+
+/* 3. Fusione armoniosa tra righe alternate (even) e colorazione condizionale: non cancella il colore ma vi applica una leggera sfumatura zebrata continua */
+.adv-table.table-striped tbody tr.hl-c1:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c1) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c2:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c2) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c3:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c3) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c4:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c4) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c5:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c5) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c6:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c6) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c7:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c7) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c8:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c8) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c9:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c9) 94%, black) !important; }
+.adv-table.table-striped tbody tr.hl-c10:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c10) 94%, black) !important; }
+
+[data-theme="dark"] .adv-table.table-striped tbody tr[class*="hl-c"]:nth-child(even),
+[data-theme="notion-dark"] .adv-table.table-striped tbody tr[class*="hl-c"]:nth-child(even) {
+    filter: brightness(0.92);
+}
+
 /* SELETTORE RIGA GLOBALE */
 #adv-global-row-selector { position: fixed;  width: 24px; height: 24px; background: var(--bg-color);  border: 1px solid var(--border-color); border-radius: 6px; display: flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 0.15s, transform 0.1s, background 0.2s; z-index: 400;  box-shadow: 2px 2px 6px rgba(0,0,0,0.1);
 }

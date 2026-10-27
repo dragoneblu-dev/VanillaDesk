@@ -8,6 +8,7 @@
  * FEAT LINK RAPIDI: Intercettazione della digitazione "[[" per evocare in modo nativo LinkManager.openInternalModal().
  * FIX LINK RAPIDI INDEXSIZEERROR: Risolto crash setStart(4294967295) collassando direttamente cleanRange
  * dopo deleteContents(), garantendo il corretto ancoraggio e l'apertura immediata del Drawer.
+ * FEAT VISUAL LINE HOME/END INTEGRATION: Aggancio alla navigazione e selezione per righe visive su soft-wrap.
  */
 
 Object.assign(Editor, {
@@ -460,7 +461,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // MOTORE INTERCETTAZIONE TASTO HOME (Inizio Riga)
+            // GESTIONE VISUALE RIGA HOME ED END (Con e Senza Shift per soft-wrap)
+            if (e.key === 'Home' || e.key === 'End') {
+                if (AppState.isEditMode && typeof Editor.handleHomeEndNavigation === 'function') {
+                    if (Editor.handleHomeEndNavigation(e)) {
+                        return;
+                    }
+                }
+            }
+
+            // MOTORE INTERCETTAZIONE TASTO HOME (Inizio Riga per Blocchi Codice)
             if (e.key === 'Home') {
                 if (AppState.isEditMode && Editor.handleHomeKey(e)) {
                     return; // Ferma la propagazione se lo Smart Home è stato applicato

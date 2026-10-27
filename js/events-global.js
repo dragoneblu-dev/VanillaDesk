@@ -29,6 +29,7 @@
  * FIX CANC/BACKSPACE TYPING HISTORY: Invocazione di registerTypingStart su Delete e Backspace per salvare
  * lo snapshot iniziale prima di cancellazioni continue o prolungate, proteggendo interi capitoli su Undo (Ctrl+Z).
  * REFACTOR: Rimosso listener fallback middle-click da click (gestito nativamente da auxclick).
+ * FEAT VERTICAL SHIFT SELECTION HOOK: Intercettazione di Shift+ArrowUp/Down prima del table handler.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -250,7 +251,7 @@ Object.assign(EventsGlobal, {
             Editor.initCopyInterceptor(); 
         }
 
-        // 6. Router Tastiera Globale
+        // 7. Router Tastiera Globale
         document.addEventListener('keydown', (e) => {
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
             const key = e.key ? e.key.toLowerCase() : '';
@@ -294,8 +295,16 @@ Object.assign(EventsGlobal, {
                 return;
             }
 
+            // GESTIONE VISUALE RIGA HOME ED END (Con e Senza Shift per soft-wrap)
+            if (e.key === 'Home' || e.key === 'End') {
+                if (AppState.isEditMode && typeof Editor.handleHomeEndNavigation === 'function') {
+                    if (Editor.handleHomeEndNavigation(e)) {
+                        return;
+                    }
+                }
+            }
+
             if (!AppState.isEditMode) return;
-            // Guardia difensiva robusta: accetta sia key che code per eventi sintetici e nativi
             if (!e.key && !e.code) return; 
 
             // ISOLAMENTO RIGOROSO INPUT NATIVI: Gestione mirata di Ctrl+A su input e textarea
@@ -386,6 +395,13 @@ Object.assign(EventsGlobal, {
 
             if (typeof Editor !== 'undefined') {
                 if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
+                    // Selezione verticale riga per riga (Shift + ArrowUp / ArrowDown)
+                    if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
+                        if (typeof Editor.handleVerticalShiftSelection === 'function') {
+                            if (Editor.handleVerticalShiftSelection(e)) return;
+                        }
+                    }
+
                     // Navigazione completa su griglie e widget per tutte e 4 le direzioni
                     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                         if (typeof Editor.handleTableNavigation === 'function') {
@@ -627,7 +643,7 @@ Object.assign(EventsGlobal, {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) checkSelectionAll(e);
         });
 
-        // 7. Modifica Checkbox
+        // 8. Modifica Checkbox
         editorEl.addEventListener('change', (e) => {
             if (e.target.tagName === 'INPUT' && e.target.type === 'checkbox') {
                 const now = new Date().toLocaleString();
@@ -643,7 +659,7 @@ Object.assign(EventsGlobal, {
             }
         });
 
-        // 8. Dispatcher Click Globale
+        // 9. Dispatcher Click Globale
         document.addEventListener('click', (e) => {
             let target = e.target;
 

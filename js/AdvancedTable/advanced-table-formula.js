@@ -8,6 +8,7 @@
  * FIX SUGGERIMENTI DB: Rimosso codice, bottoni, diari e viste collegate.
  * Ripristinato il layout a pillole compatto ed elegante con soli database reali.
  * FEAT IMMUTABLE ID: Supporto bivalente nel calcolo e nei prompt sia per Titoli che per ID Immutabili.
+ * FIX CONSOLE LOG NOISE: Soppressione dei falsi allarmi console.error durante i test controllati di formule errate.
  */
 
 Object.assign(AdvancedTable, {
@@ -167,7 +168,10 @@ Object.assign(AdvancedTable, {
             if (Number.isNaN(result)) return 'NaN';
             return String(result);
         } catch (e) {
-            console.error("🔴 [FORMULA ERROR] Valutazione sincrona fallita:", e, "\nFormula:", formulaStr);
+            // Durante l'esecuzione dei test unitari sopprime il console.error per i test negativi attesi
+            if (typeof TestFramework === 'undefined') {
+                console.warn("⚠️ [FORMULA WARNING] Valutazione sincrona fallita:", e.message || String(e), "\nFormula:", formulaStr);
+            }
             return `ERROR: ${e.message || String(e)}`;
         }
     },
@@ -200,7 +204,9 @@ Object.assign(AdvancedTable, {
             // Restituisce direttamente il risultato preservandone il tipo nativo (Number, Boolean, Object, String)
             return result;
         } catch (e) {
-            console.error("🔴 [FORMULA ERROR] Valutazione asincrona (Macro/Automazione) fallita:", e, "\nScript:", scriptStr);
+            if (typeof TestFramework === 'undefined') {
+                console.warn("⚠️ [FORMULA WARNING] Valutazione asincrona (Macro/Automazione) fallita:", e.message || String(e), "\nScript:", scriptStr);
+            }
             return `<span style="color:var(--danger-color)" title="${e.message.replace(/"/g, "'")}">${Icons.alertTriangle} Async Err</span>`;
         }
     },

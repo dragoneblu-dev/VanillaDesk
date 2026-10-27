@@ -28,6 +28,7 @@
  * FIX RIGHE ORFANE ADDCOLUMN: Rimozione del refuso di assegnazione non dichiarata (newRowCellsEmpty).
  * FEAT CENTRALIZED SHADOW DB SHIELD: Metodo isSystemDatabaseProtected per bloccare l'inserimento,
  * la duplicazione e l'eliminazione di righe su SYS_PROPERTIES_DB da qualsiasi vista con alert esplicito.
+ * FEAT PEEK TRACKING: Aggiornamento tracciamento stato dirty in AdvancedTable._activeRelationPeek.
  */
 
 Object.assign(AdvancedTable, {
@@ -180,6 +181,11 @@ Object.assign(AdvancedTable, {
             row.virtualCells[colId] = value;
         }
 
+        // Traccia lo stato modificato se la riga appartiene alla sessione attiva di Quick Peek
+        if (AdvancedTable._activeRelationPeek && AdvancedTable._activeRelationPeek.targetRowId === rowId) {
+            AdvancedTable._activeRelationPeek.isDirty = true;
+        }
+
         AdvancedTable.setState(realTableId, state);
 
         if (typeof AdvancedAutomations !== 'undefined') {
@@ -275,6 +281,11 @@ Object.assign(AdvancedTable, {
             row.virtualCells = freshVRow.virtualCells;
         } else if (row.virtualCells) {
             row.virtualCells[colId] = dateObj;
+        }
+
+        // Traccia lo stato modificato se la riga appartiene alla sessione attiva di Quick Peek
+        if (AdvancedTable._activeRelationPeek && AdvancedTable._activeRelationPeek.targetRowId === rowId) {
+            AdvancedTable._activeRelationPeek.isDirty = true;
         }
 
         AdvancedTable.setState(realTableId, state);

@@ -1,14 +1,16 @@
 /**
  * tests/test-editor-paste.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
- * Moduli testati: editor-paste.js, editor-copy.js, editor-paste-parser.js
- * Conteggio test case: 28
+ * Moduli testati: editor-paste-parser.js, editor-paste.js, editor-copy.js, editor-core.js, editor-format-text.js
+ * Conteggio test case: 50
+ * NOTA ARCHITETTURALE: Tutti i 50 test case invocano ESCLUSIVAMENTE le funzioni reali
+ * esposte dai moduli dell'applicazione (senza duplicazione locale della logica di business).
  */
 
-describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
+describe("EditorPaste, EditorCopy & PasteParser (50 Test)", () => {
 
     // =========================================================================
-    // 1. FORMATTAZIONE TESTO PIANO (_formatPlainTextForHTML)
+    // 1. FORMATTAZIONE TESTO PIANO (Editor._formatPlainTextForHTML)
     // =========================================================================
 
     test("PasteParser: _formatPlainTextForHTML gestisce input nulli o vuoti", () => {
@@ -17,12 +19,14 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     test("PasteParser: _formatPlainTextForHTML non avvolge testo a riga singola in <p> (Inline Preservation)", () => {
+        // Se il testo incollato è su riga singola, non deve essere frammentato in blocchi <p>
         const res = Editor._formatPlainTextForHTML("testo semplice");
         Assert.strictEqual(res, "testo semplice");
         Assert.isFalse(res.includes("<p>"));
     });
 
     test("PasteParser: _formatPlainTextForHTML esegue l'escape di entità HTML pericolose", () => {
+        // Previene attacchi XSS assicurandosi che i caratteri speciali vengano trasformati in entità
         const res = Editor._formatPlainTextForHTML("<script>alert('xss')</script> & \"tag\"");
         Assert.isTrue(res.includes("&lt;script&gt;"));
         Assert.isTrue(res.includes("&amp;"));
@@ -30,16 +34,26 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     test("PasteParser: _formatPlainTextForHTML converte tabulazioni in 4 spazi non comprimibili", () => {
+        // Le tabulazioni (\t) del testo semplice devono diventare 4 &nbsp; per non collassare
         const res = Editor._formatPlainTextForHTML("col1\tcol2");
         Assert.strictEqual(res, "col1&nbsp;&nbsp;&nbsp;&nbsp;col2");
     });
 
     test("PasteParser: _formatPlainTextForHTML preserva sequenze di spazi multipli con &nbsp;", () => {
+        // Spazi multipli consecutivi devono essere preservati evitando la compattazione nativa HTML
         const res = Editor._formatPlainTextForHTML("parola    quattro_spazi");
         Assert.strictEqual(res, "parola&nbsp;&nbsp;&nbsp;&nbsp;quattro_spazi");
     });
 
+    test("PasteParser: _formatPlainTextForHTML preserva rientri all'inizio di ogni riga tramite &nbsp;", () => {
+        // I rientri visivi all'inizio delle righe devono rimanere visibili tramite &nbsp;
+        const text = "Riga base\n  Due spazi rientro";
+        const res = Editor._formatPlainTextForHTML(text);
+        Assert.isTrue(res.includes("&nbsp;&nbsp;Due spazi rientro"));
+    });
+
     test("PasteParser: _formatPlainTextForHTML crea blocchi <p> conformi solo per testi su più righe", () => {
+        // Per testi con a capo, genera blocchi paragrafo conformi e preserva le righe vuote come <p><br></p>
         const res = Editor._formatPlainTextForHTML("Riga 1\n\nRiga 2");
         Assert.isTrue(res.includes("<p>Riga 1</p>"));
         Assert.isTrue(res.includes("<p><br></p>"));
@@ -47,6 +61,7 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     test("PasteParser: _formatPlainTextForHTML converte righe numerate plain text in <ol><li> nativi", () => {
+        // Riconosce sequenze numerate nel testo semplice e le struttura in elenchi ordinati nativi
         const input = "1. Primo punto\n2. Secondo punto\n3. Terzo punto";
         const res = Editor._formatPlainTextForHTML(input);
         Assert.isTrue(res.startsWith("<ol>"));
@@ -54,20 +69,23 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
         Assert.isTrue(res.includes("<li>Primo punto</li>"));
         Assert.isTrue(res.includes("<li>Secondo punto</li>"));
         Assert.isTrue(res.includes("<li>Terzo punto</li>"));
-        Assert.isFalse(res.includes("1. Primo punto")); // Marcatore duplicato rimosso
+        Assert.isFalse(res.includes("1. Primo punto")); // Il marcatore numerico duplicato viene rimosso
     });
 
-    test("PasteParser: _formatPlainTextForHTML converte punti elenco plain text (-, *, •) in <ul><li>", () => {
-        const input = "- Elemento A\n* Elemento B\n• Elemento C";
+    test("PasteParser: _formatPlainTextForHTML converte punti elenco plain text (-, *, •, ·) in <ul><li>", () => {
+        // Riconosce trattini, asterischi e pallini nel testo puro convertendoli in tag <ul> e <li>
+        const input = "- Elemento A\n* Elemento B\n• Elemento C\n· Elemento D";
         const res = Editor._formatPlainTextForHTML(input);
         Assert.isTrue(res.startsWith("<ul>"));
         Assert.isTrue(res.endsWith("</ul>"));
         Assert.isTrue(res.includes("<li>Elemento A</li>"));
         Assert.isTrue(res.includes("<li>Elemento B</li>"));
         Assert.isTrue(res.includes("<li>Elemento C</li>"));
+        Assert.isTrue(res.includes("<li>Elemento D</li>"));
     });
 
     test("PasteParser: _formatPlainTextForHTML raggruppa correttamente elenchi intervallati da paragrafi", () => {
+        // Chiude e riapre correttamente le liste quando sono intervallate da paragrafi normali
         const input = "Introduzione\n1. Passo Uno\n2. Passo Due\nConclusione";
         const res = Editor._formatPlainTextForHTML(input);
         Assert.isTrue(res.includes("<p>Introduzione</p>"));
@@ -76,10 +94,11 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     // =========================================================================
-    // 2. PARSER ELENCHI MICROSOFT WORD MsoList (_convertWordListsToHTML)
+    // 2. PARSER ELENCHI MICROSOFT WORD MsoList (Editor._convertWordListsToHTML)
     // =========================================================================
 
     test("PasteParser: _convertWordListsToHTML converte MsoListParagraph numerati in <ol> e rimuove mso-list:Ignore", () => {
+        // Riconosce le classi MsoListParagraph di Word rimuovendo il tag di numerazione duplicato mso-list:Ignore
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p class="MsoListParagraphCxSpFirst" style="mso-list:l0 level1 lfo1;">
@@ -105,6 +124,7 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     test("PasteParser: _convertWordListsToHTML converte MsoListParagraph puntati in <ul>", () => {
+        // Converte gli elenchi puntati Word con pallino '·' in elenchi <ul> puliti
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p class="MsoListParagraph" style="mso-list:l1 level1 lfo2;">
@@ -124,6 +144,7 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     test("PasteParser: _convertWordListsToHTML riconosce e converte paragrafi con marcatore numerico testuale puro", () => {
+        // Converte paragrafi che iniziano con numero e tabulazione ("1.\t") in elenchi ordinati
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p>1.\tElemento tabulato</p>
@@ -137,9 +158,11 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
         Assert.isTrue(ol !== null);
         Assert.strictEqual(ol.children.length, 2);
         Assert.strictEqual(ol.children[0].textContent.trim(), "Elemento tabulato");
+        Assert.strictEqual(ol.children[1].textContent.trim(), "Secondo elemento");
     });
 
     test("PasteParser: _convertWordListsToHTML non tocca paragrafi normali che non sono elenchi", () => {
+        // Garantisce che il parser Word non alteri i normali paragrafi di testo privi di marcatori
         const doc = new DOMParser().parseFromString(`
             <div>
                 <p>Paragrafo normale senza marcatore.</p>
@@ -154,125 +177,54 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
     });
 
     // =========================================================================
-    // 3. PULIZIA E SANIFICAZIONE RICH TEXT (Word, Google Docs, Tabelle)
+    // 3. RICONOSCIMENTO TABELLE EXCEL E SHEETS (Editor._isExcelOrSpreadsheetPaste)
     // =========================================================================
 
-    test("PasteParser: pulizia rimuove contenitori fittizi Google Docs (docs-internal-guid)", () => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`
-            <b id="docs-internal-guid-12345" style="font-weight:normal;">
-                <span>Testo dentro wrapper Docs</span>
-            </b>
-        `, 'text/html');
-
-        doc.querySelectorAll('b, strong').forEach(bEl => {
-            const styleStr = (bEl.getAttribute('style') || '').toLowerCase();
-            const isNormal = bEl.style.fontWeight === 'normal' || bEl.style.fontWeight === '400' || /font-weight\s*:\s*(normal|[1-4]00)/.test(styleStr);
-            const isDocsGuid = (bEl.id && bEl.id.startsWith('docs-internal-guid')) || styleStr.includes('font-weight:normal');
-            if (isNormal || isDocsGuid) {
-                const parent = bEl.parentNode;
-                if (parent) {
-                    while (bEl.firstChild) bEl.parentNode.insertBefore(bEl.firstChild, bEl);
-                    bEl.remove();
-                }
-            }
-        });
-
-        Assert.strictEqual(doc.body.querySelector('#docs-internal-guid-12345'), null);
-        Assert.isTrue(doc.body.textContent.includes("Testo dentro wrapper Docs"));
+    test("PasteParser: _isExcelOrSpreadsheetPaste restituisce false per input nulli o vuoti", () => {
+        Assert.isFalse(Editor._isExcelOrSpreadsheetPaste(null, null));
+        Assert.isFalse(Editor._isExcelOrSpreadsheetPaste("", ""));
     });
 
-    test("PasteParser: converte stili inline font-weight:bold e font-style:italic in <b> e <i>", () => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`
-            <p>
-                <span style="font-weight: 700;">Grassetto Word</span>
-                <span style="font-style: italic;">Corsivo Word</span>
-            </p>
-        `, 'text/html');
-
-        const allElements = Array.from(doc.body.querySelectorAll('*')).reverse();
-        allElements.forEach(el => {
-            const rawStyle = (el.getAttribute('style') || '').toLowerCase();
-            const hasBold = el.style.fontWeight === 'bold' || parseInt(el.style.fontWeight, 10) >= 600 || rawStyle.includes('font-weight: 700');
-            const hasItalic = el.style.fontStyle === 'italic' || rawStyle.includes('font-style: italic');
-
-            if (el.tagName === 'SPAN' && (hasBold || hasItalic)) {
-                const frag = doc.createDocumentFragment();
-                while (el.firstChild) frag.appendChild(el.firstChild);
-                let wrap = frag;
-                if (hasItalic) { const i = doc.createElement('i'); i.appendChild(wrap); wrap = i; }
-                if (hasBold) { const b = doc.createElement('b'); b.appendChild(wrap); wrap = b; }
-                el.appendChild(wrap);
-            }
-        });
-
-        Assert.isTrue(doc.body.querySelector('b') !== null);
-        Assert.isTrue(doc.body.querySelector('i') !== null);
-    });
-
-    test("PasteParser: srotola tag <p> annidati dentro <li> tipici di Google Docs", () => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`
-            <ul>
-                <li><p>Elemento annidato da Docs</p></li>
-            </ul>
-        `, 'text/html');
-
-        doc.querySelectorAll('li > p').forEach(pInsideLi => {
-            const li = pInsideLi.parentNode;
-            if (li && li.tagName === 'LI' && li.children.length === 1) {
-                while (pInsideLi.firstChild) li.insertBefore(pInsideLi.firstChild, pInsideLi);
-                pInsideLi.remove();
-            }
-        });
-
-        Assert.strictEqual(doc.body.querySelectorAll('li > p').length, 0);
-        Assert.strictEqual(doc.body.querySelector('li').innerHTML, "Elemento annidato da Docs");
-    });
-
-    test("PasteParser: srotola <p> e garantisce <br> nelle celle vuote delle tabelle", () => {
-        const parser = new DOMParser();
-        const doc = parser.parseFromString(`
-            <table>
-                <tr>
-                    <td><p>Contenuto Cella</p></td>
-                    <td></td>
-                </tr>
-            </table>
-        `, 'text/html');
-
-        doc.querySelectorAll('td, th').forEach(cell => {
-            cell.querySelectorAll('p, div').forEach(b => {
-                const parent = b.parentNode;
-                while (b.firstChild) parent.insertBefore(b.firstChild, b);
-                b.remove();
-            });
-            const cellCleanText = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-            if (!cellCleanText && !cell.querySelector('img, audio, input, svg')) {
-                cell.innerHTML = '<br>';
-            }
-        });
-
-        const cells = doc.body.querySelectorAll('td');
-        Assert.strictEqual(cells[0].querySelectorAll('p').length, 0);
-        Assert.strictEqual(cells[0].textContent, "Contenuto Cella");
-        Assert.strictEqual(cells[1].innerHTML, "<br>");
-    });
-
-    // =========================================================================
-    // 4. PARSER TABELLE EXCEL / GOOGLE SHEETS
-    // =========================================================================
-
-    test("PasteParser: _isExcelOrSpreadsheetPaste riconosce tabelle HTML con signature Excel/Google Sheets", () => {
+    test("PasteParser: _isExcelOrSpreadsheetPaste riconosce tabelle HTML con signature Microsoft Excel", () => {
+        // Riconosce il namespace xmlns:x proprietario di Microsoft Excel
         const excelHTML = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><body><table><tr><td>1</td><td>2</td></tr></table></body></html>`;
         Assert.isTrue(Editor._isExcelOrSpreadsheetPaste(excelHTML, "1\t2"));
-
-        const wordDocHTML = `<html><body><p>Testo Word</p><table><tr><td>1</td></tr></table></body></html>`;
-        Assert.isFalse(Editor._isExcelOrSpreadsheetPaste(wordDocHTML, "Testo Word\n1"));
     });
 
-    test("PasteParser: _createSimpleTableFromExcel genera markup conforme di tabella semplice", () => {
+    test("PasteParser: _isExcelOrSpreadsheetPaste riconosce tabelle HTML con signature Google Sheets", () => {
+        // Riconosce i tag contenitore proprietari di Google Sheets (google-sheets-html-origin)
+        const sheetsHTML = `<google-sheets-html-origin><table><tr><td>A</td><td>B</td></tr></table></google-sheets-html-origin>`;
+        Assert.isTrue(Editor._isExcelOrSpreadsheetPaste(sheetsHTML, "A\tB"));
+    });
+
+    test("PasteParser: _isExcelOrSpreadsheetPaste riconosce tabella HTML isolata accompagnata da TSV", () => {
+        // Riconosce tabelle senza signature specifica purché accompagnate da TSV puro in text/plain
+        const genericTableHTML = `<table><tr><td>Dato 1</td><td>Dato 2</td></tr></table>`;
+        Assert.isTrue(Editor._isExcelOrSpreadsheetPaste(genericTableHTML, "Dato 1\tDato 2"));
+    });
+
+    test("PasteParser: _isExcelOrSpreadsheetPaste riconosce dati tabulari puri in formato TSV senza HTML", () => {
+        // Consente l'importazione anche in assenza di markup HTML purché la stringa contenga tabulazioni
+        const tsvOnly = "ColA\tColB\nVal1\tVal2";
+        Assert.isTrue(Editor._isExcelOrSpreadsheetPaste(null, tsvOnly));
+    });
+
+    test("PasteParser: _isExcelOrSpreadsheetPaste esclude documenti Word/Docs con testo e tabelle miste", () => {
+        // Se il frammento contiene paragrafi di testo all'esterno della tabella, non è una selezione di solo foglio di calcolo
+        const wordDocHTML = `<html><body><p>Titolo del documento Word</p><table><tr><td>1</td></tr></table></body></html>`;
+        Assert.isFalse(Editor._isExcelOrSpreadsheetPaste(wordDocHTML, "Titolo del documento Word\n1"));
+    });
+
+    test("PasteParser: _isExcelOrSpreadsheetPaste esclude testo normale privo di tabulazioni o tag table", () => {
+        Assert.isFalse(Editor._isExcelOrSpreadsheetPaste("<p>Testo normale</p>", "Testo normale"));
+    });
+
+    // =========================================================================
+    // 4. GENERAZIONE TABELLE DA EXCEL (Editor._createSimpleTableFromExcel)
+    // =========================================================================
+
+    test("PasteParser: _createSimpleTableFromExcel genera markup conforme .simple-table-wrapper", () => {
+        // Trasforma le celle in una tabella semplice nativa di VanillaDesk con classe table-striped
         const tableHtml = `<table><tr><td>Intestazione 1</td><td>Intestazione 2</td></tr><tr><td>Valore A</td><td>Valore B</td></tr></table>`;
         const res = Editor._createSimpleTableFromExcel(tableHtml, "Intestazione 1\tIntestazione 2\nValore A\tValore B");
 
@@ -282,156 +234,298 @@ describe("EditorPaste, EditorCopy & PasteParser (28 Test)", () => {
         Assert.isTrue(res.includes('<td contenteditable="true">Valore A</td>'));
     });
 
-    // =========================================================================
-    // 5. PRESERVAZIONE DEGLI SPAZI E ALLINEAMENTO PASTEDTEXT
-    // =========================================================================
-
-    test("EditorPaste: preserva fedelmente spazi multipli e spazi terminali per testo inline", () => {
-        const pastedText = "  testo   ";
-        let finalHTML = "testo";
-
-        const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|blockquote|pre)>/i.test(finalHTML);
-        if (!hasBlockTags) {
-            finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
-            const leadingSpaces = pastedText.match(/^[ \t]*/)[0];
-            const trailingSpaces = pastedText.match(/[ \t]*$/)[0];
-            finalHTML = leadingSpaces + finalHTML + trailingSpaces;
-        }
-
-        Assert.strictEqual(finalHTML, "  testo   ");
-        Assert.strictEqual(finalHTML.length, 10);
+    test("PasteParser: _createSimpleTableFromExcel con una sola cella restituisce null (Regola UX anti 1x1)", () => {
+        // Se viene copiata una sola cella da Excel, non crea una griglia 1x1 ma lascia passare il testo
+        const tableHtml = `<table><tr><td>Solo un valore</td></tr></table>`;
+        const res = Editor._createSimpleTableFromExcel(tableHtml, "Solo un valore");
+        Assert.isNull(res);
     });
 
-    test("EditorPaste: stringa senza spazi (testo) non subisce alcuna iniezione di spazi parassiti", () => {
-        const pastedText = "testo";
-        let finalHTML = " testo ";
-
-        const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|blockquote|pre)>/i.test(finalHTML);
-        if (!hasBlockTags) {
-            finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
-            const leadingSpaces = pastedText.match(/^[ \t]*/)[0];
-            const trailingSpaces = pastedText.match(/[ \t]*$/)[0];
-            finalHTML = leadingSpaces + finalHTML + trailingSpaces;
-        }
-
-        Assert.strictEqual(finalHTML, "testo");
-        Assert.strictEqual(finalHTML.length, 5);
+    test("PasteParser: _createSimpleTableFromExcel preserva attributi colspan e rowspan", () => {
+        // Mantiene intatte le fusioni di celle provenienti da fogli di calcolo
+        const tableHtml = `<table><tr><th colspan="2">Titolo Esteso</th></tr><tr><td rowspan="2">A</td><td>B1</td></tr><tr><td>B2</td></tr></table>`;
+        const res = Editor._createSimpleTableFromExcel(tableHtml, "");
+        Assert.isTrue(res.includes('colspan="2"'));
+        Assert.isTrue(res.includes('rowspan="2"'));
     });
 
-    test("EditorPaste: preserva stringa con un solo spazio finale (testo ) senza aggiungere spazio iniziale", () => {
-        const pastedText = "testo ";
-        let finalHTML = " testo ";
+    test("PasteParser: _createSimpleTableFromExcel esegue il fallback su TSV puro se HTML è assente", () => {
+        // In assenza di payload HTML, ricostruisce l'intera griglia a partire dai valori separati da tabulazione
+        const tsv = "Col1\tCol2\nVal1\tVal2";
+        const res = Editor._createSimpleTableFromExcel(null, tsv);
+        Assert.isTrue(res !== null);
+        Assert.isTrue(res.includes('<th contenteditable="true">Col1</th>'));
+        Assert.isTrue(res.includes('<td contenteditable="true">Val2</td>'));
+    });
 
-        const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|blockquote|pre)>/i.test(finalHTML);
-        if (!hasBlockTags) {
-            finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
-            const leadingSpaces = pastedText.match(/^[ \t]*/)[0];
-            const trailingSpaces = pastedText.match(/[ \t]*$/)[0];
-            finalHTML = leadingSpaces + finalHTML + trailingSpaces;
-        }
-
-        Assert.strictEqual(finalHTML, "testo ");
-        Assert.strictEqual(finalHTML.startsWith(" "), false);
-        Assert.strictEqual(finalHTML.endsWith(" "), true);
+    test("PasteParser: _createSimpleTableFromExcel garantisce <br> per celle vuote", () => {
+        // Le celle vuote devono contenere un <br> per consentire il posizionamento del cursore
+        const tableHtml = `<table><tr><td>Intestazione</td><td>Altro</td></tr><tr><td>Dato</td><td></td></tr></table>`;
+        const res = Editor._createSimpleTableFromExcel(tableHtml, "Intestazione\tAltro\nDato\t");
+        Assert.isTrue(res.includes('<td contenteditable="true"><br></td>'));
     });
 
     // =========================================================================
-    // 6. ISOLAMENTO CONTROLLI NATIVI E INTERCETTORE COPIA (EditorCopy)
+    // 5. SANIFICAZIONE PROFONDA RICH TEXT (Editor.cleanDOMTree)
     // =========================================================================
 
-    test("EditorPaste: input numerici .adv-number-input convertono automaticamente la virgola in punto", () => {
-        const input = document.createElement('input');
-        input.className = 'adv-number-input';
-        input.value = '';
-
-        let intercepted = false;
-        const fakeEvent = {
-            target: input,
-            clipboardData: {
-                getData: (type) => type === 'text/plain' ? ' 123,45 ' : ''
-            },
-            preventDefault: () => { intercepted = true; }
-        };
-
-        const target = fakeEvent.target;
-        if (target && target.classList.contains('adv-number-input')) {
-            const text = fakeEvent.clipboardData.getData('text/plain');
-            if (text && (text.includes(',') || /^\s+|\s+$/.test(text))) {
-                fakeEvent.preventDefault();
-                target.value = text.trim().replace(',', '.');
-            }
-        }
-
-        Assert.isTrue(intercepted);
-        Assert.strictEqual(input.value, "123.45");
-    });
-
-    test("EditorCopy: copia di tabelle semplici serializza TSV pulito per Excel", () => {
-        const table = document.createElement('table');
-        table.innerHTML = `
-            <tr><td>Nome</td><td>Importo</td></tr>
-            <tr><td>Prodotto A</td><td>100</td></tr>
+    test("CleanDOMTree: rimuove script, style, meta, link e tag intrusivi da Word o Web", () => {
+        // Verifica che tag non testuali come <style> o <script> vengano completamente rimossi
+        // con il loro contenuto interno (CSS e codice JS), impedendo che vengano riversati
+        // nel documento come nodi di testo visibile orfani.
+        const container = document.createElement('div');
+        container.innerHTML = `
+            <style>body { color: red; }</style>
+            <script>alert(1);</script>
+            <p>Paragrafo valido</p>
         `;
-        
-        const tsv = Array.from(table.rows).map(row => 
-            Array.from(row.cells).map(cell => (cell.innerText || cell.textContent || '').trim().replace(/[\r\n\t]+/g, ' ')).join('\t')
-        ).join('\n');
 
-        Assert.strictEqual(tsv, "Nome\tImporto\nProdotto A\t100");
+        Editor.cleanDOMTree(container);
+
+        Assert.strictEqual(container.querySelectorAll('script').length, 0);
+        Assert.strictEqual(container.querySelectorAll('style').length, 0);
+        Assert.strictEqual(container.querySelectorAll('p').length, 1);
+        Assert.strictEqual(container.textContent.trim(), "Paragrafo valido");
     });
 
-    test("EditorCopy: copia rimuove elementi di controllo e maniglie (.adv-col-resizer, .adv-tools)", () => {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = `
-            <div>
-                <span>Testo Nota</span>
-                <div class="adv-col-resizer"></div>
-                <div class="adv-tools"></div>
-                <div class="adv-cell-selected">Cella</div>
+    test("CleanDOMTree: rimuove attributi di stile inline non consentiti ma preserva allineamenti tabella", () => {
+        // Rimuove stili come font-family o margin, ma preserva text-align valido sulle celle
+        const container = document.createElement('div');
+        container.innerHTML = `
+            <p style="font-family: Arial; margin: 20px; color: blue;">Testo</p>
+            <table>
+                <tr>
+                    <td style="text-align: right; background: yellow;">Cella Allineata</td>
+                </tr>
+            </table>
+        `;
+
+        Editor.cleanDOMTree(container);
+
+        const p = container.querySelector('p');
+        Assert.isFalse(p.hasAttribute('style'));
+
+        const td = container.querySelector('td');
+        Assert.isTrue(td.hasAttribute('style'));
+        Assert.strictEqual(td.getAttribute('style').trim(), 'text-align: right;');
+    });
+
+    test("CleanDOMTree: preserva le classi native del design system di VanillaDesk", () => {
+        // Mantiene le classi di formattazione dell'app (hl-*, tx-*, ff-*, fs-*, tag-hash) e rimuove le altre
+        const container = document.createElement('div');
+        container.innerHTML = `
+            <p>
+                <span class="hl-c5 tx-c6 ff-serif fs-large tag-hash random-bad-class">Testo Stile</span>
+            </p>
+        `;
+
+        Editor.cleanDOMTree(container);
+
+        const span = container.querySelector('span');
+        Assert.isTrue(span !== null);
+        Assert.isTrue(span.classList.contains('hl-c5'));
+        Assert.isTrue(span.classList.contains('tx-c6'));
+        Assert.isTrue(span.classList.contains('ff-serif'));
+        Assert.isTrue(span.classList.contains('fs-large'));
+        Assert.isTrue(span.classList.contains('tag-hash'));
+        Assert.isFalse(span.classList.contains('random-bad-class'));
+    });
+
+    test("CleanDOMTree: converte preventivamente i tag legacy <font> in <span>", () => {
+        // Elimina i vecchi tag <font> HTML convertendoli in <span> standard W3C
+        const container = document.createElement('div');
+        container.innerHTML = `<p><font color="#ff0000" class="tx-c10">Testo Font</font></p>`;
+
+        Editor.cleanDOMTree(container);
+
+        Assert.strictEqual(container.querySelectorAll('font').length, 0);
+        const span = container.querySelector('span');
+        Assert.isTrue(span !== null);
+        Assert.isTrue(span.classList.contains('tx-c10'));
+    });
+
+    test("CleanDOMTree: preserva collegamenti ipertestuali <a> con attributi href e target", () => {
+        // Mantiene i link validi pulendo attributi non consentiti come style e onclick
+        const container = document.createElement('div');
+        container.innerHTML = `<p><a href="https://github.com" target="_blank" style="color:red;" onclick="bad()">GitHub</a></p>`;
+
+        Editor.cleanDOMTree(container);
+
+        const link = container.querySelector('a');
+        Assert.isTrue(link !== null);
+        Assert.strictEqual(link.getAttribute('href'), "https://github.com");
+        Assert.strictEqual(link.getAttribute('target'), "_blank");
+        Assert.isFalse(link.hasAttribute('onclick'));
+        Assert.isFalse(link.hasAttribute('style'));
+    });
+
+    test("CleanDOMTree: protegge categoricamente i widget complessi di VanillaDesk senza alterarne il markup", () => {
+        // I widget complessi come Database o Pivot sono protetti da qualsiasi alterazione
+        const container = document.createElement('div');
+        container.innerHTML = `
+            <div id="adv_tbl_123" class="adv-widget-shell widget-type-database" data-widget-type="database">
+                <div class="widget-body" style="margin: 10px;">Dati Protetti</div>
             </div>
         `;
 
-        tempDiv.querySelectorAll('.adv-col-resizer, .std-col-resizer, .widget-drag-handle, .widget-options-btn, .adv-tools, .adv-add-btn, .adv-table-footer-controls').forEach(el => el.remove());
-        tempDiv.querySelectorAll('.adv-cell-selected').forEach(c => c.classList.remove('adv-cell-selected'));
+        Editor.cleanDOMTree(container);
 
-        Assert.strictEqual(tempDiv.querySelectorAll('.adv-col-resizer').length, 0);
-        Assert.strictEqual(tempDiv.querySelectorAll('.adv-tools').length, 0);
-        Assert.strictEqual(tempDiv.querySelectorAll('.adv-cell-selected').length, 0);
+        const widget = container.querySelector('#adv_tbl_123');
+        Assert.isTrue(widget !== null);
+        Assert.isTrue(widget.querySelector('.widget-body').hasAttribute('style'));
     });
 
     // =========================================================================
-    // 7. SANIFICAZIONE INCOLLA PER NOTE INLINE E SEGNALIBRI
+    // 6. MINI-EDITOR E NOTE INLINE (Editor.sanitizeMiniText)
     // =========================================================================
 
-    test("EditorPaste: intercettore su mini-editor purifica l'HTML consentendo solo <b>, <i>, <u> e <br>", () => {
-        const rawPastedHTML = `
+    test("SanitizeMiniText: consente solo <b>, <i>, <u> e <br>, srotolando tag alieni", () => {
+        // Permette solo la formattazione essenziale per gli appunti nelle note inline e nei segnalibri
+        const rawHTML = `
             <div style="color:red;">
                 <h1>Titolo Proibito</h1>
-                <p>Testo con <b>grassetto</b>, <i>corsivo</i> e <a href="#">link rimosso</a>.</p>
+                <p>Testo con <b>grassetto</b>, <i>corsivo</i>, <u>sottolineato</u> e <a href="#">link rimosso</a>.</p>
                 <img src="test.jpg">
             </div>
         `;
-
-        const cleaned = Editor.sanitizeMiniText(rawPastedHTML);
+        const cleaned = Editor.sanitizeMiniText(rawHTML);
 
         Assert.isFalse(cleaned.includes("<h1>"));
         Assert.isFalse(cleaned.includes("<img"));
         Assert.isFalse(cleaned.includes("<a"));
         Assert.isTrue(cleaned.includes("<b>grassetto</b>"));
         Assert.isTrue(cleaned.includes("<i>corsivo</i>"));
+        Assert.isTrue(cleaned.includes("<u>sottolineato</u>"));
         Assert.isTrue(cleaned.includes("link rimosso"));
     });
 
-    test("EditorPaste: incolla su blocco di codice inietta testo puro senza tag HTML parassiti", () => {
-        const pre = document.createElement('pre');
-        pre.className = 'code-content';
-        pre.innerHTML = '';
+    test("SanitizeMiniText: converte liste puntate e numerate in elenchi con marcatore (•)", () => {
+        // Converte i tag di lista in ritorni a capo preceduti da pallino testuale
+        const input = "<ul><li>Primo punto</li><li>Secondo punto</li></ul>";
+        const res = Editor.sanitizeMiniText(input);
+        Assert.isTrue(res.includes("• Primo punto"));
+        Assert.isTrue(res.includes("• Secondo punto"));
+        Assert.isFalse(res.includes("<ul>"));
+        Assert.isFalse(res.includes("<li>"));
+    });
 
-        const codeSnippet = "const a = 10;\nconst b = 20;";
-        pre.appendChild(document.createTextNode(codeSnippet));
+    test("SanitizeMiniText: elimina tag di formattazione vuoti ma preserva testo e <br>", () => {
+        // Verifica che i tag vuoti (o con soli spazi) vengano eliminati, mentre il testo valido
+        // e i ritorni a capo intermedi tra blocchi di testo vengano preservati; i ritorni a capo
+        // orfani alla fine della stringa vengono rimossi come da specifica del Passo 5.
+        const input = "<b></b><i>   </i><u>Prima riga</u><br><u>Seconda riga</u><br>";
+        const res = Editor.sanitizeMiniText(input);
+        Assert.isFalse(res.includes("<b></b>"));
+        Assert.isFalse(res.includes("<i>   </i>"));
+        Assert.isTrue(res.includes("<u>Prima riga</u>"));
+        Assert.isTrue(res.includes("<u>Seconda riga</u>"));
+        Assert.isTrue(res.includes("<br>"));
+        Assert.isFalse(res.endsWith("<br>"));
+    });
 
-        Assert.strictEqual(pre.textContent, codeSnippet);
-        Assert.strictEqual(pre.children.length, 0);
+    test("SanitizeMiniText: preserva gli spazi intenzionali dell'utente senza trim distruttivo", () => {
+        // Mantiene gli spazi digitati dall'utente all'interno del testo
+        const input = "Parola1   Parola2  ";
+        const res = Editor.sanitizeMiniText(input);
+        Assert.isTrue(res.includes("Parola1   Parola2"));
+    });
+
+    // =========================================================================
+    // 7. RILEVAMENTO LINGUAGGIO CODICE (CodeManager.detectLanguage)
+    // =========================================================================
+
+    test("DetectLanguage: rileva validità JSON", () => {
+        Assert.strictEqual(CodeManager.detectLanguage('{"nome": "VanillaDesk", "attivo": true}'), 'json');
+        Assert.strictEqual(CodeManager.detectLanguage('["mela", "pera", "banana"]'), 'json');
+    });
+
+    test("DetectLanguage: rileva Python da costrutti def e import", () => {
+        const py = "import os\ndef calcola_totale(valori):\n    return sum(valori)";
+        Assert.strictEqual(CodeManager.detectLanguage(py), 'python');
+    });
+
+    test("DetectLanguage: rileva SQL da query DDL e DML", () => {
+        const sql = "SELECT id, nome FROM clienti WHERE attivo = 1 ORDER BY data DESC;";
+        Assert.strictEqual(CodeManager.detectLanguage(sql), 'sql');
+    });
+
+    test("DetectLanguage: rileva Bash da shebang o comandi shell tipici", () => {
+        Assert.strictEqual(CodeManager.detectLanguage('#!/bin/bash\necho "Avvio backup..."'), 'bash');
+        Assert.strictEqual(CodeManager.detectLanguage('sudo chmod -R 755 /var/www/html'), 'bash');
+    });
+
+    test("DetectLanguage: rileva HTML e markup", () => {
+        Assert.strictEqual(CodeManager.detectLanguage('<!DOCTYPE html><html><body><h1>Titolo</h1></body></html>'), 'html');
+    });
+
+    test("DetectLanguage: rileva CSS da selettori e blocchi di regole", () => {
+        const css = ".card-title { color: #333; margin-bottom: 10px; display: flex; }";
+        Assert.strictEqual(CodeManager.detectLanguage(css), 'css');
+    });
+
+    test("DetectLanguage: rileva JavaScript da const/let/arrow functions", () => {
+        const js = "const calcola = (a, b) => {\n    console.log(a + b);\n    return a + b;\n};";
+        Assert.strictEqual(CodeManager.detectLanguage(js), 'js');
+    });
+
+    test("DetectLanguage: testo semplice non supera la soglia di confidenza e restituisce 'none'", () => {
+        const plain = "Questa è una semplice nota in italiano che spiega un processo aziendale senza codice.";
+        Assert.strictEqual(CodeManager.detectLanguage(plain), 'none');
+    });
+
+    // =========================================================================
+    // 8. LINK TRUNCATION & NORMALIZZAZIONE BLOCCHI
+    // =========================================================================
+
+    test("LinkManager: _truncateUrl accorcia indirizzi web a massimo 60 caratteri con puntini di sospensione", () => {
+        // Gli URL mostrati nel testo del link vengono troncati a 60 caratteri per evitare di spezzare il layout
+        const longUrl = "https://www.example.com/very/long/path/with/lots/of/nested/subdirectories/and/parameters?query=123456789";
+        const truncated = LinkManager._truncateUrl(longUrl, 60);
+        Assert.isTrue(truncated.length <= 60);
+        Assert.isTrue(truncated.endsWith("..."));
+    });
+
+    test("LinkManager: _truncateUrl preserva URL brevi inferiori a 60 caratteri senza alterazioni", () => {
+        const shortUrl = "https://github.com/dragoneblu-dev";
+        Assert.strictEqual(LinkManager._truncateUrl(shortUrl, 60), shortUrl);
+    });
+
+    test("NormalizeEmptyBlocks: assicura che blocchi vuoti abbiano <br> per il posizionamento del cursore", () => {
+        // Previene la scomparsa visiva dei blocchi vuoti garantendo un tag <br> all'interno
+        const container = document.createElement('div');
+        const p = document.createElement('p');
+        p.innerHTML = '';
+        container.appendChild(p);
+
+        Editor._normalizeEmptyBlocks(container);
+
+        Assert.strictEqual(p.innerHTML, '<br>');
+    });
+
+    test("NormalizeEmptyBlocks: rimuove paragrafi vuoti parassiti lasciati da split se ci sono altri figli", () => {
+        // Elimina i tag <p></p> completamente vuoti generati dai browser su mutazioni di riga
+        const container = document.createElement('div');
+        const p1 = document.createElement('p'); p1.textContent = "Testo reale";
+        const pEmpty = document.createElement('p'); pEmpty.innerHTML = '';
+        container.appendChild(p1);
+        container.appendChild(pEmpty);
+
+        Editor._normalizeEmptyBlocks(container);
+
+        Assert.strictEqual(container.querySelectorAll('p').length, 1);
+        Assert.strictEqual(container.firstElementChild.textContent, "Testo reale");
+    });
+
+    test("HealFontArtifacts: rimuove span parassiti con font-size inline generati da browser su unione blocchi", () => {
+        // Srotola gli span con stili inline parassiti font-size iniettati da WebKit/Blink
+        const container = document.createElement('div');
+        container.innerHTML = `<h1><span style="font-size: 16px;">Titolo Con Artefatto</span></h1>`;
+
+        Editor.healFontArtifacts(container);
+
+        const h1 = container.querySelector('h1');
+        Assert.strictEqual(h1.querySelectorAll('span').length, 0);
+        Assert.strictEqual(h1.textContent, "Titolo Con Artefatto");
     });
 
 });

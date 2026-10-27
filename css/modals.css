@@ -316,7 +316,7 @@
 }
 
 /* -------------------------------------------------------------
-   PANNELLO LATERALE (DRAWER)
+   PANNELLO LATERALE (DRAWER) CON RESIZER CONTINUO
    ------------------------------------------------------------- */
 .adv-drawer {
     position: absolute;
@@ -324,6 +324,7 @@
     left: 0;
     bottom: 0;
     width: 650px;
+    min-width: 380px;
     max-width: 90vw;
     background: var(--sidebar-bg);
     border-right: 1px solid var(--border-color);
@@ -335,11 +336,41 @@
     box-shadow: 5px 0 15px rgba(0, 0, 0, 0.1);
 }
 
+.adv-drawer.is-resizing {
+    transition: none !important;
+    user-select: none !important;
+}
+
+/* Maniglia di ridimensionamento orizzontale priva di illuminazione al semplice passaggio del mouse */
+.adv-drawer-resizer {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 8px;
+    cursor: col-resize;
+    z-index: 510;
+    background: transparent;
+}
+
+.adv-drawer:not(.dock-right) .adv-drawer-resizer {
+    right: -4px;
+}
+
+.adv-drawer.dock-right .adv-drawer-resizer {
+    left: -4px;
+}
+
+/* Evidenziazione visiva limitata al solo trascinamento attivo effettivo */
+.adv-drawer.is-resizing .adv-drawer-resizer {
+    background: var(--accent-color);
+    opacity: 0.35;
+}
+
 .adv-drawer.open {
     transform: translateX(0);
 }
 
-/* --- NUOVO: SIDE SWITCHER (DOCK A DESTRA) --- */
+/* --- SIDE SWITCHER (DOCK A DESTRA) --- */
 .adv-drawer.dock-right {
     left: auto;
     right: 0;
@@ -353,7 +384,7 @@
     transform: translateX(0);
 }
 
-/* --- NUOVO: MODALITÀ X-RAY (GHOST MODE) --- */
+/* --- MODALITÀ X-RAY (GHOST MODE) --- */
 .adv-drawer.ghost-mode {
     background: transparent;
     border: none;
@@ -371,7 +402,7 @@
     pointer-events: auto; /* L'header resta cliccabile */
 }
 
-/* Svuotiamo brutalmente il corpo per non generare "zuppa di testo" */
+/* Svuotiamo il corpo per non generare sovrapposizioni visive */
 .adv-drawer.ghost-mode .adv-drawer-body,
 .adv-drawer.ghost-mode .adv-drawer-footer {
     opacity: 0;
@@ -571,8 +602,12 @@
 
 @media (max-width: 768px) {
     .adv-drawer {
-        width: 100%;
-        max-width: 100%;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+
+    .adv-drawer-resizer {
+        display: none !important;
     }
 
     .link-modal {
