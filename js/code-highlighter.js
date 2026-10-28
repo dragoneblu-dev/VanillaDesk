@@ -8,6 +8,9 @@
  * FIX REFACTORING: Integrata la lingua "formula" per unificare l'evidenziazione sintattica dei database.
  * FEAT AUTO-DETECT: Analizzatore euristico a punteggio (detectLanguage) per rilevare automaticamente
  * il linguaggio su blocchi appena creati o su incolla, con rispetto assoluto del testo semplice.
+ * FEAT POST-NEWLINE DETECTION: L'analisi automatica durante la digitazione scatta esclusivamente dopo
+ * l'inserimento di almeno un a capo (\n), prevenendo la classificazione prematura a "testo semplice" sui primi caratteri.
+ * FEAT MANUAL LANGUAGE LOCK: La selezione esplicita di un linguaggio da menu blocca l'auto-rilevatore per non sovrascrivere l'utente.
  */
 
 const CodeManager = {
@@ -262,7 +265,7 @@ const CodeManager = {
     init: () => {
         CodeManager._typingTimer = null;
 
-        // Rilevamento automatico su incolla (paste) all'interno di blocchi con sintassi ancora non impostata (none)
+        // Rilevamento automatico su incolla (paste) all'interno di blocchi con sintassi non ancora bloccata manualmente
         document.addEventListener('paste', (e) => {
             const pre = e.target && e.target.closest ? e.target.closest('pre.code-content') : null;
             if (!pre) return;
@@ -270,9 +273,13 @@ const CodeManager = {
             const wrapper = pre.closest('.code-wrapper, [data-widget-type="code"]');
             if (!wrapper) return;
 
-            const currentLang = pre.getAttribute('data-language') || 'none';
-            // Scatta solo se il blocco è ancora sul default non formattato (none)
-            if (currentLang !== 'none') return;
+            const trueId = wrapper.id.split('_cited_')[0];
+            const state = AppState.databases ? AppState.databases[trueId] : null;
+
+            // Se l'utente ha impostato manualmente una lingua specifica, non sovrascrivere su incolla
+            if (state && state.manualLanguage && state.language && state.language !== 'none') {
+                return;
+            }
 
             const pastedText = (e.clipboardData || window.clipboardData)?.getData('text/plain');
             if (!pastedText) return;
@@ -291,15 +298,16 @@ const CodeManager = {
         document.addEventListener('input', (e) => {
             if (e.target && e.target.tagName === 'PRE' && e.target.classList.contains('code-content')) {
                 const wrapper = e.target.closest('.code-wrapper, [data-widget-type="code"]');
-                
+                let rawText = '';
+                let trueId = '';
+
                 if (wrapper) {
-                    const trueId = wrapper.id.split('_cited_')[0];
+                    trueId = wrapper.id.split('_cited_')[0];
                     if (!AppState.databases) AppState.databases = {};
                     if (!AppState.databases[trueId]) {
                         AppState.databases[trueId] = { title: I18n.t('code_widget.default_title'), language: 'none', content: '' };
                     }
                     
-                    let rawText = '';
                     if (typeof Editor !== 'undefined' && Editor._getRawText) {
                         rawText = Editor._getRawText(e.target);
                         if (rawText.endsWith('\n')) rawText = rawText.slice(0, -1);
@@ -319,6 +327,25 @@ const CodeManager = {
                             const range = sel.getRangeAt(0);
                             if (typeof Editor._getCodeOffset === 'function') {
                                 caretPos = Editor._getCodeOffset(e.target, range.startContainer, range.startOffset);
+                            }
+                        }
+
+                        // AUTO-RILEVAMENTO POST-NEWLINE:
+                        // L'analisi euristica in digitazione scatta ESCLUSIVAMENTE se:
+                        // 1. Il blocco è ancora sul default ('none') e non è stato impostato manualmente.
+                        // 2. Il testo contiene almeno un a capo (\n), garantendo che la prima riga/istruzione sia completa.
+                        if (wrapper && trueId && AppState.databases && AppState.databases[trueId]) {
+                            const curState = AppState.databases[trueId];
+                            const isLanguageUnlocked = !curState.manualLanguage && (!curState.language || curState.language === 'none');
+
+                            if (isLanguageUnlocked && rawText && rawText.includes('\n')) {
+                                const detected = CodeManager.detectLanguage(rawText);
+                                // Modifica la lingua solo se il punteggio individua un linguaggio con certezza (non forza mai 'none')
+                                if (detected && detected !== 'none') {
+                                    curState.language = detected;
+                                    e.target.setAttribute('data-language', detected);
+                                    CodeManager._updateShell(wrapper.id, detected, wrapper.classList.contains('collapsed'), curState.title);
+                                }
                             }
                         }
                         
@@ -342,8 +369,13 @@ const CodeManager = {
         const state = (AppState.databases && AppState.databases[trueId]) ? AppState.databases[trueId] : null;
         const text = state?.content || wrapper.querySelector('pre')?.innerText || '';
 
+        // Sblocca la selezione manuale quando l'utente clicca esplicitamente "Rileva Automaticamente"
+        if (state) {
+            delete state.manualLanguage;
+        }
+
         const detected = CodeManager.detectLanguage(text);
-        CodeManager.setLanguage(wrapperId, detected);
+        CodeManager.setLanguage(wrapperId, detected, false, false);
 
         if (typeof UI !== 'undefined' && UI.showToast) {
             const langLabel = detected === 'none' ? I18n.t('code_widget.lang_plain') : detected.toUpperCase();
@@ -389,7 +421,7 @@ const CodeManager = {
             { type: 'divider' },
             ...langs.map(l => ({
                 label: l.label + (currentLang === l.id ? ' <span style="color:var(--accent-color);font-weight:bold;float:right;">✓</span>' : ''),
-                onClick: () => CodeManager.setLanguage(wrapper.id, l.id)
+                onClick: () => CodeManager.setLanguage(wrapper.id, l.id, false, true)
             }))
         ];
         
@@ -402,7 +434,7 @@ const CodeManager = {
         ]);
     },
 
-    setLanguage: (wrapperId, langId, silent = false) => {
+    setLanguage: (wrapperId, langId, silent = false, isUserManualChoice = false) => {
         const wrapper = document.getElementById(wrapperId);
         const pre = wrapper ? wrapper.querySelector('pre') : CodeManager.activePre;
         if (!pre) return;
@@ -418,6 +450,12 @@ const CodeManager = {
         let state = AppState.databases[trueId] || {};
         
         state.language = langId;
+
+        // Se l'utente ha scelto esplicitamente la lingua dal menu, blocca l'auto-rilevatore
+        if (isUserManualChoice) {
+            state.manualLanguage = (langId !== 'none');
+        }
+
         AppState.databases[trueId] = state;
         
         Store.triggerAutoSave();
@@ -706,7 +744,7 @@ const CodeManager = {
             html = html.replace(/(\$[a-zA-Z_][a-zA-Z0-9_]*|\$\{[^}]+\})/g, '<span style="color:#9cdcfe;">$1</span>');
             html = html.replace(/\b(if|else|elseif|switch|foreach|for|while|do|until|break|continue|return|function|param|class|try|catch|finally|throw|exit)\b/gi, '<span style="color:#569cd6;font-weight:bold;">$1</span>');
             html = html.replace(/\b(Write-Host|Write-Output|Get-ChildItem|Get-Item|Set-Location|Invoke-RestMethod|Invoke-WebRequest|Start-Process)\b/gi, '<span style="color:#dcdcaa;">$1</span>');
-            html = html.replace(/\b(-eq|-ne|-gt|-ge|-lt|-le|-like|-notlike|-match|-notmatch|-contains|-notcontains|-in|-notin|-replace|-and|-or|-not|-xor)\b/gi, '<span style="color:#c586c0;">$1</span>');
+            html = html.replace(/\b(-eq|-ne|-gt|-ge|-lt|-le|-like|-notlike|-match|-notmatch|-contains|-notcontains|-in|-notin|-replace|-and|-or|-not|-xor)\b/gi, '<span style="color:#c586c0;font-weight:bold;">$1</span>');
         }
         
         html = html.replace(/__TK_(\d+)__/g, (match, i) => tokens[i] !== undefined ? tokens[i] : match);
