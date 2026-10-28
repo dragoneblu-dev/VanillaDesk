@@ -19,8 +19,6 @@
  * direttamente dentro il <li> della lista invece che su noteContent, eliminando la creazione di <p></p> parassiti da parte di Blink.
  * FIX MULTI-CELL HISTORY RESILIENCE: Depurazione automatica della classe transitoria .adv-cell-selected
  * dagli snapshot e azzeramento selettore TableManager.Selection al ripristino per garantire il funzionamento perfetto di Ctrl+Z e Ctrl+Y.
- * REFACTOR DRY & EXTENDED SELECTION: Centralizzazione della gestione del marker temporaneo (_injectHistoryMarker e _cleanupHistoryMarker)
- * con ancoraggio non distruttivo all'inizio del range anche per selezioni estese, eliminando il salto del cursore a riga 1 su Undo.
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -124,95 +122,6 @@ Object.assign(Editor, {
             }
         }
         return null;
-    },
-
-    // Iniezione controllata del marcatore temporaneo: ancoraggio sicuro all'inizio del range sia per cursore singolo che selezione estesa
-    _injectHistoryMarker: (editor) => {
-        const meta = {
-            markerInserted: false,
-            codeBlockCaret: false,
-            activeCodeBlockWrapper: null,
-            origContainer: null,
-            origOffset: 0,
-            secondPart: null
-        };
-
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || !editor.contains(sel.anchorNode)) {
-            return meta;
-        }
-
-        const range = sel.getRangeAt(0);
-        const node = sel.anchorNode;
-        const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-
-        if (preNode) {
-            const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-            meta.activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-            if (meta.activeCodeBlockWrapper) {
-                meta.activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                meta.codeBlockCaret = true;
-            }
-        } else {
-            try {
-                meta.origContainer = range.startContainer;
-                meta.origOffset = range.startOffset;
-
-                // Ancoraggio non distruttivo all'inizio del range: permette di memorizzare la posizione esatta anche su selezioni estese
-                const markerRange = range.cloneRange();
-                markerRange.collapse(true);
-
-                const marker = document.createElement('span');
-                marker.id = 'history-undo-marker-temp';
-                marker.style.display = 'none';
-
-                markerRange.insertNode(marker);
-                meta.markerInserted = true;
-
-                if (meta.origContainer.nodeType === Node.TEXT_NODE) {
-                    meta.secondPart = marker.nextSibling;
-                }
-            } catch (e) {
-                console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
-            }
-        }
-
-        return meta;
-    },
-
-    // Pulizia atomica del marcatore temporaneo dal DOM vivo e ricongiungimento dei nodi di testo
-    _cleanupHistoryMarker: (editor, meta) => {
-        if (!meta) return;
-
-        if (meta.markerInserted) {
-            const startM = document.getElementById('history-undo-marker-temp');
-            if (startM) startM.remove();
-
-            if (meta.origContainer && meta.origContainer.nodeType === Node.TEXT_NODE && meta.secondPart && meta.secondPart.parentNode === meta.origContainer.parentNode) {
-                meta.origContainer.nodeValue += meta.secondPart.nodeValue;
-                meta.secondPart.remove();
-            }
-
-            try {
-                if (meta.origContainer && document.body.contains(meta.origContainer)) {
-                    const sel = window.getSelection();
-                    const isStillFocused = sel.rangeCount > 0 && editor.contains(sel.anchorNode);
-
-                    if (!isStillFocused || sel.anchorNode === meta.origContainer) {
-                        const restoreRange = document.createRange();
-                        const safeOffset = Math.min(meta.origOffset, meta.origContainer.nodeValue ? meta.origContainer.nodeValue.length : meta.origContainer.childNodes.length);
-                        restoreRange.setStart(meta.origContainer, safeOffset);
-                        restoreRange.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(restoreRange);
-                    }
-                }
-            } catch (err) {}
-        }
-
-        if (meta.codeBlockCaret && meta.activeCodeBlockWrapper) {
-            meta.activeCodeBlockWrapper.removeAttribute('data-undo-caret');
-        }
     },
 
     // Funzione centralizzata per l'estrazione sicura del DOM per l'History
@@ -333,9 +242,88 @@ Object.assign(Editor, {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
 
-        const caretMeta = Editor._injectHistoryMarker(editor);
+        let markerInserted = false;
+        let codeBlockCaret = false;
+        let activeCodeBlockWrapper = null;
+        let origContainer = null;
+        let origOffset = 0;
+        let secondPart = null;
+
+        const sel = window.getSelection();
+        if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+            // SICUREZZA DOM: Il marcatore temporaneo viene inserito SOLO su cursore collassato
+            // per evitare di spezzare nodi di testo o corrompere le selezioni estese
+            if (sel.isCollapsed) {
+                const node = sel.anchorNode;
+                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                
+                if (preNode) {
+                    const range = sel.getRangeAt(0);
+                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                    if (activeCodeBlockWrapper) {
+                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                        codeBlockCaret = true;
+                    }
+                } else {
+                    try {
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
+                        const marker = document.createElement('span');
+                        marker.id = 'history-undo-marker-temp';
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
+                        markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
+                    } catch (e) { 
+                        console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
+                    }
+                }
+            }
+        }
+
         const htmlToSave = Editor._buildHistorySnapshot(editor);
-        Editor._cleanupHistoryMarker(editor, caretMeta);
+
+        // Nel DOM vivo: rimuoviamo il marker e ricongiungiamo i nodi di testo ripristinando la selezione integra
+        if (markerInserted) {
+            const startM = document.getElementById('history-undo-marker-temp');
+            if (startM) startM.remove();
+
+            if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
+                origContainer.nodeValue += secondPart.nodeValue;
+                secondPart.remove();
+            }
+
+            try {
+                if (origContainer && document.body.contains(origContainer)) {
+                    // Verifica di sicurezza prima di ripristinare il range per evitare sovrascritture parassite se il cursore è già valido
+                    const currentSel = window.getSelection();
+                    const isStillFocused = currentSel.rangeCount > 0 && editor.contains(currentSel.anchorNode);
+                    
+                    if (!isStillFocused || currentSel.anchorNode === origContainer) {
+                        const restoreRange = document.createRange();
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
+                    }
+                }
+            } catch(err) {}
+        }
+        
+        if (codeBlockCaret && activeCodeBlockWrapper) {
+            activeCodeBlockWrapper.removeAttribute('data-undo-caret');
+        }
 
         // Evita duplicazioni di snapshot identici nel contenuto a meno che non sia forzato (es. Drag & Drop atomico)
         if (!forcePush && Editor.undoStack.length > 0) {
@@ -529,21 +517,9 @@ Object.assign(Editor, {
                     focusNode.scrollIntoView({ behavior: 'auto', block: 'nearest' });
                 }
             } else {
-                // Fallback sicuro anti-salto a riga 1: preserva lo scroll e seleziona il blocco visibile
+                editor.focus({ preventScroll: true });
                 if (scrollArea) {
                     scrollArea.scrollTop = currentScrollTop;
-                }
-                const targetChild = editor.lastElementChild || editor.firstElementChild;
-                if (targetChild) {
-                    const sel = window.getSelection();
-                    const fallbackRange = document.createRange();
-                    fallbackRange.selectNodeContents(targetChild);
-                    fallbackRange.collapse(false);
-                    sel.removeAllRanges();
-                    sel.addRange(fallbackRange);
-                    targetChild.focus({ preventScroll: true });
-                } else {
-                    editor.focus({ preventScroll: true });
                 }
             }
         }
@@ -562,10 +538,77 @@ Object.assign(Editor, {
         if (Editor.undoStack.length > 0) {
             const editor = document.getElementById('noteContent');
 
-            const caretMeta = Editor._injectHistoryMarker(editor);
+            let markerInserted = false;
+            let codeBlockCaret = false;
+            let activeCodeBlockWrapper = null;
+            let origContainer = null;
+            let origOffset = 0;
+            let secondPart = null;
+
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+                if (sel.isCollapsed) {
+                    const node = sel.anchorNode;
+                    const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                    
+                    if (preNode) {
+                        const range = sel.getRangeAt(0);
+                        const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                        activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                        if (activeCodeBlockWrapper) {
+                            activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                            codeBlockCaret = true;
+                        }
+                    } else {
+                        try {
+                            const range = sel.getRangeAt(0);
+                            origContainer = range.startContainer;
+                            origOffset = range.startOffset;
+
+                            const markerRange = range.cloneRange();
+                            markerRange.collapse(true);
+
+                            const marker = document.createElement('span');
+                            marker.id = 'history-undo-marker-temp';
+                            marker.style.display = 'none';
+
+                            markerRange.insertNode(marker);
+                            markerInserted = true;
+
+                            if (origContainer.nodeType === Node.TEXT_NODE) {
+                                secondPart = marker.nextSibling;
+                            }
+                        } catch (e) { }
+                    }
+                }
+            }
+
             const htmlToSaveForRedo = Editor._buildHistorySnapshot(editor);
             Editor.redoStack.push(htmlToSaveForRedo);
-            Editor._cleanupHistoryMarker(editor, caretMeta);
+
+            if (markerInserted) {
+                const startM = document.getElementById('history-undo-marker-temp');
+                if (startM) startM.remove();
+
+                if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
+                    origContainer.nodeValue += secondPart.nodeValue;
+                    secondPart.remove();
+                }
+
+                try {
+                    if (origContainer && document.body.contains(origContainer)) {
+                        const restoreRange = document.createRange();
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
+                    }
+                } catch(err) {}
+            }
+            if (codeBlockCaret && activeCodeBlockWrapper) {
+                activeCodeBlockWrapper.removeAttribute('data-undo-caret');
+            }
 
             let snap = Editor.undoStack.pop();
             
@@ -601,10 +644,77 @@ Object.assign(Editor, {
         if (Editor.redoStack.length > 0) {
             const editor = document.getElementById('noteContent');
 
-            const caretMeta = Editor._injectHistoryMarker(editor);
+            let markerInserted = false;
+            let codeBlockCaret = false;
+            let activeCodeBlockWrapper = null;
+            let origContainer = null;
+            let origOffset = 0;
+            let secondPart = null;
+
+            const sel = window.getSelection();
+            if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+                if (sel.isCollapsed) {
+                    const node = sel.anchorNode;
+                    const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+                    
+                    if (preNode) {
+                        const range = sel.getRangeAt(0);
+                        const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                        activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                        if (activeCodeBlockWrapper) {
+                            activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                            codeBlockCaret = true;
+                        }
+                    } else {
+                        try {
+                            const range = sel.getRangeAt(0);
+                            origContainer = range.startContainer;
+                            origOffset = range.startOffset;
+
+                            const markerRange = range.cloneRange();
+                            markerRange.collapse(true);
+
+                            const marker = document.createElement('span');
+                            marker.id = 'history-undo-marker-temp';
+                            marker.style.display = 'none';
+
+                            markerRange.insertNode(marker);
+                            markerInserted = true;
+
+                            if (origContainer.nodeType === Node.TEXT_NODE) {
+                                secondPart = marker.nextSibling;
+                            }
+                        } catch (e) { }
+                    }
+                }
+            }
+
             const htmlToSaveForUndo = Editor._buildHistorySnapshot(editor);
             Editor.undoStack.push(htmlToSaveForUndo);
-            Editor._cleanupHistoryMarker(editor, caretMeta);
+
+            if (markerInserted) {
+                const startM = document.getElementById('history-undo-marker-temp');
+                if (startM) startM.remove();
+
+                if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
+                    origContainer.nodeValue += secondPart.nodeValue;
+                    secondPart.remove();
+                }
+
+                try {
+                    if (origContainer && document.body.contains(origContainer)) {
+                        const restoreRange = document.createRange();
+                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
+                        restoreRange.setStart(origContainer, safeOffset);
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
+                    }
+                } catch(err) {}
+            }
+            if (codeBlockCaret && activeCodeBlockWrapper) {
+                activeCodeBlockWrapper.removeAttribute('data-undo-caret');
+            }
 
             const snap = Editor.redoStack.pop();
             Editor._restoreSnapshotWithCursor(snap);
