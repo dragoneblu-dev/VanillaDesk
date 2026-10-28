@@ -4,6 +4,9 @@
  * Gestione essenziale del ciclo di vita della nota: Creazione, Selezione JIT su disco,
  * Aggiornamento Real-time del contenuto/titolo e Cancellazione sicura nel Cestino.
  * Sincronizzazione atomica del titolo nell'header superiore su due righe (Workspace + Nota attiva).
+ * FAST-PATH STESSA NOTA: Quando selectNote viene chiamata per la nota già aperta (es. tasto Apri su citazione
+ * o link interno in-page), non distrugge il DOM ma esegue direttamente lo scroll verso l'elemento target
+ * garantendo la dis-espansione degli antenati collassati.
  */
 
 Object.assign(UI, {
@@ -100,6 +103,63 @@ Object.assign(UI, {
     },
 
     selectNote: async (id, anchorText = null, refId = null, scrollToTop = false, isHistoryNavigation = false) => {
+        // =========================================================================
+        // FAST-PATH: NAVIGAZIONE INTERNA ALLA STESSA NOTA GIÀ APERTA A SCHERMO
+        // Impedisce la distruzione del DOM vivo e lo sfarfallio se si clicca un elemento
+        // o citazione che punta a un capitolo/blocco della nota attualmente attiva.
+        // =========================================================================
+        if (AppState.currentNoteId === id) {
+            AppState.isSwitchingNote = false;
+            UI.closeDrawer();
+            if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll(true);
+
+            // Sincronizza lo stato in RAM prima di spostare la vista
+            if (AppState.isEditMode && typeof Editor !== 'undefined') {
+                const curNote = Store.getNote(id);
+                const editorEl = document.getElementById('noteContent');
+                if (curNote && editorEl) {
+                    const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    if (cleanHtml && cleanHtml !== curNote.content) {
+                        curNote.content = cleanHtml;
+                        curNote._isDirty = true;
+                    }
+                }
+            }
+
+            if (refId) {
+                const targetEl = document.getElementById(refId) || document.querySelector(`[id^="${refId}_cited_"]`);
+                if (targetEl) {
+                    // Dis-espande eventuali contenitori collassati per rendere visibile l'elemento
+                    let curr = targetEl.parentElement;
+                    while (curr && curr.id !== 'noteContent') {
+                        if (curr.classList && curr.classList.contains('collapsed')) {
+                            curr.classList.remove('collapsed');
+                        }
+                        curr = curr.parentElement;
+                    }
+
+                    targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    targetEl.style.transition = 'box-shadow 0.6s ease';
+                    targetEl.style.boxShadow = '0 0 0 4px var(--marked-border), 0 0 30px var(--marked-border)';
+                    setTimeout(() => {
+                        targetEl.style.boxShadow = '';
+                        setTimeout(() => targetEl.style.transition = '', 600);
+                    }, 800);
+                }
+                return;
+            } else if (anchorText) {
+                if (typeof UI.scrollToHeader !== 'undefined') {
+                    UI.scrollToHeader(anchorText);
+                }
+                return;
+            } else if (scrollToTop) {
+                const scrollArea = document.querySelector('.editor-scroll-content');
+                if (scrollArea) scrollArea.scrollTop = 0;
+                return;
+            }
+            return;
+        }
+
         AppState.isSwitchingNote = true;
         
         // Pulizia immediata di qualsiasi evidenziazione drag residua sul pannello laterale
@@ -372,6 +432,14 @@ Object.assign(UI, {
             setTimeout(() => {
                 const targetEl = document.getElementById(refId) || document.querySelector(`[id^="${refId}_cited_"]`);
                 if (targetEl) {
+                    let curr = targetEl.parentElement;
+                    while (curr && curr.id !== 'noteContent') {
+                        if (curr.classList && curr.classList.contains('collapsed')) {
+                            curr.classList.remove('collapsed');
+                        }
+                        curr = curr.parentElement;
+                    }
+
                     targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
                     targetEl.style.transition = 'box-shadow 0.6s ease';
                     targetEl.style.boxShadow = '0 0 0 4px var(--marked-border), 0 0 30px var(--marked-border)';

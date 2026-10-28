@@ -4,6 +4,8 @@
  * Inserimento riga di uscita dal menu contestuale.
  * Drag & Drop per riordinare le citazioni nella Home Page.
  * Riquadro informativo e statistiche globali del Workspace in fondo alla Home Dashboard (in stile chip/proprietà).
+ * FIX SYNC IMMEDIATO: confirmCitation sincronizza istantaneamente curNote.content in RAM per prevenire
+ * sovrascritture stantie prima del debounce dell'autosave.
  */
 
 const CitationManager = {
@@ -45,7 +47,7 @@ const CitationManager = {
                 if (isCited) return; 
                 UI.Menu.closeAll(true);
                 UI.Menu.buildContextMenu(`cit-opt-btn-${cit.id}`, [
-                    { icon: Icons.arrowRightUp, label: I18n.t('citation.open_source_note'), onClick: () => UI.selectNote(noteId) },
+                    { icon: Icons.arrowRightUp, label: I18n.t('citation.open_source_note'), onClick: () => UI.selectNote(noteId, null, refId) },
                     { icon: Icons.edit, label: I18n.t('citation.edit_source'), onClick: () => CitationManager.editCitation(cit.id) },
                     { type: 'divider' },
                     { icon: Icons.down, label: I18n.t('citation.insert_line_below'), onClick: () => WidgetManager.insertLineBreakAfter(cit.id) },
@@ -64,7 +66,7 @@ const CitationManager = {
                  AppState.draggedBlockType = null;
             },
             tools: [
-                { icon: Icons.arrowRightUp, label: '', title: I18n.t('citation.open_action'), onClick: () => UI.selectNote(noteId) },
+                { icon: Icons.arrowRightUp, label: '', title: I18n.t('citation.open_action'), onClick: () => UI.selectNote(noteId, null, refId) },
                 { icon: isCollapsed ? Icons.chevronDown : Icons.searchUp, title: I18n.t('citation.expand_collapse'), onClick: (e) => CitationManager.toggleCollapse(e, cit.id) }
             ]
         });
@@ -136,6 +138,17 @@ const CitationManager = {
                 else cit.removeAttribute('data-ref-id');
 
                 CitationManager._updateShellUI(cit);
+
+                // Sincronizzazione immediata della nota corrente attiva
+                if (AppState.currentNoteId) {
+                    const curNote = Store.getNote(AppState.currentNoteId);
+                    const editorEl = document.getElementById('noteContent');
+                    if (curNote && editorEl && typeof Editor !== 'undefined') {
+                        curNote.content = Editor.getCleanHTML();
+                        curNote._isDirty = true;
+                    }
+                }
+
                 Store.triggerAutoSave();
                 CitationManager.renderLiveCitations();
             }
@@ -200,10 +213,22 @@ const CitationManager = {
         sel.removeAllRanges();
         sel.addRange(newRange);
 
-        Store.triggerAutoSave();
-        
         CitationManager._updateShellUI(block);
         CitationManager.renderLiveCitations();
+
+        // Sincronizzazione immediata della nota corrente in memoria: impedisce che navigazioni immediate
+        // ripristinino il vecchio markup precedente all'inserimento
+        if (AppState.currentNoteId) {
+            const curNote = Store.getNote(AppState.currentNoteId);
+            const editorEl = document.getElementById('noteContent');
+            if (curNote && editorEl && typeof Editor !== 'undefined') {
+                curNote.content = Editor.getCleanHTML();
+                curNote._isDirty = true;
+                curNote.updatedAt = new Date().toISOString();
+            }
+        }
+
+        Store.triggerAutoSave();
     },
 
     removeHomeCitation: (index) => {
@@ -280,7 +305,7 @@ const CitationManager = {
                             <span class="widget-icon" style="display:inline-flex;">${Icons.link}</span>
                             <span class="widget-title adv-table-title" contenteditable="false" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('citation.title_prefix', { title: fullTitle })}</span>
                             <div class="widget-tools adv-tools" style="flex-shrink: 0;">
-                                <button class="adv-tool-btn" title="${I18n.t('citation.open_action')}" onclick="UI.selectNote('${cit.noteId}')"><span style="display:inline-flex; align-items:center;">${Icons.arrowRightUp}</span></button>
+                                <button class="adv-tool-btn" title="${I18n.t('citation.open_action')}" onclick="UI.selectNote('${cit.noteId}', null, '${cit.refId || ''}')"><span style="display:inline-flex; align-items:center;">${Icons.arrowRightUp}</span></button>
                                 <button class="adv-tool-btn active" title="${I18n.t('citation.btn_remove_home')}" onclick="CitationManager.removeHomeCitation(${idx})"><span style="display:inline-flex; align-items:center;">${Icons.close}</span></button>
                             </div>
                         </div>
