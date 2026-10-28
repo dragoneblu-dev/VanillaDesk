@@ -36,7 +36,7 @@ dict: {
         menu: {
             import: "Importa...",
             import_obsidian: "Importa Vault Obsidian...",
-            configure: "Configura",
+            configure: "Personalizza",
             language: "Lingua / Language",
             new_workspace: "Nuovo Workspace...",
             open_workspace: "Apri Workspace...",
@@ -1433,7 +1433,7 @@ audio: {
         },
         menu: {
             import_obsidian: "Import Obsidian Vault...",
-            configure: "Configure",
+            configure: "Customize",
             language: "Language / Lingua",
             new_workspace: "New Workspace...",
             open_workspace: "Open Workspace...",
@@ -2830,7 +2830,7 @@ audio: {
         },
         menu: {
             import_obsidian: "Importar Vault de Obsidian...",
-            configure: "Configurar",
+            configure: "Personaliza",
             language: "Idioma / Language",
             new_workspace: "Nuevo Espacio de Trabajo...",
             open_workspace: "Abrir Espacio de Trabajo...",
@@ -4228,7 +4228,7 @@ audio: {
         },
         menu: {
             import_obsidian: "Obsidian-Vault importieren...",
-            configure: "Konfigurieren",
+            configure: "Anpassen",
             language: "Sprache / Language",
             new_workspace: "Neuer Arbeitsbereich...",
             open_workspace: "Arbeitsbereich öffnen...",

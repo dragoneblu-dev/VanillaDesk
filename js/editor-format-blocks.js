@@ -49,8 +49,8 @@ Object.assign(Editor, {
 
 
         const items = [
-            { icon: Icons.code, label: I18n.t('format_blocks.menu_widget_code'), onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
-            { icon: Icons.citation, label: I18n.t('format_blocks.menu_widget_citation'), onClick: () => executeInsert(() => CitationManager.openModal()) },
+            { icon: Icons.code, label: I18n.t('format_blocks.menu_widget_code'), shortcut: '\'\'\'', onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
+            { icon: Icons.citation, label: I18n.t('format_blocks.menu_widget_citation'), shortcut: '![[', onClick: () => executeInsert(() => CitationManager.openModal()) },
             { icon: Icons.columns, label: I18n.t('format_blocks.menu_widget_columns'), onClick: () => executeInsert(() => ColumnManager.insert()) },
             { type: 'divider' },
             { icon: Icons.tableSimple, label: I18n.t('format_blocks.menu_widget_table'), onClick: () => executeInsert(() => TableManager.openCreationModal()) },

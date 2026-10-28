@@ -9,6 +9,13 @@
  * per intercettazione corretta del Simple-Table Wrapper.
  * FEAT INSTANT NOTE CREATION (PKM PATTERN): Creazione istantanea al volo di una nuova sotto-nota
  * digitando il titolo nel campo di ricerca con conferma tramite click o tasto Invio.
+ * FIX STRICT DOWNWARD PROPAGATION: Quando una nota soddisfa la ricerca, vengono resi disponibili
+ * all'espansione unicamente i suoi blocchi interni (capitoli, tabelle, diari, codice), escludendo
+ * categoricamente le sotto-note non pertinenti.
+ * FIX CLEAN EXPANSION STATE: Resetta le espansioni residue alla digitazione di una nuova query
+ * mantenendo le note trovate chiuse finché l'utente non clicca intenzionalmente sulla freccia ›.
+ * FEAT SEAMLESS SEARCH HIGHLIGHTING: Evidenziazione cromatica protetta incapsulata in span inline unico
+ * per prevenire l'applicazione del flex gap di .node-title tra i frammenti delle parole.
  * REFACTOR I18N: Tutte le stringhe per l'utente sono internazionalizzate dinamicamente tramite I18n.
  */
 
@@ -55,7 +62,7 @@ UI.DocumentBrowser = {
             const searchInput = document.getElementById('docBrowserSearch');
             if (searchInput) {
                 searchInput.focus();
-                searchInput.oninput = (e) => UI.DocumentBrowser.filter(e.target.value);
+                searchInput.oninput = (e) => UI.DocumentBrowser.filter(e.target.value, false);
                 searchInput.onkeydown = (e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault();
@@ -387,7 +394,8 @@ UI.DocumentBrowser = {
         const searchInput = document.getElementById('docBrowserSearch');
         const filterVal = searchInput ? searchInput.value.toLowerCase() : "";
         
-        if (filterVal) UI.DocumentBrowser.filter(filterVal);
+        // preserveUserExpansions = true: preserva lo stato del click manuale sulla freccia
+        if (filterVal) UI.DocumentBrowser.filter(filterVal, true);
         else UI.DocumentBrowser.renderTree();
     },
 
@@ -554,7 +562,18 @@ UI.DocumentBrowser = {
             }
             
             let iconHtml = `<span style="opacity:0.8; margin-right:8px; display:inline-flex; align-items:center; color:${item.color};">${item.icon}</span>`;
-            let titleHtml = `<span class="node-title" style="color:${item.color}; font-weight:${item.refType==='note'||item.refType==='chapter'?'bold':'normal'};">${item.title}</span>`;
+            
+            // Evidenziazione continua del testo ricercato, protetta da un wrapper inline unico
+            let renderedTitle = UI.escapeHTML(item.title);
+            if (query) {
+                const escapedQuery = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(${escapedQuery})`, 'gi');
+                // padding azzerato e display inline per mantenere le lettere della parola unite senza gap
+                renderedTitle = renderedTitle.replace(regex, '<mark class="search-highlight" style="display:inline; padding:0 1px; border-radius:2px;">$1</mark>');
+            }
+
+            // Incapsulamento in un singolo <span> inline per neutralizzare il flex gap di .node-title
+            let titleHtml = `<span class="node-title" style="color:${item.color}; font-weight:${item.refType==='note'||item.refType==='chapter'?'bold':'normal'};"><span style="display:inline; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; min-width:0;">${renderedTitle}</span></span>`;
             
             content.innerHTML = `${toggleHtml}<div style="display:flex; align-items:center; flex:1; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;">${iconHtml}${titleHtml}</div>`;
             
@@ -602,7 +621,7 @@ UI.DocumentBrowser = {
         });
     },
 
-    filter: (query) => {
+    filter: (query, preserveUserExpansions = false) => {
         UI.DocumentBrowser.currentSearchQuery = query || '';
         const lower = (query || '').trim().toLowerCase();
         
@@ -611,18 +630,35 @@ UI.DocumentBrowser = {
             return;
         }
 
+        // Se l'utente digita una nuova query di ricerca, azzera le vecchie espansioni per mostrare l'albero pulito e chiuso
+        if (!preserveUserExpansions) {
+            UI.DocumentBrowser.expandedNodes.clear();
+        }
+
         const idsToInclude = new Set();
 
         UI.DocumentBrowser.allItems.forEach(item => {
             if (item.title.toLowerCase().includes(lower)) {
                 idsToInclude.add(item.id);
                 
+                // 1. Propagazione verso l'alto (Antenati): garantisce che il percorso fino al nodo trovato sia visibile ed espanso
                 let pId = item.parentId;
                 while (pId) {
                     idsToInclude.add(pId);
                     UI.DocumentBrowser.expandedNodes.add(pId);
                     const pNode = UI.DocumentBrowser.allItems.find(i => i.id === pId);
                     pId = pNode ? pNode.parentId : null;
+                }
+
+                // 2. Propagazione mirata verso il basso (SOLO per i blocchi interni della stessa nota):
+                // Includiamo capitoli ed elementi di QUESTA SPECIFICA NOTA per renderli visibili se l'utente espande la nota.
+                // Le sotto-note (refType === 'note') NON vengono incluse se non contengono la parola nel proprio titolo.
+                if (item.refType === 'note') {
+                    UI.DocumentBrowser.allItems.forEach(child => {
+                        if (child.noteId === item.noteId && child.refType !== 'note') {
+                            idsToInclude.add(child.id);
+                        }
+                    });
                 }
             }
         });

@@ -6,9 +6,12 @@
  * FIX: Previene l'inserimento accidentale di Segnalibri nei Blocchi Codice.
  * FEAT SMART HOME: Aggiunto gestore handleHomeKey per i blocchi di codice.
  * FEAT LINK RAPIDI: Intercettazione della digitazione "[[" per evocare in modo nativo LinkManager.openInternalModal().
+ * FEAT LIVE CITATION RAPIDA: Intercettazione della digitazione "![[" (Obsidian style) per evocare CitationManager.openModal().
  * FIX LINK RAPIDI INDEXSIZEERROR: Risolto crash setStart(4294967295) collassando direttamente cleanRange
  * dopo deleteContents(), garantendo il corretto ancoraggio e l'apertura immediata del Drawer.
  * FEAT VISUAL LINE HOME/END INTEGRATION: Aggancio alla navigazione e selezione per righe visive su soft-wrap.
+ * FEAT CODE BLOCK SHORTCUTS: Supporto ai trigger ``` e ''' a inizio riga con neutralizzazione
+ * dell'autoclose moltiplicatore degli apici singoli.
  */
 
 Object.assign(Editor, {
@@ -86,8 +89,7 @@ Object.assign(Editor, {
         const quoteChars = ['"', "'"];
 
         // ==============================================================
-        // INNESCO MAGICO COLLEGAMENTI (OBSIDIAN STYLE)
-        // Se premo la QUADRA APERTA '[', controllo se la lettera precedente era anch'essa una '['.
+        // INNESCO MAGICO: COLLEGAMENTI ("[[") E CITAZIONI LIVE ("![[")
         // ==============================================================
         if (e.key === '[') {
             const sel = window.getSelection();
@@ -98,11 +100,16 @@ Object.assign(Editor, {
                 // Mai innescare l'UI se siamo nel codice (es. array JavaScript)
                 if (!node.parentNode.closest('.code-content')) {
                     if (node.nodeType === 3 && range.startOffset > 0) {
-                        const charBefore = node.textContent.charAt(range.startOffset - 1);
-                        if (charBefore === '[') {
+                        const textBefore = node.textContent.substring(0, range.startOffset);
+
+                        const isLiveCitationTrigger = textBefore.endsWith('![');
+                        const isInternalLinkTrigger = !isLiveCitationTrigger && textBefore.endsWith('[');
+
+                        if (isLiveCitationTrigger || isInternalLinkTrigger) {
                             e.preventDefault();
                             
-                            const startOffset = range.startOffset - 1;
+                            const charsToRemove = isLiveCitationTrigger ? 2 : 1; // Rimuove "![" oppure "["
+                            const startOffset = range.startOffset - charsToRemove;
                             let endOffset = range.startOffset;
                             
                             // Se la prima '[' aveva inserito una ']' automatica, la includiamo nella cancellazione
@@ -129,19 +136,29 @@ Object.assign(Editor, {
                             sel.removeAllRanges();
                             sel.addRange(cleanRange);
                             
-                            // Salva la selezione corretta e apre il Drawer per il Link Interno
                             Editor.saveSelection();
                             if (typeof UI !== 'undefined') UI.closeDrawer();
-                            if (typeof LinkManager !== 'undefined') {
-                                LinkManager.isEditingMode = false;
-                                LinkManager.editingLink = null;
-                                LinkManager.openInternalModal();
+
+                            // DISPATCHER IN BASE AL TRIGGER DIGITATO
+                            if (isLiveCitationTrigger) {
+                                // "![[" -> Citazione Live Transclusion
+                                if (typeof CitationManager !== 'undefined') {
+                                    CitationManager.openModal(false);
+                                }
+                            } else {
+                                // "[[" -> Collegamento Ipertestuale Interno
+                                if (typeof LinkManager !== 'undefined') {
+                                    LinkManager.isEditingMode = false;
+                                    LinkManager.editingLink = null;
+                                    LinkManager.openInternalModal();
+                                }
                             }
                             return;
                         }
                     }
                 }
             }
+
             // Auto-Close per le quadre singole
             const range = sel.getRangeAt(0);
             let targetNode = range.commonAncestorContainer;
@@ -182,6 +199,59 @@ Object.assign(Editor, {
                 }
             }
             return;
+        }
+
+        // ==============================================================
+        // INNESCO RAPIDO BLOCCO DI CODICE (``` e ''')
+        // Gestisce la digitazione del 3° carattere prevenendo la moltiplicazione degli apici
+        // ==============================================================
+        if (e.key === '`' || e.key === "'") {
+            const sel = window.getSelection();
+            if (sel.rangeCount && sel.isCollapsed) {
+                const range = sel.getRangeAt(0);
+                let targetNode = range.commonAncestorContainer;
+                if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
+
+                // Non scattare se ci troviamo già all'interno di un blocco codice o in widget protetti
+                const isInsideCode = !!targetNode.closest('pre.code-content, .widget-type-code');
+                const isInsideList = !!targetNode.closest('li');
+
+                if (!isInsideCode && !isInsideList && (!WidgetManager.isProtectedBlock(targetNode) || WidgetManager.isInsideEditableWidgetArea(targetNode))) {
+                    const block = targetNode.closest('p, div, h1, h2, h3') || document.getElementById('noteContent');
+                    if (block && block.id !== 'noteContent') {
+                        const preRange = range.cloneRange();
+                        preRange.selectNodeContents(block);
+                        preRange.setEnd(range.startContainer, range.startOffset);
+                        const textBefore = preRange.toString().replace(/[\u200B\uFEFF]/g, '');
+
+                        const postRange = range.cloneRange();
+                        postRange.selectNodeContents(block);
+                        postRange.setStart(range.endContainer, range.endOffset);
+                        const textAfter = postRange.toString().replace(/[\u200B\uFEFF]/g, '');
+
+                        const targetPair = e.key === '`' ? '``' : "''";
+
+                        // Rileva se all'inizio della riga sono già presenti esattamente due caratteri identici
+                        if (textBefore.trim() === targetPair && textAfter.trim() === '') {
+                            e.preventDefault();
+                            Editor.saveSnapshot();
+
+                            // Ripulisce il blocco corrente dai due apici/backtick preliminari per renderlo vuoto
+                            block.innerHTML = '<br>';
+
+                            const resetRange = document.createRange();
+                            resetRange.setStart(block, 0);
+                            resetRange.collapse(true);
+                            sel.removeAllRanges();
+                            sel.addRange(resetRange);
+
+                            // Inserisce il blocco di codice nativo posizionando il cursore al suo interno
+                            Editor.insertCodeBlock();
+                            return;
+                        }
+                    }
+                }
+            }
         }
         
         if (!openPairs[e.key] && !closeChars.includes(e.key) && !quoteChars.includes(e.key)) return;
@@ -260,9 +330,11 @@ Object.assign(Editor, {
             const isAlphanumericAfter = /[a-zA-Z0-9À-ÿ_]/.test(charAfter);
             if (isAlphanumericAfter) return; 
 
+            // FIX MOLTIPLICAZIONE APICI: Se il carattere precedente è identico (es. stiamo digitando '' consecutivi),
+            // non generare una nuova coppia di chiusura automatica ma lascia scorrere il singolo carattere
             if (quoteChars.includes(e.key)) {
                 const isAlphanumericBefore = /[a-zA-Z0-9À-ÿ_]/.test(charBefore);
-                if (isAlphanumericBefore) return; 
+                if (isAlphanumericBefore || charBefore === e.key) return; 
             }
 
             e.preventDefault();
@@ -320,6 +392,20 @@ Object.assign(Editor, {
                     newRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(newRange);
+                }
+            },
+            {
+                trigger: /^(```|''')\s?$/,
+                allowInList: false,
+                execute: () => {
+                    Editor.saveSnapshot();
+                    block.innerHTML = '<br>';
+                    const newRange = document.createRange();
+                    newRange.setStart(block, 0);
+                    newRange.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(newRange);
+                    Editor.insertCodeBlock();
                 }
             },
             {
