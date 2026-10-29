@@ -19,6 +19,8 @@
  * direttamente dentro il <li> della lista invece che su noteContent, eliminando la creazione di <p></p> parassiti da parte di Blink.
  * FIX MULTI-CELL HISTORY RESILIENCE: Depurazione automatica della classe transitoria .adv-cell-selected
  * dagli snapshot e azzeramento selettore TableManager.Selection al ripristino per garantire il funzionamento perfetto di Ctrl+Z e Ctrl+Y.
+ * FIX SELECTION INTEGRITY & SMART FALLBACK: Preservazione assoluta della selezione attiva per comandi di formattazione (B, I, Colori)
+ * e neutralizzazione del fallback a riga 1 mediante ancoraggio al blocco corrente su ripristino Undo.
  */
 Object.assign(Editor, {
     undoStack: [],
@@ -251,8 +253,9 @@ Object.assign(Editor, {
 
         const sel = window.getSelection();
         if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-            // SICUREZZA DOM: Il marcatore temporaneo viene inserito SOLO su cursore collassato
-            // per evitare di spezzare nodi di testo o corrompere le selezioni estese
+            // SICUREZZA DOM: Il marcatore viene inserito nel DOM vivo SOLO su cursore collassato.
+            // Quando la selezione è estesa (es. testo selezionato per grassetto o colore), non tocchiamo il DOM
+            // per preservare intatta la selezione attiva richiesta da document.execCommand e ColorManager.
             if (sel.isCollapsed) {
                 const node = sel.anchorNode;
                 const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
@@ -305,7 +308,6 @@ Object.assign(Editor, {
 
             try {
                 if (origContainer && document.body.contains(origContainer)) {
-                    // Verifica di sicurezza prima di ripristinare il range per evitare sovrascritture parassite se il cursore è già valido
                     const currentSel = window.getSelection();
                     const isStillFocused = currentSel.rangeCount > 0 && editor.contains(currentSel.anchorNode);
                     
@@ -354,6 +356,21 @@ Object.assign(Editor, {
         const scrollArea = document.querySelector('.editor-scroll-content');
         
         const currentScrollTop = scrollArea ? scrollArea.scrollTop : 0;
+
+        // CATTURA INTELLIGENTE DEL BLOCCO ATTIVO: prima di rimpiazzare l'HTML, memorizziamo l'indice del blocco
+        // in cui si trova l'utente per impedire che gli snapshot privi di marker sbalzino il cursore a riga 1
+        let targetBlockIndex = -1;
+        const currentSel = window.getSelection();
+        if (currentSel && currentSel.rangeCount > 0 && editor.contains(currentSel.anchorNode)) {
+            const curRange = currentSel.getRangeAt(0);
+            let curBlock = curRange.startContainer.nodeType === 3 ? curRange.startContainer.parentNode : curRange.startContainer;
+            curBlock = curBlock.closest('p, div, li, h1, h2, h3, h4, h5, h6, blockquote, pre, td, th');
+            
+            if (curBlock && editor.contains(curBlock)) {
+                const allBlocks = Array.from(editor.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6, blockquote, pre, td, th'));
+                targetBlockIndex = allBlocks.indexOf(curBlock);
+            }
+        }
 
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlData;
@@ -517,9 +534,51 @@ Object.assign(Editor, {
                     focusNode.scrollIntoView({ behavior: 'auto', block: 'nearest' });
                 }
             } else {
-                editor.focus({ preventScroll: true });
-                if (scrollArea) {
-                    scrollArea.scrollTop = currentScrollTop;
+                // SMART FALLBACK ANTI-SALTO A RIGA 1:
+                // Se lo snapshot non possiede un marker (es. salvato prima di applicare grassetto o colore con selezione estesa),
+                // non chiamiamo editor.focus() a vuoto. Posizioniamo il cursore nel blocco esatto in cui l'utente stava lavorando!
+                let fallbackTarget = null;
+                if (targetBlockIndex >= 0) {
+                    const newBlocks = Array.from(editor.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6, blockquote, pre, td, th'));
+                    if (newBlocks[targetBlockIndex]) {
+                        fallbackTarget = newBlocks[targetBlockIndex];
+                    } else if (newBlocks.length > 0) {
+                        fallbackTarget = newBlocks[Math.min(targetBlockIndex, newBlocks.length - 1)];
+                    }
+                }
+
+                if (!fallbackTarget) {
+                    // Fallback secondario: trova il blocco visibile all'altezza dello scroll corrente
+                    const allBlocks = Array.from(editor.querySelectorAll('p, div, li, h1, h2, h3, h4, h5, h6, blockquote, pre, td, th'));
+                    for (const b of allBlocks) {
+                        if (b.offsetTop >= currentScrollTop) {
+                            fallbackTarget = b;
+                            break;
+                        }
+                    }
+                    if (!fallbackTarget) fallbackTarget = editor.lastElementChild || editor.firstElementChild;
+                }
+
+                if (fallbackTarget) {
+                    const fallbackRange = document.createRange();
+                    fallbackRange.selectNodeContents(fallbackTarget);
+                    fallbackRange.collapse(false);
+
+                    const sel = window.getSelection();
+                    sel.removeAllRanges();
+                    sel.addRange(fallbackRange);
+
+                    const editableTarget = fallbackTarget.closest('[contenteditable="true"]') || editor;
+                    editableTarget.focus({ preventScroll: true });
+
+                    if (scrollArea) {
+                        scrollArea.scrollTop = currentScrollTop;
+                    }
+                } else {
+                    editor.focus({ preventScroll: true });
+                    if (scrollArea) {
+                        scrollArea.scrollTop = currentScrollTop;
+                    }
                 }
             }
         }
