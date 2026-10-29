@@ -11,7 +11,7 @@
  * dopo deleteContents(), garantendo il corretto ancoraggio e l'apertura immediata del Drawer.
  * FEAT VISUAL LINE HOME/END INTEGRATION: Aggancio alla navigazione e selezione per righe visive su soft-wrap.
  * FEAT CODE BLOCK SHORTCUTS: Supporto ai trigger ``` e ''' a inizio riga con neutralizzazione
- * dell'autoclose moltiplicatore degli apici singoli.
+ * dell'autoclose moltiplicatore degli apici singoli e corretto posizionamento in-place del widget.
  */
 
 Object.assign(Editor, {
@@ -158,7 +158,6 @@ Object.assign(Editor, {
                     }
                 }
             }
-
             // Auto-Close per le quadre singole
             const range = sel.getRangeAt(0);
             let targetNode = range.commonAncestorContainer;
@@ -203,7 +202,7 @@ Object.assign(Editor, {
 
         // ==============================================================
         // INNESCO RAPIDO BLOCCO DI CODICE (``` e ''')
-        // Gestisce la digitazione del 3° carattere prevenendo la moltiplicazione degli apici
+        // Gestisce la digitazione del 3° carattere posizionando in-place il widget
         // ==============================================================
         if (e.key === '`' || e.key === "'") {
             const sel = window.getSelection();
@@ -212,7 +211,7 @@ Object.assign(Editor, {
                 let targetNode = range.commonAncestorContainer;
                 if (targetNode.nodeType === 3) targetNode = targetNode.parentNode;
 
-                // Non scattare se ci troviamo già all'interno di un blocco codice o in widget protetti
+                // Non scattare se ci troviamo già all'interno di un blocco codice o in liste
                 const isInsideCode = !!targetNode.closest('pre.code-content, .widget-type-code');
                 const isInsideList = !!targetNode.closest('li');
 
@@ -245,7 +244,10 @@ Object.assign(Editor, {
                             sel.removeAllRanges();
                             sel.addRange(resetRange);
 
-                            // Inserisce il blocco di codice nativo posizionando il cursore al suo interno
+                            // Sincronizza esplicitamente la selezione salvata per impedire salti all'inizio della nota
+                            Editor.savedRange = resetRange.cloneRange();
+
+                            // Inserisce il blocco di codice esattamente nella posizione del blocco corrente
                             Editor.insertCodeBlock();
                             return;
                         }
@@ -355,7 +357,6 @@ Object.assign(Editor, {
         // --- COLLEGAMENTO AL MENU INLINE (Cerca il testo digitato dopo le `[[`) ---
         if (typeof UI !== 'undefined' && UI.DocumentBrowser && UI.DocumentBrowser._inlineModeActive) {
             UI.DocumentBrowser.handleInlineTyping();
-            // Non intercettiamo Markdown se sto cercando una nota
             return; 
         }
 
@@ -405,6 +406,7 @@ Object.assign(Editor, {
                     newRange.collapse(true);
                     sel.removeAllRanges();
                     sel.addRange(newRange);
+                    Editor.savedRange = newRange.cloneRange();
                     Editor.insertCodeBlock();
                 }
             },
@@ -559,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
             // MOTORE INTERCETTAZIONE TASTO HOME (Inizio Riga per Blocchi Codice)
             if (e.key === 'Home') {
                 if (AppState.isEditMode && Editor.handleHomeKey(e)) {
-                    return; // Ferma la propagazione se lo Smart Home è stato applicato
+                    return;
                 }
             }
         });

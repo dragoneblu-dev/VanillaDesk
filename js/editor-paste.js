@@ -11,6 +11,8 @@
  * - FIX SEAMLESS PARAGRAPH MERGE: Fusione naturale dei blocchi incollati nello stile di Word e Google Docs
  *   (il primo blocco si fonde con il testo precedente, l'ultimo con il testo successivo, senza spezzare
  *   la frase in paragrafi vuoti o isolati).
+ * - FIX EXCEL RASTER IMAGE OVERRIDE: Neutralizzazione del file image/png accessorio generato da Microsoft Excel
+ *   quando si copiano celle, garantendo l'incollamento del testo o della tabella ed evitando lo screenshot raster.
  */
 
 Object.assign(Editor, {
@@ -120,11 +122,24 @@ Object.assign(Editor, {
             }
         }
 
+        // =========================================================================
+        // RICONOSCIMENTO PAYLOAD EXCEL / OFFICE (Neutralizza immagine raster screenshot)
+        // Quando si copia da Excel, il sistema operativo riceve sempre anche un item 'image/png'.
+        // Se la clipboard contiene marcatori di foglio di calcolo o tabulazioni (\t), il file immagine
+        // è solo un render di compatibilità e non deve assolutamente sostituire il testo.
+        // =========================================================================
+        const isFromOfficeOrExcel = isSpreadsheetData || (pastedHTML && (
+            pastedHTML.includes('excel') || 
+            pastedHTML.includes('schemas-microsoft-com') || 
+            pastedHTML.includes('office') ||
+            pastedHTML.includes('data-sheets-')
+        )) || (pastedText && pastedText.includes('\t'));
+
         const items = Array.from((e.clipboardData || e.originalEvent.clipboardData).items);
         let isImage = false;
 
-        // 1. GESTIONE IMMAGINI INCOLLATE (Clipboard File reale, non proveniente da tabella Excel)
-        if (!isSpreadsheetData) {
+        // 1. GESTIONE IMMAGINI INCOLLATE (File immagine reale o screenshot autentico, MAI da Excel/Office)
+        if (!isSpreadsheetData && !isFromOfficeOrExcel) {
             for (let item of items) {
                 if (item.kind === 'file' && item.type.includes('image/')) {
                     e.preventDefault();
@@ -377,7 +392,7 @@ Object.assign(Editor, {
                         return;
                     }
                 } else {
-                    // GESTIONE INCOLLA HTML (RICH TEXT: WORD, GOOGLE DOCS, SITI WEB)
+                    // GESTIONE INCOLLA HTML (RICH TEXT: WORD, GOOGLE DOCS, EXCEL, SITI WEB)
 
                     // PRE-PULIZIA ARTEFATTI WORD: Rimuove commenti condizionali MSO prima del parsing DOM
                     const cleanRawHTML = pastedHTML

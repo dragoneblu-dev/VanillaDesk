@@ -213,7 +213,7 @@ input.title-input[readonly] { cursor: default; }
 mark.search-highlight { 
     background-color: #fef08a !important; 
     color: #000000 !important; 
-    padding: 0 3px; 
+    padding: 0 2px; 
     border-radius: 3px; 
     font-weight: 600;
     text-shadow: none !important;

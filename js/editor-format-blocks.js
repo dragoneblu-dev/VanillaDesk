@@ -9,6 +9,8 @@
  * FEAT TOOLTIP DATABASE: Aggiunto title descrittivo sulla voce di menu Database per illustrare le viste supportate.
  * FEAT MULTI-CELL FORMATTING: Intercettazione in Editor.exec dei comandi bold, italic, underline, strikeThrough
  * per applicare o rimuovere la formattazione a tutte le celle selezionate in TableManager.
+ * FIX INSERT CODE CARET POSITION: insertCodeBlock preserva la selezione attiva del cursore se già presente
+ * nell'editor invece di ripristinare uno snapshot stantio, garantendo l'inserimento esatto su shortcut inline (''' e ```).
  */
 
 Object.assign(Editor, {
@@ -47,7 +49,6 @@ Object.assign(Editor, {
             fn();
         };
 
-
         const items = [
             { icon: Icons.code, label: I18n.t('format_blocks.menu_widget_code'), shortcut: '\'\'\'', onClick: () => executeInsert(() => Editor.insertCodeBlock()) },
             { icon: Icons.citation, label: I18n.t('format_blocks.menu_widget_citation'), shortcut: '![[', onClick: () => executeInsert(() => CitationManager.openModal()) },
@@ -64,10 +65,18 @@ Object.assign(Editor, {
     },
 
     insertCodeBlock: () => {
-        Editor.restoreSelection();
         const selection = window.getSelection();
-        let node = selection.rangeCount > 0 ? selection.getRangeAt(0).commonAncestorContainer : null;
-        if(node && node.nodeType === 3) node = node.parentNode;
+        const editor = document.getElementById('noteContent');
+
+        // Se la selezione non è attiva nell'editor (es. click su toolbar), ripristina la savedSelection;
+        // se invece il cursore è già presente e valido dentro noteContent, non sovrascrivere con vecchi snapshot
+        if (!selection || !selection.rangeCount || !editor || !editor.contains(selection.anchorNode)) {
+            Editor.restoreSelection();
+        }
+
+        const sel = window.getSelection();
+        let node = sel.rangeCount > 0 ? sel.getRangeAt(0).commonAncestorContainer : null;
+        if (node && node.nodeType === 3) node = node.parentNode;
 
         if (node && node.closest('.widget-type-columns')) {
             alert(I18n.t('format_blocks.alert_columns_barrier'));
@@ -100,8 +109,8 @@ Object.assign(Editor, {
         if (isEmptyBlock) {
             targetBlock.parentNode.replaceChild(wrapper, targetBlock);
         } else {
-            if (selection.rangeCount) {
-                const range = selection.getRangeAt(0);
+            if (sel.rangeCount) {
+                const range = sel.getRangeAt(0);
                 range.deleteContents();
                 range.insertNode(wrapper);
             } else {
@@ -109,7 +118,8 @@ Object.assign(Editor, {
             }
         }
         
-        const p = document.createElement('p'); p.innerHTML = '<br>';
+        const p = document.createElement('p'); 
+        p.innerHTML = '<br>';
         wrapper.parentNode.insertBefore(p, wrapper.nextSibling);
 
         Editor._ensureLastLineBreak(document.getElementById('noteContent'));
@@ -119,8 +129,8 @@ Object.assign(Editor, {
         // Sincronizza immediatamente il DOM della nota corrente affinché il nuovo widget sia registrato nel content
         if (AppState.currentNoteId) {
             const curNote = Store.getNote(AppState.currentNoteId);
-            const editor = document.getElementById('noteContent');
-            if (curNote && editor) {
+            const editorEl = document.getElementById('noteContent');
+            if (curNote && editorEl) {
                 curNote.content = Editor.getCleanHTML();
                 curNote._isDirty = true;
                 curNote.updatedAt = new Date().toISOString();
@@ -136,9 +146,9 @@ Object.assign(Editor, {
                 const newRange = document.createRange();
                 newRange.selectNodeContents(preElement);
                 newRange.collapse(false);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(newRange);
+                const currentSel = window.getSelection();
+                currentSel.removeAllRanges();
+                currentSel.addRange(newRange);
             }
         }, 50);
     },

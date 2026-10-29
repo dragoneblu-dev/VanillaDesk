@@ -5,6 +5,8 @@
  * FEAT PRIORITÀ: Aggiunto sistema per indicare priorità Alta/Bassa sulle singole attività interagendo con la gutter laterale.
  * FIX RICERCA DIARIO: Isolamento eventi da tastiera con stopPropagation su input di ricerca,
  * rimozione del blocco readonly e ripristino asincrono del cursore post-render.
+ * FIX CALENDAR CUTOFF: Calcolo matematico della data limite solare rispetto ad Oggi per il filtro 7/14 giorni,
+ * impedendo la ricomparsa di voci risalenti a mesi precedenti.
  */
 
 const JournalManager = {
@@ -64,12 +66,12 @@ const JournalManager = {
         legacyJournals.forEach(legacy => {
             const state = { 
                 title: defaultJournalTitle,
-            entries: [], 
-            collapsedDates:[], 
-            displayLimit: 'all', 
-            showSearch: false, 
-            searchTerm: '', 
-            hideCompleted: false 
+                entries: [], 
+                collapsedDates: [], 
+                displayLimit: 'all', 
+                showSearch: false, 
+                searchTerm: '', 
+                hideCompleted: false 
             };
             
             legacy.querySelectorAll('.journal-time-node').forEach(timeNode => {
@@ -169,7 +171,7 @@ const JournalManager = {
         const isHideCompleted = state.hideCompleted === true;
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
-        const menuItems =[
+        const menuItems = [
             { 
                 icon: Icons.listFilter, 
                 label: I18n.t('journal.hide_completed') + (isHideCompleted ? chk : ''), 
@@ -185,7 +187,7 @@ const JournalManager = {
                 icon: Icons.date,
                 label: I18n.t('journal.displayed_days'),
                 type: 'submenu',
-                items:[
+                items: [
                     { label: I18n.t('journal.all_days') + (limit === 'all' ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 'all') },
                     { label: I18n.t('journal.last_7_days') + (limit === 7 ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 7) },
                     { label: I18n.t('journal.last_14_days') + (limit === 14 ? chk : ''), onClick: () => JournalManager.setDisplayLimit(journalId, 14) }
@@ -412,7 +414,7 @@ const JournalManager = {
                 endTime: null,
                 priority: null
             }],
-            collapsedDates:[],
+            collapsedDates: [],
             displayLimit: 'all',
             showSearch: false,
             searchTerm: '',
@@ -590,7 +592,7 @@ const JournalManager = {
 
     toggleDate: (journalId, dateStr) => {
         let state = JournalManager.getState(journalId);
-        if (!state.collapsedDates) state.collapsedDates =[];
+        if (!state.collapsedDates) state.collapsedDates = [];
 
         const idx = state.collapsedDates.indexOf(dateStr);
         if (idx > -1) state.collapsedDates.splice(idx, 1);
@@ -636,10 +638,34 @@ const JournalManager = {
 
         let activeEntries = [...state.entries];
         
+        // 1. Filtro attività completate
         if (state.hideCompleted) {
             activeEntries = activeEntries.filter(e => !e.endTime || e.isVanishing);
         }
 
+        // 2. Filtro temporale solare calcolato rispetto ad Oggi (7 giorni / 14 giorni)
+        if (state.displayLimit && state.displayLimit !== 'all') {
+            const daysLimit = parseInt(state.displayLimit, 10);
+            if (!isNaN(daysLimit) && daysLimit > 0) {
+                const now = new Date();
+                // Calcolo della data di cutoff a mezzanotte di (daysLimit - 1) giorni fa, includendo oggi
+                const cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (daysLimit - 1));
+                const cutoffDateStr = JournalManager.formatDate(cutoffDate);
+                const cutoffTime = cutoffDate.getTime();
+
+                activeEntries = activeEntries.filter(e => {
+                    if (e.dateStr) {
+                        return e.dateStr >= cutoffDateStr;
+                    }
+                    if (e.timestamp) {
+                        return e.timestamp >= cutoffTime;
+                    }
+                    return true;
+                });
+            }
+        }
+
+        // 3. Ricerca testuale
         if (state.showSearch && state.searchTerm) {
             const term = state.searchTerm.toLowerCase();
             activeEntries = activeEntries.filter(e => {
@@ -656,14 +682,7 @@ const JournalManager = {
             grouped[entry.dateStr].push(entry);
         });
 
-        let dateKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b)); 
-        
-        if (state.displayLimit && state.displayLimit !== 'all') {
-            const limit = parseInt(state.displayLimit);
-            if (!isNaN(limit) && dateKeys.length > limit) {
-                dateKeys = dateKeys.slice(dateKeys.length - limit);
-            }
-        }
+        let dateKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
 
         if (typeof WidgetManager !== 'undefined') {
             WidgetManager.updateShellUI(journalId, {
