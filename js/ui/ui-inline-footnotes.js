@@ -4,6 +4,7 @@
  * Rendering visivo delle Note a piè di pagina generate dagli "Appunti Nascosti".
  * FIX DEFENSIVO DOM: Fallback automatico per l'append di inline-footnotes-area
  * qualora .editor-scroll-content non sia presente nel DOM o in ambienti headless.
+ * Risoluzione duale sia su ID (#editorScrollContent) che su classe (.editor-scroll-content).
  */
 
 Object.assign(UI, {
@@ -13,13 +14,13 @@ Object.assign(UI, {
             area = document.createElement('div');
             area.id = 'inline-footnotes-area';
             
-            area.style.maxWidth = 'var(--page-max-width)';
+            area.style.maxWidth = 'var(--page-max-width, 900px)';
             area.style.marginLeft = 'auto';
             area.style.marginRight = 'auto';
             area.style.width = '100%';
             area.style.boxSizing = 'border-box';
 
-            const editorWrapper = document.querySelector('.editor-scroll-content');
+            const editorWrapper = document.getElementById('editorScrollContent') || document.querySelector('.editor-scroll-content');
             if (editorWrapper) {
                 editorWrapper.appendChild(area);
             } else {
@@ -27,7 +28,10 @@ Object.assign(UI, {
                 if (noteContent && noteContent.parentNode) {
                     noteContent.parentNode.appendChild(area);
                 } else {
-                    document.body.appendChild(area);
+                    const mountTarget = document.body || document.documentElement;
+                    if (mountTarget) {
+                        mountTarget.appendChild(area);
+                    }
                 }
             }
         }

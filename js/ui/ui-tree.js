@@ -166,7 +166,8 @@ Object.assign(UI, {
         const cleanMarkup = htmlContent
             .replace(/<iframe\b[^>]*>([\s\S]*?<\/iframe>)?/gi, '')
             .replace(/<script\b[^>]*>([\s\S]*?<\/script>)?/gi, '')
-            .replace(/<style\b[^>]*>([\s\S]*?<\/style>)?/gi, '');
+            .replace(/<style\b[^>]*>([\s\S]*?<\/style>)?/gi, '')
+            .replace(/<\/(p|div|li|h[1-6]|blockquote|tr|td|th)>|<br\s*[\/]?>|<hr\s*[\/]?>/gi, ' ');
 
         const temp = document.createElement('div');
         temp.innerHTML = cleanMarkup;

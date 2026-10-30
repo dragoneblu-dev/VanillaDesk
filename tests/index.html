@@ -427,7 +427,7 @@
 
     <!-- Sandbox DOM isolato per consentire il collaudo headless dei moduli UI ed Editor -->
     <div id="testSandBox" style="position: absolute; left: -9999px; top: -9999px; width: 800px; height: 600px; overflow: hidden; pointer-events: none;">
-        <div id="editorScrollContent">
+        <div id="editorScrollContent" class="editor-scroll-content">
             <input id="noteTitle" value="">
             <div id="noteHeaderProperties" class="note-header-properties" style="display:none;"></div>
             <div id="noteContent" class="editor-content" contenteditable="true"></div>
@@ -452,6 +452,9 @@
         <button id="goUpBtn"></button>
         <div id="treeContainer"></div>
     </div>
+
+    <!-- Contenitore permanente per i Toast (previene fallimenti appendChild prima del caricamento della sandbox) -->
+    <div id="adv-toast-container" class="toast-container" style="display:none;"></div>
 
     <div class="container">
         <header>

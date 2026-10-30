@@ -2,11 +2,11 @@
  * tests/test-editor-format-text.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: editor-format-text
- * Conteggio test case: 18
+ * Conteggio test case: 19
  * Generato automaticamente il: 2026-09-25 11:19:11
  */
 
-describe("Editor Format Text: Toggle Header, Blockquote, Gomma & Typography (18 Test)", () => {
+describe("Editor Format Text: Toggle Header, Blockquote, Gomma & Typography (19 Test)", () => {
 
     test("Editor.toggleBlockquote: unwrap di blockquote esistente ripristina paragrafi standard", () => {
             let editor = document.getElementById('noteContent');
@@ -305,6 +305,23 @@ describe("Editor Format Text: Toggle Header, Blockquote, Gomma & Typography (18 
 
             Editor.applyTextFormat('fs', 'fs-standard');
             Assert.isFalse(editor.innerHTML.includes('fs-large'));
+        });
+
+    test("Editor.clearFormatting (Gomma): preserva classi di sottolineatura colorata hl-u-c*", () => {
+            let editor = document.getElementById('noteContent');
+            editor.innerHTML = '<p><span class="hl-u-c2">Testo Sottolineato</span></p>';
+
+            const span = editor.querySelector('span');
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            const r = document.createRange();
+            r.selectNodeContents(span);
+            sel.addRange(r);
+
+            Editor.clearFormatting();
+            const cleanedSpan = editor.querySelector('span');
+            Assert.isNotNull(cleanedSpan);
+            Assert.isTrue(cleanedSpan.classList.contains('hl-u-c2'));
         });
 
 });

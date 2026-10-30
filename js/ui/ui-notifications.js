@@ -9,6 +9,9 @@
  * e fail-safe con auto-estinzione quando activeToasts è vuoto per garantire l'interruzione immediata dell'audio su Stop/Snooze.
  * FIX DUPLICATE RACE CONDITION: Risolta finestra cieca dei 10ms nel rilevamento duplicati con querySelectorAll('.toast-msg:not(.toast-exit)')
  * garantendo il corretto rifiuto sincrono di toast identici.
+ * FIX DOM DEFENSIVE RESILIENCE: Risoluzione sicura del target di montaggio (document.body con fallback su document.documentElement)
+ * e guardie perenni su contains() e remove() nei timer asincroni per prevenire eccezioni in ambienti di test.
+ * FIX AUDIO AUTOPLAY WARNING: Catch difensivo su AudioContext.resume() per eliminare errori console durante test headless.
  */
 
 Object.assign(UI, {
@@ -18,8 +21,13 @@ Object.assign(UI, {
             container = document.createElement('div');
             container.id = 'adv-toast-container';
             container.className = 'toast-container';
-            document.body.appendChild(container);
+            const mountTarget = document.body || document.documentElement;
+            if (mountTarget) {
+                mountTarget.appendChild(container);
+            }
         }
+
+        if (!container) return null;
 
         // Seleziona tutti i toast attivi escludendo solo quelli già in fase di dissolvenza/uscita (.toast-exit)
         const existingToasts = Array.from(container.querySelectorAll('.toast-msg:not(.toast-exit)'));
@@ -71,14 +79,22 @@ Object.assign(UI, {
         toast.innerHTML = `<span style="color:${iconColor}; display:inline-flex; align-items:flex-start; margin-top:2px;">${icon}</span> ${messageHTML}`;
         container.appendChild(toast);
         
-        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => {
+            const isAttached = document.contains ? document.contains(toast) : (document.body && document.body.contains(toast));
+            if (toast && isAttached) {
+                toast.classList.add('show');
+            }
+        }, 10);
         
         if (!isPersistent) {
             setTimeout(() => {
-                if (document.body.contains(toast)) {
+                const isAttached = document.contains ? document.contains(toast) : (document.body && document.body.contains(toast));
+                if (toast && isAttached) {
                     toast.classList.add('toast-exit');
                     toast.classList.remove('show');
-                    setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
+                    setTimeout(() => { 
+                        if (toast && toast.parentNode) toast.parentNode.removeChild(toast); 
+                    }, 300);
                 }
             }, 4000);
         }
@@ -138,7 +154,10 @@ Object.assign(UI, {
                 </div>
             `;
 
-            document.body.appendChild(overlay);
+            const mountTarget = document.body || document.documentElement;
+            if (mountTarget) {
+                mountTarget.appendChild(overlay);
+            }
             UI.ProgressModal._overlay = overlay;
         },
 
@@ -162,7 +181,7 @@ Object.assign(UI, {
         hide: () => {
             const overlay = UI.ProgressModal._overlay || document.getElementById('adv-progress-modal-overlay');
             if (overlay) {
-                overlay.remove();
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
                 UI.ProgressModal._overlay = null;
             }
         }
@@ -182,7 +201,8 @@ Object.assign(UI, {
                         UI.Alarm.audioCtx = new AudioContext();
                     }
                     if (UI.Alarm.audioCtx.state === 'suspended') {
-                        UI.Alarm.audioCtx.resume();
+                        const p = UI.Alarm.audioCtx.resume();
+                        if (p && typeof p.catch === 'function') p.catch(() => {});
                     }
                 } catch (e) {
                     console.warn("AudioContext non supportato.");
@@ -218,7 +238,8 @@ Object.assign(UI, {
                 }
 
                 if (UI.Alarm.audioCtx.state === 'suspended') {
-                    UI.Alarm.audioCtx.resume();
+                    const p = UI.Alarm.audioCtx.resume();
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
                 }
 
                 if (!UI.Alarm.beepInterval) {
@@ -258,7 +279,9 @@ Object.assign(UI, {
             if (toast) {
                 toast.classList.add('toast-exit');
                 toast.classList.remove('show');
-                setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
+                setTimeout(() => { 
+                    if (toast && toast.parentNode) toast.parentNode.removeChild(toast); 
+                }, 300);
             }
             
             UI.Alarm.activeToasts.delete(toastId);
@@ -290,7 +313,9 @@ Object.assign(UI, {
                 if (toast) {
                     toast.classList.add('toast-exit');
                     toast.classList.remove('show');
-                    setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
+                    setTimeout(() => { 
+                        if (toast && toast.parentNode) toast.parentNode.removeChild(toast); 
+                    }, 300);
                 }
             });
             UI.Alarm.activeToasts.clear();

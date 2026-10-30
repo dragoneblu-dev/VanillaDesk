@@ -531,7 +531,7 @@ Object.assign(Editor, {
                             const needS = hasStrikeStyle && tag !== 'S';
 
                             const existingClass = el.getAttribute('class') || '';
-                            const hasVanillaDeskClass = /(?:^|\s)(?:ff-|fs-|hl-c|tx-c|tag-hash)/.test(existingClass);
+                            const hasVanillaDeskClass = /(?:^|\s)(?:ff-|fs-|hl-c|hl-u-c|tx-c|tag-hash)/.test(existingClass);
 
                             if (needB || needI || needU || needS) {
                                 const frag = doc.createDocumentFragment();

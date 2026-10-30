@@ -103,6 +103,7 @@ Object.assign(Editor, {
                     // Estrae classi di colore, evidenziatore e font native VanillaDesk
                     const validClasses = Array.from(currAncestor.classList).filter(cls => 
                         /^hl-c\d+$/.test(cls) || 
+                        /^hl-u-c\d+$/.test(cls) || 
                         /^tx-c\d+$/.test(cls) || 
                         /^ff-/.test(cls) || 
                         /^fs-/.test(cls) ||

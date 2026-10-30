@@ -393,7 +393,12 @@ Object.assign(Editor, {
         }
 
         const selection = window.getSelection();
-        if (!selection.rangeCount) return;
+        if (selection.rangeCount > 0 && selection.isCollapsed) {
+            if (typeof ColorManager !== 'undefined' && typeof ColorManager.expandSelectionToWord === 'function') {
+                ColorManager.expandSelectionToWord(selection);
+            }
+        }
+        if (!selection.rangeCount || selection.isCollapsed) return;
         const text = selection.toString();
         if (!text) return;
         Editor.saveSnapshot();
@@ -479,6 +484,14 @@ Object.assign(Editor, {
         Editor.restoreSelection();
 
         const selection = window.getSelection();
+
+        // AUTO-ESPANSIONE SULLA PAROLA CORRENTE (WORD-SNAP)
+        if (selection.rangeCount > 0 && selection.isCollapsed) {
+            if (typeof ColorManager !== 'undefined' && typeof ColorManager.expandSelectionToWord === 'function') {
+                ColorManager.expandSelectionToWord(selection);
+            }
+        }
+
         if (!selection.rangeCount || selection.isCollapsed) return;
 
         const editor = document.getElementById('noteContent') || document.getElementById('inlineNoteInput');
@@ -614,7 +627,7 @@ Object.assign(Editor, {
      * MOTORE CENTRALE DI SANIFICAZIONE PROFONDA (GOMMA FORMATTAZIONI)
      * Funzione riutilizzata sia da clearFormatting sia da handlePaste per garantire coerenza assoluta,
      * rimozione totale di stili alieni (-webkit, margin, padding, user-select)
-     * e conservazione garantita delle classi di stile VanillaDesk (hl-c*, tx-c*, ff-*, fs-*).
+     * e conservazione garantita delle classi di stile VanillaDesk (hl-c*, hl-u-c*, tx-c*, ff-*, fs-*).
      * TUTELA ASSOLUTA: Esclusione totale e blindata dei widget complessi di VanillaDesk.
      */
     cleanDOMTree: (container) => {
@@ -690,7 +703,7 @@ Object.assign(Editor, {
         
         // Rigido allineamento con il Design System di VanillaDesk: ammesse solo le classi ufficiali dell'app.
         // I prefissi validi sono rigorosamente vincolati ai token colore e tipografia di VanillaDesk.
-        const allowedPrefixes = ['hl-c', 'tx-c', 'ff-', 'fs-'];
+        const allowedPrefixes = ['hl-c', 'hl-u-c', 'tx-c', 'ff-', 'fs-'];
         
         const allowedClasses = [
             // Link, Testo e Ricerca

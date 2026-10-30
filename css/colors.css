@@ -10,6 +10,18 @@
 .hl-c9 { background-color: var(--hl-c9); }
 .hl-c10 { background-color: var(--hl-c10); }
 
+/* --- CLASSI SOTTOLINEATURA COLORATA (UNDERLINE HIGHLIGHT) --- */
+.hl-u-c1 { text-decoration: underline !important; text-decoration-color: var(--tx-c1) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c2 { text-decoration: underline !important; text-decoration-color: var(--tx-c2) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c3 { text-decoration: underline !important; text-decoration-color: var(--tx-c3) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c4 { text-decoration: underline !important; text-decoration-color: var(--tx-c4) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c5 { text-decoration: underline !important; text-decoration-color: var(--tx-c5) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c6 { text-decoration: underline !important; text-decoration-color: var(--tx-c6) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c7 { text-decoration: underline !important; text-decoration-color: var(--tx-c7) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c8 { text-decoration: underline !important; text-decoration-color: var(--tx-c8) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c9 { text-decoration: underline !important; text-decoration-color: var(--tx-c9) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+.hl-u-c10 { text-decoration: underline !important; text-decoration-color: var(--tx-c10) !important; text-underline-offset: 3px !important; text-decoration-thickness: 2px !important; }
+
 .tx-c1 { color: var(--tx-c1); }
 .tx-c2 { color: var(--tx-c2); }
 .tx-c3 { color: var(--tx-c3); }
@@ -68,6 +80,18 @@
 .btn-color-bar.hl-c8 { background-color: var(--hl-c8); }
 .btn-color-bar.hl-c9 { background-color: var(--hl-c9); }
 .btn-color-bar.hl-c10 { background-color: var(--hl-c10); }
+
+/* Barretta toolbar per Sottolineatura Colorata */
+.btn-color-bar.hl-u-c1 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c1); }
+.btn-color-bar.hl-u-c2 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c2); }
+.btn-color-bar.hl-u-c3 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c3); }
+.btn-color-bar.hl-u-c4 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c4); }
+.btn-color-bar.hl-u-c5 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c5); }
+.btn-color-bar.hl-u-c6 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c6); }
+.btn-color-bar.hl-u-c7 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c7); }
+.btn-color-bar.hl-u-c8 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c8); }
+.btn-color-bar.hl-u-c9 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c9); }
+.btn-color-bar.hl-u-c10 { background-color: transparent; border: none; border-bottom: 3px solid var(--tx-c10); }
 
 .btn-color-bar.tx-c1 { background-color: var(--tx-c1); border: 1px solid rgba(0,0,0,0.1); }
 .btn-color-bar.tx-c2 { background-color: var(--tx-c2); }
