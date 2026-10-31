@@ -1,7 +1,17 @@
 /**
  * ui-notifications.js
- * Modulo UI per i popup (Toast) temporanei e il Sintetizzatore Audio (Allarmi).
+ * Modulo UI per i popup (Toast) temporanei, il Sintetizzatore Audio (Allarmi)
+ * e la finestra modale di avanzamento sincrono su disco (UI.ProgressModal).
  * Gestione dello Snooze resiliente per i promemoria da segnalibro tramite registro dati sicuro.
+ * FIX LAYOUT PROGRESS MODAL: Forzatura esplicita di layout a colonna flessibile per centrare
+ * stabilmente l'icona della clessidra all'interno del riquadro modale.
+ * FIX ALARM BEEP INTERVAL LEAK: Assegnazione esplicita dell'ID di setInterval a UI.Alarm.beepInterval
+ * e fail-safe con auto-estinzione quando activeToasts è vuoto per garantire l'interruzione immediata dell'audio su Stop/Snooze.
+ * FIX DUPLICATE RACE CONDITION: Risolta finestra cieca dei 10ms nel rilevamento duplicati con querySelectorAll('.toast-msg:not(.toast-exit)')
+ * garantendo il corretto rifiuto sincrono di toast identici.
+ * FIX DOM DEFENSIVE RESILIENCE: Risoluzione sicura del target di montaggio (document.body con fallback su document.documentElement)
+ * e guardie perenni su contains() e remove() nei timer asincroni per prevenire eccezioni in ambienti di test.
+ * FIX AUDIO AUTOPLAY WARNING: Catch difensivo su AudioContext.resume() per eliminare errori console durante test headless.
  */
 
 Object.assign(UI, {
@@ -11,11 +21,22 @@ Object.assign(UI, {
             container = document.createElement('div');
             container.id = 'adv-toast-container';
             container.className = 'toast-container';
-            document.body.appendChild(container);
+            const mountTarget = document.body || document.documentElement;
+            if (mountTarget) {
+                mountTarget.appendChild(container);
+            }
         }
 
-        const existingToasts = Array.from(container.querySelectorAll('.toast-msg'));
-        const isDuplicate = existingToasts.some(t => t.innerText.includes(message.replace(/<[^>]*>?/gm, '')));
+        if (!container) return null;
+
+        // Seleziona tutti i toast attivi escludendo solo quelli già in fase di dissolvenza/uscita (.toast-exit)
+        const existingToasts = Array.from(container.querySelectorAll('.toast-msg:not(.toast-exit)'));
+        const cleanMessage = String(message).replace(/<[^>]*>?/gm, '').trim();
+        const isDuplicate = existingToasts.some(t => {
+            const existingText = (t.innerText || t.textContent || '').trim();
+            return existingText.includes(cleanMessage);
+        });
+
         if (isDuplicate) return null;
 
         const toastId = 'toast_' + Date.now() + Math.random().toString(36).substring(2, 5);
@@ -58,18 +79,112 @@ Object.assign(UI, {
         toast.innerHTML = `<span style="color:${iconColor}; display:inline-flex; align-items:flex-start; margin-top:2px;">${icon}</span> ${messageHTML}`;
         container.appendChild(toast);
         
-        setTimeout(() => toast.classList.add('show'), 10);
+        setTimeout(() => {
+            const isAttached = document.contains ? document.contains(toast) : (document.body && document.body.contains(toast));
+            if (toast && isAttached) {
+                toast.classList.add('show');
+            }
+        }, 10);
         
         if (!isPersistent) {
             setTimeout(() => {
-                if (document.body.contains(toast)) {
+                const isAttached = document.contains ? document.contains(toast) : (document.body && document.body.contains(toast));
+                if (toast && isAttached) {
+                    toast.classList.add('toast-exit');
                     toast.classList.remove('show');
-                    setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
+                    setTimeout(() => { 
+                        if (toast && toast.parentNode) toast.parentNode.removeChild(toast); 
+                    }, 300);
                 }
             }, 4000);
         }
 
         return toastId; 
+    },
+
+    // =========================================================================
+    // MODALE DI AVANZAMENTO SINCRONO SU DISCO (Anti-Chiusura Intempestiva)
+    // =========================================================================
+    ProgressModal: {
+        _overlay: null,
+
+        show: (title, message, current = 0, total = 100) => {
+            UI.ProgressModal.hide();
+
+            const overlay = document.createElement('div');
+            overlay.id = 'adv-progress-modal-overlay';
+            overlay.className = 'link-modal-overlay';
+            overlay.style.cssText = `
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(0, 0, 0, 0.75);
+                z-index: 10005;
+                backdrop-filter: blur(2px);
+            `;
+
+            const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+            const safeTitle = UI.escapeHTML(title);
+            const safeMsg = UI.escapeHTML(message);
+
+            overlay.innerHTML = `
+                <div class="link-modal modal-animate" style="width: 460px; max-width: 90vw; padding: 25px; border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.4); text-align: center; display: flex; flex-direction: column; align-items: center; justify-content: center; box-sizing: border-box;">
+                    <div style="margin-bottom: 15px; display: flex; align-items: center; justify-content: center; width: 100%; color: var(--accent-color); transform: scale(1.4);">
+                        ${typeof Icons !== 'undefined' ? Icons.hourglass : '⏳'}
+                    </div>
+                    <h3 id="advProgressModalTitle" style="margin: 0 0 10px 0; font-size: 1.15rem; color: var(--text-primary); text-align: center; width: 100%;">
+                        ${safeTitle}
+                    </h3>
+                    <div id="advProgressModalMsg" style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 18px; line-height: 1.45; text-align: center; width: 100%;">
+                        ${safeMsg}
+                    </div>
+
+                    <div style="width: 100%; height: 10px; background: rgba(0, 0, 0, 0.08); border-radius: 5px; overflow: hidden; margin-bottom: 8px; border: 1px solid var(--border-color);">
+                        <div id="advProgressModalBar" style="width: ${pct}%; height: 100%; background: var(--accent-color); transition: width 0.15s ease;"></div>
+                    </div>
+
+                    <div style="display: flex; justify-content: space-between; width: 100%; font-size: 0.75rem; color: var(--text-secondary); font-family: monospace;">
+                        <span id="advProgressModalCounter">${current} / ${total}</span>
+                        <span id="advProgressModalPct">${pct}%</span>
+                    </div>
+
+                    <div style="margin-top: 15px; font-size: 0.75rem; color: var(--danger-color); font-weight: 600; text-align: center; width: 100%;">
+                        ⚠️ ${I18n.t('progress.do_not_close') || "Non chiudere la finestra del browser fino al termine dell'operazione."}
+                    </div>
+                </div>
+            `;
+
+            const mountTarget = document.body || document.documentElement;
+            if (mountTarget) {
+                mountTarget.appendChild(overlay);
+            }
+            UI.ProgressModal._overlay = overlay;
+        },
+
+        update: (message, current, total) => {
+            const overlay = UI.ProgressModal._overlay || document.getElementById('adv-progress-modal-overlay');
+            if (!overlay) return;
+
+            const msgEl = overlay.querySelector('#advProgressModalMsg');
+            const barEl = overlay.querySelector('#advProgressModalBar');
+            const counterEl = overlay.querySelector('#advProgressModalCounter');
+            const pctEl = overlay.querySelector('#advProgressModalPct');
+
+            const pct = total > 0 ? Math.min(100, Math.round((current / total) * 100)) : 0;
+
+            if (msgEl && message) msgEl.innerText = message;
+            if (barEl) barEl.style.width = `${pct}%`;
+            if (counterEl) counterEl.innerText = `${current} / ${total}`;
+            if (pctEl) pctEl.innerText = `${pct}%`;
+        },
+
+        hide: () => {
+            const overlay = UI.ProgressModal._overlay || document.getElementById('adv-progress-modal-overlay');
+            if (overlay) {
+                if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+                UI.ProgressModal._overlay = null;
+            }
+        }
     },
 
     Alarm: {
@@ -86,7 +201,8 @@ Object.assign(UI, {
                         UI.Alarm.audioCtx = new AudioContext();
                     }
                     if (UI.Alarm.audioCtx.state === 'suspended') {
-                        UI.Alarm.audioCtx.resume();
+                        const p = UI.Alarm.audioCtx.resume();
+                        if (p && typeof p.catch === 'function') p.catch(() => {});
                     }
                 } catch (e) {
                     console.warn("AudioContext non supportato.");
@@ -122,11 +238,21 @@ Object.assign(UI, {
                 }
 
                 if (UI.Alarm.audioCtx.state === 'suspended') {
-                    UI.Alarm.audioCtx.resume();
+                    const p = UI.Alarm.audioCtx.resume();
+                    if (p && typeof p.catch === 'function') p.catch(() => {});
                 }
 
                 if (!UI.Alarm.beepInterval) {
                     UI.Alarm.beepInterval = setInterval(() => {
+                        // Fail-safe difensivo: se non ci sono più toast di allarme attivi, interrompi il loop
+                        if (!UI.Alarm.audioCtx || UI.Alarm.activeToasts.size === 0) {
+                            if (UI.Alarm.beepInterval) {
+                                clearInterval(UI.Alarm.beepInterval);
+                                UI.Alarm.beepInterval = null;
+                            }
+                            return;
+                        }
+
                         const osc = UI.Alarm.audioCtx.createOscillator();
                         const gain = UI.Alarm.audioCtx.createGain();
                         
@@ -151,8 +277,11 @@ Object.assign(UI, {
             if (!toastId) return; 
             const toast = document.getElementById(toastId);
             if (toast) {
+                toast.classList.add('toast-exit');
                 toast.classList.remove('show');
-                setTimeout(() => { if (document.body.contains(toast)) toast.remove(); }, 300);
+                setTimeout(() => { 
+                    if (toast && toast.parentNode) toast.parentNode.removeChild(toast); 
+                }, 300);
             }
             
             UI.Alarm.activeToasts.delete(toastId);
@@ -165,9 +294,32 @@ Object.assign(UI, {
             }
         },
 
-        stop: (toastId) => {
-            delete UI.Alarm._alarmData[toastId];
-            UI.Alarm._removeToastAndCheckAudio(toastId);
+        stop: (toastId = null) => {
+            if (toastId) {
+                delete UI.Alarm._alarmData[toastId];
+                UI.Alarm._removeToastAndCheckAudio(toastId);
+            } else {
+                UI.Alarm.stopAll();
+            }
+        },
+
+        stopAll: () => {
+            if (UI.Alarm.beepInterval) {
+                clearInterval(UI.Alarm.beepInterval);
+                UI.Alarm.beepInterval = null;
+            }
+            UI.Alarm.activeToasts.forEach(tId => {
+                const toast = document.getElementById(tId);
+                if (toast) {
+                    toast.classList.add('toast-exit');
+                    toast.classList.remove('show');
+                    setTimeout(() => { 
+                        if (toast && toast.parentNode) toast.parentNode.removeChild(toast); 
+                    }, 300);
+                }
+            });
+            UI.Alarm.activeToasts.clear();
+            UI.Alarm._alarmData = {};
         },
 
         snooze: (toastId, minutes = 5) => {
