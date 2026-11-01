@@ -458,7 +458,7 @@ img[data-broken="true"] {
 }
 
 .adv-quick-search-input:focus {
-    border-color: var(--accent-color) !important;
+    border-bottom-color: var(--accent-color) !important;
     background: var(--bg-color) !important;
 }
 

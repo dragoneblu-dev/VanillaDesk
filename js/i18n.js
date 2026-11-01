@@ -175,6 +175,10 @@ export_dialog: {
             unlock_btn: "Sblocca"
         },
         journal: {
+            sort_by: "Ordinamento Voci",
+            sort_creation: "Per Data di Creazione",
+            sort_completion: "Per Data di Completamento",
+            pending_group: "Da Completare",
             default_title: "Diario / Log",
             hide_completed: "Nascondi completati (Vedi solo To-Do)",
             show_search: "Mostra barra di ricerca",
@@ -1573,6 +1577,10 @@ export_dialog: {
             unlock_btn: "Unlock"
         },
         journal: {
+            sort_by: "Sort Entries",
+            sort_creation: "By Creation Date",
+            sort_completion: "By Completion Date",
+            pending_group: "To Do",
             default_title: "Journal / Log",
             hide_completed: "Hide completed (To-Do only)",
             show_search: "Show search bar",
@@ -2970,6 +2978,10 @@ export_dialog: {
             unlock_btn: "Desbloquear"
         },
         journal: {
+            sort_by: "Ordenar Entradas",
+            sort_creation: "Por Fecha de Creación",
+            sort_completion: "Por Fecha de Finalización",
+            pending_group: "Por Completar",
             default_title: "Diario / Registro",
             hide_completed: "Ocultar completados (Solo pendientes)",
             show_search: "Mostrar barra de búsqueda",
@@ -4368,6 +4380,10 @@ export_dialog: {
             unlock_btn: "Entsperren"
         },
         journal: {
+            sort_by: "Einträge Sortieren",
+            sort_creation: "Nach Erstellungsdatum",
+            sort_completion: "Nach Abschlussdatum",
+            pending_group: "Unerledigt",
             default_title: "Tagebuch / Protokoll",
             hide_completed: "Erledigte ausblenden (Nur To-Do)",
             show_search: "Suchleiste anzeigen",

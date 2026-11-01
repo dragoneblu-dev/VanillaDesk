@@ -7,6 +7,8 @@
  * FAST-PATH STESSA NOTA: Quando selectNote viene chiamata per la nota già aperta (es. tasto Apri su citazione
  * o link interno in-page), non distrugge il DOM ma esegue direttamente lo scroll verso l'elemento target
  * garantendo la dis-espansione degli antenati collassati.
+ * AUTO-HEAL APERTURA NOTA (CASO C): Controllo mirato ultrarapido tramite regex (ZWS duplicati o intrappolati tra lettere)
+ * per avviare la bonifica dei cuscinetti solo in presenza di reali anomalie, evitando scansioni inutili su widget legittimi.
  */
 
 Object.assign(UI, {
@@ -398,6 +400,19 @@ Object.assign(UI, {
         const contentEl = document.getElementById('noteContent');
         if (contentEl) {
             contentEl.innerHTML = note.content || "<p><br></p>";
+
+            // CASO C: AUTO-GUARIGIONE SELETTIVA DEI CUSCINETTI ALL'APERTURA DELLA NOTA
+            // Controllo regex ultrarapido a zero overhead (~0.03ms): se la nota contiene ZWS legittimi per widget inline,
+            // il test dà false ed esce immediatamente senza alterare il DOM. Se rileva ZWS duplicati (\u200B{2,})
+            // o ZWS intrappolati tra lettere di parole, avvia la bonifica mirata di ensureInlineWidgetBuffers.
+            const rawMarkup = contentEl.innerHTML;
+            if (rawMarkup && rawMarkup.includes('\u200B')) {
+                const hasZwsAnomaly = /\u200B{2,}|[a-zA-Z0-9À-ÿ]\u200B+[a-zA-Z0-9À-ÿ]/.test(rawMarkup);
+                if (hasZwsAnomaly && typeof Editor !== 'undefined' && typeof Editor.ensureInlineWidgetBuffers === 'function') {
+                    Editor.ensureInlineWidgetBuffers(contentEl);
+                }
+            }
+
             if (typeof Editor !== 'undefined' && Editor.hydrateMedia) {
                 Editor.hydrateMedia(contentEl);
             }

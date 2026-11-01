@@ -9,6 +9,7 @@
  * - Normalizzazione dei blocchi vuoti (_normalizeEmptyBlocks).
  * - Minificazione e serializzazione protetta per il salvataggio (minifyHTMLForStorage, getCleanHTML, sanitizeContent).
  * - Gestione evidenziazioni di ricerca prima e dopo il salvataggio (applyHighlight, cleanHighlightsBeforeSave).
+ * - Scansione e supporto per match cross-node di termini multi-parola separati da tag inline (es. "ciao <b>bello</b>").
  * - Pulizia centralizzata cache in RAM (cleanOrphanedCaches).
  */
 
@@ -183,7 +184,7 @@ Object.assign(Editor, {
             }
         });
 
-        // 3. Estirpazione degli Zero-Width Space orfani e riallineamento dei bordi
+        // 3. Estirpazione degli Zero-Width Space orfani, pulizia ZWS duplicati e ZWS intrappolati tra lettere
         const walker = document.createTreeWalker(container, NodeFilter.SHOW_TEXT, null, false);
         const orphanNodes = [];
         let textNode;
@@ -196,14 +197,20 @@ Object.assign(Editor, {
         let caretTargetNode = null;
 
         while ((textNode = walker.nextNode())) {
-            const val = textNode.nodeValue;
-            if (!val.includes('\u200B')) continue;
+            let val = textNode.nodeValue;
+            if (!val.includes('\u200B') && !val.includes('\uFEFF')) continue;
 
             const parent = textNode.parentNode;
             // AUDIT DIFENSIVO: Protegge i nodi di layout interni a snippet, note inline e checklist
             if (parent && (parent.closest('.adv-inline-shell') || parent.classList.contains('checklist-text') || parent.classList.contains('snippet-text'))) {
                 continue;
             }
+
+            // REGOLA A: Rimuove all'origine qualsiasi ZWS intrappolato tra lettere alfanumeriche di parole
+            val = val.replace(/(?<=[\wÀ-ÿ])[\u200B\uFEFF]+(?=[\wÀ-ÿ])/gu, '');
+
+            // REGOLA B: Rimuove sequenze duplicate di ZWS comprimendole a uno solo
+            val = val.replace(/[\u200B\uFEFF]{2,}/g, '\u200B');
 
             const prev = textNode.previousSibling;
             const next = textNode.nextSibling;
@@ -221,7 +228,7 @@ Object.assign(Editor, {
                     caretTargetNode = textNode;
                     needsRestoreCaret = true;
                 }
-                const cleaned = val.replace(/\u200B/g, '');
+                const cleaned = val.replace(/[\u200B\uFEFF]/g, '');
                 if (cleaned === '') {
                     orphanNodes.push(textNode);
                 } else {
@@ -229,13 +236,13 @@ Object.assign(Editor, {
                 }
             } else {
                 // Nodo adiacente a una shell: il \u200B deve stare ESCLUSIVAMENTE sui bordi aderenti alla shell
-                let pureText = val.replace(/\u200B/g, '');
+                let pureText = val.replace(/[\u200B\uFEFF]/g, '');
                 let inner = pureText;
 
                 if (isAfterShell) inner = '\u200B' + inner;
                 if (isBeforeShell && inner !== '\u200B') inner = inner + '\u200B';
 
-                if (inner !== val) {
+                if (inner !== textNode.nodeValue) {
                     if (textNode === activeNode) {
                         const textBefore = val.substring(0, activeOffset);
                         const zwsCountBefore = (textBefore.match(/\u200B/g) || []).length;
@@ -477,16 +484,21 @@ Object.assign(Editor, {
         const root = isString ? document.createElement('div') : elementOrHtml;
         if (isString) root.innerHTML = elementOrHtml;
 
-        const safeTerm = term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const cleanTerm = term.trim();
+        if (!cleanTerm) return elementOrHtml;
+
+        const safeTerm = cleanTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         const regex = new RegExp(`(${safeTerm})`, 'gi');
 
+        // FASE 1: Fast-Path standard su singoli nodi di testo (copre termini monoriga e parole singole)
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
         const nodesToReplace = [];
 
         let n;
-        while (n = walker.nextNode()) {
-            const parentTag = n.parentNode ? n.parentNode.tagName.toUpperCase() : '';
-            if (parentTag !== 'SCRIPT' && parentTag !== 'STYLE' && parentTag !== 'MARK' && !WidgetManager.isTotallyProtected(n.parentNode)) {
+        while ((n = walker.nextNode())) {
+            const parent = n.parentNode;
+            const parentTag = parent ? parent.tagName.toUpperCase() : '';
+            if (parentTag !== 'SCRIPT' && parentTag !== 'STYLE' && parentTag !== 'MARK' && !WidgetManager.isTotallyProtected(parent)) {
                 if (n.nodeValue.match(regex)) nodesToReplace.push(n);
             }
         }
@@ -495,7 +507,7 @@ Object.assign(Editor, {
             const fragment = document.createDocumentFragment();
             const parts = textNode.nodeValue.split(regex);
             parts.forEach(part => {
-                if (part.toLowerCase() === term.toLowerCase()) {
+                if (part.toLowerCase() === cleanTerm.toLowerCase()) {
                     const mark = document.createElement('mark');
                     mark.className = 'search-highlight';
                     mark.textContent = part;
@@ -506,6 +518,91 @@ Object.assign(Editor, {
             });
             textNode.parentNode.replaceChild(fragment, textNode);
         });
+
+        // FASE 2: Cross-Node Boundary Matching (per ricerche multi-parola separate da tag come "ciao <b>bello</b>")
+        // Se il termine contiene spazi, verifichiamo se esistono blocchi contenitori il cui textContent matcha il termine
+        // ma i cui singoli TextNode non hanno potuto essere intercettati dalla FASE 1 a causa di tag inline intermedi.
+        if (cleanTerm.includes(' ')) {
+            const blockSelector = 'p, div, li, h1, h2, h3, h4, h5, h6, blockquote, td, th';
+            const blocks = Array.from(root.querySelectorAll(blockSelector)).filter(b => {
+                return !b.querySelector(blockSelector) && !WidgetManager.isTotallyProtected(b);
+            });
+
+            const lowerSearchTerm = cleanTerm.toLowerCase();
+
+            blocks.forEach(block => {
+                const fullText = block.textContent || '';
+                const lowerFullText = fullText.toLowerCase();
+
+                let searchIdx = lowerFullText.indexOf(lowerSearchTerm);
+                if (searchIdx === -1) return;
+
+                // Raccoglie tutti i nodi di testo del blocco ignorando quelli già dentro un <mark>
+                const blockWalker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null, false);
+                const textNodesInfo = [];
+                let currOffset = 0;
+                let tNode;
+
+                while ((tNode = blockWalker.nextNode())) {
+                    if (tNode.parentNode && tNode.parentNode.tagName === 'MARK') {
+                        currOffset += tNode.nodeValue.length;
+                        continue;
+                    }
+                    const len = tNode.nodeValue.length;
+                    textNodesInfo.push({
+                        node: tNode,
+                        start: currOffset,
+                        end: currOffset + len
+                    });
+                    currOffset += len;
+                }
+
+                // Per ogni occorrenza trovata nel blocco
+                while (searchIdx !== -1) {
+                    const matchStart = searchIdx;
+                    const matchEnd = searchIdx + cleanTerm.length;
+
+                    // Trova i nodi di testo che intersecano l'intervallo [matchStart, matchEnd]
+                    const intersecting = textNodesInfo.filter(info => {
+                        return info.end > matchStart && info.start < matchEnd;
+                    });
+
+                    // Se l'occorrenza era già stata gestita dalla FASE 1 su un singolo nodo, salta
+                    const alreadyMarked = intersecting.some(info => info.node.parentNode && info.node.parentNode.tagName === 'MARK');
+
+                    if (!alreadyMarked && intersecting.length > 0) {
+                        intersecting.forEach(info => {
+                            const node = info.node;
+                            if (!node.parentNode || node.parentNode.tagName === 'MARK') return;
+
+                            const nodeVal = node.nodeValue;
+                            const localStart = Math.max(0, matchStart - info.start);
+                            const localEnd = Math.min(nodeVal.length, matchEnd - info.start);
+
+                            if (localStart < localEnd) {
+                                const beforeText = nodeVal.substring(0, localStart);
+                                const matchText = nodeVal.substring(localStart, localEnd);
+                                const afterText = nodeVal.substring(localEnd);
+
+                                const frag = document.createDocumentFragment();
+                                if (beforeText) frag.appendChild(document.createTextNode(beforeText));
+
+                                const mark = document.createElement('mark');
+                                mark.className = 'search-highlight';
+                                mark.textContent = matchText;
+                                frag.appendChild(mark);
+
+                                if (afterText) frag.appendChild(document.createTextNode(afterText));
+
+                                node.parentNode.replaceChild(frag, node);
+                            }
+                        });
+                    }
+
+                    searchIdx = lowerFullText.indexOf(lowerSearchTerm, matchEnd);
+                }
+            });
+        }
 
         return isString ? root.innerHTML : root;
     },

@@ -71,7 +71,7 @@ Object.assign(AdvancedTable, {
             return `<div style="display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap: 10px; margin-bottom:5px; position:relative;">
                         <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; width: 100px; overflow:hidden; text-overflow:ellipsis;" title="${c.name.replace(/"/g, '&quot;')}">${c.name}</span>
                         <div style="flex:1; position:relative; display:flex; align-items:center;">
-                            <input type="text" class="adv-menu-input" style="margin:0; width:100%; padding-right:${val ? '25px' : '5px'};" 
+                            <input type="text" class="adv-menu-input" style="margin:0; padding-right:${val ? '25px' : '5px'};" 
                                    autocomplete="chrome-off" name="prevent_autofill_${c.id}" data-lpignore="true" data-1p-ignore="true" spellcheck="false"
                                    data-col="${c.id}" value="${safeVal}" placeholder="..." 
                                    onkeydown="event.stopPropagation()" 

@@ -10,6 +10,8 @@
  * bordo d'accento e indicatore di spunta chiaro per massima leggibilità a colpo d'occhio.
  * FIX MODAL PEAK ELEVATION: Supporto per z-index elevato (100005 e 100010) e sincronizzazione visiva istantanea
  * della cella all'interno del Quick Peek Modal (#advRelationPeekModalOverlay).
+ * FIX PEEK FOOTER REACTIVITY: Invocazione sistematica di AdvancedTable.updateRelationQuickPeekFooter()
+ * in toggleSelectValue e createSelectOption per far comparire immediatamente i pulsanti 'Annulla' e 'Salva'.
  */
 
 const svgDotsHorizontal = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><circle cx="5" cy="12" r="1.5"></circle><circle cx="12" cy="12" r="1.5"></circle><circle cx="19" cy="12" r="1.5"></circle></svg>`;
@@ -384,6 +386,9 @@ Object.assign(AdvancedTable, {
             }
             if (AdvancedTable._activeRelationPeek) {
                 AdvancedTable._activeRelationPeek.isDirty = true;
+                if (typeof AdvancedTable.updateRelationQuickPeekFooter === 'function') {
+                    AdvancedTable.updateRelationQuickPeekFooter();
+                }
             }
         }
 
@@ -508,6 +513,9 @@ Object.assign(AdvancedTable, {
             }
             if (AdvancedTable._activeRelationPeek) {
                 AdvancedTable._activeRelationPeek.isDirty = true;
+                if (typeof AdvancedTable.updateRelationQuickPeekFooter === 'function') {
+                    AdvancedTable.updateRelationQuickPeekFooter();
+                }
             }
         }
 

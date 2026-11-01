@@ -12,6 +12,7 @@
  * all'interno del timer di chiusura a 300ms, prevenendo eccezioni unhandled nel DOM.
  * FEAT RESIZABLE DRAWER: Bordo trascinabile continuo con clamp matematico (380px - 90vw)
  * e salvataggio permanente della larghezza dell'utente in localStorage.
+ * CLEAN STYLE RIDONDANTE: Eliminata assegnazione inline di box-shadow già governata nativamente da .adv-drawer in modals.css.
  */
 
 Object.assign(UI, {
@@ -278,7 +279,6 @@ Object.assign(UI, {
                 UI.toggleDrawerGhost();
             }
 
-            drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)';
             drawer.classList.add('open');
         }
     },
@@ -353,7 +353,6 @@ Object.assign(UI, {
             const footerEl = document.getElementById('advDrawerFooter');
             if (bodyEl) bodyEl.innerHTML = '';
             if (footerEl) footerEl.innerHTML = '';
-            if (drawer) drawer.style.boxShadow = '5px 0 15px rgba(0, 0, 0, 0.1)';
         }, 300);
 
         // --- GESTIONE INTEGRATA CHIUSURA RECORD DATABASE ---

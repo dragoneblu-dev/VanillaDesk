@@ -27,6 +27,10 @@
 .widget-options-btn:hover { background: var(--item-hover); opacity: 1; color: var(--text-primary);
 }
 
+.adv-table-count-label {
+    font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px;
+}
+
 .adv-table-title { font-size: 1.2rem; font-weight: 700; color: var(--text-primary); border: 1px solid transparent; padding: 2px 5px; border-radius: 4px; outline: none; min-width: 100px;
 }
 
@@ -207,7 +211,26 @@ z-index: 2;
 
 .adv-dropdown { position: absolute; background: var(--sidebar-bg); border: 1px solid var(--border-color); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); border-radius: 6px; padding: 8px; z-index: 1000; min-width: 200px; display: flex; flex-direction: column; gap: 4px; }
 .adv-dropdown-title { font-size: 0.7rem; font-weight: bold; color: var(--text-secondary); text-transform: uppercase; margin-bottom: 2px; }
-.adv-dropdown-input, .adv-dropdown-select { width: 100%; padding: 6px; border: 1px solid var(--border-color); border-radius: 4px; background: var(--bg-color); color: var(--text-primary); font-size: 0.85rem; outline: none; margin-bottom: 5px; }
+.adv-dropdown-input, .adv-dropdown-select { 
+    width: 100%; 
+    padding: 6px; 
+    border: 1px solid var(--border-color); 
+    border-radius: 4px; 
+    background: var(--bg-color); 
+    color: var(--text-primary); 
+    font-size: 0.85rem; 
+    outline: none; 
+    margin-bottom: 5px; 
+    transition: border-color 0.2s ease, box-shadow 0.2s ease;
+    box-sizing: border-box;
+}
+
+.adv-dropdown-input:focus,
+.adv-dropdown-select:focus,
+#advCreateSelectInput:focus {
+    border-bottom-color: var(--accent-color) !important;
+}
+
 .adv-dropdown-item { padding: 6px 8px; cursor: pointer; border-radius: 4px; font-size: 0.85rem; color: var(--text-primary); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .adv-dropdown-item:hover { background: var(--item-hover); }
 .adv-dropdown-item.active { background: var(--item-active); color: var(--accent-color); font-weight: bold; }
@@ -270,7 +293,7 @@ body.is-panning * { user-select: none !important; pointer-events: none !importan
 .adv-tree-row:hover .adv-tree-quick-add { opacity: 0.7; visibility: visible;
 }
 
-.adv-tree-quick-add:hover { opacity: 1 !important; background: var(--item-hover); border-color: var(--accent-color);
+.adv-tree-quick-add:hover { opacity: 1 !important; background: var(--item-hover); border-bottom-color: var(--accent-color);
 }
 
 .tree-ancestor-dimmed { opacity: 0.55; font-style: italic;
@@ -328,5 +351,4 @@ body.is-panning * { user-select: none !important; pointer-events: none !importan
     flex-direction: column;
     gap: 8px;
     border-top: 1px solid var(--border-color);
-    /*background: var(--bg-color);*/
 }

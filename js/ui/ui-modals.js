@@ -3,14 +3,15 @@
  * Iniezione dinamica delle finestre modali nel DOM.
  * REFACTOR: Integrazione della scheda "Backup JSON" direttamente nel pannello di esportazione a 4 colonne,
  * unificando tutti i flussi di output dell'applicazione in un'unica interfaccia coerente.
+ * CLEAN STYLE RIDONDANTE: Eliminati display: flex e flex-direction ridondanti già inclusi nella classe .link-modal.
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     const modalsHTML = `
     <!-- Export Modal -->
     <div id="exportModal" class="link-modal-overlay hidden">
-        <div class="link-modal export-modal modal-animate" style="width: 760px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column;">
-            <div class="link-modal-header" style="flex-shrink: 0;">
+        <div class="link-modal export-modal modal-animate" style="width: 760px; max-width: 95vw; max-height: 90vh;">
+            <div class="link-modal-header">
                 <div class="link-modal-title">
                     <span style="display:flex; align-items:center; gap:8px;">
                         <span style="display:inline-flex; color:var(--accent-color);">${Icons.export}</span> 
@@ -20,7 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
             
-            <div class="link-modal-list adv-scroll-container" style="padding: 20px; display:flex; flex-direction:column; gap:18px; overflow-y:auto; flex:1;">
+            <div class="link-modal-list adv-scroll-container" style="padding: 20px; display:flex; flex-direction:column; gap:18px;">
                 
                 <!-- PASSO 1: FORMATO (4 CARDS) -->
                 <div>
@@ -106,8 +107,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
     <!-- File Viewer Modal (Usato per leggere file txt, log e codice locali dal PC) -->
     <div id="fileViewerModal" class="link-modal-overlay hidden" style="background: rgba(0,0,0,0.85); z-index: 1500;">
-        <div class="link-modal modal-animate" style="width: 95%; height: 95%; max-height: 95vh; display:flex; flex-direction:column;">
-            <div class="link-modal-header" style="flex-shrink:0; background:var(--sidebar-bg); border-bottom:1px solid var(--border-color);">
+        <div class="link-modal modal-animate" style="width: 95%; height: 95%; max-height: 95vh;">
+            <div class="link-modal-header" style="background:var(--sidebar-bg); border-bottom:1px solid var(--border-color);">
                 <div class="link-modal-title"><span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.folderOpen}</span> ${typeof I18n !== 'undefined' ? I18n.t('link_manager.viewer_title') : 'Visualizzatore File Esterno'}</span><button class="close-modal-btn" onclick="LinkManager.closeViewer()">${Icons.close}</button></div>
                 <div style="display:flex; align-items:center; gap:10px; background:var(--bg-color); padding:5px; border-radius:4px; border:1px solid var(--border-color);">
                     <span style="font-size:1.2rem; color:var(--text-secondary); display:inline-flex;">${Icons.file}</span><input type="text" id="viewerPath" readonly style="flex:1; border:none; background:transparent; font-family:monospace; color:var(--text-primary); font-size:0.9rem;" value="..."><button class="btn" style="padding:4px 8px; border:1px solid var(--border-color);" onclick="LinkManager.copyViewerPath()" title="${typeof I18n !== 'undefined' ? I18n.t('link_manager.tooltip_copy_path') : 'Copia percorso'}"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${typeof I18n !== 'undefined' ? I18n.t('common.copy') : 'Copia'}</span></button>

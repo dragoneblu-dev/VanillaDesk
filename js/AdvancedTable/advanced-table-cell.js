@@ -233,7 +233,7 @@ Object.assign(AdvancedTable, {
                            data-col="${col.id}" 
                            placeholder="..." 
                            class="adv-input-right adv-number-input" 
-                           onfocus="this.type='number'; this.value=this.getAttribute('data-raw-value');" 
+                           onfocus="if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true); this.type='number'; this.value=this.getAttribute('data-raw-value');" 
                            onkeydown="if((event.ctrlKey||event.metaKey)&&(event.key==='a'||event.key==='A')){event.preventDefault();event.stopPropagation();this.select();return;}if(event.key==='Enter'){event.preventDefault(); this.blur();}"
                            onblur="this.setAttribute('data-raw-value', this.value); this.type='text'; this.value=AdvancedTable.formatDecimal(this.value, this.getAttribute('data-decimals'));" 
                            ${readonly}>

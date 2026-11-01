@@ -521,7 +521,6 @@ Object.assign(UI, {
                 !e.target.closest('#advRelationPeekModalOverlay')) {
 
                 if (UI._preventDrawerClose) {
-                    console.log("🛡️ [DEBUG-PREFERENCES] Click esterno ignorato: UI._preventDrawerClose attivo.");
                     return;
                 }
 

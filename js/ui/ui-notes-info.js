@@ -11,9 +11,26 @@
  * FEAT DEDICATED VIEW ICONS: Icone e badge tipologici specifici per ogni tipo di vista (Kanban, Calendario,
  * Timeline, WBS, Grafico, Pivot e Tabella) allineati al design system dell'applicazione.
  * FIX CHART ICON: Utilizzo diretto dell'icona nativa Icons.tablePivot (barre verticali) per le viste Grafico.
+ * FEAT COLLAPSIBLE DB RECORDS AUDITING: Separazione netta tra sotto-note standard e record note dei database.
+ * Le record note vengono raggruppate per database di appartenenza, presentate inizialmente collassate
+ * con identificatore cromatico verde (--record-color) ed esplose su richiesta con matrice adattiva dedicata.
  */
 
 Object.assign(UI, {
+
+    toggleDbSubnotesCollapse: (headerEl) => {
+        if (!headerEl) return;
+        const body = headerEl.nextElementSibling;
+        const arrow = headerEl.querySelector('.db-subnotes-toggle-arrow');
+        if (!body) return;
+
+        const isHidden = body.style.display === 'none';
+        body.style.display = isHidden ? 'block' : 'none';
+        if (arrow) {
+            arrow.style.transform = isHidden ? 'rotate(90deg)' : 'rotate(0deg)';
+        }
+    },
+
     openNoteInfoPanel: () => {
         if (!AppState.currentNoteId) return;
         const note = Store.getNote(AppState.currentNoteId);
@@ -54,43 +71,44 @@ Object.assign(UI, {
             if (tgtId && tgtId !== note.id) outlinks.add(tgtId);
         });
 
-        // 4. Calcolo Auditing Sotto-note (Matrice con Adaptive Column Pruning)
-        const children = Store.getChildren(note.id);
-        let subNotesHtml = '';
+        // 4. Calcolo Auditing Sotto-note (Separazione tra Note Standard e Record Note dei Database)
+        const allChildren = Store.getChildren(note.id);
+        const standardChildren = allChildren.filter(n => !n.isRecordNote);
+        const recordNoteChildren = allChildren.filter(n => n.isRecordNote && n.linkedTableId);
 
-        if (children.length > 0) {
-            const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
-            const allCandidateCols = propsDb ? propsDb.columns.filter(c => c.id !== 'sys_c_note' && !c.hidden) : [];
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+        const allCandidateCols = propsDb ? propsDb.columns.filter(c => c.id !== 'sys_c_note' && !c.hidden) : [];
 
-            // Helper per determinare se una cella contiene un valore informativo reale
-            const isValued = (val) => {
-                if (val === undefined || val === null || val === '') return false;
-                if (Array.isArray(val)) return val.length > 0 && val.some(item => item !== undefined && item !== null && String(item).trim() !== '');
-                if (typeof val === 'boolean') return val === true; // Un checkbox non spuntato ovunque non è informativo
-                if (typeof val === 'object') {
-                    if (val.start || val.end) return true;
-                    if (val.noteId || val.title) return true;
-                    return Object.keys(val).length > 0;
-                }
-                return String(val).trim() !== '';
-            };
+        // Helper per determinare se una cella contiene un valore informativo reale
+        const isValued = (val) => {
+            if (val === undefined || val === null || val === '') return false;
+            if (Array.isArray(val)) return val.length > 0 && val.some(item => item !== undefined && item !== null && String(item).trim() !== '');
+            if (typeof val === 'boolean') return val === true;
+            if (typeof val === 'object') {
+                if (val.start || val.end) return true;
+                if (val.noteId || val.title) return true;
+                return Object.keys(val).length > 0;
+            }
+            return String(val).trim() !== '';
+        };
 
-            // Suddivisione deterministica tra colonne con almeno un valore e colonne interamente vuote
+        // Funzione riutilizzabile per generare la matrice HTML con Adaptive Column Pruning per un gruppo di note
+        const buildAdaptiveMatrixHTML = (notesList, isRecordMode = false) => {
             const populatedCols = [];
             const unpopulatedCols = [];
 
             allCandidateCols.forEach(col => {
-                let hasValueInAnyChild = false;
+                let hasValueInAnyNote = false;
                 if (propsDb && propsDb.rows) {
-                    for (const child of children) {
-                        const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === child.id);
+                    for (const n of notesList) {
+                        const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === n.id);
                         if (sysRow && isValued(sysRow.cells[col.id])) {
-                            hasValueInAnyChild = true;
+                            hasValueInAnyNote = true;
                             break;
                         }
                     }
                 }
-                if (hasValueInAnyChild) {
+                if (hasValueInAnyNote) {
                     populatedCols.push(col);
                 } else {
                     unpopulatedCols.push(col);
@@ -104,7 +122,7 @@ Object.assign(UI, {
             });
 
             let trHtml = '';
-            children.forEach(child => {
+            notesList.forEach(child => {
                 const childSafeTitle = (child.title || I18n.t('editor.untitled')).replace(/</g, '&lt;');
                 let rowPropsHtml = '';
 
@@ -135,10 +153,14 @@ Object.assign(UI, {
                     });
                 }
 
+                const iconHtml = isRecordMode 
+                    ? `<span style="color:var(--record-color, #10b981); margin-right:6px; display:inline-flex; align-items:center;">${Icons.recordPage}</span>`
+                    : `<span style="opacity:0.5; margin-right:5px; font-weight:normal;">${Icons.file}</span>`;
+
                 trHtml += `
                     <tr style="cursor:pointer; transition:background 0.2s;" onmouseenter="this.style.background='var(--item-hover)'" onmouseleave="this.style.background=''" onclick="UI.selectNote('${child.id}')">
                         <td style="padding:8px; border-bottom:1px solid var(--border-color); font-weight:bold; color:var(--text-primary); font-size:0.9rem;">
-                            <span style="opacity:0.5; margin-right:5px; font-weight:normal;">${Icons.file}</span>${childSafeTitle}
+                            ${iconHtml}${childSafeTitle}
                         </td>
                         ${rowPropsHtml}
                     </tr>
@@ -153,21 +175,10 @@ Object.assign(UI, {
                     chipsHtml += `<span class="adv-select-pill default-color" style="opacity:0.75; font-size:0.72rem; padding:2px 7px; border:1px dashed var(--border-color); background:transparent;">🏷️ ${c.name.replace(/</g, '&lt;')}</span>`;
                 });
 
-                const unpopulatedTitle = I18n.t('notes_info.unpopulated_props_title', { count: unpopulatedCols.length }) || `Altre proprietà disponibili ma non valorizzate (${unpopulatedCols.length}):`;
-                unpopulatedFooterHtml = `
-                    <div style="margin-top:10px; padding:10px 12px; background:var(--box-bg, rgba(0,0,0,0.02)); border:1px dashed var(--border-color); border-radius:6px;">
-                        <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px;">
-                            ${unpopulatedTitle}
-                        </div>
-                        <div style="display:flex; flex-wrap:wrap; gap:5px; align-items:center;">
-                            ${chipsHtml}
-                        </div>
-                    </div>
-                `;
             }
 
-            subNotesHtml = `
-                <div class="adv-scroll-container" style="max-height: 400px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); margin-top: 10px;">
+            return `
+                <div class="adv-scroll-container" style="max-height: 350px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: 6px; background: var(--bg-color); margin-top: 8px;">
                     <table style="width:100%; border-collapse:collapse; text-align:left;">
                         <thead style="position:sticky; top:0; z-index:10; background:var(--sidebar-bg); box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
                             <tr>${thHtml}</tr>
@@ -179,8 +190,58 @@ Object.assign(UI, {
                 </div>
                 ${unpopulatedFooterHtml}
             `;
-        } else {
+        };
+
+        // 4A. Costruzione sezione per le sotto-note gerarchiche standard
+        let subNotesHtml = '';
+        if (standardChildren.length > 0) {
+            subNotesHtml = buildAdaptiveMatrixHTML(standardChildren, false);
+        } else if (recordNoteChildren.length === 0) {
             subNotesHtml = `<div style="font-size:0.85rem; color:var(--text-secondary); font-style:italic;">${I18n.t('notes_info.subnotes_empty')}</div>`;
+        }
+
+        // 4B. Costruzione blocchi a fisarmonica collassati per ciascun Database presente
+        let dbRecordsAccordionHtml = '';
+        if (recordNoteChildren.length > 0) {
+            // Raggruppa le record note per linkedTableId
+            const dbGroups = new Map(); // dbId -> array di note
+            recordNoteChildren.forEach(rn => {
+                const dbId = rn.linkedTableId;
+                if (!dbGroups.has(dbId)) dbGroups.set(dbId, []);
+                dbGroups.get(dbId).push(rn);
+            });
+
+            // Ordina i database alfabeticamente per titolo
+            const sortedDbIds = Array.from(dbGroups.keys()).sort((a, b) => {
+                const titleA = AppState.databases[a]?.title || 'Database';
+                const titleB = AppState.databases[b]?.title || 'Database';
+                return titleA.localeCompare(titleB, undefined, { numeric: true, sensitivity: 'base' });
+            });
+
+            sortedDbIds.forEach(dbId => {
+                const dbState = AppState.databases[dbId];
+                const rawDbTitle = dbState?.title || I18n.t('editor.database');
+                const safeDbTitle = UI.escapeHTML(rawDbTitle);
+                const dbNotes = dbGroups.get(dbId);
+
+                // Genera la matrice specifica per questo database
+                const matrixHtml = buildAdaptiveMatrixHTML(dbNotes, true);
+
+                dbRecordsAccordionHtml += `
+                    <div class="db-subnotes-collapsible" style="border: 1px solid var(--border-color); border-radius: 6px; overflow: hidden; margin-top: 10px; background: var(--bg-color);">
+                        <div class="db-subnotes-header" onclick="UI.toggleDbSubnotesCollapse(this)" style="display: flex; align-items: center; gap: 8px; padding: 8px 12px; background: var(--sidebar-bg); cursor: pointer; user-select: none; transition: background 0.15s ease;"
+                             onmouseenter="this.style.background='var(--item-hover)'" onmouseleave="this.style.background='var(--sidebar-bg)'">
+                            <span class="db-subnotes-toggle-arrow" style="font-size: 0.8rem; transition: transform 0.2s ease; display: inline-flex; color: var(--text-secondary);">${Icons.chevronRight}</span>
+                            <span style="color: var(--record-color, #10b981); display: inline-flex;">${Icons.recordPage}</span>
+                            <span style="font-weight: bold; font-size: 0.85rem; color: var(--record-color, #10b981); flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${safeDbTitle}</span>
+                            <span style="font-size: 0.72rem; color: var(--record-color, #10b981); background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.25); padding: 2px 8px; border-radius: 12px; font-weight: bold;">${dbNotes.length} record</span>
+                        </div>
+                        <div class="db-subnotes-body" style="display: none; padding: 10px; border-top: 1px solid var(--border-color);">
+                            ${matrixHtml}
+                        </div>
+                    </div>
+                `;
+            });
         }
 
         // 5. RILEVAMENTO RIGOROSO DELLE VISTE COLLEGATE ALLO SHADOW DATABASE (SYS_PROPERTIES_DB)
@@ -238,7 +299,6 @@ Object.assign(UI, {
                                 if (isChart) {
                                     // Utilizzo diretto dell'icona Icons.tablePivot (istogramma a barre verticali)
                                     iconSvg = Icons.tablePivot;
-
                                     const chartType = targetDbState.chartConfig?.type;
                                     typeName = chartType 
                                         ? `Grafico (${chartType.toUpperCase()})` 
@@ -412,7 +472,7 @@ Object.assign(UI, {
 
         bodyHTML += `</div>`;
 
-        // Auditing Sotto-note
+        // Auditing Sotto-note Standard e Blocchi Collassati per i Record dei Database
         bodyHTML += `
                 <div>
                     <h4 style="margin:0 0 10px 0; color:var(--text-primary); font-size:0.95rem; border-bottom:1px solid var(--border-color); padding-bottom:5px; display:flex; align-items:center; gap:6px;">
@@ -420,6 +480,7 @@ Object.assign(UI, {
                     </h4>
                     <div style="font-size:0.8rem; color:var(--text-secondary);">${I18n.t('notes_info.subnotes_audit_desc')}</div>
                     ${subNotesHtml}
+                    ${dbRecordsAccordionHtml}
                 </div>
 
                 <!-- Sezione Analisi Globale Shadow Database (Tutte le Viste Reali Censite) -->

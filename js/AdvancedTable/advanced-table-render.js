@@ -629,8 +629,8 @@ Object.assign(AdvancedTable, {
         const formattedFiltered = String(totalFilteredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
 
         const recordCountHtml = (totalFilteredRows < totalStoredRows)
-            ? `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;" title="Filtro o ricerca attiva"><b style="color:var(--accent-color); margin-right:3px;">${formattedFiltered}</b> di ${formattedStored} record</span>`
-            : `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
+            ? `<span class="adv-table-count-label" style="font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;" title="Filtro o ricerca attiva"><b style="color:var(--accent-color); margin-right:3px;">${formattedFiltered}</b> di ${formattedStored} record</span>`
+            : `<span class="adv-table-count-label" style="font-variant-numeric:tabular-nums; display:inline-flex; align-items:center;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
 
         // DETERMINAZIONE LOGICA VISIBILITÀ DEL FOOTER:
         // 1. Footer completo: se hideFooterControls è false (mostra pulsante nuova riga, contatore e paginazione).
@@ -641,7 +641,7 @@ Object.assign(AdvancedTable, {
 
         if (showFullFooter || showCompactNavigationFooter) {
             html += `<div class="adv-table-footer-controls">`;
-            html += `<div class="adv-footer-left" style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;">`;
+            html += `<div class="adv-footer-left" style="align-items:center; gap:6px; flex-wrap:wrap;">`;
             
             if (showFullFooter) {
                 if (isEdit && !isSysDB) {

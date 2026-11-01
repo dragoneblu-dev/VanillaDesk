@@ -684,7 +684,7 @@ const AdvancedTree = {
         // Footer Controls con indicatore conteggio totale record
         const totalStoredRows = state.rows ? state.rows.length : 0;
         const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-        const recordCountHtml = `<span class="adv-table-count-label" style="font-size:0.78rem; color:var(--text-secondary); opacity:0.85; margin:0 6px; font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
+        const recordCountHtml = `<span class="adv-table-count-label" style="font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
 
         // DETERMINAZIONE LOGICA VISIBILITÀ DEL FOOTER (Tree View):
         // 1. Footer completo: se hideFooterControls è false (mostra pulsante nuova radice, contatore e paginazione radici).

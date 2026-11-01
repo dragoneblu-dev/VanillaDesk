@@ -19,6 +19,11 @@
  * FIX WORD-SNAP BOUNDARIES: Verifica rigorosa dei confini di editabilità e validità del nodo di testo in expandSelectionToWord.
  * FIX ATOMIC REVERSION (TRY-FINALLY): Riconversione garantita dei colori magici temporanei (rgb 252,5,5) in classi CSS
  * anche in caso di eccezioni intermedie, con routine di auto-guarigione (healMagicColors) al caricamento.
+ * FEAT SMART CARET COLLAPSE: Collassa automaticamente la selezione a fine parola dopo l'auto-espansione (Word-Snap),
+ * impedendo che la digitazione del carattere successivo sovrascriva accidentalmente la parola evidenziata.
+ * FEAT SMART FORMATTING ESCAPE ON SPACES: Se il cursore si trova su spazi vuoti o a fine span senza parole selezionate,
+ * la pressione dell'evidenziatore o del colore testo estrae il cursore dallo span formattato (trasferendo gli spazi all'esterno)
+ * consentendo all'utente di riprendere a scrivere all'istante in testo neutro non colorato.
  */
 
 const ColorManager = {
@@ -141,6 +146,117 @@ const ColorManager = {
         }
     },
 
+    /**
+     * SMART FORMATTING ESCAPE: Gestione intelligente del cursore su spazi o a confine di span formattati.
+     * Quando l'utente preme il pulsante dell'evidenziatore o del colore testo senza una parola selezionata,
+     * verifica se il cursore si trova dentro o subito adiacente a uno span formattato (es. dopo uno spazio).
+     * Se sì, sposta gli spazi all'esterno e colloca il cursore nel testo normale, consentendo di proseguire
+     * la scrittura senza rimanere intrappolati nello stile.
+     */
+    escapeFormattingSpan: (type, sel, editor) => {
+        if (!sel || !sel.rangeCount || !sel.isCollapsed || !editor) return false;
+
+        const range = sel.getRangeAt(0);
+        let node = range.startContainer;
+        let offset = range.startOffset;
+
+        const parentEl = node.nodeType === Node.TEXT_NODE ? node.parentNode : node;
+        if (!parentEl || parentEl.id === 'noteContent') return false;
+
+        // Criterio di identificazione dello span di formattazione pertinente in base al tipo
+        const isTargetSpan = (el) => {
+            if (!el || el.nodeType !== Node.ELEMENT_NODE || el.tagName !== 'SPAN') return false;
+            if (el.classList.contains('adv-inline-shell') || el.classList.contains('adv-widget-shell')) return false;
+
+            if (type === 'highlight') {
+                return Array.from(el.classList).some(c => c.startsWith('hl-c') || c.startsWith('hl-u-c'));
+            } else {
+                return Array.from(el.classList).some(c => c.startsWith('tx-c'));
+            }
+        };
+
+        // SCENARIO 1: Il cursore si trova DENTRO lo span formattato (a fine testo o su spazi in coda)
+        let formatSpan = parentEl.closest('span');
+        while (formatSpan && formatSpan !== editor && !isTargetSpan(formatSpan)) {
+            formatSpan = formatSpan.parentNode ? formatSpan.parentNode.closest('span') : null;
+        }
+
+        if (formatSpan && isTargetSpan(formatSpan)) {
+            // Verifica se il cursore è verso la fine del testo dello span (dopo l'ultima parola o su spazi)
+            const spanText = formatSpan.textContent || '';
+            const preRange = range.cloneRange();
+            preRange.selectNodeContents(formatSpan);
+            preRange.setEnd(range.startContainer, range.startOffset);
+            const textBefore = preRange.toString();
+
+            // Se il cursore si trova oltre l'ultimo carattere alfanumerico dello span (o alla fine assoluta)
+            const remainingInSpan = spanText.substring(textBefore.length);
+            const isAtOrNearEnd = !/[a-zA-Z0-9À-ÿ]/.test(remainingInSpan);
+
+            if (isAtOrNearEnd) {
+                if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+
+                // Estrae eventuali spazi di coda presenti all'interno dello span
+                let trailingSpaces = '';
+                const lastTextChild = formatSpan.lastChild;
+                if (lastTextChild && lastTextChild.nodeType === Node.TEXT_NODE) {
+                    const match = lastTextChild.nodeValue.match(/[ \t\u00A0]+$/);
+                    if (match) {
+                        trailingSpaces = match[0];
+                        lastTextChild.nodeValue = lastTextChild.nodeValue.slice(0, -trailingSpaces.length);
+                    }
+                }
+
+                // Posiziona il cursore subito dopo lo span in un nodo di testo neutro
+                let nextNode = formatSpan.nextSibling;
+                const textToInject = trailingSpaces || ' ';
+
+                if (nextNode && nextNode.nodeType === Node.TEXT_NODE) {
+                    nextNode.nodeValue = textToInject + nextNode.nodeValue;
+                } else {
+                    const newTextNode = document.createTextNode(textToInject);
+                    formatSpan.parentNode.insertBefore(newTextNode, formatSpan.nextSibling);
+                    nextNode = newTextNode;
+                }
+
+                const newRange = document.createRange();
+                newRange.setStart(nextNode, textToInject.length);
+                newRange.collapse(true);
+
+                sel.removeAllRanges();
+                sel.addRange(newRange);
+
+                if (typeof Editor !== 'undefined') {
+                    Editor.savedRange = newRange.cloneRange();
+                }
+                return true;
+            }
+        }
+
+        // SCENARIO 2: Il cursore si trova SUBITO DOPO lo span formattato (preceduto da spazi o a confine)
+        let prevSibling = node.previousSibling;
+        if (!prevSibling && node.nodeType === Node.TEXT_NODE && offset === 0) {
+            prevSibling = parentEl.previousSibling;
+        }
+
+        // Se siamo all'inizio di un nodo di testo preceduto dallo span formattato
+        if (prevSibling && isTargetSpan(prevSibling)) {
+            // Il cursore è già fisicamente fuori dallo span; garantiamo che il range attivo sia solido
+            const newRange = document.createRange();
+            newRange.setStart(node, offset);
+            newRange.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+
+            if (typeof Editor !== 'undefined') {
+                Editor.savedRange = newRange.cloneRange();
+            }
+            return true;
+        }
+
+        return false;
+    },
+
     openColorMenu: (e, anchorId, type) => {
         if (e) e.stopPropagation();
         
@@ -174,7 +290,6 @@ const ColorManager = {
 
         if (type === 'highlight') {
             // SEZIONE 1: SFONDO CLASSICO (EVIDENZIAZIONE A CAMPO PIENO)
-            //html += `<div style="font-size:0.72rem; color:var(--text-secondary); padding:2px 4px 4px 4px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px;">Sfondo:</div>`;
             html += `<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 2px 4px 6px 4px;">`;
             for (let i = 1; i <= 10; i++) {
                 html += `<div class="color-option hl-c${i}" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'hl-c${i}')" title="Sfondo ${i}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; color: ${currentTextColor};" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
@@ -182,7 +297,6 @@ const ColorManager = {
             html += `</div>`;
 
             // SEZIONE 2: SOTTOLINEATURA COLORATA (EVIDENZIAZIONE A LINEA SU SFONDO NEUTRO)
-            //html += `<div style="font-size:0.72rem; color:var(--text-secondary); padding:6px 4px 4px 4px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; border-top:1px solid var(--border-color); margin-top:2px;">Sottolineatura:</div>`;
             html += `<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 2px 4px 6px 4px;">`;
             for (let i = 1; i <= 10; i++) {
                 // Sfondo neutro var(--bg-color): l'anteprima riflette fedelmente che la sottolineatura sostituisce lo sfondo
@@ -250,17 +364,28 @@ const ColorManager = {
     applyLast: (type) => {
         const editor = document.getElementById('noteContent');
         const sel = window.getSelection();
+        let wasAutoExpanded = false;
 
-        // Se il cursore è collassato all'interno dell'editor, espande preventivamente sulla parola corrente
+        // Se il cursore è collassato all'interno dell'editor, prova l'espansione sulla parola corrente
         if (sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
-            ColorManager.expandSelectionToWord(sel);
+            wasAutoExpanded = ColorManager.expandSelectionToWord(sel);
+        }
+
+        // SMART ESCAPE SU SPAZI: se non tocca alcuna parola ed è collassato, verifica se siamo in uscita da uno span
+        if (!wasAutoExpanded && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            const escaped = ColorManager.escapeFormattingSpan(type, sel, editor);
+            if (escaped) {
+                Store.triggerAutoSave();
+                Editor.updateToolbarFormatting();
+                return;
+            }
         }
 
         const targetColor = type === 'highlight' ? ColorManager.lastHighlight : ColorManager.lastText;
         
         // Se si tenta di applicare il "nessun colore", delega alla normale esecuzione
         if (!targetColor || targetColor === 'bg-none' || targetColor === 'tx-auto') {
-            ColorManager.applyColor(type, null);
+            ColorManager.applyColor(type, null, wasAutoExpanded);
             return;
         }
 
@@ -268,9 +393,9 @@ const ColorManager = {
         const isAlreadyColored = ColorManager._isSelectionAlreadyColored(type, targetColor);
         
         if (isAlreadyColored) {
-            ColorManager.applyColor(type, null);
+            ColorManager.applyColor(type, null, wasAutoExpanded);
         } else {
-            ColorManager.applyColor(type, targetColor);
+            ColorManager.applyColor(type, targetColor, wasAutoExpanded);
         }
     },
 
@@ -278,7 +403,7 @@ const ColorManager = {
         if (type === 'highlight') {
             if (colorClass) {
                 ColorManager.lastHighlight = colorClass;
-                try { localStorage.setItem('pronotes_last_hl', colorClass); } catch (_) {}
+                try { localStorage.getItem('pronotes_last_hl', colorClass); } catch (_) {}
             }
             ColorManager.updateToolbarIcon('highlight', colorClass || 'bg-none');
         } else {
@@ -331,7 +456,7 @@ const ColorManager = {
         return true;
     },
 
-    applyColor: (type, colorClass) => {
+    applyColor: (type, colorClass, forceAutoExpanded = false) => {
         // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Colore Testo ed Evidenziatore)
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
@@ -398,6 +523,7 @@ const ColorManager = {
 
         const editor = document.getElementById('noteContent');
         const sel = window.getSelection();
+        let wasAutoExpanded = forceAutoExpanded;
 
         // GESTIONE ATTENTA DELLA SELEZIONE:
         // Se il cursore o la selezione è attiva dentro l'editor, il range corrente nel DOM vivo è la verità
@@ -411,7 +537,17 @@ const ColorManager = {
 
         // AUTO-ESPANSIONE SULLA PAROLA CORRENTE (WORD-SNAP) SE ANCORA COLLASSATO
         if (sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
-            ColorManager.expandSelectionToWord(sel);
+            wasAutoExpanded = ColorManager.expandSelectionToWord(sel) || wasAutoExpanded;
+        }
+
+        // SMART ESCAPE SU SPAZI: se non tocca alcuna parola ed è ancora collassato, verifica se siamo in uscita da uno span
+        if (!wasAutoExpanded && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            const escaped = ColorManager.escapeFormattingSpan(type, sel, editor);
+            if (escaped) {
+                Store.triggerAutoSave();
+                Editor.updateToolbarFormatting();
+                return;
+            }
         }
 
         if (!sel || !sel.rangeCount || sel.isCollapsed) return;
@@ -539,6 +675,18 @@ const ColorManager = {
             try { 
                 document.execCommand('styleWithCSS', false, false); 
             } catch(e) {}
+        }
+
+        // SMART CARET COLLAPSE: Se la parola è stata auto-estesa da un cursore collassato,
+        // disattiva la selezione e collassa il cursore a fine parola per prevenire la sovrascrittura accidentale del testo
+        if (wasAutoExpanded) {
+            const currentSel = window.getSelection();
+            if (currentSel && currentSel.rangeCount > 0) {
+                currentSel.collapseToEnd();
+                if (typeof Editor !== 'undefined') {
+                    Editor.savedRange = currentSel.getRangeAt(0).cloneRange();
+                }
+            }
         }
 
         Store.triggerAutoSave();

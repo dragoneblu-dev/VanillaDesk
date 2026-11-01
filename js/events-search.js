@@ -5,6 +5,8 @@
  * FEAT CSS CUSTOM HIGHLIGHT HASHTAGS: Sottolineatura ed evidenziazione visiva nativa dei tag #parola senza mutare il DOM.
  * FEAT ESC CLEAR SEARCH: Tasto ESC all'interno del campo cerca/tag svuota automaticamente il campo e azzera i filtri.
  * FEAT TAG DISAMBIGUATION: Gestione unificata navigazione tag con prefisso '#' - Selezione diretta se univoco, autocompletamento se ambiguo.
+ * FEAT MIN SEARCH THRESHOLD: Ricerca as-you-type attiva da 2 caratteri in su (o da 1 carattere su Invio esplicito), prevenendo overload da singola lettera.
+ * FIX LIVE IN-PLACE HIGHLIGHTING: Evidenziazione diretta in-place sull'editor attivo senza distruggere la pagina con selectNote.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -16,13 +18,22 @@ Object.assign(EventsGlobal, {
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
             AppState._currentHighlightIndex = 0;
-            EventsGlobal._executeSearchLogic(searchInput);
+            EventsGlobal._executeSearchLogic(searchInput, true);
         }
     },
 
-    _executeSearchLogic: (searchInput) => {
+    _executeSearchLogic: (searchInput, forceSubmit = false) => {
         const searchControls = document.getElementById('searchControls');
         const searchCounter = document.getElementById('searchCounter');
+        const rawValue = searchInput ? (searchInput.value || '') : '';
+        const trimmed = rawValue.trim();
+        const isTagQuery = trimmed.startsWith('#');
+
+        // SOGLIA MINIMA DI RICERCA TESTUALE:
+        // - Se è un tag (#...): procede sempre.
+        // - Se è testo normale: richiede almeno 2 caratteri per la ricerca incrementale automatica,
+        //   oppure almeno 1 carattere se l'utente ha premuto esplicitamente Invio (forceSubmit === true).
+        const meetsThreshold = isTagQuery || trimmed.length >= 2 || (forceSubmit && trimmed.length >= 1);
 
         if (AppState.currentNoteId && AppState.isEditMode && !AppState.isSwitchingNote) {
             const currentNote = Store.getNote(AppState.currentNoteId);
@@ -31,17 +42,22 @@ Object.assign(EventsGlobal, {
             }
         }
 
-        AppState.searchFilter = (searchInput.value || '').toLowerCase();
+        if (meetsThreshold) {
+            AppState.searchFilter = trimmed.toLowerCase();
+        } else {
+            // Sotto la soglia minima: azzera il filtro testuale per non sovraccaricare l'albero
+            AppState.searchFilter = "";
+        }
         
-        // Ridisegniamo i filtri a pillola attivi
+        // Ridisegno dei filtri a pillola attivi
         if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
             SidebarManager.SearchAutocomplete.renderPills();
         }
         
-        // Mostriamo i controlli se c'è un testo OPPURE se c'è un filtro proprietà attivo
         const hasActivePropFilters = AppState.activePropertyFilters && AppState.activePropertyFilters.length > 0;
+        const hasActiveSearch = AppState.searchFilter.length > 0 || hasActivePropFilters;
         
-        if (searchInput.value.length > 0 || hasActivePropFilters) {
+        if (hasActiveSearch) {
             if (searchControls) searchControls.classList.remove('hidden');
         } else {
             if (searchControls) searchControls.classList.add('hidden');
@@ -50,26 +66,20 @@ Object.assign(EventsGlobal, {
             AppState._currentHighlightIndex = 0;
         }
 
+        // 1. Aggiorna l'albero laterale con le note pertinenti
         UI.renderTree();
         
-        // Se c'è una ricerca testuale esplicita, ricarica la nota aperta per applicare i mark gialli;
-        // altrimenti ripulisce immediatamente tutti i mark residui dall'editor vivo senza ricaricare la pagina
-        if (AppState.searchFilter.length > 0) {
-            if (AppState.currentNoteId) UI.selectNote(AppState.currentNoteId);
-        } else {
-            if (typeof Editor !== 'undefined' && typeof Editor.cleanHighlightsBeforeSave === 'function') {
-                Editor.cleanHighlightsBeforeSave();
-            }
-            if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
-                UI.highlightTreeNode(AppState.currentNoteId);
-            }
-        }
-        
-        setTimeout(() => {
-            const editor = document.getElementById('noteContent');
-            if (editor) {
+        // 2. AGGIORNAMENTO IN-PLACE DEI MARK NELL'EDITOR VIVO (Nessun reload distruttivo con selectNote)
+        const editor = document.getElementById('noteContent');
+        if (editor && typeof Editor !== 'undefined') {
+            // Pulisce preventivamente i vecchi mark gialli dal DOM vivo
+            Editor.cleanHighlightsBeforeSave();
+
+            if (AppState.searchFilter.length > 0) {
+                // Applica i nuovi mark all'istante all'interno del documento già a video
+                Editor.applyHighlight(editor, AppState.searchFilter);
                 AppState._totalHighlights = editor.querySelectorAll('mark.search-highlight').length;
-                
+
                 if (searchCounter) {
                     if (AppState._totalHighlights > 0) {
                         if (AppState._currentHighlightIndex === -1) {
@@ -82,8 +92,13 @@ Object.assign(EventsGlobal, {
                         searchCounter.innerText = "0/0";
                     }
                 }
+            } else {
+                if (searchCounter) searchCounter.innerText = "0/0";
+                if (AppState.currentNoteId && typeof UI.highlightTreeNode === 'function') {
+                    UI.highlightTreeNode(AppState.currentNoteId);
+                }
             }
-        }, 150);
+        }
     },
 
     // Invia un tag alla sidebar gestendo la logica concordata:
@@ -144,7 +159,7 @@ Object.assign(EventsGlobal, {
         else {
             // CASO C (NESSUNA PROPRIETÀ CENSITA): Cerca nel testo di tutte le note
             searchInputEl.value = '#' + cleanTag;
-            EventsGlobal._executeSearchLogic(searchInputEl);
+            EventsGlobal._executeSearchLogic(searchInputEl, true);
             searchInputEl.focus();
 
             if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
@@ -306,7 +321,7 @@ Object.assign(EventsGlobal, {
                     }
                 }
                 AppState._currentHighlightIndex = 0;
-                EventsGlobal._executeSearchLogic(searchInput);
+                EventsGlobal._executeSearchLogic(searchInput, false);
             });
             
             searchInput.addEventListener('focus', (e) => {
@@ -317,7 +332,7 @@ Object.assign(EventsGlobal, {
                 }
             });
             
-            // Gestione tastiera sul campo cerca: Invio naviga, ESC svuota e resetta i filtri
+            // Gestione tastiera sul campo cerca: Invio forza la ricerca e naviga, ESC azzera tutto
             searchInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Escape') {
                     e.preventDefault();
@@ -345,6 +360,13 @@ Object.assign(EventsGlobal, {
 
                 if (e.key === 'Enter') {
                     e.preventDefault();
+                    
+                    // Se la ricerca non era ancora partita perché sotto soglia, Invio forza l'esecuzione immediata
+                    if (!AppState.searchFilter && searchInput.value.trim().length > 0) {
+                        EventsGlobal._executeSearchLogic(searchInput, true);
+                        return;
+                    }
+
                     if (e.shiftKey) AppState.findPrevious();
                     else AppState.findNext();
                 }

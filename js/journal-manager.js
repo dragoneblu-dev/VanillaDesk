@@ -7,6 +7,8 @@
  * rimozione del blocco readonly e ripristino asincrono del cursore post-render.
  * FIX CALENDAR CUTOFF: Calcolo matematico della data limite solare rispetto ad Oggi per il filtro 7/14 giorni,
  * impedendo la ricomparsa di voci risalenti a mesi precedenti.
+ * FEAT ORDINAMENTO PER COMPLETAMENTO: Supporto all'ordinamento per data di completamento (sortBy: 'creation' | 'completion')
+ * con conservazione della data di creazione sui task pendenti e collocazione coerente a fine storico.
  */
 
 const JournalManager = {
@@ -71,7 +73,8 @@ const JournalManager = {
                 displayLimit: 'all', 
                 showSearch: false, 
                 searchTerm: '', 
-                hideCompleted: false 
+                hideCompleted: false,
+                sortBy: 'creation'
             };
             
             legacy.querySelectorAll('.journal-time-node').forEach(timeNode => {
@@ -121,7 +124,10 @@ const JournalManager = {
             }
             seenIds.add(currentId);
             const st = JournalManager.getState(currentId);
-            if(st && st.hideCompleted === undefined) st.hideCompleted = false;
+            if (st) {
+                if (st.hideCompleted === undefined) st.hideCompleted = false;
+                if (st.sortBy === undefined) st.sortBy = 'creation';
+            }
             JournalManager.render(currentId);
         });
     },
@@ -169,6 +175,7 @@ const JournalManager = {
         const limit = state.displayLimit || 'all';
         const isSearchVisible = state.showSearch === true;
         const isHideCompleted = state.hideCompleted === true;
+        const currentSort = state.sortBy || 'creation';
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
 
         const menuItems = [
@@ -176,6 +183,21 @@ const JournalManager = {
                 icon: Icons.listFilter, 
                 label: I18n.t('journal.hide_completed') + (isHideCompleted ? chk : ''), 
                 onClick: () => JournalManager.toggleHideCompleted(journalId) 
+            },
+            {
+                icon: Icons.sort || '⇅',
+                label: I18n.t('journal.sort_by') || "Ordinamento Voci",
+                type: 'submenu',
+                items: [
+                    { 
+                        label: (I18n.t('journal.sort_creation') || "Per Data di Creazione") + (currentSort === 'creation' ? chk : ''), 
+                        onClick: () => JournalManager.setSortBy(journalId, 'creation') 
+                    },
+                    { 
+                        label: (I18n.t('journal.sort_completion') || "Per Data di Completamento") + (currentSort === 'completion' ? chk : ''), 
+                        onClick: () => JournalManager.setSortBy(journalId, 'completion') 
+                    }
+                ]
             },
             { type: 'divider' },
             { 
@@ -209,6 +231,14 @@ const JournalManager = {
         ];
 
         UI.Menu.buildContextMenu(`j-opt-btn-${journalId}`, menuItems);
+    },
+
+    setSortBy: (journalId, sortBy) => {
+        let state = JournalManager.getState(journalId);
+        if (!state) return;
+        state.sortBy = sortBy;
+        JournalManager.setState(journalId, state);
+        JournalManager.render(journalId);
     },
 
     openPriorityMenu: (e, journalId, entryId) => {
@@ -326,7 +356,21 @@ const JournalManager = {
             const headerCont = I18n.t('journal.csv_header_content');
 
             let csvContent = `${headerDate};${headerTime};${headerComp};${headerPrio};${headerCont}\n`;
-            const sorted = [...state.entries].sort((a,b) => a.timestamp - b.timestamp);
+            
+            let sorted = [...state.entries];
+            if (state.sortBy === 'completion') {
+                sorted.sort((a, b) => {
+                    const timeA = a.endTime || 0;
+                    const timeB = b.endTime || 0;
+                    // Voci completate prima (ordinate per chiusura), non completate in coda
+                    if (timeA !== 0 && timeB !== 0) return timeA - timeB;
+                    if (timeA !== 0) return -1;
+                    if (timeB !== 0) return 1;
+                    return a.timestamp - b.timestamp;
+                });
+            } else {
+                sorted.sort((a, b) => a.timestamp - b.timestamp);
+            }
 
             sorted.forEach((entry) => {
                 let tempDiv = document.createElement('div');
@@ -418,7 +462,8 @@ const JournalManager = {
             displayLimit: 'all',
             showSearch: false,
             searchTerm: '',
-            hideCompleted: false
+            hideCompleted: false,
+            sortBy: 'creation'
         };
 
         if (!AppState.databases) AppState.databases = {};
@@ -494,7 +539,6 @@ const JournalManager = {
         state.entries.splice(idx, 1);
 
         if (state.entries.length === 0) {
-            // Se tutte le voci vengono cancellate manualmente, mostra lo stato vuoto senza eliminare il widget
             JournalManager._focusAfterRender = null;
             JournalManager.setState(journalId, state);
             JournalManager.render(journalId);
@@ -648,17 +692,23 @@ const JournalManager = {
             const daysLimit = parseInt(state.displayLimit, 10);
             if (!isNaN(daysLimit) && daysLimit > 0) {
                 const now = new Date();
-                // Calcolo della data di cutoff a mezzanotte di (daysLimit - 1) giorni fa, includendo oggi
                 const cutoffDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (daysLimit - 1));
                 const cutoffDateStr = JournalManager.formatDate(cutoffDate);
                 const cutoffTime = cutoffDate.getTime();
 
                 activeEntries = activeEntries.filter(e => {
-                    if (e.dateStr) {
-                        return e.dateStr >= cutoffDateStr;
+                    const effectiveDateStr = (state.sortBy === 'completion' && e.endTime)
+                        ? JournalManager.formatDate(new Date(e.endTime))
+                        : e.dateStr;
+                    const effectiveTime = (state.sortBy === 'completion' && e.endTime)
+                        ? e.endTime
+                        : (e.timestamp || 0);
+
+                    if (effectiveDateStr) {
+                        return effectiveDateStr >= cutoffDateStr;
                     }
-                    if (e.timestamp) {
-                        return e.timestamp >= cutoffTime;
+                    if (effectiveTime) {
+                        return effectiveTime >= cutoffTime;
                     }
                     return true;
                 });
@@ -674,15 +724,49 @@ const JournalManager = {
             });
         }
 
-        activeEntries.sort((a, b) => a.timestamp - b.timestamp);
+        const isSortByCompletion = state.sortBy === 'completion';
+        const pendingGroupTitle = I18n.t('journal.pending_group') || "Da Completare";
+
+        // Ordinamento preliminare delle voci
+        if (isSortByCompletion) {
+            activeEntries.sort((a, b) => {
+                const timeA = a.endTime || 0;
+                const timeB = b.endTime || 0;
+                // Voci completate prima (ordinate per data/ora di chiusura crescente)
+                if (timeA !== 0 && timeB !== 0) return timeA - timeB;
+                if (timeA !== 0) return -1;
+                if (timeB !== 0) return 1;
+                // Voci non completate ordinate per data di creazione crescente (dal più vecchio al più recente)
+                return a.timestamp - b.timestamp;
+            });
+        } else {
+            activeEntries.sort((a, b) => a.timestamp - b.timestamp);
+        }
         
+        // Raggruppamento per data
         const grouped = {};
         activeEntries.forEach(entry => {
-            if (!grouped[entry.dateStr]) grouped[entry.dateStr] = [];
-            grouped[entry.dateStr].push(entry);
+            let groupKey = entry.dateStr;
+            if (isSortByCompletion) {
+                if (entry.endTime) {
+                    groupKey = JournalManager.formatDate(new Date(entry.endTime));
+                } else {
+                    groupKey = pendingGroupTitle;
+                }
+            }
+            if (!grouped[groupKey]) grouped[groupKey] = [];
+            grouped[groupKey].push(entry);
         });
 
-        let dateKeys = Object.keys(grouped).sort((a, b) => a.localeCompare(b));
+        // Ordinamento delle cartelle-data:
+        // Nella cronologia crescente, 'Da Completare' sta IN FONDO (dopo le date passate chiuse)
+        let dateKeys = Object.keys(grouped).sort((a, b) => {
+            if (isSortByCompletion) {
+                if (a === pendingGroupTitle) return 1;
+                if (b === pendingGroupTitle) return -1;
+            }
+            return a.localeCompare(b);
+        });
 
         if (typeof WidgetManager !== 'undefined') {
             WidgetManager.updateShellUI(journalId, {
@@ -726,11 +810,15 @@ const JournalManager = {
             dateKeys.forEach(dateStr => {
                 const entries = grouped[dateStr];
                 const isCollapsed = state.collapsedDates && state.collapsedDates.includes(dateStr);
-                
+                const isPendingGroup = isSortByCompletion && dateStr === pendingGroupTitle;
+
+                const headerColor = isPendingGroup ? 'color:var(--accent-color); font-weight:bold;' : '';
+                const headerBadge = isPendingGroup ? ` <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8; font-weight:normal;">(${entries.length})</span>` : '';
+
                 html += `<li class="journal-date-node ${isCollapsed ? 'collapsed' : ''}" data-date="${dateStr}">`;
                 html += `<div class="journal-date-header" onclick="JournalManager.toggleDate('${journalId}', '${dateStr}')">`;
                 html += `   <span class="journal-toggle">${Icons.chevronDown}</span>
-                            <span class="journal-date-label">${dateStr}</span>
+                            <span class="journal-date-label" style="${headerColor}">${dateStr}${headerBadge}</span>
                          </div>`;
                 html += `<ul class="journal-time-list">`;
 
@@ -740,15 +828,38 @@ const JournalManager = {
                     let isCompleted = !!entry.endTime;
                     let hiddenTimeClass = '';
                     
-                    if (!state.searchTerm && index > 0 && (entry.timestamp - lastVisibleTs) < 180000 && !isCompleted) {
+                    const effectiveTs = (isSortByCompletion && entry.endTime) ? entry.endTime : entry.timestamp;
+
+                    // Compattazione orario solo nella modalità standard di creazione se gli eventi sono vicini
+                    if (!state.searchTerm && index > 0 && (effectiveTs - lastVisibleTs) < 180000 && !isCompleted && !isSortByCompletion) {
                         hiddenTimeClass = 'hidden-time';
                     } else {
-                        lastVisibleTs = entry.timestamp;
+                        lastVisibleTs = effectiveTs;
                     }
 
                     let completedClass = isCompleted ? 'completed' : '';
                     const strikeStyle = isCompleted ? 'opacity:0.5; text-decoration: line-through;' : '';
                     const vanishingClass = entry.isVanishing ? 'vanishing' : '';
+
+                    // RISOLUZIONE VISIVA TEMPORALE ACCURATA
+                    let displayedTimeStr = entry.timeStr;
+                    let createdOriginBadge = '';
+
+                    if (isSortByCompletion) {
+                        if (isCompleted && entry.endTime) {
+                            // Ora di completamento reale
+                            displayedTimeStr = JournalManager.formatTime(new Date(entry.endTime));
+
+                            // Se creata in una data diversa rispetto al completamento, mostra badge di origine
+                            const completionDateStr = JournalManager.formatDate(new Date(entry.endTime));
+                            if (entry.dateStr && entry.dateStr !== completionDateStr) {
+                                createdOriginBadge = `<span style="font-size:0.72rem; color:var(--text-secondary); opacity:0.75; margin-left:6px; font-family:monospace;" title="Creata in data: ${entry.dateStr} ${entry.timeStr}">[Creata: ${entry.dateStr} ${entry.timeStr}]</span>`;
+                            }
+                        } else {
+                            // Task PENDENTE: mostra Data di Creazione + Ora (es. 24/10 10:30)
+                            displayedTimeStr = `${entry.dateStr} ${entry.timeStr}`;
+                        }
+                    }
 
                     let tooltipAttr = '';
                     if (isCompleted) {
@@ -770,7 +881,8 @@ const JournalManager = {
                     html += `
                         <li class="journal-time-node ${vanishingClass}">
                             ${priorityHtml}
-                            <span class="journal-time-label ${hiddenTimeClass} ${completedClass}" ${tooltipAttr} ${isEdit ? `onclick="JournalManager.toggleCompletion('${journalId}', '${entry.id}', this.closest('.journal-time-node'))"` : ''}>${entry.timeStr}</span>
+                            <span class="journal-time-label ${hiddenTimeClass} ${completedClass}" ${tooltipAttr} ${isEdit ? `onclick="JournalManager.toggleCompletion('${journalId}', '${entry.id}', this.closest('.journal-time-node'))"` : ''}>${displayedTimeStr}</span>
+                            ${createdOriginBadge}
                             <div id="${entry.id}" class="journal-content" ${isEdit ? 'contenteditable="true"' : 'contenteditable="false"'} style="${strikeStyle}" placeholder="${I18n.t('journal.input_placeholder')}">${entry.content}</div>
                         </li>
                     `;
@@ -825,7 +937,6 @@ const JournalManager = {
             const targetInfo = JournalManager._focusAfterRender;
             const targetId = typeof targetInfo === 'string' ? targetInfo : targetInfo.id;
             
-            // Micro-differimento asincrono per permettere al browser di terminare il ciclo di render e posizionare saldamente il cursore
             setTimeout(() => {
                 const targetDiv = document.getElementById(targetId);
                 if (targetDiv) {

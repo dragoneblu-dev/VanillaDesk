@@ -222,7 +222,7 @@ Object.assign(AdvancedTable, {
                                data-decimals="${decAttr}" 
                                class="modern-input adv-number-input" 
                                style="margin:0; text-align:right;" 
-                               onfocus="this.type='number'; this.value=this.getAttribute('data-raw-value');" 
+                               onfocus="if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true); this.type='number'; this.value=this.getAttribute('data-raw-value');" 
                                onblur="${blurScript}">
                     `;
                 }

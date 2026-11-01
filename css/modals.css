@@ -554,7 +554,7 @@
 }
 
 .adv-menu-input:focus { 
-    border-color: var(--accent-color); 
+    border-bottom-color: var(--accent-color); 
 }
 
 .adv-menu-btn { 
