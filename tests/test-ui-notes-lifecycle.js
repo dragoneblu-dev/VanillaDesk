@@ -4,7 +4,8 @@
  * Moduli testati: ui-notes-lifecycle.js, ui-notes-nav.js, ui-notes-header.js
  * Responsabilità: Creazione note, selezione, aggiornamento titolo,
  * gestione note cestinate in sola lettura, navigazione verso la Home,
- * stack di cronologia lineare (History Stack), tracciamento dirty state e ripristino da banner.
+ * stack di cronologia lineare (History Stack), tracciamento dirty state,
+ * isolamento sotto-note vergini e ripristino da banner.
  */
 
 describe("UI Notes Lifecycle, Navigation & Header Components", () => {
@@ -115,6 +116,43 @@ describe("UI Notes Lifecycle, Navigation & Header Components", () => {
 
         const titleInput = document.getElementById('noteTitle');
         Assert.isFalse(titleInput.hasAttribute('readonly'));
+    });
+
+    test("Lifecycle: Creazione sotto-nota partendo da nota esistente non clona il contenuto della nota madre", () => {
+        setupLifecycleDOM();
+
+        // 1. Apriamo una nota madre con titolo e contenuto ricchi
+        const parentNote = {
+            id: 'n_parent_test',
+            parentId: null,
+            title: 'Nota Madre Importante',
+            content: '<h1>Titolo Madre</h1><p>Contenuto segreto della madre</p>',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+        };
+        AppState.notes.push(parentNote);
+        UI.selectNote('n_parent_test');
+        UI.toggleEditMode(true);
+
+        Assert.strictEqual(AppState.currentNoteId, 'n_parent_test');
+        Assert.isTrue(document.getElementById('noteContent').innerHTML.includes('Contenuto segreto'));
+
+        // 2. Creiamo una sotto-nota cliccando il "+" della nota madre
+        UI.addNote('n_parent_test');
+
+        // La nuova nota deve essere attiva, avere parentId corretto, ma essere completamente VUOTA!
+        Assert.strictEqual(AppState.notes.length, 2);
+        const childNote = AppState.notes.find(n => n.parentId === 'n_parent_test');
+        Assert.isNotNull(childNote, "La sotto-nota deve essere stata creata");
+        Assert.strictEqual(AppState.currentNoteId, childNote.id, "La sotto-nota deve essere la nota attiva");
+        Assert.strictEqual(childNote.title, "", "Il titolo della sotto-nota deve essere vuoto");
+        Assert.strictEqual(childNote.content, "<p><br></p>", "Il contenuto della sotto-nota deve essere vuoto");
+        Assert.isFalse(childNote.content.includes('Contenuto segreto'), "Non deve contenere il testo della nota madre");
+
+        // Anche il DOM vivo deve mostrare il contenuto vuoto
+        Assert.strictEqual(document.getElementById('noteTitle').value, "");
+        Assert.strictEqual(document.getElementById('noteContent').innerHTML, "<p><br></p>");
+        Assert.isTrue(AppState.isEditMode);
     });
 
     test("Lifecycle: Selezione nota carica titolo, contenuto e sincronizza l'interfaccia", async () => {

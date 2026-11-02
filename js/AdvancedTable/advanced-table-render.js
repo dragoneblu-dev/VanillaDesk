@@ -21,6 +21,7 @@
  * FIX UX FOOTER AUTO-NAVIGATION: Se hideFooterControls è attivo ma i record superano la dimensione
  * della pagina (totalPages > 1), viene mostrata la sola barra di navigazione/conteggio senza tasti di inserimento,
  * impedendo che tabelle estese appaiano troncate o corrotte.
+ * FEAT ZERO-RESULTS FILTER FEEDBACK (1B): Feedback descrittivo con conteggio record e pulsante per azzerare filtri e ricerca con un click.
  */
 
 Object.assign(AdvancedTable, {
@@ -222,6 +223,17 @@ Object.assign(AdvancedTable, {
         if (floatScroll) {
             floatScroll.scrollLeft = sourceScrollContainer.scrollLeft;
         }
+    },
+
+    clearTableFiltersAndSearch: (tableId) => {
+        let state = AdvancedTable.getState(tableId);
+        if (!state) return;
+        state.filters = {};
+        state.quickSearch = '';
+        state.currentPage = 1;
+        AdvancedTable.setState(tableId, state);
+        AdvancedTable.renderTable(tableId);
+        Store.triggerAutoSave();
     },
 
     renderTable: (tableId) => {
@@ -513,7 +525,22 @@ Object.assign(AdvancedTable, {
         html += `<th id="adv-th-add-${tableId}" style="width: ${lastColWidth}px; text-align:center; padding:0; vertical-align:middle;">${lastColIcon}</th></tr></thead><tbody>`;
 
         if (pagedRows.length === 0) {
-            html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:20px;">${I18n.t('adv_render.no_results')}</td></tr>`;
+            const totalStoredRowsCount = state.rows ? state.rows.length : 0;
+            if (totalStoredRowsCount > 0 && hasActiveFilterOrQuick) {
+                const noMatchesMsg = I18n.t('adv_render.no_filter_matches', { total: totalStoredRowsCount });
+                const clearBtnLabel = I18n.t('adv_render.clear_filters_btn');
+
+                html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:25px 15px;">
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+                        <span>${noMatchesMsg}</span>
+                        <button class="btn" style="padding:4px 12px; font-size:0.8rem; border-color:var(--accent-color); color:var(--accent-color); cursor:pointer;" onclick="event.stopPropagation(); AdvancedTable.clearTableFiltersAndSearch('${tableId}')">
+                            ${clearBtnLabel}
+                        </button>
+                    </div>
+                </td></tr>`;
+            } else {
+                html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:20px;">${I18n.t('adv_render.no_results')}</td></tr>`;
+            }
         } else {
             pagedRows.forEach(row => {
                 

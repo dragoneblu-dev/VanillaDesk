@@ -10,6 +10,7 @@
  * - Estrazione testo indicizzabile da note e blocchi codice (extractSearchableText).
  * - TOC dinamico per capitoli H1, H2, H3 (scrollToHeader).
  * - Evidenziazione del nodo attivo nella sidebar (highlightTreeNode).
+ * - FEAT SEARCH ZERO-RESULTS FEEDBACK & ACTIONS (4C): Feedback esplicito e pulsanti di reset quando ricerca e filtri tag non producono riscontri.
  */
 
 Object.assign(UI, {
@@ -22,6 +23,32 @@ Object.assign(UI, {
                 else btn.classList.remove('active');
             }
         });
+    },
+
+    clearTagFilters: () => {
+        AppState.activePropertyFilters = [];
+        if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+            SidebarManager.SearchAutocomplete.renderPills();
+        }
+        if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._triggerSearchUpdate === 'function') {
+            EventsGlobal._triggerSearchUpdate();
+        }
+    },
+
+    clearSearchAndFilters: () => {
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) searchInput.value = '';
+        AppState.searchFilter = '';
+        AppState.activePropertyFilters = [];
+        if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+            SidebarManager.SearchAutocomplete.renderPills();
+        }
+        if (typeof Editor !== 'undefined' && typeof Editor.cleanHighlightsBeforeSave === 'function') {
+            Editor.cleanHighlightsBeforeSave();
+        }
+        if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._triggerSearchUpdate === 'function') {
+            EventsGlobal._triggerSearchUpdate();
+        }
     },
 
     switchToNotes: () => {
@@ -156,6 +183,61 @@ Object.assign(UI, {
                     }
                 }
             }
+        }
+
+        // 3. GESTIONE STATO DI RICERCA A ZERO RISULTATI (4C)
+        if (container.children.length === 0 && isFiltering) {
+            const emptyDiv = document.createElement('div');
+            emptyDiv.className = 'tree-empty-search-state';
+            emptyDiv.style.cssText = 'padding: 24px 14px; text-align: center; color: var(--text-secondary); font-size: 0.85rem; display: flex; flex-direction: column; align-items: center; gap: 12px;';
+
+            let msg = '';
+            let buttonsHtml = '';
+
+            if (hasFilterText && hasFilterProp) {
+                msg = I18n.t('tree.empty_search_text_and_tags');
+                const btnTagLabel = I18n.t('tree.btn_clear_tag_filters');
+                const btnAllLabel = I18n.t('tree.btn_clear_all_search');
+
+                buttonsHtml = `
+                    <div style="display:flex; flex-direction:column; gap:6px; width:100%; max-width:220px;">
+                        <button class="btn" style="padding:4px 8px; font-size:0.75rem; justify-content:center; color:var(--accent-color); border-color:var(--accent-color); cursor:pointer;" onclick="UI.clearTagFilters()">
+                            ${btnTagLabel}
+                        </button>
+                        <button class="btn" style="padding:4px 8px; font-size:0.75rem; justify-content:center; cursor:pointer;" onclick="UI.clearSearchAndFilters()">
+                            ${btnAllLabel}
+                        </button>
+                    </div>
+                `;
+            } else if (hasFilterProp) {
+                msg = I18n.t('tree.empty_search_tags');
+                const btnTagLabel = I18n.t('tree.btn_clear_tag_filters');
+
+                buttonsHtml = `
+                    <button class="btn" style="padding:4px 10px; font-size:0.8rem; justify-content:center; color:var(--accent-color); border-color:var(--accent-color); cursor:pointer;" onclick="UI.clearTagFilters()">
+                        ${btnTagLabel}
+                    </button>
+                `;
+            } else if (hasFilterText) {
+                const termSafe = UI.escapeHTML(AppState.searchFilter);
+                msg = I18n.t('tree.empty_search_text', { term: termSafe });
+                const btnTextLabel = I18n.t('tree.btn_clear_search_text');
+
+                buttonsHtml = `
+                    <button class="btn" style="padding:4px 10px; font-size:0.8rem; justify-content:center; cursor:pointer;" onclick="UI.clearSearchAndFilters()">
+                        ${btnTextLabel}
+                    </button>
+                `;
+            } else if (reqBook || reqFav) {
+                msg = reqBook ? I18n.t('tree.empty_bookmarks') : I18n.t('tree.empty_favorites');
+            }
+
+            emptyDiv.innerHTML = `
+                <span style="opacity:0.5; font-size:1.6rem; display:inline-flex;">🔍</span>
+                <span style="line-height:1.45;">${msg}</span>
+                ${buttonsHtml}
+            `;
+            container.appendChild(emptyDiv);
         }
     },
 

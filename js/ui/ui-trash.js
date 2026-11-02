@@ -4,6 +4,7 @@
  * Impostazione del flag _isDirty su ripristino per consentire a saveToFile di propagare la rimozione di deletedAt.
  * Elaborazione atomica in batch per svuotamento massivo (2000+ note) senza deadlock di I/O su File System Access API.
  * FEAT PHYSICAL DELETION PROGRESS: Notifica all'utente della cancellazione fisica da disco tramite UI.ProgressModal.
+ * FEAT HARD DELETE BRANCH WARNING (4A): Quantificazione esatta delle sotto-note rimosse definitivamente.
  */
 
 Object.assign(UI, {
@@ -71,7 +72,20 @@ Object.assign(UI, {
         },
 
         hardDelete: async (id, force = false) => {
-            if (!force && !confirm(I18n.t('trash.confirm_hard_delete'))) return;
+            const note = Store.getNote(id);
+            const subnotes = [];
+            const traverse = (pId) => {
+                const ch = AppState.notes.filter(c => c.parentId === pId);
+                ch.forEach(c => { subnotes.push(c); traverse(c.id); });
+            };
+            if (note) traverse(id);
+            const count = subnotes.length;
+
+            const msg = count > 0 
+                ? I18n.t('trash.confirm_hard_delete_branch', { count: count + 1, subnotes: count })
+                : I18n.t('trash.confirm_hard_delete');
+
+            if (!force && !confirm(msg)) return;
             
             await UI.Trash.forceHardDeleteRecursive(id);
             if (!force) UI.Trash.open(); 

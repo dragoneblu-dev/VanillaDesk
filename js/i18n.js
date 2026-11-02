@@ -141,6 +141,16 @@ export_dialog: {
             btn_overwrite: "Sovrascrivi su Disco (Forza la mia versione)",
             toast_reloaded: "Nota ricaricata da disco. Le tue modifiche sono recuperabili con Ctrl+Z."
         },
+        tree: {
+            empty_search_text_and_tags: "Nessuna nota trovata combinando la ricerca con i filtri tag attivi.",
+            empty_search_tags: "Nessuna nota corrisponde ai filtri tag selezionati.",
+            empty_search_text: "Nessuna nota trovata per \"{term}\".",
+            empty_bookmarks: "Nessun segnalibro trovato.",
+            empty_favorites: "Nessuna nota tra i preferiti.",
+            btn_clear_tag_filters: "Rimuovi filtri tag",
+            btn_clear_search_text: "Cancella ricerca",
+            btn_clear_all_search: "Azzera ricerca e filtri"
+        },
         trash: {
             title: "Cestino",
             banner_info: "Le note nel cestino sono invisibili nell'albero principale. Puoi ripristinarle o eliminarle definitivamente.",
@@ -151,7 +161,8 @@ export_dialog: {
             empty_trash_btn: "Svuota Cestino",
             restore_toast: "Nota \"{title}\" ripristinata.",
             confirm_empty: "Svuotare completamente il cestino? TUTTE le note verranno eliminate per sempre.",
-            confirm_hard_delete: "Eliminare DEFINITIVAMENTE questa nota dal database? Non potrà essere recuperata."
+            confirm_hard_delete: "Eliminare DEFINITIVAMENTE questa nota dal database? Non potrà essere recuperata.",
+            confirm_hard_delete_branch: "Attenzione: Stai per eliminare DEFINITIVAMENTE la nota e le sue {subnotes} sotto-note ({count} note totali).\nQuesta operazione è irreversibile. Procedere?"
         },
         security: {
             drawer_title: "Sicurezza Workspace",
@@ -233,7 +244,11 @@ export_dialog: {
             raw_html_warning_desc: "Stai per modificare la struttura grezza della nota. Non alterare o eliminare gli attributi <code>id=\"adv_...\"</code> o <code>data-widget-type</code> dei componenti complessi (Database, Diari, Codice) per non corrompere i dati collegati.<br>In caso di errori, potrai comunque annullare l'operazione con Ctrl+Z.",
             raw_html_copy_btn: "Copia Tutto per VS Code",
             raw_html_apply_btn: "Applica e Reidrata Pagina",
-            raw_html_success_toast: "Codice HTML applicato e pagina reidratata con successo!"
+            raw_html_success_toast: "Codice HTML applicato e pagina reidratata con successo!",
+            confirm_move_trash_single: "Spostare la nota \"{title}\" nel Cestino?",
+            confirm_move_trash_subnotes: "Attenzione: Spostando la nota \"{title}\" nel Cestino, verranno spostate anche le sue {count} sotto-note (totale {total} note).\n\nConfermi lo spostamento nel Cestino?",
+            confirm_move_trash_dbs: "Attenzione: La nota \"{title}\" contiene {dbs} database con dati.\n\nSpostare la nota nel Cestino?",
+            confirm_move_trash_subnotes_and_dbs: "Attenzione: Spostando la nota \"{title}\" nel Cestino, verranno spostate anche le sue {subnotes} sotto-note (totale {total} note). All'interno sono presenti {dbs} database con dati.\n\nConfermi lo spostamento nel Cestino?"
         },
         format_blocks: {
             menu_insert_link: "Collegamento (Link)",
@@ -968,7 +983,9 @@ adv_render: {
     go_to_orig_db_structure: "Vai al Database Originale per modificare la struttura",
     no_results: "Nessun risultato.",
     sys_db_rows_info: "Il numero di record riflette le pagine. Le righe non possono essere aggiunte o rimosse manualmente.",
-    open_record: "Apri Record"
+    open_record: "Apri Record",
+    no_filter_matches: "Nessun record corrisponde ai filtri attivi (su {total} totali).",
+    clear_filters_btn: "Azzera filtri e ricerca"
 },
 pkg_manager: {
     export_banner: "Stai per impacchettare questa nota in un <b>Modpack Autoinstallante</b>.<br>Il sistema ha rilevato e incapsulerà automaticamente <b>{count}</b> componenti avanzati (Database, Dashboard, Pulsanti) collegati tra loro.",
@@ -1543,6 +1560,16 @@ export_dialog: {
             btn_overwrite: "Overwrite Disk (Force My Version)",
             toast_reloaded: "Note reloaded from disk. Your edits can be restored with Ctrl+Z."
         },
+        tree: {
+            empty_search_text_and_tags: "No notes found matching both the text search and active tag filters.",
+            empty_search_tags: "No notes match the selected tag filters.",
+            empty_search_text: "No notes found for \"{term}\".",
+            empty_bookmarks: "No bookmarks found.",
+            empty_favorites: "No favorite notes found.",
+            btn_clear_tag_filters: "Remove tag filters",
+            btn_clear_search_text: "Clear search",
+            btn_clear_all_search: "Reset search & filters"
+        },
         trash: {
             title: "Trash",
             banner_info: "Notes in the trash are hidden from the main tree. You can restore them or delete them permanently.",
@@ -1553,7 +1580,8 @@ export_dialog: {
             empty_trash_btn: "Empty Trash",
             restore_toast: "Note \"{title}\" restored.",
             confirm_empty: "Permanently empty the trash? ALL notes will be lost forever.",
-            confirm_hard_delete: "PERMANENTLY delete this note? It cannot be recovered."
+            confirm_hard_delete: "PERMANENTLY delete this note? It cannot be recovered.",
+            confirm_hard_delete_branch: "Warning: You are about to PERMANENTLY delete this note and its {subnotes} sub-notes ({count} notes total).\nThis operation cannot be undone. Proceed?"
         },
         security: {
             drawer_title: "Workspace Security",
@@ -1635,7 +1663,11 @@ export_dialog: {
             raw_html_warning_desc: "You are about to edit the raw structure of the note. Do not modify or delete the <code>id=\"adv_...\"</code> or <code>data-widget-type</code> attributes of complex components (Databases, Journals, Code) to avoid corrupting linked data.<br>In case of errors, you can always undo the action with Ctrl+Z.",
             raw_html_copy_btn: "Copy All for VS Code",
             raw_html_apply_btn: "Apply and Rehydrate Page",
-            raw_html_success_toast: "HTML code applied and page successfully rehydrated!"
+            raw_html_success_toast: "HTML code applied and page successfully rehydrated!",
+            confirm_move_trash_single: "Move note \"{title}\" to Trash?",
+            confirm_move_trash_subnotes: "Warning: Moving note \"{title}\" to Trash will also move its {count} sub-notes ({total} notes total).\n\nConfirm moving to Trash?",
+            confirm_move_trash_dbs: "Warning: Note \"{title}\" contains {dbs} databases with data.\n\nMove note to Trash?",
+            confirm_move_trash_subnotes_and_dbs: "Warning: Moving note \"{title}\" to Trash will also move its {subnotes} sub-notes ({total} notes total). It also contains {dbs} databases with data.\n\nConfirm moving to Trash?"
         },
         format_blocks: {
             menu_insert_link: "Link / Hyperlink",
@@ -2369,7 +2401,9 @@ adv_render: {
     go_to_orig_db_structure: "Go to Original Database to modify structure",
     no_results: "No results found.",
     sys_db_rows_info: "Record count reflects workspace pages. Rows cannot be added or deleted manually.",
-    open_record: "Open Record"
+    open_record: "Open Record",
+    no_filter_matches: "Nessun record corrisponde ai filtri attivi (su {total} totali).",
+    clear_filters_btn: "Azzera filtri e ricerca"
 },
 pkg_manager: {
     export_banner: "You are about to package this note into a self-installing <b>Modpack</b>.<br>The system detected and will encapsulate <b>{count}</b> connected advanced widgets (Databases, Dashboards, Buttons).",
@@ -2944,6 +2978,16 @@ export_dialog: {
             btn_overwrite: "Sobrescribir en Disco (Forzar mi versión)",
             toast_reloaded: "Nota recargada desde el disco. Tus cambios se pueden recuperar con Ctrl+Z."
         },
+        tree: {
+            empty_search_text_and_tags: "No se encontraron notas combinando la búsqueda con los filtros de etiquetas activos.",
+            empty_search_tags: "Ninguna nota coincide con los filtros de etiquetas seleccionados.",
+            empty_search_text: "No se encontraron notas para \"{term}\".",
+            empty_bookmarks: "No se encontraron marcadores.",
+            empty_favorites: "No hay notas en favoritos.",
+            btn_clear_tag_filters: "Quitar filtros de etiqueta",
+            btn_clear_search_text: "Borrar búsqueda",
+            btn_clear_all_search: "Restablecer búsqueda y filtros"
+        },
         trash: {
             title: "Papelera",
             banner_info: "Las notas en la papelera están ocultas en el árbol principal. Puedes restaurarlas o eliminarlas definitivamente.",
@@ -2954,7 +2998,8 @@ export_dialog: {
             empty_trash_btn: "Vaciar Papelera",
             restore_toast: "Nota \"{title}\" restaurada.",
             confirm_empty: "¿Vaciar completamente la papelera? TODAS las notas se eliminarán para siempre.",
-            confirm_hard_delete: "¿Eliminar DEFINITIVAMENTE esta nota? No se podrá recuperar."
+            confirm_hard_delete: "¿Eliminar DEFINITIVAMENTE esta nota? No se podrá recuperar.",
+            confirm_hard_delete_branch: "Atención: Estás a punto de eliminar DEFINITIVAMENTE esta nota y sus {subnotes} subnotas ({count} notas en total).\nEsta operación no se puede deshacer. ¿Continuar?"
         },
         security: {
             drawer_title: "Seguridad del Espacio de Trabajo",
@@ -3036,7 +3081,11 @@ export_dialog: {
             raw_html_warning_desc: "Estás a punto de modificar la estructura sin procesar de la nota. No alteres ni elimines los atributos <code>id=\"adv_...\"</code> o <code>data-widget-type</code> de los componentes complejos (Bases de datos, Diarios, Código) para no corromper los datos vinculados.<br>En caso de error, siempre puedes deshacer la acción con Ctrl+Z.",
             raw_html_copy_btn: "Copiar todo para VS Code",
             raw_html_apply_btn: "Aplicar y rehidratar página",
-            raw_html_success_toast: "¡Código HTML aplicado y página rehidratada con éxito!"
+            raw_html_success_toast: "¡Código HTML aplicado y página rehidratada con éxito!",
+            confirm_move_trash_single: "¿Mover la nota \"{title}\" a la Papelera?",
+            confirm_move_trash_subnotes: "Atención: Al mover la nota \"{title}\" a la Papelera, también se moverán sus {count} subnotas ({total} notas en total).\n\n¿Confirmar el traslado a la Papelera?",
+            confirm_move_trash_dbs: "Atención: La nota \"{title}\" contiene {dbs} bases de datos con datos.\n\n¿Mover la nota a la Papelera?",
+            confirm_move_trash_subnotes_and_dbs: "Atención: Al mover la nota \"{title}\" a la Papelera, también se moverán sus {subnotes} subnotas ({total} notas en total). Además contiene {dbs} bases de datos con datos.\n\n¿Confirmar el traslado a la Papelera?"
         },
         format_blocks: {
             menu_insert_link: "Enlace (Link)",
@@ -3771,7 +3820,9 @@ adv_render: {
     go_to_orig_db_structure: "Ir a la Base de Datos Original para modificar la estructura",
     no_results: "Sin resultados.",
     sys_db_rows_info: "El número de registros refleja las páginas. Las filas no se pueden añadir ni eliminar manualmente.",
-    open_record: "Abrir Registro"
+    open_record: "Abrir Registro",
+    no_filter_matches: "No records match the active filters (out of {total} total).",
+    clear_filters_btn: "Clear filters & search"
 },
 pkg_manager: {
     export_banner: "Vas a empaquetar esta nota en un <b>Modpack Autoinstalable</b>.<br>El sistema detectó e incluirá automáticamente <b>{count}</b> componentes avanzados conectados entre sí.",
@@ -4346,6 +4397,16 @@ export_dialog: {
             btn_overwrite: "Auf Festplatte überschreiben (Meine Version erzwingen)",
             toast_reloaded: "Notiz von Festplatte neu geladen. Änderungen können mit Strg+Z wiederhergestellt werden."
         },
+        tree: {
+            empty_search_text_and_tags: "Keine Notizen gefunden, die sowohl der Textsuche als auch den aktiven Tag-Filtern entsprechen.",
+            empty_search_tags: "Keine Notizen entsprechen den ausgewählten Tag-Filtern.",
+            empty_search_text: "Keine Notizen für \"{term}\" gefunden.",
+            empty_bookmarks: "Keine Lesezeichen gefunden.",
+            empty_favorites: "Keine Notizen in den Favoriten.",
+            btn_clear_tag_filters: "Tag-Filter entfernen",
+            btn_clear_search_text: "Suche löschen",
+            btn_clear_all_search: "Suche & Filter zurücksetzen"
+        },
         trash: {
             title: "Papierkorb",
             banner_info: "Notizen im Papierkorb sind im Hauptbaum ausgeblendet. Du kannst sie wiederherstellen oder dauerhaft löschen.",
@@ -4356,7 +4417,8 @@ export_dialog: {
             empty_trash_btn: "Papierkorb leeren",
             restore_toast: "Notiz \"{title}\" wiederhergestellt.",
             confirm_empty: "Papierkorb wirklich vollständig leeren? ALLE Notizen werden unwiderruflich gelöscht.",
-            confirm_hard_delete: "Diese Notiz DAUERHAFT löschen? Sie kann nicht wiederhergestellt werden."
+            confirm_hard_delete: "Diese Notiz DAUERHAFT löschen? Sie kann nicht wiederhergestellt werden.",
+            confirm_hard_delete_branch: "Achtung: Sie sind im Begriff, diese Notiz und ihre {subnotes} Unternotizen ({count} Notizen insgesamt) ENDGÜLTIG zu löschen.\nDieser Vorgang kann nicht rückgängig gemacht werden. Fortfahren?"
         },
         security: {
             drawer_title: "Arbeitsbereich-Sicherheit",
@@ -4438,7 +4500,11 @@ export_dialog: {
             raw_html_warning_desc: "Sie sind dabei, die Rohstruktur der Notiz zu bearbeiten. Ändern oder löschen Sie nicht die Attribute <code>id=\"adv_...\"</code> oder <code>data-widget-type</code> komplexer Komponenten (Datenbanken, Tagebücher, Code), um eine Beschädigung der verknüpften Daten zu vermeiden.<br>Bei Fehlern können Sie den Vorgang jederzeit mit Strg+Z rückgängig machen.",
             raw_html_copy_btn: "Alles für VS Code kopieren",
             raw_html_apply_btn: "Anwenden und Seite rehydrieren",
-            raw_html_success_toast: "HTML-Code erfolgreich angewendet und Seite rehydriert!"
+            raw_html_success_toast: "HTML-Code erfolgreich angewendet und Seite rehydriert!",
+            confirm_move_trash_single: "Notiz \"{title}\" in den Papierkorb verschieben?",
+            confirm_move_trash_subnotes: "Achtung: Wenn Sie die Notiz \"{title}\" in den Papierkorb verschieben, werden auch ihre {count} Unternotizen verschoben (insgesamt {total} Notizen).\n\nIn den Papierkorb verschieben?",
+            confirm_move_trash_dbs: "Achtung: Die Notiz \"{title}\" enthält {dbs} Datenbanken mit Daten.\n\nNotiz in den Papierkorb verschieben?",
+            confirm_move_trash_subnotes_and_dbs: "Achtung: Wenn Sie die Notiz \"{title}\" in den Papierkorb verschieben, werden auch ihre {subnotes} Unternotizen verschoben (insgesamt {total} Notizen). Sie enthält zudem {dbs} Datenbanken mit Daten.\n\nIn den Papierkorb verschieben?"
         },
         format_blocks: {
             menu_insert_link: "Link / Hyperlink",
@@ -5172,7 +5238,9 @@ adv_render: {
     go_to_orig_db_structure: "Zur Original-Datenbank wechseln, um die Struktur zu bearbeiten",
     no_results: "Keine Ergebnisse.",
     sys_db_rows_info: "Die Zeilenzahl spiegelt die Seiten wider. Zeilen können nicht manuell hinzugefügt oder gelöscht werden.",
-    open_record: "Datensatz öffnen"
+    open_record: "Datensatz öffnen",
+    no_filter_matches: "Ningún registro coincide con los filtros activos (de {total} en total).",
+    clear_filters_btn: "Restablecer filtros y búsqueda"
 },
 pkg_manager: {
     export_banner: "Du bist dabei, diese Notiz in ein selbstinstallierendes <b>Modpack</b> zu packen.<br>Das System hat automatisch <b>{count}</b> verbundene Widgets gekapselt.",

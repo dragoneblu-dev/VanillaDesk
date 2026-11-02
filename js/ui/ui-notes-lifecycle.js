@@ -9,6 +9,9 @@
  * garantendo la dis-espansione degli antenati collassati.
  * AUTO-HEAL APERTURA NOTA (CASO C): Controllo mirato ultrarapido tramite regex (ZWS duplicati o intrappolati tra lettere)
  * per avviare la bonifica dei cuscinetti solo in presenza di reali anomalie, evitando scansioni inutili su widget legittimi.
+ * FEAT BRANCH TRASH QUANTIFICATION (4A): Calcolo esatto delle sotto-note e dei soli database primari reali (escluse viste/pivot).
+ * FIX SUB-NOTE CLONING ROOT-CAUSE: Eliminata assegnazione prematura di currentNoteId in addNote e preservazione
+ * della sincronicità contrattuale con bypass di syncWidgetsForNote sulle note bozza.
  */
 
 Object.assign(UI, {
@@ -85,9 +88,6 @@ Object.assign(UI, {
             AdvancedTable.syncSystemPropertiesRow(newNoteId);
         }
 
-        // Impostazione sincrona immediata dello stato attivo
-        AppState.currentNoteId = newNoteId;
-
         if (typeof UI.renderTree !== 'undefined') UI.renderTree();
         
         UI.selectNote(newNote.id, null, null, true);
@@ -115,11 +115,11 @@ Object.assign(UI, {
             UI.closeDrawer();
             if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll(true);
 
-            // Sincronizza lo stato in RAM prima di spostare la vista
+            // Sincronizza lo stato in RAM prima di spostare la vista (solo se non è una bozza vergine)
             if (AppState.isEditMode && typeof Editor !== 'undefined') {
                 const curNote = Store.getNote(id);
                 const editorEl = document.getElementById('noteContent');
-                if (curNote && editorEl) {
+                if (curNote && editorEl && !curNote._isDraft) {
                     const cleanHtml = Editor.minifyHTMLForStorage(editorEl.innerHTML);
                     if (cleanHtml && cleanHtml !== curNote.content) {
                         curNote.content = cleanHtml;
@@ -221,7 +221,7 @@ Object.assign(UI, {
         let note = Store.getNote(id);
         if (!note) { AppState.isSwitchingNote = false; return; }
 
-        // Assegnazione sincrona immediata dell'ID della nota selezionata per garantire la coerenza dello stato
+        // Assegnazione sincrona dell'ID della nota selezionata al punto esatto di transizione
         AppState.currentNoteId = id;
 
         // Allinea la riga superiore dell'header con il nome della nota appena aperta
@@ -248,42 +248,40 @@ Object.assign(UI, {
             note._lastScroll = 0;
         }
 
-        // 1. VERIFICA JIT DELLA NOTA SU DISCO
-        if (AppState.workspaceHandle !== null) {
-            if (!note._isDraft) {
-                const syncRes = await Store.syncNoteFromDisk(id);
-                if (syncRes.status === 'deleted') {
-                    const idx = AppState.notes.findIndex(n => n.id === id);
-                    if (idx > -1) AppState.notes.splice(idx, 1);
-                    if (typeof AdvancedTable !== 'undefined' && AdvancedTable.deleteSystemPropertiesRow) {
-                        AdvancedTable.deleteSystemPropertiesRow(id);
-                    }
-                    if (typeof UI.renderTree !== 'undefined') UI.renderTree();
-                    if (typeof UI.showToast !== 'undefined') {
-                        UI.showToast("La nota non è più disponibile sul disco.", "warning");
-                    }
-                    if (AppState.currentNoteId === id) {
-                        UI.goHome();
-                    }
-                    AppState.isSwitchingNote = false;
-                    return;
-                } else if (syncRes.status === 'success' && syncRes.note) {
-                    if (!note._isDirty) {
-                        const currentExpanded = note.expanded;
-                        const currentTocCollapsed = note._tocCollapsed;
-                        const currentLastScroll = note._lastScroll;
-                        Object.assign(note, syncRes.note);
-                        if (currentExpanded !== undefined) note.expanded = currentExpanded;
-                        if (currentTocCollapsed !== undefined) note._tocCollapsed = currentTocCollapsed;
-                        if (currentLastScroll !== undefined) note._lastScroll = currentLastScroll;
-                        note._baseRevId = syncRes.note.revId || note.revId || Store.generateId();
-                        note._isDirty = false;
-                    }
+        // 1. VERIFICA JIT DELLA NOTA SU DISCO (Esclusa per bozze nuove per garantire totale sincronicità e zero overhead)
+        if (AppState.workspaceHandle !== null && !note._isDraft) {
+            const syncRes = await Store.syncNoteFromDisk(id);
+            if (syncRes.status === 'deleted') {
+                const idx = AppState.notes.findIndex(n => n.id === id);
+                if (idx > -1) AppState.notes.splice(idx, 1);
+                if (typeof AdvancedTable !== 'undefined' && AdvancedTable.deleteSystemPropertiesRow) {
+                    AdvancedTable.deleteSystemPropertiesRow(id);
+                }
+                if (typeof UI.renderTree !== 'undefined') UI.renderTree();
+                if (typeof UI.showToast !== 'undefined') {
+                    UI.showToast("La nota non è più disponibile sul disco.", "warning");
+                }
+                if (AppState.currentNoteId === id) {
+                    UI.goHome();
+                }
+                AppState.isSwitchingNote = false;
+                return;
+            } else if (syncRes.status === 'success' && syncRes.note) {
+                if (!note._isDirty) {
+                    const currentExpanded = note.expanded;
+                    const currentTocCollapsed = note._tocCollapsed;
+                    const currentLastScroll = note._lastScroll;
+                    Object.assign(note, syncRes.note);
+                    if (currentExpanded !== undefined) note.expanded = currentExpanded;
+                    if (currentTocCollapsed !== undefined) note._tocCollapsed = currentTocCollapsed;
+                    if (currentLastScroll !== undefined) note._lastScroll = currentLastScroll;
+                    note._baseRevId = syncRes.note.revId || note.revId || Store.generateId();
+                    note._isDirty = false;
                 }
             }
 
             // 2. JIT COMPONENT RECONCILIATION
-            if (typeof Store.syncWidgetsForNote === 'function' && note.content) {
+            if (typeof Store.syncWidgetsForNote === 'function' && note.content && note.content.includes('adv_')) {
                 await Store.syncWidgetsForNote(note.content);
             }
         }
@@ -638,7 +636,68 @@ Object.assign(UI, {
         const note = Store.getNote(AppState.currentNoteId);
         if (!note || note.deletedAt) return;
 
-        if (!confirm(I18n.t('notes_utils.confirm_move_trash'))) return; 
+        // Calcolo ricorsivo sotto-note discendenti
+        const getDescendants = (parentId) => {
+            let list = [];
+            const children = AppState.notes.filter(n => n.parentId === parentId && !n.deletedAt);
+            children.forEach(c => {
+                list.push(c);
+                list = list.concat(getDescendants(c.id));
+            });
+            return list;
+        };
+
+        const subnotes = getDescendants(note.id);
+        const subnotesCount = subnotes.length;
+        const allNotesToCheck = [note, ...subnotes];
+        const foundDbIds = new Set();
+        const dbRegex = /\bid=["'](adv_tbl_[a-zA-Z0-9_]+|adv_pivot_[a-zA-Z0-9_]+|adv_journal_[a-zA-Z0-9_]+)["']/g;
+
+        allNotesToCheck.forEach(n => {
+            if (!n.content) return;
+            let match;
+            dbRegex.lastIndex = 0;
+            while ((match = dbRegex.exec(n.content)) !== null) {
+                const trueId = match[1].split('_cited_')[0];
+                if (trueId === 'SYS_PROPERTIES_DB') continue;
+                const dbState = AppState.databases ? AppState.databases[trueId] : null;
+                // Conta solo database primari reali (esclude viste collegate e pivot prive di dati autonomi)
+                if (dbState && !dbState.isLinkedView && !dbState.isPivot && AppState.isRelationalTable(trueId)) {
+                    foundDbIds.add(trueId);
+                }
+            }
+        });
+
+        const dbCount = foundDbIds.size;
+        const totalNotesCount = subnotesCount + 1;
+        const safeTitle = note.title || I18n.t('editor.untitled');
+
+        let confirmMsg = '';
+        if (subnotesCount > 0 && dbCount > 0) {
+            confirmMsg = I18n.t('notes_utils.confirm_move_trash_subnotes_and_dbs', {
+                title: safeTitle,
+                subnotes: subnotesCount,
+                dbs: dbCount,
+                total: totalNotesCount
+            });
+        } else if (subnotesCount > 0) {
+            confirmMsg = I18n.t('notes_utils.confirm_move_trash_subnotes', {
+                title: safeTitle,
+                count: subnotesCount,
+                total: totalNotesCount
+            });
+        } else if (dbCount > 0) {
+            confirmMsg = I18n.t('notes_utils.confirm_move_trash_dbs', {
+                title: safeTitle,
+                dbs: dbCount
+            });
+        } else {
+            confirmMsg = I18n.t('notes_utils.confirm_move_trash_single', {
+                title: safeTitle
+            });
+        }
+
+        if (!confirm(confirmMsg)) return; 
         
         const parentIdToReturn = note.parentId;
         const targetId = AppState.currentNoteId;

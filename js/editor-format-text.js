@@ -17,6 +17,10 @@
  * WIDGET PROTECTION: Esclusione categorica di tutti i widget complessi di VanillaDesk dalla gomma formattazioni.
  * FEAT MULTI-CELL FORMATTING: Supporto a Maiuscolo/Minuscolo (toggleCase) e Carattere/Dimensione (applyTextFormat)
  * applicati simultaneamente a tutte le celle selezionate in TableManager con snapshot forzato per Undo/Redo immediato.
+ * FIX MULTI-PARAGRAPH FONT PRESERVATION: Preservazione della selezione su paragrafi multipli tramite marker temporanei
+ * post-execCommand.
+ * FIX FONT INSPECTION ACCURACY: Rilevamento deterministico di font e dimensione tramite closest() sul punto di selezione,
+ * prevenendo che ricerche non mirate forzino falsi positivi su font EasyReading da span non selezionati.
  */
 
 Object.assign(Editor, {
@@ -40,28 +44,46 @@ Object.assign(Editor, {
 
         if (hasSelectedCells) {
             const firstCell = TableManager.Selection.selectedCells[0];
-            const span = firstCell.querySelector('span[class*="ff-"], span[class*="fs-"]');
-            if (span) {
-                if (span.classList.contains('ff-serif')) activeFF = 'ff-serif';
-                else if (span.classList.contains('ff-cursive')) activeFF = 'ff-cursive';
-                else if (span.classList.contains('ff-easyreading')) activeFF = 'ff-easyreading';
-
-                if (span.classList.contains('fs-small')) activeFS = 'fs-small';
-                else if (span.classList.contains('fs-large')) activeFS = 'fs-large';
+            const spanFF = firstCell.querySelector('.ff-serif, .ff-cursive, .ff-easyreading');
+            if (spanFF) {
+                if (spanFF.classList.contains('ff-serif')) activeFF = 'ff-serif';
+                else if (spanFF.classList.contains('ff-cursive')) activeFF = 'ff-cursive';
+                else if (spanFF.classList.contains('ff-easyreading')) activeFF = 'ff-easyreading';
+            }
+            const spanFS = firstCell.querySelector('.fs-small, .fs-large');
+            if (spanFS) {
+                if (spanFS.classList.contains('fs-small')) activeFS = 'fs-small';
+                else if (spanFS.classList.contains('fs-large')) activeFS = 'fs-large';
             }
         } else {
             const sel = window.getSelection();
-            if (sel.rangeCount > 0) {
-                let node = sel.anchorNode;
-                if (node.nodeType === 3) node = node.parentNode;
-                const span = node.closest('span[class*="ff-"], span[class*="fs-"]');
-                if (span) {
-                    if (span.classList.contains('ff-serif')) activeFF = 'ff-serif';
-                    else if (span.classList.contains('ff-cursive')) activeFF = 'ff-cursive';
-                    else if (span.classList.contains('ff-easyreading')) activeFF = 'ff-easyreading';
+            const range = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0) : Editor.savedRange;
 
-                    if (span.classList.contains('fs-small')) activeFS = 'fs-small';
-                    else if (span.classList.contains('fs-large')) activeFS = 'fs-large';
+            let startNode = null;
+            if (range) {
+                startNode = range.startContainer;
+                if (startNode && startNode.nodeType === Node.ELEMENT_NODE && startNode.childNodes && startNode.childNodes[range.startOffset]) {
+                    startNode = startNode.childNodes[range.startOffset];
+                }
+            } else if (sel && sel.anchorNode) {
+                startNode = sel.anchorNode;
+            }
+
+            if (startNode) {
+                const startEl = startNode.nodeType === Node.TEXT_NODE ? startNode.parentNode : startNode;
+                if (startEl && startEl.closest) {
+                    const ffEl = startEl.closest('.ff-serif, .ff-cursive, .ff-easyreading');
+                    if (ffEl) {
+                        if (ffEl.classList.contains('ff-serif')) activeFF = 'ff-serif';
+                        else if (ffEl.classList.contains('ff-cursive')) activeFF = 'ff-cursive';
+                        else if (ffEl.classList.contains('ff-easyreading')) activeFF = 'ff-easyreading';
+                    }
+
+                    const fsEl = startEl.closest('.fs-small, .fs-large');
+                    if (fsEl) {
+                        if (fsEl.classList.contains('fs-small')) activeFS = 'fs-small';
+                        else if (fsEl.classList.contains('fs-large')) activeFS = 'fs-large';
+                    }
                 }
             }
         }
@@ -535,6 +557,31 @@ Object.assign(Editor, {
 
         document.execCommand(command, false, targetValue);
 
+        // PRESERVAZIONE DELLA SELEZIONE MULTI-BLOCCO TRAMITE MARKER TEMPORANEI
+        let startMarker = null;
+        let endMarker = null;
+
+        if (selection.rangeCount > 0) {
+            const postExecRange = selection.getRangeAt(0);
+            if (!postExecRange.collapsed) {
+                startMarker = document.createElement('span');
+                startMarker.id = 'adv-font-sel-start';
+                startMarker.style.display = 'none';
+
+                endMarker = document.createElement('span');
+                endMarker.id = 'adv-font-sel-end';
+                endMarker.style.display = 'none';
+
+                const endR = postExecRange.cloneRange();
+                endR.collapse(false);
+                endR.insertNode(endMarker);
+
+                const startR = postExecRange.cloneRange();
+                startR.collapse(true);
+                startR.insertNode(startMarker);
+            }
+        }
+
         // Conversione post-taglio dai magic tags (face/size) alle classi pulite dell'applicazione
         editor.querySelectorAll('*').forEach(el => {
             if (typeof ColorManager !== 'undefined' && !ColorManager._isSafeToColor(el)) return;
@@ -546,6 +593,7 @@ Object.assign(Editor, {
                 if (faceAttr === 'MagicRemoveFF' || ffStyle === 'MagicRemoveFF') {
                     el.removeAttribute('face');
                     el.style.fontFamily = '';
+                    el.classList.remove('ff-serif', 'ff-cursive', 'ff-easyreading');
                 } else {
                     for (let cls in magicFF) {
                         if (faceAttr === magicFF[cls] || ffStyle === magicFF[cls]) {
@@ -593,12 +641,13 @@ Object.assign(Editor, {
             fontEl.parentNode.replaceChild(span, fontEl);
         });
 
-        // Garbage collection dei nodi vuoti lasciati indietro
+        // Garbage collection dei nodi vuoti lasciati indietro (preservando i marker di selezione)
         let changed = true;
         while (changed) {
             changed = false;
             editor.querySelectorAll('*').forEach(el => {
                 if (typeof ColorManager !== 'undefined' && !ColorManager._isSafeToColor(el)) return;
+                if (el === startMarker || el === endMarker) return;
 
                 if (el.getAttribute('class') === '') el.removeAttribute('class');
                 if (el.getAttribute('style') === '') el.removeAttribute('style');
@@ -616,7 +665,23 @@ Object.assign(Editor, {
                 }
             });
         }
-        editor.normalize(); 
+
+        // RIPRISTINO ESATTO DELLA SELEZIONE MULTI-PARAGRAFO
+        if (startMarker && endMarker && startMarker.parentNode && endMarker.parentNode) {
+            const restoredRange = document.createRange();
+            restoredRange.setStartAfter(startMarker);
+            restoredRange.setEndBefore(endMarker);
+
+            startMarker.remove();
+            endMarker.remove();
+            editor.normalize();
+
+            selection.removeAllRanges();
+            selection.addRange(restoredRange);
+            Editor.savedRange = restoredRange.cloneRange();
+        } else {
+            editor.normalize();
+        }
 
         Store.triggerAutoSave();
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);

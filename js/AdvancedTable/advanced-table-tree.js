@@ -20,6 +20,7 @@
  * - FIX DEFENSIVE STATE: Inizializzazione difensiva di sorts, filters e selectedRows per prevenire TypeError su find().
  * - FIX UX FOOTER AUTO-NAVIGATION: Sincronizzazione automatica del footer in modalità navigazione quando hideFooterControls è attivo
  *   ma i record radice superano la pagina (totalPages > 1).
+ * - FEAT ZERO-RESULTS FILTER FEEDBACK (1B): Feedback descrittivo con opzione di azzeramento filtri e ricerca con un click.
  */
 
 const AdvancedTree = {
@@ -130,6 +131,7 @@ const AdvancedTree = {
         state.columns.forEach(c => {
             if (c.type === 'checkbox') newRow.cells[c.id] = false;
             else if (['multi-select', 'relation'].includes(c.type)) newRow.cells[c.id] = [];
+            else if (['date', 'datetime'].includes(c.type)) newRow.cells[c.id] = c.hasEndDate ? { start: '', end: '' } : '';
             else newRow.cells[c.id] = '';
         });
 
@@ -539,8 +541,24 @@ const AdvancedTree = {
 
         html += `<th id="adv-th-add-${tableId}" style="width: ${lastColWidth}px; text-align:center; padding:0; vertical-align:middle;">${lastColIcon}</th></tr></thead><tbody>`;
 
+        const totalStoredRows = state.rows ? state.rows.length : 0;
+
         if (flatTreeRows.length === 0) {
-            html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:25px;">Nessun record corrisponde ai filtri impostati.</td></tr>`;
+            if (totalStoredRows > 0 && isFilteredMode) {
+                const noMatchesMsg = I18n.t('adv_render.no_filter_matches', { total: totalStoredRows });
+                const clearBtnLabel = I18n.t('adv_render.clear_filters_btn');
+
+                html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:25px 15px;">
+                    <div style="display:flex; flex-direction:column; align-items:center; gap:8px;">
+                        <span>${noMatchesMsg}</span>
+                        <button class="btn" style="padding:4px 12px; font-size:0.8rem; border-color:var(--accent-color); color:var(--accent-color); cursor:pointer;" onclick="event.stopPropagation(); AdvancedTable.clearTableFiltersAndSearch('${tableId}')">
+                            ${clearBtnLabel}
+                        </button>
+                    </div>
+                </td></tr>`;
+            } else {
+                html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:25px;">Nessun record corrisponde ai filtri impostati.</td></tr>`;
+            }
         } else {
             flatTreeRows.forEach(item => {
                 const row = item.row;
@@ -682,7 +700,6 @@ const AdvancedTree = {
         html += `</tbody></table></div>`;
 
         // Footer Controls con indicatore conteggio totale record
-        const totalStoredRows = state.rows ? state.rows.length : 0;
         const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
         const recordCountHtml = `<span class="adv-table-count-label" style="font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
 
