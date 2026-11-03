@@ -11,6 +11,8 @@
  * - TOC dinamico per capitoli H1, H2, H3 (scrollToHeader).
  * - Evidenziazione del nodo attivo nella sidebar (highlightTreeNode).
  * - FEAT SEARCH ZERO-RESULTS FEEDBACK & ACTIONS (4C): Feedback esplicito e pulsanti di reset quando ricerca e filtri tag non producono riscontri.
+ * - FIX RECORD NOTE SUBNOTES HIERARCHY: Sbloccata la ricorsione gerarchica sui figli delle record note senza alterare la struttura delle radici.
+ * - FIX RECORD BRANCH ICON: Ereditarietà automatica dell'icona verde record per tutti i rami discendenti delle pagine di database.
  */
 
 Object.assign(UI, {
@@ -120,7 +122,7 @@ Object.assign(UI, {
         const reqFav = AppState.showFavoritesInTree;
         const isFiltering = hasFilterText || hasFilterProp || reqBook || reqFav;
 
-        // 1. Modalità Esplicita Database
+        // 1. Modalità Esplicita Database (Mostra solo l'elenco dei database e delle viste collegate)
         if (AppState.showDbNotesInTree) {
             if (AppState.databases) {
                 const sortedDbIds = Object.keys(AppState.databases)
@@ -147,7 +149,7 @@ Object.assign(UI, {
                 });
             }
         } 
-        // 2. Modalità Struttura Classica
+        // 2. Modalità Struttura Classica (Tab Note)
         else {
             const roots = Store.getChildren(null).filter(n => !n.isRecordNote);
             roots.forEach(node => { 
@@ -384,8 +386,9 @@ Object.assign(UI, {
         });
     },
 
-    buildTreeElement: (node, forceRender = false) => {
-        
+    buildTreeElement: (node, forceRender = false, isDbBranch = false) => {
+        const isDbBranchNode = Boolean(node.isRecordNote || isDbBranch);
+
         if (node.isRecordNote && !forceRender) {
             const isActivePath = AppState.currentNoteId === node.id || UI.isDescendant(node.id, AppState.currentNoteId);
             if (!isActivePath) return null;
@@ -446,9 +449,10 @@ Object.assign(UI, {
         const childElements = [];
         let hasMatchChild = false;
 
-        const children = forceRender ? [] : Store.getChildren(node.id).filter(n => !n.isRecordNote);
+        // Recupero ricorsivo dei nodi figli con propagazione garantita del ramo database
+        const children = Store.getChildren(node.id).filter(n => !n.isRecordNote);
         children.forEach(c => {
-            const el = UI.buildTreeElement(c);
+            const el = UI.buildTreeElement(c, forceRender, isDbBranchNode);
             if (el) { childElements.push(el); hasMatchChild = true; }
         });
 
@@ -592,7 +596,7 @@ Object.assign(UI, {
         let iconColorStyle = "";
         const hasBookmark = node.content && node.content.includes('adv-bookmark-marker');
 
-        if (node.isRecordNote) {
+        if (isDbBranchNode) {
             customIcon = Icons.recordPage;
             iconColorStyle = "color:var(--record-color);";
         } else if (!isGhost) {

@@ -60,7 +60,7 @@ Object.assign(TemplateManager, {
                 wrapper.innerHTML = `
                     <div class="widget-header adv-table-header" style="display:flex;">
                         <span class="widget-icon" style="display:inline-flex; color:var(--danger-color);">${typeof Icons !== 'undefined' ? Icons.youtube : '▶'}</span>
-                        <span class="widget-title adv-table-title" style="flex:0 1 auto; font-weight:bold;">Video YouTube</span>
+                        <span class="widget-title adv-table-title" style="flex:0 1 auto; font-weight:bold;">${I18n.t('template_preview.video_youtube')}</span>
                     </div>
                     <div class="widget-body">${wrapper.innerHTML}</div>
                 `;
@@ -71,7 +71,7 @@ Object.assign(TemplateManager, {
         temp.querySelectorAll('.block-citation').forEach(cit => {
             const noteId = cit.getAttribute('data-ref-note');
             const targetNote = typeof Store !== 'undefined' ? Store.getNote(noteId) : null;
-            const noteTitle = targetNote ? targetNote.title : (cit.getAttribute('data-title') || 'Riferimento Nota');
+            const noteTitle = targetNote ? targetNote.title : (cit.getAttribute('data-title') || I18n.t('template_preview.note_ref'));
             const refId = cit.getAttribute('data-ref-id');
             const refType = cit.getAttribute('data-ref-type') || 'note';
 
@@ -80,13 +80,13 @@ Object.assign(TemplateManager, {
                 bodyHtml = UI.DocumentBrowser.extractLiveHTML(targetNote.content || '', refId, refType);
             }
             if (!bodyHtml) {
-                bodyHtml = `<span style="color:var(--text-secondary); font-style:italic;">[Citazione: ${TemplateManager._escape(noteTitle)}]</span>`;
+                bodyHtml = `<span style="color:var(--text-secondary); font-style:italic;">${I18n.t('template_preview.citation_prefix', { title: TemplateManager._escape(noteTitle) })}</span>`;
             }
 
             cit.innerHTML = `
                 <div class="widget-header adv-table-header compact-header" style="display:flex;">
                     <span class="widget-icon" style="display:inline-flex; color:var(--accent-color);">${typeof Icons !== 'undefined' ? Icons.citation : '❝'}</span>
-                    <span class="widget-title adv-table-title" style="flex:0 1 auto; font-weight:bold;">Riferimento: ${TemplateManager._escape(noteTitle)}</span>
+                    <span class="widget-title adv-table-title" style="flex:0 1 auto; font-weight:bold;">${I18n.t('template_preview.reference_prefix', { title: TemplateManager._escape(noteTitle) })}</span>
                 </div>
                 <div class="widget-body citation-body adv-scroll-container editor-content" style="padding: 10px 0;">${bodyHtml}</div>
             `;
@@ -220,7 +220,7 @@ Object.assign(TemplateManager, {
 
         let trs = '';
         if (rows.length === 0) {
-            trs = `<tr><td colspan="${Math.max(columns.length, 1)}" style="padding:15px; text-align:center; color:var(--text-secondary); font-style:italic;">(Nessun record salvato)</td></tr>`;
+            trs = `<tr><td colspan="${Math.max(columns.length, 1)}" style="padding:15px; text-align:center; color:var(--text-secondary); font-style:italic;">${I18n.t('template_preview.no_records_saved')}</td></tr>`;
         } else {
             rows.forEach(r => {
                 trs += `<tr>`;
@@ -235,7 +235,7 @@ Object.assign(TemplateManager, {
                             display += `<span class="adv-select-pill ${colorClass}" style="margin:1px 2px; padding:2px 6px; font-size:0.75rem;">${TemplateManager._escape(v)}</span>`;
                         });
                     } else if (col.type === 'checkbox') {
-                        display = val ? '<span style="color:var(--accent-color); font-weight:bold;">☑ Sì</span>' : '<span style="color:var(--text-secondary);">☐ No</span>';
+                        display = val ? `<span style="color:var(--accent-color); font-weight:bold;">☑ ${I18n.t('sidebar_filter.yes')}</span>` : `<span style="color:var(--text-secondary);">☐ ${I18n.t('sidebar_filter.no')}</span>`;
                     } else if (typeof val === 'object' && val !== null) {
                         display = val.start ? `${TemplateManager._escape(val.start)}${val.end ? ' ➔ ' + TemplateManager._escape(val.end) : ''}` : TemplateManager._escape(JSON.stringify(val));
                     } else {
@@ -255,14 +255,15 @@ Object.assign(TemplateManager, {
                     <tbody>${trs}</tbody>
                 </table>
             </div>
-            ${state.rows && state.rows.length > 8 ? `<div style="font-size:0.75rem; color:var(--text-secondary); text-align:center; padding:6px; opacity:0.8;">...e altri ${state.rows.length - 8} record</div>` : ''}
+            ${state.rows && state.rows.length > 8 ? `<div style="font-size:0.75rem; color:var(--text-secondary); text-align:center; padding:6px; opacity:0.8;">${I18n.t('template_preview.more_records', { count: state.rows.length - 8 })}</div>` : ''}
         `;
     },
 
     _renderBoardPreviewBody: (state) => {
         const groupColId = state.boardGroupBy || (state.columns.find(c => c.type === 'select')?.id);
         const groupCol = state.columns.find(c => c.id === groupColId);
-        const options = (groupCol && state.selectOptions && state.selectOptions[groupColId]) ? state.selectOptions[groupColId] : ['Da Fare', 'In Corso', 'Completato'];
+        const defaultOptions = [I18n.t('template_preview.status_todo'), I18n.t('template_preview.status_in_progress'), I18n.t('template_preview.status_done')];
+        const options = (groupCol && state.selectOptions && state.selectOptions[groupColId]) ? state.selectOptions[groupColId] : defaultOptions;
         const titleCol = state.columns[0] || { id: 'c_title', name: 'Nome' };
 
         let colsHtml = '';
@@ -287,7 +288,7 @@ Object.assign(TemplateManager, {
                         <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8;">${matchingRows.length}</span>
                     </div>
                     <div style="display:flex; flex-direction:column; gap:6px;">
-                        ${cardsHtml || '<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; padding:8px; text-align:center;">(Nessuna scheda)</div>'}
+                        ${cardsHtml || `<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; padding:8px; text-align:center;">${I18n.t('template_preview.no_cards')}</div>`}
                     </div>
                 </div>
             `;
@@ -313,14 +314,14 @@ Object.assign(TemplateManager, {
         return `
             <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); border-radius:6px; padding:12px;">
                 <div style="display:grid; grid-template-columns:repeat(7, 1fr); text-align:center; font-weight:bold; font-size:0.75rem; color:var(--text-secondary); border-bottom:1px solid var(--border-color); padding-bottom:6px; margin-bottom:8px;">
-                    <div>LUN</div><div>MAR</div><div>MER</div><div>GIO</div><div>VEN</div><div>SAB</div><div>DOM</div>
+                    <div>${I18n.t('template_preview.mon')}</div><div>${I18n.t('template_preview.tue')}</div><div>${I18n.t('template_preview.wed')}</div><div>${I18n.t('template_preview.thu')}</div><div>${I18n.t('template_preview.fri')}</div><div>${I18n.t('template_preview.sat')}</div><div>${I18n.t('template_preview.sun')}</div>
                 </div>
                 <div style="display:grid; grid-template-columns:repeat(7, 1fr); gap:4px; min-height:80px; background:rgba(0,0,0,0.02); border-radius:4px; padding:8px; align-items:center;">
                     ${Array.from({ length: 14 }).map((_, i) => `<div style="font-size:0.75rem; color:var(--text-secondary); text-align:center; opacity:0.6;">${i + 1}</div>`).join('')}
                 </div>
                 <div style="margin-top:10px; border-top:1px dashed var(--border-color); padding-top:8px;">
-                    <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); margin-bottom:4px;">Eventi in agenda:</div>
-                    <div style="display:flex; flex-wrap:wrap; gap:4px;">${eventsHtml || '<span style="font-size:0.75rem; color:var(--text-secondary); font-style:italic;">Nessun evento pianificato</span>'}</div>
+                    <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); margin-bottom:4px;">${I18n.t('template_preview.events_in_agenda')}</div>
+                    <div style="display:flex; flex-wrap:wrap; gap:4px;">${eventsHtml || `<span style="font-size:0.75rem; color:var(--text-secondary); font-style:italic;">${I18n.t('template_preview.no_events_planned')}</span>`}</div>
                 </div>
             </div>
         `;
@@ -348,11 +349,11 @@ Object.assign(TemplateManager, {
         return `
             <div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:10px; overflow:hidden;">
                 <div style="display:flex; border-bottom:1px solid var(--border-color); padding-bottom:6px; margin-bottom:8px; font-size:0.75rem; color:var(--text-secondary); font-weight:bold;">
-                    <div style="flex:1; text-align:center;">Settimana 1</div>
-                    <div style="flex:1; text-align:center; border-left:1px dashed var(--border-color);">Settimana 2</div>
-                    <div style="flex:1; text-align:center; border-left:1px dashed var(--border-color);">Settimana 3</div>
+                    <div style="flex:1; text-align:center;">${I18n.t('template_preview.week_prefix', { num: 1 })}</div>
+                    <div style="flex:1; text-align:center; border-left:1px dashed var(--border-color);">${I18n.t('template_preview.week_prefix', { num: 2 })}</div>
+                    <div style="flex:1; text-align:center; border-left:1px dashed var(--border-color);">${I18n.t('template_preview.week_prefix', { num: 3 })}</div>
                 </div>
-                <div>${barsHtml || '<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; padding:10px; text-align:center;">(Nessuna attività programmata)</div>'}</div>
+                <div>${barsHtml || `<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; padding:10px; text-align:center;">${I18n.t('template_preview.no_tasks_scheduled')}</div>`}</div>
             </div>
         `;
     },
@@ -372,20 +373,20 @@ Object.assign(TemplateManager, {
                         <span style="color:var(--accent-color); font-size:0.8rem;">${idx % 2 === 0 ? '▼' : '•'}</span>
                         <span style="font-weight:${idx % 3 === 0 ? 'bold' : 'normal'}; color:var(--text-primary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${TemplateManager._escape(title)}</span>
                     </div>
-                    <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.6; font-family:monospace;">Livello ${(idx % 3) + 1}</span>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.6; font-family:monospace;">${I18n.t('template_preview.level_prefix', { num: (idx % 3) + 1 })}</span>
                 </div>
             `;
         });
 
         return `
             <div style="border:1px solid var(--border-color); border-radius:6px; background:var(--bg-color); overflow:hidden;">
-                ${treeHtml || '<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; padding:15px; text-align:center;">(Gerarchia vuota)</div>'}
+                ${treeHtml || `<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic; padding:15px; text-align:center;">${I18n.t('template_preview.empty_hierarchy')}</div>`}
             </div>
         `;
     },
 
     _renderPivotPreview: (wrapper, state, sourceState) => {
-        const title = state.title || 'Vista Analitica / Pivot';
+        const title = state.title || I18n.t('template_preview.analytics_pivot_view');
         const isChart = state.chartConfig && state.chartConfig.visible;
         const icon = isChart ? (typeof Icons !== 'undefined' ? Icons.data : '📊') : (typeof Icons !== 'undefined' ? Icons.tablePivot : '📈');
 
@@ -396,7 +397,7 @@ Object.assign(TemplateManager, {
             bodyHtml = `
                 <div style="background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:15px; text-align:center;">
                     <div style="font-size:0.85rem; font-weight:bold; color:var(--accent-color); margin-bottom:8px;">
-                        Grafico Visivo: ${TemplateManager._escape(chartType.toUpperCase())}
+                        ${I18n.t('template_preview.chart_visual_prefix', { type: TemplateManager._escape(chartType.toUpperCase()) })}
                     </div>
                     <div style="display:flex; align-items:flex-end; justify-content:center; gap:12px; height:90px; padding:10px 0; border-bottom:1px solid var(--border-color); margin-bottom:10px;">
                         <div style="width:28px; height:60%; background:var(--accent-color); border-radius:4px 4px 0 0; opacity:0.8;"></div>
@@ -405,7 +406,7 @@ Object.assign(TemplateManager, {
                         <div style="width:28px; height:75%; background:var(--tx-c8); border-radius:4px 4px 0 0; opacity:0.8;"></div>
                     </div>
                     <div style="font-size:0.75rem; color:var(--text-secondary);">
-                        Metriche aggregate configurate nel template
+                        ${I18n.t('template_preview.chart_metrics_configured')}
                     </div>
                 </div>
             `;
@@ -415,8 +416,8 @@ Object.assign(TemplateManager, {
                     <table class="adv-table table-striped adv-table-full-width" style="border-collapse:collapse; width:100%; font-size:0.85rem;">
                         <thead>
                             <tr>
-                                <th style="padding:6px 10px; background:rgba(37,99,235,0.05); color:var(--accent-color); border:1px solid var(--border-color); text-align:left;">Raggruppamento</th>
-                                <th style="padding:6px 10px; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); text-align:right;">Totale / Conteggio</th>
+                                <th style="padding:6px 10px; background:rgba(37,99,235,0.05); color:var(--accent-color); border:1px solid var(--border-color); text-align:left;">${I18n.t('template_preview.grouping')}</th>
+                                <th style="padding:6px 10px; background:rgba(0,0,0,0.02); border:1px solid var(--border-color); text-align:right;">${I18n.t('template_preview.total_count')}</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -441,7 +442,7 @@ Object.assign(TemplateManager, {
     _renderCodePreview: (wrapper, state) => {
         const title = state.title || I18n.t('code_widget.default_title');
         const lang = state.language || 'none';
-        const codeText = state.content || '// Codice template';
+        const codeText = state.content || I18n.t('template_preview.code_comment');
 
         let formattedCode = '';
         if (typeof CodeManager !== 'undefined') {
@@ -467,12 +468,12 @@ Object.assign(TemplateManager, {
     },
 
     _renderButtonBarPreview: (wrapper, state) => {
-        const buttons = state.buttons || [{ label: 'Nuovo Pulsante', color: 'var(--accent-color)', icon: Icons.play }];
+        const buttons = state.buttons || [{ label: I18n.t('template_preview.new_button'), color: 'var(--accent-color)', icon: Icons.play }];
 
         let btnsHtml = '';
         buttons.forEach(btn => {
             const color = btn.color || 'var(--accent-color)';
-            const label = btn.label || 'Pulsante';
+            const label = btn.label || I18n.t('template_preview.button');
             const icon = btn.icon || (typeof Icons !== 'undefined' ? Icons.play : '▶');
 
             btnsHtml += `
@@ -502,7 +503,7 @@ Object.assign(TemplateManager, {
             entriesHtml += `
                 <div style="display:flex; align-items:center; gap:8px; padding:4px 0; font-size:0.85rem; border-bottom:1px solid rgba(0,0,0,0.03);">
                     <span style="color:${isDone ? '#22c55e' : 'var(--text-secondary)'}; font-family:monospace; font-weight:bold;">${check} ${ent.timeStr || '10:00'}</span>
-                    <span style="flex:1; color:var(--text-primary); ${isDone ? 'opacity:0.6; text-decoration:line-through;' : ''}">${ent.content ? ent.content.replace(/<[^>]*>?/gm, '') : 'Attività'}</span>
+                    <span style="flex:1; color:var(--text-primary); ${isDone ? 'opacity:0.6; text-decoration:line-through;' : ''}">${ent.content ? ent.content.replace(/<[^>]*>?/gm, '') : I18n.t('template_preview.activity')}</span>
                 </div>
             `;
         });
@@ -514,7 +515,7 @@ Object.assign(TemplateManager, {
                 <span class="widget-title adv-table-title" style="flex:0 1 auto; font-weight:bold; font-size:1rem; color:var(--text-primary);">${TemplateManager._escape(title)}</span>
             </div>
             <div class="widget-body" style="padding:10px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px;">
-                ${entriesHtml || '<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic;">(Nessuna voce registrata)</div>'}
+                ${entriesHtml || `<div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic;">${I18n.t('template_preview.no_entries_recorded')}</div>`}
             </div>
         `;
     },
@@ -522,7 +523,7 @@ Object.assign(TemplateManager, {
     _renderColumnsPreview: (wrapper, state) => {
         const colsCount = state.columns || 2;
         const widths = state.widths || Array(colsCount).fill(100 / colsCount);
-        const contents = state.contents || Array(colsCount).fill('<p>Contenuto colonna...</p>');
+        const contents = state.contents || Array(colsCount).fill(`<p>${I18n.t('template_preview.column_content')}</p>`);
 
         let colsHtml = '';
         for (let i = 0; i < colsCount; i++) {
@@ -563,7 +564,7 @@ Object.assign(TemplateManager, {
                     <span style="display:inline-flex;">${icon}</span> <span>${TemplateManager._escape(title)}</span>
                 </div>
                 <div style="font-size:0.75rem; color:var(--text-secondary); font-style:italic;">
-                    Componente configurato nel template (verrà inizializzato all'applicazione)
+                    ${I18n.t('template_preview.component_configured')}
                 </div>
             </div>
         `;

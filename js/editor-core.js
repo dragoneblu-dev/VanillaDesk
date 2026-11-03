@@ -19,7 +19,7 @@ const Editor = {
 
     // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine cancellata o non reperibile
     getBrokenImagePlaceholder: (ref = '') => {
-        const cleanRef = (ref || 'Immagine mancante')
+        const cleanRef = (ref || I18n.t('editor_core.missing_image'))
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
@@ -33,9 +33,9 @@ const Editor = {
                 <circle cx="18" cy="14" r="4" fill="#ef4444" opacity="0.6"/>
                 <line x1="6" y1="42" x2="42" y2="6" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
             </g>
-            <text x="76" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="bold" fill="#991b1b">⚠️ Immagine non trovata</text>
+            <text x="76" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="bold" fill="#991b1b">${I18n.t('editor_core.broken_image_title')}</text>
             <text x="76" y="62" font-family="monospace" font-size="11" fill="#b91c1c">${cleanRef.length > 32 ? cleanRef.slice(0, 29) + '...' : cleanRef}</text>
-            <text x="76" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" fill="#7f1d1d" opacity="0.8">File eliminato o mancante dagli assets</text>
+            <text x="76" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" fill="#7f1d1d" opacity="0.8">${I18n.t('editor_core.broken_image_desc')}</text>
         </svg>`;
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     },
@@ -46,12 +46,12 @@ const Editor = {
         img.removeAttribute('src');
         img.setAttribute('data-broken', 'true');
         img.src = Editor.getBrokenImagePlaceholder(ref);
-        img.setAttribute('title', `Immagine non trovata: ${ref} (File eliminato dal disco o mancante)`);
+        img.setAttribute('title', I18n.t('editor_core.broken_image_tooltip', { ref }));
     },
 
     handleImageError: (img) => {
         if (!img || img.getAttribute('data-broken') === 'true') return;
-        const ref = img.getAttribute('data-image-ref') || img.getAttribute('alt') || 'Immagine';
+        const ref = img.getAttribute('data-image-ref') || img.getAttribute('alt') || I18n.t('editor_core.image_label');
         Editor.markImageBroken(img, ref);
     },
 
@@ -133,7 +133,7 @@ const Editor = {
         container.querySelectorAll('img:not([data-image-ref])').forEach(img => {
             const src = img.getAttribute('src');
             if (!src || src.trim() === '') {
-                Editor.markImageBroken(img, img.getAttribute('alt') || 'Immagine esterna');
+                Editor.markImageBroken(img, img.getAttribute('alt') || I18n.t('editor_core.external_image'));
             }
         });
 
@@ -166,7 +166,7 @@ const Editor = {
         if (!input.files || !input.files[0]) return;
         
         if (!AppState.assetsHandle) {
-            alert("Devi prima creare un Workspace per poter allegare file fisici.");
+            alert(I18n.t('editor_core.alert_no_workspace_upload'));
             input.value = '';
             return;
         }
@@ -174,7 +174,9 @@ const Editor = {
         Editor.saveSnapshot();
         const file = input.files[0];
         
-        if (typeof UI !== 'undefined') UI.showToast("Salvataggio immagine su disco in corso...", "info");
+        if (typeof UI !== 'undefined' && UI.showToast) {
+            UI.showToast(I18n.t('editor_core.toast_saving_image'), "info");
+        }
         
         const fileName = await Store.saveAsset(file, 'img');
         
@@ -286,17 +288,17 @@ const Editor = {
             <div style="display:flex; flex-direction:column; gap:10px; height:100%;">
                 <div style="background: rgba(239, 68, 68, 0.08); border-left: 4px solid var(--danger-color); padding: 12px; border-radius: 4px; font-size: 0.85rem; line-height: 1.5;">
                     <div style="color:var(--danger-color); font-weight:bold; margin-bottom:4px; display:flex; align-items:center; gap:6px;">
-                        <span>${typeof Icons !== 'undefined' ? Icons.alertTriangle : '⚠️'}</span> ${I18n.t('notes_utils.raw_html_warning_title') || 'ATTENZIONE: Modifica Diretta Codice HTML'}
+                        <span>${typeof Icons !== 'undefined' ? Icons.alertTriangle : '⚠️'}</span> ${I18n.t('notes_utils.raw_html_warning_title')}
                     </div>
                     <div style="color:var(--text-secondary);">
-                        ${I18n.t('notes_utils.raw_html_warning_desc') || 'Stai modificando il markup sorgente liofilizzato della nota. Non alterare o cancellare gli attributi ID dei widget (es. adv_tbl_*, adv_code_*) per non corrompere i dati collegati.'}
+                        ${I18n.t('notes_utils.raw_html_warning_desc')}
                     </div>
                 </div>
 
                 <div style="display:flex; justify-content:space-between; align-items:center;">
-                    <span style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:bold;">Sorgente HTML Minificato:</span>
+                    <span style="font-size:0.75rem; color:var(--text-secondary); text-transform:uppercase; font-weight:bold;">${I18n.t('editor_core.raw_html_label')}</span>
                     <button class="btn" style="padding:4px 8px; font-size:0.75rem;" onclick="Editor.copyRawHtmlToClipboard()">
-                        <span style="display:inline-flex; align-items:center; gap:4px;">${typeof Icons !== 'undefined' ? Icons.clipboard : '📋'} ${I18n.t('notes_utils.raw_html_copy_btn') || 'Copia per VS Code'}</span>
+                        <span style="display:inline-flex; align-items:center; gap:4px;">${typeof Icons !== 'undefined' ? Icons.clipboard : '📋'} ${I18n.t('editor_core.raw_html_copy_btn')}</span>
                     </button>
                 </div>
 
@@ -307,11 +309,11 @@ const Editor = {
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
             <button class="btn btn-primary" onclick="Editor.applyRawHtml()">
-                <span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.checkCircle : '✓'} ${I18n.t('notes_utils.raw_html_apply_btn') || 'Applica e Reidrata Pagina'}</span>
+                <span style="display:inline-flex; align-items:center; gap:5px;">${typeof Icons !== 'undefined' ? Icons.checkCircle : '✓'} ${I18n.t('editor_core.raw_html_apply_btn')}</span>
             </button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.code : '</>'} ${I18n.t('notes_utils.raw_html_title') || 'Sorgente HTML: ' + safeTitle}</span>`, bodyHTML, footerHTML);
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.code : '</>'} ${I18n.t('editor_core.raw_html_drawer_title', { title: safeTitle })}</span>`, bodyHTML, footerHTML);
 
         setTimeout(() => {
             const ta = document.getElementById('advRawHtmlTextarea');
@@ -327,7 +329,7 @@ const Editor = {
         if (!ta) return;
         navigator.clipboard.writeText(ta.value).then(() => {
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Codice HTML copiato negli appunti! Incollalo in VS Code.", "success");
+                UI.showToast(I18n.t('editor_core.raw_html_copied_toast'), "success");
             }
         });
     },
@@ -377,7 +379,7 @@ const Editor = {
         UI.closeDrawer();
 
         if (typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast(I18n.t('notes_utils.raw_html_success_toast') || "Codice HTML applicato e pagina reidratata con successo!", "success");
+            UI.showToast(I18n.t('editor_core.raw_html_success_toast'), "success");
         }
     },
 

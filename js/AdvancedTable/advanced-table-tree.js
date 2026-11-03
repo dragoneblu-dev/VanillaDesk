@@ -195,10 +195,10 @@ const AdvancedTree = {
         if (!bodyContainer) {
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;"></span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('widget_manager.loading')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -276,23 +276,23 @@ const AdvancedTree = {
 
         if (typeof WidgetManager !== 'undefined') {
             const tools = [];
-            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.treeNode, title: 'Cambia visualizzazione', label: 'WBS', onClick: AdvancedBoard.openViewMenu });
+            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.treeNode, title: I18n.t('adv_board.select_view_title'), label: I18n.t('table.view_tree'), onClick: AdvancedBoard.openViewMenu });
             
             // Pulsante di Usabilità Operativa: Espandi / Collassa Tutti i Rami
             if (allParentIds.size > 0) {
                 tools.push({
                     icon: hasOpenParents ? Icons.chevronDown : Icons.chevronRight,
-                    label: hasOpenParents ? 'Comprimi Tutto' : 'Espandi Tutto',
-                    title: hasOpenParents ? 'Comprimi tutti i rami aperti' : 'Espandi tutti i rami',
+                    label: hasOpenParents ? I18n.t('tree_view.collapse_all') : I18n.t('tree_view.expand_all'),
+                    title: hasOpenParents ? I18n.t('tree_view.collapse_all_title') : I18n.t('tree_view.expand_all_title'),
                     onClick: () => AdvancedTree.toggleCollapseAll(tableId)
                 });
             }
 
             if (!state.isLinkedView && !isSysDB) {
-                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
+                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
 
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina Database (tra fratelli)', active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('tree_view.sort_siblings'), active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
 
             // TOOL: RICERCA RAPIDA UNIVERSALE (FULL-TEXT OR)
             tools.push({ 
@@ -304,17 +304,17 @@ const AdvancedTree = {
                 onClick: () => AdvancedTable.toggleQuickSearch(tableId) 
             });
 
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra Dati (Campi)', active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('tree_view.filter_fields'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
 
             const bookmarkIconToUse = hasSavedFilters ? Icons.bookmarkFilled : Icons.bookmark;
-            tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: 'Viste / Filtri Salvati', active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
+            tools.push({ id: `adv-saved-filters-btn-${tableId}`, icon: bookmarkIconToUse, title: I18n.t('tree_view.saved_views_filters'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openSavedFiltersMenu });
 
             // Pulsante di ricarica e sincronizzazione con il disco
-            tools.push({ icon: Icons.refresh, title: 'Ricarica dal disco e aggiorna dati', onClick: () => AdvancedTable.forceRecalculate(tableId) });
+            tools.push({ icon: Icons.refresh, title: I18n.t('adv_render.reload_from_disk'), onClick: () => AdvancedTable.forceRecalculate(tableId) });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
-                title: state.title || 'Database',
+                title: state.title || I18n.t('editor.database'),
                 optionsId: `adv-opt-btn-${tableId}`,
                 tools: tools,
                 onTitleChange: AdvancedTable.updateTitle,
@@ -492,7 +492,7 @@ const AdvancedTree = {
             const thStyleOverrides = isFiltered ? `background: rgba(37, 99, 235, 0.15); color: var(--accent-color); border-bottom: 2px solid var(--accent-color);` : '';
             const filterIconHtml = isFiltered ? `<span style="opacity:0.5; color:var(--accent-color); margin-left:2px; font-size:0.8rem;">${Icons.filter}</span>` : '';
 
-            const safeColName = String(col.name || 'Senza Nome').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const safeColName = String(col.name || I18n.t('editor.untitled')).replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
             
             // GESTIONE TOOLTIP, COMMENTO E FILTRO ATTIVO NELL'INTESTAZIONE
             let tooltipHTML = `<div style='margin-bottom:4px; font-size:1.1em;'><b>${safeColName}</b></div>`;
@@ -506,7 +506,7 @@ const AdvancedTree = {
 
             if (isFiltered) {
                 const safeFilterTerm = state.filters[col.id].replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                tooltipHTML += `<div style='color:var(--accent-color); border-top:1px solid rgba(150,150,150,0.2); padding-top:4px;'><b>Filtro attivo:</b> ${safeFilterTerm}</div>`;
+                tooltipHTML += `<div style='color:var(--accent-color); border-top:1px solid rgba(150,150,150,0.2); padding-top:4px;'><b>${I18n.t('adv_render.active_filter_label')}</b> ${safeFilterTerm}</div>`;
                 hasTooltipInfo = true;
             }
 
@@ -557,7 +557,7 @@ const AdvancedTree = {
                     </div>
                 </td></tr>`;
             } else {
-                html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:25px;">Nessun record corrisponde ai filtri impostati.</td></tr>`;
+                html += `<tr><td colspan="${visibleCols.length + 1}" style="text-align:center; color:var(--text-secondary); padding:25px;">${I18n.t('tree_view.no_records_match_filters')}</td></tr>`;
             }
         } else {
             flatTreeRows.forEach(item => {
@@ -658,10 +658,10 @@ const AdvancedTree = {
                         let toggleHtml = '';
                         if (item.hasChildren) {
                             const iconSvg = item.isCollapsed ? Icons.chevronRight : Icons.chevronDown;
-                            const badgeCountHtml = item.isCollapsed ? `<span class="adv-tree-badge-count" title="${item.childrenCount} sotto-attività">${item.childrenCount}</span>` : '';
+                            const badgeCountHtml = item.isCollapsed ? `<span class="adv-tree-badge-count" title="${I18n.t('tree_view.subtasks_count', { count: item.childrenCount })}">${item.childrenCount}</span>` : '';
 
                             toggleHtml = `
-                                <span class="adv-tree-toggle ${levelColorClass}" onclick="event.stopPropagation(); AdvancedTree.toggleNode('${tableId}', '${row.id}')" title="${item.isCollapsed ? 'Espandi ramo' : 'Collassa ramo'}">
+                                <span class="adv-tree-toggle ${levelColorClass}" onclick="event.stopPropagation(); AdvancedTree.toggleNode('${tableId}', '${row.id}')" title="${item.isCollapsed ? I18n.t('tree_view.expand_branch') : I18n.t('tree_view.collapse_branch')}">
                                     ${iconSvg}
                                 </span>
                                 ${badgeCountHtml}
@@ -671,7 +671,7 @@ const AdvancedTree = {
                         }
 
                         const quickAddSubtaskBtn = isEdit ? `
-                            <button class="adv-tree-quick-add" onclick="event.stopPropagation(); AdvancedTree.addSubtask('${tableId}', '${row.id}')" title="Aggiungi sotto-attività a questo task">+</button>
+                            <button class="adv-tree-quick-add" onclick="event.stopPropagation(); AdvancedTree.addSubtask('${tableId}', '${row.id}')" title="${I18n.t('tree_view.add_subtask_tooltip')}">+</button>
                         ` : '';
 
                         const cellRendererHtml = AdvancedTable.renderCell(tableId, row, col, val, state, isEdit);
@@ -692,7 +692,7 @@ const AdvancedTree = {
                     }
                 });
 
-                let actionCell = `<button class="adv-icon-btn" title="Apri Record" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
+                let actionCell = `<button class="adv-icon-btn" title="${I18n.t('adv_render.open_record')}" onclick="AdvancedTable.openRecordView('${tableId}', '${row.id}')" style="padding:2px; color:currentColor;">${Icons.recordView}</button>`;
                 html += `<td class="adv-action-cell"><div class="adv-action-cell-content">${actionCell}</div></td></tr>`;
             });
         }
@@ -701,7 +701,7 @@ const AdvancedTree = {
 
         // Footer Controls con indicatore conteggio totale record
         const formattedStored = String(totalStoredRows).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
-        const recordCountHtml = `<span class="adv-table-count-label" style="font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} ${totalStoredRows === 1 ? 'record' : 'record'}</span>`;
+        const recordCountHtml = `<span class="adv-table-count-label" style="font-variant-numeric:tabular-nums; display:inline-block; vertical-align:middle;">${formattedStored} record</span>`;
 
         // DETERMINAZIONE LOGICA VISIBILITÀ DEL FOOTER (Tree View):
         // 1. Footer completo: se hideFooterControls è false (mostra pulsante nuova radice, contatore e paginazione radici).
@@ -716,16 +716,16 @@ const AdvancedTree = {
 
             if (showFullFooter) {
                 if (isEdit && !isSysDB) {
-                    html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} Nuova Attività Radice</span></button>`;
+                    html += `<button class="adv-add-btn" onclick="AdvancedTable.addRow(event, '${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.plus} ${I18n.t('tree_view.new_root_task')}</span></button>`;
                     html += recordCountHtml;
 
                     if (state.selectedRows && state.selectedRows.length > 0) {
                         if (state.selectedRows.length === 1) {
-                            html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} Apri Record</span></button>`;
+                            html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} ${I18n.t('adv_render.open_record')}</span></button>`;
                         }
-                        const btnLabel = state.selectedRows.length === 1 ? 'Elimina 1 riga' : `Elimina ${state.selectedRows.length} righe`;
+                        const btnLabel = state.selectedRows.length === 1 ? I18n.t('table.delete_rows_singular') : I18n.t('table.delete_rows_plural', { count: state.selectedRows.length });
                         html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                        html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} Annulla selezione</span></button>`;
+                        html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
                     }
                 } else if (!isSysDB) {
                     html += recordCountHtml;
@@ -745,7 +745,7 @@ const AdvancedTree = {
             let prevDisabled = (currentPage === 1) ? 'opacity:0.3; pointer-events:none;' : ``;
             let nextDisabled = (currentPage >= totalPages) ? 'opacity:0.3; pointer-events:none;' : ``;
             html += `<button class="adv-add-btn" style="padding:4px 8px; ${prevDisabled}" onclick="AdvancedTable.changePage('${tableId}', -1)">${Icons.chevronLeft}</button>
-                     <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>Radici: Pag. ${currentPage} di ${totalPages} (${totalRoots})</div>
+                     <div id="adv-page-btn-${tableId}" class="adv-add-btn" style="cursor:${isEdit ? 'pointer' : 'default'}; margin:0; font-weight:normal;" ${isEdit ? `onclick="AdvancedTable.togglePageSizeMenu(event, '${tableId}')"` : ''}>${I18n.t('tree_view.root_pagination', { current: currentPage, total: totalPages, count: totalRoots })}</div>
                      <button class="adv-add-btn" style="padding:4px 8px; ${nextDisabled}" onclick="AdvancedTable.changePage('${tableId}', 1)">${Icons.chevronRight}</button>`;
             html += `</div></div>`;
         }

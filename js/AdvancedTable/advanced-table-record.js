@@ -20,12 +20,49 @@
  * REFACTOR CSS ARCHITECTURE: Eliminazione degli stili inline e delega completa alle classi di layout in advanced-table.css.
  * FEAT SMART SPARSE PROPERTIES (SYS_PROPERTIES_DB): Nelle proprietà di pagina, mostra in cima i soli campi valorizzati
  * (+ i Tag) e raccoglie tutti i campi non compilati nell'accordion ripiegabile in fondo.
- * Nei database standard preserva la visualizzazione completa dei campi vuoti per non ostacolare l'inserimento dati.
+ * FEAT SHIFT+ENTER CONVERSION: Shift+Invio su campo monoriga converte al volo in textarea multilinea inserendo \n
+ * con disinnesco del blur-race. Ctrl+Invio delegato in modo centralizzato al Drawer globale.
  */
 
 Object.assign(AdvancedTable, {
     activeRecordId: null,
     activeTableId: null,
+
+    handleRecordTextInputKeydown: async (e, tableId, rowId, colId, inputEl, relationCtx = null) => {
+        // SHIFT + INVIO: Converte da campo monoriga a textarea multilinea
+        if (e.shiftKey && e.key === 'Enter') {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Disinnesca onblur per evitare che il vecchio valore monoriga sovrascriva il nuovo testo
+            inputEl._skipBlur = true;
+
+            const start = inputEl.selectionStart !== null ? inputEl.selectionStart : inputEl.value.length;
+            const end = inputEl.selectionEnd !== null ? inputEl.selectionEnd : start;
+            const curVal = inputEl.value || '';
+
+            const newText = curVal.substring(0, start) + '\n' + curVal.substring(end);
+
+            await AdvancedTable.updateData(tableId, rowId, colId, newText);
+            AdvancedTable.openRecordView(tableId, rowId, relationCtx);
+
+            setTimeout(() => {
+                const ta = document.getElementById(`rec_ta_${tableId}_${rowId}_${colId}`);
+                if (ta) {
+                    ta.focus();
+                    const newPos = start + 1;
+                    ta.setSelectionRange(newPos, newPos);
+                }
+            }, 60);
+            return;
+        }
+
+        // INVIO SEMPLICE: Conferma il valore togliendo il focus (scatena onblur)
+        if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            inputEl.blur();
+        }
+    },
 
     openRecordView: (tableId, rowId, relationCtx = null, isClonedCopy = false) => {
         let state = null;
@@ -310,7 +347,7 @@ Object.assign(AdvancedTable, {
                     if (noteObj && noteObj.deletedAt) noteObj = null;
                     
                     const isAttached = !!noteObj;
-                    const noteTitle = isAttached ? (noteObj.title || I18n.t('editor.untitled')) : I18n.t('adv_record.open_page');
+                    const noteTitle = isAttached ? (noteObj.title || I18n.t('editor.untitled')) : I18n.t('adv_record.no_page');
                     const btnStyle = isAttached ? 'color: var(--record-color, #10b981); font-weight: bold; background: var(--record-bg, rgba(16, 185, 129, 0.1)); border-color: var(--record-color, #10b981);' : 'color: var(--text-secondary); opacity: 0.7;';
                     displayVal = `<button class="btn" style="padding: 4px 10px; border: 1px solid var(--border-color); width: 100%; justify-content: flex-end; ${btnStyle}" onclick="UI.closeDrawer(); setTimeout(() => AdvancedTable.openRecordNote('${tableId}', '${row.id}', '${col.id}'), 50);">
                                     <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordPage} ${noteTitle}</span>
@@ -321,14 +358,28 @@ Object.assign(AdvancedTable, {
                     displayVal = `<input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
                 }
                 else if (col.type === 'text') {
-                    if (val && (val.length > 50 || val.includes('\n'))) {
-                        const isVeryLong = val.length > 250 || (val.match(/\n/g) ||[]).length > 4;
-                        const targetHeight = isVeryLong ? '160px' : '80px';
+                    const isMultiline = val && (val.length > 50 || val.includes('\n'));
+                    
+                    if (isMultiline) {
+                        const isVeryLong = val.length > 250 || (val.match(/\n/g) || []).length > 4;
+                        const targetHeight = isVeryLong ? '160px' : '90px';
                         const safeVal = (val || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        displayVal = `<textarea class="modern-input" style="margin:0; width:100%; box-sizing:border-box; min-height:${targetHeight}; text-align:left; resize:vertical; background:var(--bg-color); color:var(--text-primary);" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">${safeVal}</textarea>`;
+                        const taId = `rec_ta_${tableId}_${rowId}_${col.id}`;
+
+                        displayVal = `
+                            <textarea id="${taId}" class="modern-input" 
+                                      style="margin:0; width:100%; box-sizing:border-box; min-height:${targetHeight}; text-align:left; resize:vertical;" 
+                                      onblur="if(!this._skipBlur) { AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value); }">${safeVal}</textarea>
+                        `;
                     } else {
                         const safeVal = (val || '').replace(/"/g, '&quot;');
-                        displayVal = `<input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
+                        const ctxParam = relationCtx ? JSON.stringify(relationCtx).replace(/"/g, '&quot;') : 'null';
+
+                        displayVal = `
+                            <input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" 
+                                   onkeydown="AdvancedTable.handleRecordTextInputKeydown(event, '${tableId}', '${rowId}', '${col.id}', this, ${ctxParam})" 
+                                   onblur="if(!this._skipBlur) { AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value); }">
+                        `;
                     }
                 }
                 else {

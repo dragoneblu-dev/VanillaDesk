@@ -44,7 +44,7 @@ Object.assign(Editor, {
         } else if (type === 'columns') {
             if (typeof ColumnManager !== 'undefined') ColumnManager.destroyAndUnwrap(widgetNode.id);
         } else if (widgetNode.classList.contains('block-citation')) {
-            if (confirm("Eliminare questa citazione?")) {
+            if (confirm(I18n.t('keyboard_mutations.confirm_delete_citation'))) {
                 widgetNode.remove();
                 Editor.saveSnapshot();
                 Store.triggerAutoSave();
@@ -91,8 +91,8 @@ Object.assign(Editor, {
 
         if (widgetsToDelete.length > 0) {
             const msg = widgetsToDelete.length === 1
-                ? "⚠️ Stai per sovrascrivere o eliminare un Elemento Complesso (Database, Codice, ecc.).\nSei sicuro di voler procedere perdendo i suoi dati in modo irreversibile?"
-                : `⚠️ Stai per sovrascrivere o eliminare ${widgetsToDelete.length} Elementi Complessi (Database, Codice, ecc.).\nSei sicuro di voler procedere perdendo i loro dati in modo irreversibile?`;
+                ? I18n.t('keyboard_mutations.confirm_delete_widget_single')
+                : I18n.t('keyboard_mutations.confirm_delete_widget_plural', { count: widgetsToDelete.length });
 
             if (confirm(msg)) {
                 Editor.saveSnapshot();
@@ -106,7 +106,9 @@ Object.assign(Editor, {
                         // DB SISTEMA: Impedire eliminazione del JSON globale se viene rimosso il widget a schermo
                         const trueId = id.split('_cited_')[0];
                         if (trueId === 'SYS_PROPERTIES_DB') {
-                            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Interfaccia rimossa. I dati del sistema rimangono intatti in background.", "info");
+                            if (typeof UI !== 'undefined' && UI.showToast) {
+                                UI.showToast(I18n.t('keyboard_mutations.sys_db_removed_toast'), "info");
+                            }
                             return; 
                         }
                         
@@ -853,7 +855,7 @@ Object.assign(Editor, {
                     sel.removeAllRanges();
                     sel.addRange(newRange);
                     marker.remove();
-                    
+
                     Store.triggerAutoSave();
                     return;
                 }

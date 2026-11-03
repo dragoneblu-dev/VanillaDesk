@@ -88,7 +88,7 @@ z-index: 2;
 
 /* =========================================================================
    GESTIONE ZEBRATURA NATIVA E PRIORITÀ COLORI CONDIZIONALI
-   ========================================================================= */
+   ========================================================= */
 
 /* 1. Zebratura semitrasparente nativa per .adv-table */
 .adv-table.table-striped tbody tr:nth-child(even) {
@@ -112,7 +112,7 @@ z-index: 2;
 .adv-table tbody tr.hl-c9 { background-color: var(--hl-c9) !important; }
 .adv-table tbody tr.hl-c10 { background-color: var(--hl-c10) !important; }
 
-/* 3. Fusione armoniosa tra righe alternate (even) e colorazione condizionale: non cancella il colore ma vi applica una leggera sfumatura zebrata continua */
+/* 3. Fusione armoniosa tra righe alternate (even) e colorazione condizionale */
 .adv-table.table-striped tbody tr.hl-c1:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c1) 94%, black) !important; }
 .adv-table.table-striped tbody tr.hl-c2:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c2) 94%, black) !important; }
 .adv-table.table-striped tbody tr.hl-c3:nth-child(even) { background-color: color-mix(in srgb, var(--hl-c3) 94%, black) !important; }
@@ -144,14 +144,78 @@ z-index: 2;
 .adv-action-cell { vertical-align: middle !important; text-align: center; }
 .adv-action-cell-content { display: flex; justify-content: center; align-items: center; gap: 8px; }
 
-.adv-cell-layout { display: flex; align-items: center; gap: 6px; padding: 10px; border-bottom: 1px solid var(--border-color); background: var(--bg-color); border-radius: 6px; }
-.adv-cell-layout-long { flex-direction: column; align-items: flex-start; }
-.adv-cell-label { font-weight: bold; color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; user-select: none; }
+/* =========================================================================
+   LAYOUT SCHEDA CAMPI NEL RECORD DRAWER (Singola Linea vs Multilinea)
+   ========================================================================= */
+.adv-cell-layout { 
+    display: flex; 
+    align-items: center; 
+    gap: 4px; 
+    padding: 10px 12px; 
+    border-bottom: 1px solid var(--border-color); 
+    background: var(--bg-color); 
+    border-radius: 6px; 
+    box-sizing: border-box;
+}
+
+.adv-cell-layout-long { 
+    flex-direction: column !important; 
+    align-items: stretch !important; 
+    height: auto !important;
+}
+
+.adv-cell-label { 
+    font-weight: bold; 
+    color: var(--text-secondary); 
+    font-size: 0.8rem; 
+    text-transform: uppercase; 
+    user-select: none; 
+}
+
 .adv-cell-label-editable { cursor: pointer; }
-.adv-cell-label-wrap { display: flex; align-items: center; flex: 0 0 35%; }
-.adv-cell-layout-long .adv-cell-label-wrap { width: 100%; margin-bottom: 4px; }
-.adv-cell-value-wrap { flex: 1; display: flex; justify-content: flex-end; }
-.adv-cell-layout-long .adv-cell-value-wrap { width: 100%; box-sizing: border-box; }
+
+.adv-cell-label-wrap { 
+    display: flex; 
+    align-items: center; 
+    flex: 0 0 35%; 
+}
+
+.adv-cell-layout-long .adv-cell-label-wrap { 
+    width: 100% !important; 
+    flex: 0 0 auto !important;
+    margin-bottom: 6px !important; 
+}
+
+.adv-cell-value-wrap { 
+    flex: 1; 
+    display: flex; 
+    justify-content: flex-end; 
+    min-width: 0;
+}
+
+.adv-cell-layout-long .adv-cell-value-wrap { 
+    width: 100% !important; 
+    flex: 1 1 auto !important;
+    display: block !important;
+    box-sizing: border-box !important; 
+}
+
+/* Stile per textarea multilinea integrata nella card senza sbordature */
+.adv-cell-layout-long textarea.modern-input {
+    width: 100% !important;
+    max-width: 100% !important;
+    display: block !important;
+    border-radius: 4px !important;
+    padding: 8px 10px !important;
+    color: var(--text-primary) !important;
+    box-sizing: border-box !important;
+    line-height: 1.45;
+}
+
+
+.adv-cell-layout-long textarea.modern-input:focus {
+   /* background: var(--bg-color) !important;*/
+}
 
 .adv-col-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10;
 }

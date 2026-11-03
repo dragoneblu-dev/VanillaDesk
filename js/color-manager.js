@@ -285,34 +285,41 @@ const ColorManager = {
             }
         }
 
-        const titleText = type === 'highlight' ? 'Evidenziatore (Ctrl+Shift+H)' : 'Colore Testo (Ctrl+Alt+H)';
+        const titleText = type === 'highlight' 
+            ? I18n.t('color_manager.highlight_title') 
+            : I18n.t('color_manager.text_color_title');
         let html = `<div class="adv-dropdown-title" style="margin-bottom: 4px; padding: 0 4px;">${titleText}</div>`;
 
         if (type === 'highlight') {
             // SEZIONE 1: SFONDO CLASSICO (EVIDENZIAZIONE A CAMPO PIENO)
             html += `<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 2px 4px 6px 4px;">`;
             for (let i = 1; i <= 10; i++) {
-                html += `<div class="color-option hl-c${i}" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'hl-c${i}')" title="Sfondo ${i}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; color: ${currentTextColor};" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
+                const sampleTitle = I18n.t('color_manager.bg_sample_title', { num: i });
+                html += `<div class="color-option hl-c${i}" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'hl-c${i}')" title="${sampleTitle}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; color: ${currentTextColor};" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
             }
             html += `</div>`;
 
             // SEZIONE 2: SOTTOLINEATURA COLORATA (EVIDENZIAZIONE A LINEA SU SFONDO NEUTRO)
             html += `<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 2px 4px 6px 4px;">`;
             for (let i = 1; i <= 10; i++) {
+                const sampleTitle = I18n.t('color_manager.underline_sample_title', { num: i });
                 // Sfondo neutro var(--bg-color): l'anteprima riflette fedelmente che la sottolineatura sostituisce lo sfondo
-                html += `<div class="color-option hl-u-c${i}" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'hl-u-c${i}')" title="Sottolineatura ${i}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid var(--border-color); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; color: ${currentTextColor}; background-color: var(--bg-color);" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
+                html += `<div class="color-option hl-u-c${i}" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'hl-u-c${i}')" title="${sampleTitle}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid var(--border-color); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; color: ${currentTextColor}; background-color: var(--bg-color);" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
             }
             html += `</div>`;
         } else {
             // COLORE TESTO STANDARD
             html += `<div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; padding: 4px;">`;
             for (let i = 1; i <= 10; i++) {
-                html += `<div class="color-option tx-c${i}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; background-color: ${currentBgColor};" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'tx-c${i}')" title="Testo ${i}" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
+                const sampleTitle = I18n.t('color_manager.text_sample_title', { num: i });
+                html += `<div class="color-option tx-c${i}" style="width: 28px; height: 24px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; display: flex; align-items: center; justify-content: center; font-weight: bold; font-family: serif; font-size: 14px; background-color: ${currentBgColor};" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', 'tx-c${i}')" title="${sampleTitle}" onmousedown="event.preventDefault(); Editor.saveSelection();">Ab</div>`;
             }
             html += `</div>`;
         }
 
-        const removeLabel = type === 'highlight' ? 'Rimuovi Evidenziazione' : 'Automatico';
+        const removeLabel = type === 'highlight' 
+            ? I18n.t('color_manager.remove_highlight') 
+            : I18n.t('color_manager.auto_color');
         html += `<div style="width: 100%; padding: 6px 4px; text-align: left; font-size: 0.8rem; color: var(--text-primary); cursor: pointer; border-radius: 3px; margin-top: 4px; border-top: 1px solid var(--border-color);" onmouseenter="this.style.background='var(--item-hover)'" onmouseleave="this.style.background='transparent'" onclick="event.stopPropagation(); ColorManager.selectColor('${type}', null)" onmousedown="event.preventDefault(); Editor.saveSelection();" title="${removeLabel}">${removeLabel}</div>`;
 
         const items = [{ type: 'custom', html: html }];

@@ -8,15 +8,20 @@
  * FIX REFACTORING: Integrata la lingua "formula" per unificare l'evidenziazione sintattica dei database.
  * FEAT AUTO-DETECT: Analizzatore euristico a punteggio (detectLanguage) per rilevare automaticamente
  * il linguaggio su blocchi appena creati o su incolla, con rispetto assoluto del testo semplice.
- * FEAT POST-NEWLINE DETECTION: L'analisi automatica durante la digitazione scatta esclusivamente dopo
- * l'inserimento di almeno un a capo (\n), prevenendo la classificazione prematura a "testo semplice" sui primi caratteri.
- * FEAT MANUAL LANGUAGE LOCK: La selezione esplicita di un linguaggio da menu blocca l'auto-rilevatore per non sovrascrivere l'utente.
+ * FEAT POST-NEWLINE & MIN-WORDS DETECTION: L'analisi automatica durante la digitazione scatta esclusivamente
+ * se il widget è in modalità automatica (!manualLanguage), dopo almeno un a capo (\n) e con un minimo di 4 parole,
+ * prevenendo classificazioni premature su testi non ancora strutturati.
+ * FEAT MANUAL LANGUAGE LOCK: La selezione esplicita di un linguaggio da menu (incluso Testo Semplice) blocca l'auto-rilevatore.
+ * FEAT FLOATING STICKY ACTIONS & SCROLL RESTORATION: Visualizzazione automatica dei pulsanti "Copia" e icona di riduzione
+ * ancorati in cima alla viewport quando l'intestazione scorre fuori vista, con riallineamento automatico della visuale
+ * all'inizio del widget in caso di compressione di blocchi lunghi.
  */
 
 const CodeManager = {
     activePre: null,
     _preCache: new WeakMap(), 
     _typingTimer: null,
+    _activeFloatingWrapper: null,
 
     // Rilevatore Euristico a Punteggio di Confidenza (Rule-based Heuristic Scorer)
     detectLanguage: (rawText) => {
@@ -147,6 +152,10 @@ const CodeManager = {
             delete AppState.databases[trueId];
         }
 
+        if (CodeManager._activeFloatingWrapper && CodeManager._activeFloatingWrapper.id === id) {
+            CodeManager.hideFloatingActions();
+        }
+
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         Store.triggerAutoSave();
     },
@@ -234,6 +243,12 @@ const CodeManager = {
                 CodeManager._updateShell(currentId, state.language || 'none', wrapper.classList.contains('collapsed'), state.title);
             }
         });
+
+        // Sincronizzazione immediata azioni fluttuanti post mount
+        const scrollArea = document.getElementById('editorScrollContent');
+        if (scrollArea) {
+            CodeManager.updateFloatingActions(scrollArea);
+        }
     },
 
     _updateShell: (wrapperId, lang, isCollapsed, customTitle = null) => {
@@ -277,17 +292,24 @@ const CodeManager = {
             const state = AppState.databases ? AppState.databases[trueId] : null;
 
             // Se l'utente ha impostato manualmente una lingua specifica, non sovrascrivere su incolla
-            if (state && state.manualLanguage && state.language && state.language !== 'none') {
+            if (state && state.manualLanguage === true) {
                 return;
             }
 
             const pastedText = (e.clipboardData || window.clipboardData)?.getData('text/plain');
             if (!pastedText) return;
 
+            // Su incolla: verifichiamo che ci siano almeno 4 parole o una struttura formale (es. JSON) prima di mutare
+            const pastedWords = (pastedText.match(/[a-zA-Z0-9_$#]+/g) || []);
+            const isJsonStruct = (pastedText.trim().startsWith('{') && pastedText.trim().endsWith('}')) || (pastedText.trim().startsWith('[') && pastedText.trim().endsWith(']'));
+            if (pastedWords.length < 4 && !isJsonStruct) {
+                return;
+            }
+
             const detected = CodeManager.detectLanguage(pastedText);
             if (detected && detected !== 'none') {
                 setTimeout(() => {
-                    CodeManager.setLanguage(wrapper.id, detected, true);
+                    CodeManager.setLanguage(wrapper.id, detected, true, false);
                     if (typeof UI !== 'undefined' && UI.showToast) {
                         UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }) || `Sintassi rilevata: ${detected.toUpperCase()}`, "info");
                     }
@@ -330,17 +352,20 @@ const CodeManager = {
                             }
                         }
 
-                        // AUTO-RILEVAMENTO POST-NEWLINE:
+                        // AUTO-RILEVAMENTO:
                         // L'analisi euristica in digitazione scatta ESCLUSIVAMENTE se:
-                        // 1. Il blocco è ancora sul default ('none') e non è stato impostato manualmente.
-                        // 2. Il testo contiene almeno un a capo (\n), garantendo che la prima riga/istruzione sia completa.
+                        // 1. Il widget è in modalità automatica (!curState.manualLanguage).
+                        // 2. Il testo contiene almeno un a capo (\n).
+                        // 3. Sono presenti almeno 4 parole/token significativi nel testo.
                         if (wrapper && trueId && AppState.databases && AppState.databases[trueId]) {
                             const curState = AppState.databases[trueId];
-                            const isLanguageUnlocked = !curState.manualLanguage && (!curState.language || curState.language === 'none');
+                            const isLanguageUnlocked = curState.manualLanguage !== true;
 
-                            if (isLanguageUnlocked && rawText && rawText.includes('\n')) {
+                            const words = (rawText.match(/[a-zA-Z0-9_$#]+/g) || []);
+                            const hasEnoughWords = words.length >= 4;
+
+                            if (isLanguageUnlocked && rawText && rawText.includes('\n') && hasEnoughWords) {
                                 const detected = CodeManager.detectLanguage(rawText);
-                                // Modifica la lingua solo se il punteggio individua un linguaggio con certezza (non forza mai 'none')
                                 if (detected && detected !== 'none') {
                                     curState.language = detected;
                                     e.target.setAttribute('data-language', detected);
@@ -359,6 +384,19 @@ const CodeManager = {
                 }, 600); 
             }
         });
+
+        // Ascoltatori per mantenere aggiornate le coordinate della barra fluttuante
+        const scrollArea = document.getElementById('editorScrollContent');
+        if (scrollArea) {
+            scrollArea.addEventListener('scroll', () => {
+                CodeManager.updateFloatingActions(scrollArea);
+            });
+        }
+        window.addEventListener('resize', () => {
+            if (CodeManager._activeFloatingWrapper) {
+                CodeManager.updateFloatingActions();
+            }
+        });
     },
 
     autoDetectLanguage: (wrapperId) => {
@@ -374,7 +412,12 @@ const CodeManager = {
             delete state.manualLanguage;
         }
 
-        const detected = CodeManager.detectLanguage(text);
+        const words = (text.match(/[a-zA-Z0-9_$#]+/g) || []);
+        let detected = 'none';
+        if (words.length >= 4 || text.trim().startsWith('{') || text.trim().startsWith('[')) {
+            detected = CodeManager.detectLanguage(text);
+        }
+
         CodeManager.setLanguage(wrapperId, detected, false, false);
 
         if (typeof UI !== 'undefined' && UI.showToast) {
@@ -392,8 +435,11 @@ const CodeManager = {
         
         CodeManager.activePre = wrapper.querySelector('pre');
         if (!CodeManager.activePre) return;
-        
-        const currentLang = CodeManager.activePre.getAttribute('data-language') || 'none';
+
+        const trueId = id.split('_cited_')[0];
+        const state = (AppState.databases && AppState.databases[trueId]) ? AppState.databases[trueId] : {};
+        const isAuto = state.manualLanguage !== true;
+        const currentLang = CodeManager.activePre.getAttribute('data-language') || state.language || 'none';
         
         const langs = [
             { id: 'none', label: I18n.t('code_widget.lang_plain') }, 
@@ -412,15 +458,17 @@ const CodeManager = {
             { id: 'formula', label: 'Formula (VanillaDesk)' }
         ];
 
+        const chkMark = ' <span style="color:var(--accent-color);font-weight:bold;float:right;">✓</span>';
+
         const langSubmenu = [
             {
                 icon: Icons.lightning || '✨',
-                label: I18n.t('code_widget.auto_detect') || "Rileva Automaticamente (Auto)",
+                label: (I18n.t('code_widget.auto_detect') || "Rileva Automaticamente (Auto)") + (isAuto ? chkMark : ''),
                 onClick: () => CodeManager.autoDetectLanguage(wrapper.id)
             },
             { type: 'divider' },
             ...langs.map(l => ({
-                label: l.label + (currentLang === l.id ? ' <span style="color:var(--accent-color);font-weight:bold;float:right;">✓</span>' : ''),
+                label: l.label + (!isAuto && currentLang === l.id ? chkMark : ''),
                 onClick: () => CodeManager.setLanguage(wrapper.id, l.id, false, true)
             }))
         ];
@@ -451,9 +499,9 @@ const CodeManager = {
         
         state.language = langId;
 
-        // Se l'utente ha scelto esplicitamente la lingua dal menu, blocca l'auto-rilevatore
+        // Se l'utente ha scelto esplicitamente la lingua dal menu (incluso Testo Semplice), blocca l'auto-rilevatore
         if (isUserManualChoice) {
-            state.manualLanguage = (langId !== 'none');
+            state.manualLanguage = true;
         }
 
         AppState.databases[trueId] = state;
@@ -466,9 +514,31 @@ const CodeManager = {
     },
 
     toggleCollapse: (e, wrapper) => {
-        e.preventDefault();
-        e.stopPropagation();
-        wrapper.classList.toggle('collapsed');
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (!wrapper) return;
+
+        const scrollArea = document.getElementById('editorScrollContent');
+        // Verifica prima del cambio altezza se l'inizio del widget si trovava sopra la viewport visibile
+        const wasAboveViewport = Boolean(
+            scrollArea &&
+            !wrapper.classList.contains('collapsed') &&
+            wrapper.getBoundingClientRect().top < scrollArea.getBoundingClientRect().top
+        );
+
+        const isNowCollapsed = wrapper.classList.toggle('collapsed');
+
+        // SCROLL RESTORATION: Se il blocco è stato compattato mentre la sua intestazione era fuori schermo
+        // (es. tramite barra flottante su blocchi molto lunghi), riallinea istantaneamente la vista all'inizio del widget
+        if (isNowCollapsed && wasAboveViewport && scrollArea) {
+            const scrollRect = scrollArea.getBoundingClientRect();
+            const wrapperRect = wrapper.getBoundingClientRect();
+            const breathingMargin = 16;
+            const targetScrollTop = scrollArea.scrollTop + (wrapperRect.top - scrollRect.top) - breathingMargin;
+            scrollArea.scrollTop = Math.max(0, targetScrollTop);
+        }
         
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
         Store.triggerAutoSave();
@@ -477,19 +547,26 @@ const CodeManager = {
         let state = (AppState.databases && AppState.databases[trueId]) ? AppState.databases[trueId] : {};
         const lang = state.language || 'none';
         
-        CodeManager._updateShell(wrapper.id, lang, wrapper.classList.contains('collapsed'), state.title);
+        CodeManager._updateShell(wrapper.id, lang, isNowCollapsed, state.title);
 
         if (AppState.showMinimap && typeof UI !== 'undefined' && typeof UI.Minimap !== 'undefined') {
             setTimeout(() => UI.Minimap.sync(), 50);
         }
+
+        // Ricalcola lo stato della barra fluttuante a seguito del cambio dimensione del blocco
+        if (scrollArea) {
+            CodeManager.updateFloatingActions(scrollArea);
+        }
     },
 
     copyCode: (e, element) => {
-        e.preventDefault();
-        e.stopPropagation();
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
         
-        const wrapper = element.classList && element.classList.contains('code-wrapper') 
-            ? element : element.closest('.code-wrapper, [data-widget-type="code"]');
+        const wrapper = element && element.classList && element.classList.contains('code-wrapper') 
+            ? element : (element && element.closest ? element.closest('.code-wrapper, [data-widget-type="code"]') : null);
         if (!wrapper) return;
         
         const trueId = wrapper.id.split('_cited_')[0];
@@ -510,7 +587,7 @@ const CodeManager = {
         
         navigator.clipboard.writeText(textToCopy).then(() => {
             if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('code_widget.copied'), "success");
-            const btn = e.currentTarget;
+            const btn = e && e.currentTarget ? e.currentTarget : null;
             if (btn) {
                 const orig = btn.innerHTML;
                 btn.innerHTML = `${Icons.checkCircle} ${I18n.t('code_widget.copied')}`;
@@ -521,11 +598,13 @@ const CodeManager = {
     },
 
     downloadCode: (e, element) => {
-        e.preventDefault();
-        e.stopPropagation();
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
 
-        const wrapper = element.classList && element.classList.contains('code-wrapper') 
-            ? element : element.closest('.code-wrapper, [data-widget-type="code"]');
+        const wrapper = element && element.classList && element.classList.contains('code-wrapper') 
+            ? element : (element && element.closest ? element.closest('.code-wrapper, [data-widget-type="code"]') : null);
         if (!wrapper) return;
 
         const trueId = wrapper.id.split('_cited_')[0];
@@ -593,6 +672,117 @@ const CodeManager = {
         }, 150);
 
         if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('code_widget.file_downloaded_toast', { filename: filename }), "success");
+    },
+
+    // =========================================================================
+    // BARRA AZIONI FLUTTUANTE STICKY (Copia & Riduci a blocco per Widget Codice)
+    // =========================================================================
+    hideFloatingActions: () => {
+        const bar = document.getElementById('advCodeFloatingBar');
+        if (bar) bar.style.display = 'none';
+        CodeManager._activeFloatingWrapper = null;
+    },
+
+    updateFloatingActions: (scrollArea) => {
+        if (!scrollArea) {
+            scrollArea = document.getElementById('editorScrollContent');
+        }
+        if (!scrollArea || !AppState.currentNoteId) {
+            CodeManager.hideFloatingActions();
+            return;
+        }
+
+        // L'infrastruttura modale/drawer del layout racchiude scrollArea
+        const parentContainer = scrollArea.parentElement;
+        if (!parentContainer) {
+            CodeManager.hideFloatingActions();
+            return;
+        }
+
+        let bar = document.getElementById('advCodeFloatingBar');
+        if (!bar) {
+            bar = document.createElement('div');
+            bar.id = 'advCodeFloatingBar';
+            bar.className = 'adv-code-floating-bar';
+            parentContainer.appendChild(bar);
+        }
+
+        const scrollRect = scrollArea.getBoundingClientRect();
+        const codeWrappers = scrollArea.querySelectorAll('.widget-type-code, [data-widget-type="code"], .code-wrapper');
+
+        let activeWrapper = null;
+
+        for (const wrapper of codeWrappers) {
+            // Un blocco collassato è alto solo 50px e ha l'header visibile
+            if (wrapper.classList.contains('collapsed')) continue;
+
+            const header = wrapper.querySelector('.widget-header');
+            if (!header) continue;
+
+            const headerRect = header.getBoundingClientRect();
+            const wrapperRect = wrapper.getBoundingClientRect();
+
+            // L'intestazione è scivolata sopra il bordo superiore visibile dello scrollArea
+            // E il blocco di codice è ancora visibile nello schermo (prima di uscire del tutto)
+            if (headerRect.bottom < scrollRect.top && wrapperRect.bottom > scrollRect.top + 50) {
+                activeWrapper = wrapper;
+                break;
+            }
+        }
+
+        if (!activeWrapper) {
+            bar.style.display = 'none';
+            CodeManager._activeFloatingWrapper = null;
+            return;
+        }
+
+        const isSameWrapper = CodeManager._activeFloatingWrapper === activeWrapper;
+        CodeManager._activeFloatingWrapper = activeWrapper;
+
+        const wrapRect = activeWrapper.getBoundingClientRect();
+        const parentRect = parentContainer.getBoundingClientRect();
+
+        // Posizionamento matematico allineato in alto a destra nel perimetro del widget attivo
+        const topPos = (scrollRect.top - parentRect.top) + 8;
+        const rightPos = Math.max(15, (parentRect.right - wrapRect.right) + 10);
+
+        bar.style.top = `${topPos}px`;
+        bar.style.right = `${rightPos}px`;
+
+        // Ricostruisce i nodi interni solo quando cambia il widget bersaglio per preservare eventuali stati attivi (es. "Copiato!")
+        if (!isSameWrapper || bar.children.length === 0) {
+            const copyTitle = I18n.t('code_widget.copy_code');
+            const rawCollapseKey = typeof I18n !== 'undefined' ? I18n.t('code_widget.collapse_block') : '';
+            const collapseTitle = (rawCollapseKey && rawCollapseKey !== 'code_widget.collapse_block')
+                ? rawCollapseKey
+                : ((typeof I18n !== 'undefined' && I18n.t('citation.expand_collapse')) || "Riduci a blocco");
+
+            bar.innerHTML = `
+                <button class="adv-code-floating-btn" id="btnCodeFloatCopy" title="${copyTitle}">
+                    <span style="display:inline-flex;">${Icons.clipboard}</span>
+                </button>
+                <div style="width:1px; height:14px; background:var(--border-color); opacity:0.6;"></div>
+                <button class="adv-code-floating-btn" id="btnCodeFloatCollapse" title="${collapseTitle}" style="padding: 3px 6px;">
+                    <span style="display:inline-flex;">${Icons.searchUp}</span>
+                </button>
+            `;
+        }
+
+        const btnCopy = bar.querySelector('#btnCodeFloatCopy');
+        if (btnCopy) {
+            btnCopy.onclick = (e) => {
+                CodeManager.copyCode(e, activeWrapper);
+            };
+        }
+
+        const btnCollapse = bar.querySelector('#btnCodeFloatCollapse');
+        if (btnCollapse) {
+            btnCollapse.onclick = (e) => {
+                CodeManager.toggleCollapse(e, activeWrapper);
+            };
+        }
+
+        bar.style.display = 'flex';
     },
 
     highlightBlock: (preElement, force = false, overrideText = null) => {

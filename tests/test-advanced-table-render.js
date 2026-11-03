@@ -3,7 +3,7 @@
  * Suite Modulare di Collaudo Unitario e di Integrazione per il Rendering Grafico Tabellare.
  * Modulo testato: advanced-table-render
  * Conteggio test case: 15
- * Generato automaticamente il: 2026-10-11 19:40:00
+ * Allineato con la feature 1B (Zero-Results Filter Feedback e Azzeramento Filtri)
  */
 
 describe("AdvancedTable Render: Griglia HTML, Paginazione, Selezione & Stili Cella (15 Test)", () => {
@@ -382,7 +382,7 @@ describe("AdvancedTable Render: Griglia HTML, Paginazione, Selezione & Stili Cel
         }
     });
 
-    test("Render: visualizzazione messaggio 'Nessun risultato' quando i filtri non restituiscono record", () => {
+    test("Render: visualizzazione messaggio descrittivo con pulsante azzera filtri quando non ci sono riscontri", () => {
         const tId = 'db_render_no_results';
         AppState.databases[tId] = {
             id: tId,
@@ -396,10 +396,28 @@ describe("AdvancedTable Render: Griglia HTML, Paginazione, Selezione & Stili Cel
         document.body.appendChild(wrapper);
 
         try {
+            // 1. In presenza di record memorizzati ma filtrati, mostra il feedback descrittivo e il pulsante azzera
             AdvancedTable.renderTable(tId);
-            const tbody = wrapper.querySelector('tbody');
+            let tbody = wrapper.querySelector('tbody');
             Assert.isNotNull(tbody);
-            Assert.isTrue(tbody.innerText.includes('Nessun risultato') || tbody.innerText.includes('0 record'));
+
+            const text = (tbody.innerText || tbody.textContent || '').trim();
+            const expectedFilterMsg = I18n.t('adv_render.no_filter_matches', { total: 1 });
+            Assert.isTrue(text.includes(expectedFilterMsg) || text.includes('Azzera filtri'), "Deve mostrare il feedback sui filtri attivi");
+
+            const clearBtn = tbody.querySelector('button');
+            Assert.isNotNull(clearBtn, "Deve essere presente il pulsante per azzerare i filtri");
+            Assert.isTrue(clearBtn.getAttribute('onclick').includes('clearTableFiltersAndSearch'));
+
+            // 2. Se il database è realmente privo di record (0 righe totali), mostra 'Nessun risultato.'
+            AppState.databases[tId].rows = [];
+            AppState.databases[tId].filters = {};
+            AdvancedTable.renderTable(tId);
+            
+            tbody = wrapper.querySelector('tbody');
+            Assert.isNotNull(tbody);
+            const expectedNoResults = I18n.t('adv_render.no_results');
+            Assert.isTrue(tbody.innerText.includes(expectedNoResults) || tbody.textContent.includes(expectedNoResults));
         } finally {
             wrapper.remove();
         }

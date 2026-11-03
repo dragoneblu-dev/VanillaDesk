@@ -12,7 +12,7 @@
  * all'interno del timer di chiusura a 300ms, prevenendo eccezioni unhandled nel DOM.
  * FEAT RESIZABLE DRAWER: Bordo trascinabile continuo con clamp matematico (380px - 90vw)
  * e salvataggio permanente della larghezza dell'utente in localStorage.
- * CLEAN STYLE RIDONDANTE: Eliminata assegnazione inline di box-shadow già governata nativamente da .adv-drawer in modals.css.
+ * FEAT KEYBOARD SHORTCUT: Supporto a Ctrl+Invio / Cmd+Invio su qualsiasi campo del Drawer per confermare e chiudere.
  */
 
 Object.assign(UI, {
@@ -50,6 +50,33 @@ Object.assign(UI, {
             document.addEventListener('mousemove', UI._handleDrawerResizeMove);
             document.addEventListener('mouseup', UI._handleDrawerResizeEnd);
         };
+
+        // GESTIONE UNIVERSALE SCORCIATOIA CTRL+INVIO / CMD+INVIO SUL DRAWER
+        if (!drawer._hasKeydownHandler) {
+            drawer._hasKeydownHandler = true;
+            drawer.addEventListener('keydown', (e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+                    // 1. Sincronizza il campo attivo facendo scattare l'onblur
+                    if (document.activeElement && typeof document.activeElement.blur === 'function') {
+                        document.activeElement.blur();
+                    }
+
+                    e.preventDefault();
+                    e.stopPropagation();
+
+                    // 2. Se è presente un pulsante primario visibile nel footer (es. Salva Formula, Salva Appunto, ecc.), innescalo
+                    const footer = document.getElementById('advDrawerFooter');
+                    const primaryBtn = (footer && footer.style.display !== 'none') ? footer.querySelector('.btn-primary') : null;
+                    if (primaryBtn && typeof primaryBtn.click === 'function') {
+                        primaryBtn.click();
+                        return;
+                    }
+
+                    // 3. Altrimenti (es. Dettaglio Record o Proprietà Pagina che salvano in tempo reale) chiude il Drawer
+                    UI.closeDrawer();
+                }
+            });
+        }
     },
 
     _handleDrawerResizeMove: (e) => {
@@ -140,7 +167,7 @@ Object.assign(UI, {
 
         if (drawer && title && body && footer) {
             
-            // Inizializza il resizer sul Drawer se non ancora presente
+            // Inizializza il resizer e i listener sulla tastiera sul Drawer se non ancora presenti
             UI.initDrawerResize();
 
             // Applica la larghezza preferita dall'utente memorizzata su disco

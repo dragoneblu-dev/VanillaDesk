@@ -28,6 +28,7 @@ const SidebarManager = {
             const resizer = document.createElement('div');
             resizer.id = 'sidebarResizer';
             resizer.className = 'sidebar-resizer';
+            resizer.title = I18n.t('sidebar_filter.resizer_title');
             sidebar.appendChild(resizer);
 
             resizer.addEventListener('mousedown', (e) => {
@@ -99,7 +100,7 @@ const SidebarManager = {
                     if (val === undefined || val === null || val === '') return;
 
                     if (col.type === 'checkbox') {
-                        const boolLabel = val === true ? 'Sì (Spuntato)' : 'No (Vuoto)';
+                        const boolLabel = val === true ? I18n.t('sidebar_filter.yes_checked') : I18n.t('sidebar_filter.no_empty');
                         uniqueValuesMap.set(val === true, boolLabel);
                     } else if (col.type === 'relation' || col.type === 'relation_backlink') {
                         if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.resolveRelationDetails === 'function') {
@@ -200,7 +201,7 @@ const SidebarManager = {
                             type: 'column_exists',
                             colId: col.id,
                             colName: col.name,
-                            displayValue: `Qualsiasi valore`,
+                            displayValue: I18n.t('sidebar_filter.any_value'),
                             realValue: '*EXISTS*', 
                             colorClass: 'default-color'
                         });
@@ -222,7 +223,7 @@ const SidebarManager = {
                     if (val === undefined || val === null || val === '') return;
                     
                     if (col.type === 'checkbox') {
-                        const boolLabel = val === true ? 'Sì (Spuntato)' : 'No (Vuoto)';
+                        const boolLabel = val === true ? I18n.t('sidebar_filter.yes_checked') : I18n.t('sidebar_filter.no_empty');
                         uniqueValuesMap.set(val === true, boolLabel);
                     } else if (col.type === 'relation' || col.type === 'relation_backlink') {
                         // Risoluzione semantica degli ID: mostra i titoli e nasconde 'sys_r_*'
@@ -327,7 +328,7 @@ const SidebarManager = {
             popup.style.width = 'max-content';
             popup.style.boxSizing = 'border-box';
 
-            let html = '<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">Suggerimenti Tag / Proprietà:</div>';
+            let html = `<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">${I18n.t('sidebar_filter.suggestions_title')}</div>`;
             
             // Limitiamo a max 15 suggerimenti visivi
             suggestions.forEach((sug) => {
@@ -337,7 +338,7 @@ const SidebarManager = {
 
                 if (sug.type === 'column_exists') {
                     html += `
-                        <div class="adv-filter-autocomplete-item" style="display:flex; align-items:center; gap:8px;" onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.select('${sug.colId}', '${safeRealValue}', '${safeColName}', '🏷️ ${safeColName}: Qualsiasi')">
+                        <div class="adv-filter-autocomplete-item" style="display:flex; align-items:center; gap:8px;" onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.select('${sug.colId}', '${safeRealValue}', '${safeColName}', '${I18n.t('sidebar_filter.any')}')">
                             <span style="color:var(--text-primary); font-weight:bold; font-size:0.8rem;">🏷️ ${sug.colName}</span>
                             <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7;">(${sug.displayValue})</span>
                         </div>
@@ -346,7 +347,7 @@ const SidebarManager = {
                     html += `
                         <div class="adv-filter-autocomplete-item" style="display:flex; align-items:center; gap:8px;" onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.select('${sug.colId}', '${safeRealValue}', '${safeColName}', '${safeDisplayValue}')">
                             <span class="adv-select-pill ${sug.colorClass}" style="margin:0; padding:2px 6px;">${String(sug.displayValue).replace(/</g, '&lt;')}</span>
-                            <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7;">in ${sug.colName}</span>
+                            <span style="font-size:0.75rem; color:var(--text-secondary); opacity:0.7;">${I18n.t('sidebar_filter.in_column', { colName: sug.colName })}</span>
                         </div>
                     `;
                 }
@@ -390,9 +391,9 @@ const SidebarManager = {
                 
                 let formattedVisualText = '';
                 if (realValue === '*EXISTS*') {
-                    formattedVisualText = `🏷️ ${colName}: Qualsiasi`;
+                    formattedVisualText = I18n.t('sidebar_filter.pill_any', { colName });
                 } else if (realValue === '*EMPTY*') {
-                    formattedVisualText = `🚫 ${colName}: Vuoto`;
+                    formattedVisualText = I18n.t('sidebar_filter.pill_empty', { colName });
                 } else {
                     formattedVisualText = `${colName}: ${visualPillText.replace(/^[🏷️🚫\s]+/, '')}`;
                 }
@@ -437,9 +438,9 @@ const SidebarManager = {
             filter.colorClass = newColorClass || 'default-color';
 
             if (newValue === '*EXISTS*') {
-                filter.visualText = `${filter.colName}: Qualsiasi`;
+                filter.visualText = I18n.t('sidebar_filter.pill_any', { colName: filter.colName });
             } else if (newValue === '*EMPTY*') {
-                filter.visualText = `${filter.colName}: Vuoto`;
+                filter.visualText = I18n.t('sidebar_filter.pill_empty', { colName: filter.colName });
             } else {
                 filter.visualText = `${filter.colName}: ${displayValue}`;
             }
@@ -471,16 +472,16 @@ const SidebarManager = {
             const menuItems = [
                 {
                     type: 'custom',
-                    html: `<div class="adv-dropdown-title" style="padding:2px 4px 6px 4px; border-bottom:1px solid var(--border-color); margin-bottom:4px;">Proprietà: <b>${colName}</b></div>`
+                    html: `<div class="adv-dropdown-title" style="padding:2px 4px 6px 4px; border-bottom:1px solid var(--border-color); margin-bottom:4px;">${I18n.t('sidebar_filter.property_label', { colName })}</div>`
                 },
                 {
-                    label: `Qualsiasi valore (*EXISTS*)` + (filter.realValue === '*EXISTS*' ? chk : ''),
+                    label: I18n.t('sidebar_filter.option_any') + (filter.realValue === '*EXISTS*' ? chk : ''),
                     onClick: () => {
                         SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, '*EXISTS*', colName, 'default-color');
                     }
                 },
                 {
-                    label: `Nessun valore (Vuoto)` + (filter.realValue === '*EMPTY*' ? chk : ''),
+                    label: I18n.t('sidebar_filter.option_empty') + (filter.realValue === '*EMPTY*' ? chk : ''),
                     onClick: () => {
                         SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, '*EMPTY*', colName, 'default-color');
                     }
@@ -493,12 +494,12 @@ const SidebarManager = {
                 const isFalse = filter.realValue === false;
                 menuItems.push(
                     {
-                        label: 'Sì (Spuntato)' + (isTrue ? chk : ''),
-                        onClick: () => SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, true, 'Sì', 'default-color')
+                        label: I18n.t('sidebar_filter.yes_checked') + (isTrue ? chk : ''),
+                        onClick: () => SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, true, I18n.t('sidebar_filter.yes'), 'default-color')
                     },
                     {
-                        label: 'No (Vuoto)' + (isFalse ? chk : ''),
-                        onClick: () => SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, false, 'No', 'default-color')
+                        label: I18n.t('sidebar_filter.no_empty') + (isFalse ? chk : ''),
+                        onClick: () => SidebarManager.SearchAutocomplete.updateFilterValue(filterIndex, false, I18n.t('sidebar_filter.no'), 'default-color')
                     }
                 );
             } else if (col && (col.type === 'select' || col.type === 'multi-select')) {
@@ -519,7 +520,7 @@ const SidebarManager = {
                 if (options.length === 0) {
                     menuItems.push({
                         type: 'custom',
-                        html: '<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">Nessun valore disponibile.</div>'
+                        html: `<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">${I18n.t('sidebar_filter.no_values_available')}</div>`
                     });
                 } else {
                     options.forEach(opt => {
@@ -572,7 +573,7 @@ const SidebarManager = {
                 if (sortedRelations.length === 0) {
                     menuItems.push({
                         type: 'custom',
-                        html: '<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">Nessun record collegato trovato.</div>'
+                        html: `<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">${I18n.t('sidebar_filter.no_linked_records')}</div>`
                     });
                 } else {
                     sortedRelations.forEach(([relId, relName]) => {
@@ -632,7 +633,7 @@ const SidebarManager = {
                 if (sortedEntries.length === 0) {
                     menuItems.push({
                         type: 'custom',
-                        html: '<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">Nessun valore memorizzato.</div>'
+                        html: `<div style="font-size:0.75rem; color:var(--text-secondary); padding:4px 8px; font-style:italic;">${I18n.t('sidebar_filter.no_values_stored')}</div>`
                     });
                 } else {
                     sortedEntries.forEach(([realVal, displayVal]) => {
@@ -676,7 +677,7 @@ const SidebarManager = {
                 html += `
                     <span id="${anchorId}" class="adv-select-pill ${filter.colorClass || 'default-color'}" 
                           style="display:inline-flex; align-items:center; gap:0; margin:0; padding:1px 2px 1px 6px; user-select:none; border-radius:12px;"
-                          title="Filtro attivo: ${safeTitle}">
+                          title="${I18n.t('sidebar_filter.active_filter_tooltip', { title: safeTitle })}">
                         
                         <!-- Corpo cliccabile per aprire le opzioni -->
                         <span class="pill-body" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; padding:1px 2px;"
@@ -693,7 +694,7 @@ const SidebarManager = {
                               onmouseenter="this.style.opacity='1'; this.style.backgroundColor='rgba(0,0,0,0.1)';"
                               onmouseleave="this.style.opacity='0.6'; this.style.backgroundColor='transparent';"
                               onclick="event.stopPropagation(); SidebarManager.SearchAutocomplete.remove(${idx})" 
-                              title="Rimuovi questo filtro">✕</span>
+                              title="${I18n.t('sidebar_filter.remove_filter_tooltip')}">✕</span>
                     </span>
                 `;
             });

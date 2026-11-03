@@ -69,7 +69,7 @@ const AdvancedCalendar = {
 
     toggleLegendFilter: (tableId, option) => {
         let state = AdvancedTable.getState(tableId);
-        if (!state.calendarLegendFilter) state.calendarLegendFilter =[];
+        if (!state.calendarLegendFilter) state.calendarLegendFilter = [];
         
         const idx = state.calendarLegendFilter.indexOf(option);
         if (idx > -1) state.calendarLegendFilter.splice(idx, 1);
@@ -81,7 +81,7 @@ const AdvancedCalendar = {
 
     clearLegendFilter: (tableId) => {
         let state = AdvancedTable.getState(tableId);
-        state.calendarLegendFilter =[];
+        state.calendarLegendFilter = [];
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);
     },
@@ -389,6 +389,7 @@ const AdvancedCalendar = {
             return AdvancedTable._renderAsTable(wrapper, state, tableId);
         }
 
+        const currentLocale = (typeof I18n !== 'undefined' && I18n.currentLang) ? I18n.currentLang : 'it';
         const isCited = tableId.includes('_cited_');
         const isEdit = AppState.isEditMode && !isCited;
 
@@ -396,10 +397,10 @@ const AdvancedCalendar = {
         if (!bodyContainer) {
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;"></span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('widget_manager.loading')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -424,7 +425,7 @@ const AdvancedCalendar = {
         let hasActiveAuto = state.automations && state.automations.some(a => a.active);
 
         if (typeof WidgetManager !== 'undefined') {
-            const tools =[];
+            const tools = [];
             tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewCalendar, label: I18n.t('adv_board.calendar_view'), onClick: AdvancedBoard.openViewMenu });
             if (!state.isLinkedView) {
                 tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
@@ -460,7 +461,7 @@ const AdvancedCalendar = {
         // Iniezione barra di ricerca rapida a scomparsa
         html += AdvancedTable.renderQuickSearchBar(tableId, state);
 
-        let viewRows =[];
+        let viewRows = [];
         const renderCache = {};
         state.rows.forEach(r => {
             let vRow = r.virtualCells ? r : AdvancedTable.buildVirtualRow(tableId, r, state, renderCache);
@@ -503,7 +504,7 @@ const AdvancedCalendar = {
         }
 
         const eventsByDate = {};
-        let unscheduledRows =[];
+        let unscheduledRows = [];
 
         viewRows.forEach(r => {
             if (!r._timeStart) {
@@ -521,9 +522,9 @@ const AdvancedCalendar = {
             }
         });
 
-        let monthName = focusDate.toLocaleString('it-IT', { month: 'long', year: 'numeric' }).toUpperCase();
+        let monthName = focusDate.toLocaleString(currentLocale, { month: 'long', year: 'numeric' }).toUpperCase();
         if (mode === 'year') {
-            monthName = `ANNO: ${focusDate.getFullYear()}`;
+            monthName = I18n.t('calendar_view.year_header', { year: focusDate.getFullYear() });
         } else if (mode === 'week') {
             const startOfWeek = new Date(focusDate);
             const day = startOfWeek.getDay();
@@ -531,39 +532,40 @@ const AdvancedCalendar = {
             startOfWeek.setDate(diff);
             const endOfWeek = new Date(startOfWeek);
             endOfWeek.setDate(startOfWeek.getDate() + 6);
-            monthName = `SETTIMANA: ${startOfWeek.getDate()} ${startOfWeek.toLocaleString('it-IT', { month: 'short' })} - ${endOfWeek.getDate()} ${endOfWeek.toLocaleString('it-IT', { month: 'short', year: 'numeric' })}`;
+            const rangeStr = `${startOfWeek.getDate()} ${startOfWeek.toLocaleString(currentLocale, { month: 'short' })} - ${endOfWeek.getDate()} ${endOfWeek.toLocaleString(currentLocale, { month: 'short', year: 'numeric' })}`;
+            monthName = I18n.t('calendar_view.week_header', { range: rangeStr });
         } else if (mode === 'day') {
-            monthName = focusDate.toLocaleString('it-IT', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
+            monthName = focusDate.toLocaleString(currentLocale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).toUpperCase();
         }
 
         let zoomControls = '';
         if ((mode === 'week' || mode === 'day') && isTimeCol) {
             zoomControls = `
-                <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; margin-right:10px; color:currentColor;" onclick="AdvancedCalendar.changeZoom(event, '${tableId}', -10)" title="Riduci Zoom Ore">${Icons.zoomOut}</button>
-                <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; margin-right:10px; color:currentColor;" onclick="AdvancedCalendar.changeZoom(event, '${tableId}', 10)" title="Aumenta Zoom Ore">${Icons.zoomIn}</button>
+                <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; margin-right:10px; color:currentColor;" onclick="AdvancedCalendar.changeZoom(event, '${tableId}', -10)" title="${I18n.t('calendar_view.zoom_out_hours')}">${Icons.zoomOut}</button>
+                <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; margin-right:10px; color:currentColor;" onclick="AdvancedCalendar.changeZoom(event, '${tableId}', 10)" title="${I18n.t('calendar_view.zoom_in_hours')}">${Icons.zoomIn}</button>
             `;
         }
 
         html += `<div class="adv-cal-nav-bar">
             <div class="adv-cal-nav-group">
                 <button class="adv-add-btn" style="padding:4px 8px; border:1px solid var(--border-color); color:currentColor;" onclick="AdvancedCalendar.navigate(event, '${tableId}', -1)">${Icons.chevronLeft}</button>
-                <button class="adv-add-btn" style="padding:4px 10px; border:1px solid var(--border-color);" onclick="AdvancedCalendar.navigate(event, '${tableId}', 0)">Oggi</button>
+                <button class="adv-add-btn" style="padding:4px 10px; border:1px solid var(--border-color);" onclick="AdvancedCalendar.navigate(event, '${tableId}', 0)">${I18n.t('calendar_view.today')}</button>
                 <button class="adv-add-btn" style="padding:4px 8px; border:1px solid var(--border-color); color:currentColor;" onclick="AdvancedCalendar.navigate(event, '${tableId}', 1)">${Icons.chevronRight}</button>
                 <span style="margin-left:10px; font-weight:bold; font-size:1.1rem; color:var(--text-primary);">${monthName}</span>
             </div>
             <div class="adv-cal-view-group">
                 ${zoomControls}
-                <button class="adv-add-btn" style="border-radius:0; border:none; ${mode === 'year' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'year')">Anno</button>
-                <button class="adv-add-btn" style="border-radius:0; border:none; border-left:1px solid var(--border-color); border-right:1px solid var(--border-color); ${mode === 'month' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'month')">Mese</button>
-                <button class="adv-add-btn" style="border-radius:0; border:none; border-right:1px solid var(--border-color); ${mode === 'week' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'week')">Settimana</button>
-                <button class="adv-add-btn" style="border-radius:0; border:none; ${mode === 'day' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'day')">Giorno</button>
+                <button class="adv-add-btn" style="border-radius:0; border:none; ${mode === 'year' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'year')">${I18n.t('calendar_view.year')}</button>
+                <button class="adv-add-btn" style="border-radius:0; border:none; border-left:1px solid var(--border-color); border-right:1px solid var(--border-color); ${mode === 'month' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'month')">${I18n.t('calendar_view.month')}</button>
+                <button class="adv-add-btn" style="border-radius:0; border:none; border-right:1px solid var(--border-color); ${mode === 'week' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'week')">${I18n.t('calendar_view.week')}</button>
+                <button class="adv-add-btn" style="border-radius:0; border:none; ${mode === 'day' ? 'background:var(--item-active); color:var(--accent-color); font-weight:bold;' : ''}" onclick="AdvancedCalendar.changeMode(event, '${tableId}', 'day')">${I18n.t('calendar_view.day')}</button>
             </div>
         </div>`;
 
         if (selectCol && state.selectOptions[selectCol.id] && mode !== 'year') {
-            const activeFilters = state.calendarLegendFilter ||[];
+            const activeFilters = state.calendarLegendFilter || [];
             html += `<div style="display:flex; flex-wrap:wrap; gap:5px; padding:5px 10px; border:1px solid var(--border-color); border-bottom:none; background:var(--sidebar-bg); border-radius:6px 6px 0 0;">`;
-            html += `<span style="font-size:0.75rem; color:var(--text-secondary); margin-right:5px; align-self:center;">Filtra per ${selectCol.name}:</span>`;
+            html += `<span style="font-size:0.75rem; color:var(--text-secondary); margin-right:5px; align-self:center;">${I18n.t('calendar_view.filter_by', { name: selectCol.name })}</span>`;
 
             state.selectOptions[selectCol.id].forEach(opt => {
                 const isActive = activeFilters.includes(opt);
@@ -575,7 +577,7 @@ const AdvancedCalendar = {
                 html += `<span class="adv-select-pill ${colorClass}" style="cursor:pointer; opacity:${opacity}; ${outline}" onclick="AdvancedCalendar.toggleLegendFilter('${tableId}', '${safeOpt}')">${opt}</span>`;
             });
             if (activeFilters.length > 0) {
-                 html += `<span style="font-size:0.75rem; color:var(--danger-color); cursor:pointer; align-self:center; margin-left:5px;" onclick="AdvancedCalendar.clearLegendFilter('${tableId}')">✕ Rimuovi filtri</span>`;
+                 html += `<span style="font-size:0.75rem; color:var(--danger-color); cursor:pointer; align-self:center; margin-left:5px;" onclick="AdvancedCalendar.clearLegendFilter('${tableId}')">${I18n.t('calendar_view.clear_filters')}</span>`;
             }
             html += `</div>`;
         }
@@ -592,12 +594,14 @@ const AdvancedCalendar = {
         // --- VISTA ANNUALE ---
         if (mode === 'year') {
             const year = focusDate.getFullYear();
-            const monthNames = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
+            const daysInitials = (I18n.dict[currentLocale]?.calendar_view?.days_initials) || ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
             
             html += `<div class="adv-scroll-container" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; padding: 15px; background: var(--bg-color); max-height: 600px; overflow-y: auto;">`;
 
             for (let m = 0; m < 12; m++) {
                 const firstDay = new Date(year, m, 1);
+                const monthDisplayTitle = firstDay.toLocaleString(currentLocale, { month: 'long' });
+                const capitalMonthTitle = monthDisplayTitle.charAt(0).toUpperCase() + monthDisplayTitle.slice(1);
                 const lastDay = new Date(year, m + 1, 0).getDate();
                 let startOffset = firstDay.getDay() - 1;
                 if (startOffset === -1) startOffset = 6;
@@ -605,10 +609,10 @@ const AdvancedCalendar = {
                 html += `<div style="border: 1px solid var(--border-color); border-radius: 6px; background: var(--sidebar-bg); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">`;
                 
                 const targetMs = firstDay.getTime();
-                html += `<div onclick="AdvancedCalendar.expandMonthView(event, '${tableId}', ${targetMs})" title="Passa alla vista Mese" style="text-align:center; font-weight:bold; font-size: 0.9rem; padding: 6px; background: rgba(0,0,0,0.03); border-bottom: 1px solid var(--border-color); color: var(--accent-color); cursor: pointer; transition: background 0.2s, opacity 0.2s;" onmouseenter="this.style.opacity='0.7'" onmouseleave="this.style.opacity='1'">${monthNames[m]}</div>`;
+                html += `<div onclick="AdvancedCalendar.expandMonthView(event, '${tableId}', ${targetMs})" title="${I18n.t('calendar_view.switch_to_month')}" style="text-align:center; font-weight:bold; font-size: 0.9rem; padding: 6px; background: rgba(0,0,0,0.03); border-bottom: 1px solid var(--border-color); color: var(--accent-color); cursor: pointer; transition: background 0.2s, opacity 0.2s;" onmouseenter="this.style.opacity='0.7'" onmouseleave="this.style.opacity='1'">${capitalMonthTitle}</div>`;
                 
                 html += `<div style="display:grid; grid-template-columns: repeat(7, 1fr); text-align:center; font-size:0.6rem; color:var(--text-secondary); padding: 4px 0; border-bottom: 1px solid var(--border-color);">
-                            <div>L</div><div>M</div><div>M</div><div>G</div><div>V</div><div>S</div><div>D</div>
+                            ${daysInitials.map(di => `<div>${di}</div>`).join('')}
                          </div>`;
                 html += `<div style="display:grid; grid-template-columns: repeat(7, 1fr); padding: 4px; gap: 2px;">`;
 
@@ -661,10 +665,10 @@ const AdvancedCalendar = {
         }
 
         const renderEventStandard = (r) => {
-            let tVal = r.virtualCells[titleCol.id] || 'Senza Titolo';
+            let tVal = r.virtualCells[titleCol.id] || I18n.t('editor.untitled');
             if (titleCol.type === 'record_note') {
                 const noteObj = typeof Store !== 'undefined' ? Store.getNote(tVal) : null;
-                if (noteObj) tVal = noteObj.title || 'Senza Titolo';
+                if (noteObj) tVal = noteObj.title || I18n.t('editor.untitled');
             }
             tVal = String(tVal).replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
@@ -693,7 +697,7 @@ const AdvancedCalendar = {
             let timeLabelText = '';
             if (isTimeCol && r._timeStart) {
                 const d = new Date(r._timeStart);
-                timeLabelText = d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+                timeLabelText = d.toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
                 timeLabelHtml = `<span style="opacity:0.6; margin-right:4px;">${timeLabelText}</span>`;
             }
 
@@ -733,10 +737,10 @@ const AdvancedCalendar = {
         };
 
         const renderEventAbsolute = (r, gridDateMs, pxPerHour, colIdx, colCount) => {
-            let tVal = r.virtualCells[titleCol.id] || 'Senza Titolo';
+            let tVal = r.virtualCells[titleCol.id] || I18n.t('editor.untitled');
             if (titleCol.type === 'record_note') {
                 const noteObj = typeof Store !== 'undefined' ? Store.getNote(tVal) : null;
-                if (noteObj) tVal = noteObj.title || 'Senza Titolo';
+                if (noteObj) tVal = noteObj.title || I18n.t('editor.untitled');
             }
             tVal = String(tVal).replace(/</g, '&lt;').replace(/>/g, '&gt;');
             
@@ -781,7 +785,7 @@ const AdvancedCalendar = {
             const resizeHandle = (isEdit && dateCol.hasEndDate && eMs === r._timeEnd) ?
                 `<div style="position:absolute; bottom:0; left:0; right:0; height:8px; cursor:ns-resize; z-index:20;" onmousedown="AdvancedCalendar.startResize(event, '${tableId}', '${r.id}')"></div>` : '';
 
-            const timeLabelText = new Date(sMs).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' });
+            const timeLabelText = new Date(sMs).toLocaleTimeString(currentLocale, { hour: '2-digit', minute: '2-digit' });
 
             let extraPropsHtml = '';
             if (propCols.length > 0) {
@@ -818,9 +822,9 @@ const AdvancedCalendar = {
         };
 
         const layoutDayEvents = (events) => {
-            if (events.length === 0) return[];
+            if (events.length === 0) return [];
             events.sort((a, b) => a._timeStart - b._timeStart || b._timeEnd - a._timeEnd);
-            let columns =[];
+            let columns = [];
             events.forEach(ev => {
                 let placed = false;
                 for (let i = 0; i < columns.length; i++) {
@@ -833,7 +837,7 @@ const AdvancedCalendar = {
                 }
                 if (!placed) columns.push([ev]);
             });
-            let formattedEvents =[];
+            let formattedEvents = [];
             const colCount = columns.length;
             columns.forEach((col, idx) => {
                 col.forEach(ev => {
@@ -863,6 +867,8 @@ const AdvancedCalendar = {
             return axisHtml;
         };
 
+        const daysShort = (I18n.dict[currentLocale]?.calendar_view?.days_short) || ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
+
         if (mode === 'month') {
             const year = focusDate.getFullYear();
             const month = focusDate.getMonth();
@@ -875,7 +881,7 @@ const AdvancedCalendar = {
             startDate.setDate(startDate.getDate() - startOffset);
 
             html += `<div class="adv-cal-month-header">
-                        <div>LUN</div><div>MAR</div><div>MER</div><div>GIO</div><div>VEN</div><div>SAB</div><div>DOM</div>
+                        ${daysShort.map(ds => `<div>${ds}</div>`).join('')}
                      </div>`;
 
             html += `<div class="adv-cal-month-grid">`;
@@ -892,7 +898,7 @@ const AdvancedCalendar = {
                 const bg = isCurrentMonth ? 'var(--bg-color)' : 'rgba(0,0,0,0.03)';
                 const dayStr = isToday ? `<span style="background:var(--accent-color); color:var(--accent-color-tx); border-radius:50%; width:24px; height:24px; display:inline-flex; align-items:center; justify-content:center;">${currentGridDate.getDate()}</span>` : currentGridDate.getDate();
 
-                const events = eventsByDate[currentGridDate.getTime()] ||[];
+                const events = eventsByDate[currentGridDate.getTime()] || [];
                 
                 const dblClick = isEdit ? `ondblclick="AdvancedCalendar.createRecord(event, '${tableId}', '${currentGridDate.getTime()}')"` : '';
                 const dropHandlers = isEdit ? `class="adv-cal-droppable" ondragover="AdvancedCalendar.onDragOver(event)" ondragleave="AdvancedCalendar.onDragLeave(event)" ondrop="AdvancedCalendar.onDrop(event, '${tableId}', '${currentGridDate.getTime()}')"` : '';
@@ -903,7 +909,7 @@ const AdvancedCalendar = {
                 }
                 
                 if (events.length > MAX_MONTH_EVENTS) {
-                    eventsHtml += `<div class="adv-cal-more-btn" style="font-size:0.75rem; color:var(--text-secondary); cursor:pointer; padding:2px; text-align:center; font-weight:bold; background: rgba(0,0,0,0.05); border-radius:3px; margin-top:2px;" onclick="AdvancedCalendar.expandDayView(event, '${tableId}', ${currentGridDate.getTime()})">+ ${events.length - MAX_MONTH_EVENTS} altri...</div>`;
+                    eventsHtml += `<div class="adv-cal-more-btn" style="font-size:0.75rem; color:var(--text-secondary); cursor:pointer; padding:2px; text-align:center; font-weight:bold; background: rgba(0,0,0,0.05); border-radius:3px; margin-top:2px;" onclick="AdvancedCalendar.expandDayView(event, '${tableId}', ${currentGridDate.getTime()})">${I18n.t('calendar_view.more_events', { count: events.length - MAX_MONTH_EVENTS })}</div>`;
                 }
 
                 html += `<div class="adv-cal-day-cell" ${dropHandlers} ${dblClick} style="background:${bg};">
@@ -929,7 +935,7 @@ const AdvancedCalendar = {
             if (isTimeCol) html += `<div style="width:45px; flex-shrink:0; border-right:1px solid var(--border-color);"></div>`;
             html += `<div class="adv-cal-week-days">`;
 
-            const daysNames =['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
+            const daysNames = (I18n.dict[currentLocale]?.calendar_view?.days_long) || ['Lunedì', 'Martedì', 'Mercoledì', 'Giovedì', 'Venerdì', 'Sabato', 'Domenica'];
             for (let i = 0; i < 7; i++) {
                 const currentGridDate = new Date(startOfWeek);
                 currentGridDate.setDate(startOfWeek.getDate() + i);
@@ -951,7 +957,7 @@ const AdvancedCalendar = {
             for (let i = 0; i < 7; i++) {
                 const currentGridDate = new Date(startOfWeek);
                 currentGridDate.setDate(startOfWeek.getDate() + i);
-                const events = eventsByDate[currentGridDate.getTime()] ||[];
+                const events = eventsByDate[currentGridDate.getTime()] || [];
                 
                 const dblClick = isEdit ? `ondblclick="AdvancedCalendar.createRecord(event, '${tableId}', '${currentGridDate.getTime()}', ${isTimeCol ? pxPerHour : 'null'})"` : '';
                 const dropHandlers = isEdit ? `class="adv-cal-droppable" ondragover="AdvancedCalendar.onDragOver(event)" ondragleave="AdvancedCalendar.onDragLeave(event)" ondrop="AdvancedCalendar.onDrop(event, '${tableId}', '${currentGridDate.getTime()}')"` : '';
@@ -971,7 +977,7 @@ const AdvancedCalendar = {
         else if (mode === 'day') {
             const pxPerHour = state.calendarZoom || 40;
             const targetTime = new Date(focusDate).setHours(0, 0, 0, 0);
-            const events = eventsByDate[targetTime] ||[];
+            const events = eventsByDate[targetTime] || [];
 
             html += `<div style="display:flex; flex-direction:row; height:600px; overflow-y:auto; border-top:1px solid var(--border-color);">`;
 
@@ -987,7 +993,7 @@ const AdvancedCalendar = {
                 html += `<div style="position:relative; width:100%; height:${pxPerHour * 24}px; z-index:5;">${formattedEvents.map(e => renderEventAbsolute(e.record, targetTime, pxPerHour, e.colIdx, e.colCount)).join('')}</div>`;
             } else {
                 if (events.length === 0) {
-                    html += `<div style="text-align:center; color:var(--text-secondary); margin-top:40px; pointer-events:none;">Nessun elemento programmato per questa data. Clicca due volte per aggiungerne uno.</div>`;
+                    html += `<div style="text-align:center; color:var(--text-secondary); margin-top:40px; pointer-events:none;">${I18n.t('calendar_view.no_events_day')}</div>`;
                 } else {
                     html += `<div style="display:flex; flex-direction:column; gap:10px; max-width:800px; margin:20px auto; pointer-events:auto;">${events.map(e => renderEventStandard(e)).join('')}</div>`;
                 }
@@ -1000,12 +1006,12 @@ const AdvancedCalendar = {
 
         if (unscheduledRows.length > 0) {
             html += `<div style="margin-top:15px; font-size:0.8rem; color:var(--text-secondary);">
-                        <b><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Elementi senza data (${unscheduledRows.length}):</b></span> 
+                        <b><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} ${I18n.t('calendar_view.unscheduled_records', { count: unscheduledRows.length })}</b></span> 
                         ${unscheduledRows.map(r => {
-                            let tTitle = r.virtualCells[titleCol.id] || 'Senza Titolo';
+                            let tTitle = r.virtualCells[titleCol.id] || I18n.t('editor.untitled');
                             if (titleCol.type === 'record_note') {
                                 const noteObj = typeof Store !== 'undefined' ? Store.getNote(tTitle) : null;
-                                if (noteObj) tTitle = noteObj.title || 'Senza Titolo';
+                                if (noteObj) tTitle = noteObj.title || I18n.t('editor.untitled');
                             }
                             tTitle = String(tTitle).replace(/</g, '&lt;').replace(/>/g, '&gt;');
                             

@@ -12,6 +12,7 @@
  * del Drawer per evitare che l'interazione con le finestre modali chiuda inavvertitamente il pannello laterale.
  * FIX SIDEBAR TOOLTIP COLLISION: Protezione del tooltip custom (#advCustomTooltip) dall'estinzione accidentale
  * scatenata dal listener globale di mouseover quando il cursore passa sopra i titoli o icone dei database nella sidebar.
+ * FEAT FLOATING CODE ACTIONS HOOK: Chiamata sincronizzata a CodeManager.updateFloatingActions sullo scroll di editorScrollContent.
  */
 
 Object.assign(UI, {
@@ -540,7 +541,7 @@ Object.assign(UI, {
             }
         }, true);
 
-        // ASCOLTATORE SCROLL PRINCIPALE (Aggancio per TOC, Minimappa e Floating Header Bar)
+        // ASCOLTATORE SCROLL PRINCIPALE (Aggancio per TOC, Minimappa, Floating Header Bar e Floating Code Actions)
         const editorScrollArea = document.getElementById('editorScrollContent');
         if (editorScrollArea) {
             editorScrollArea.addEventListener('scroll', () => {
@@ -554,6 +555,11 @@ Object.assign(UI, {
                 // Aggiornamento sincronizzato della barra intestazioni galleggiante
                 if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.updateFloatingHeader === 'function') {
                     AdvancedTable.updateFloatingHeader(editorScrollArea);
+                }
+
+                // Aggiornamento sincronizzato dei pulsanti fluttuanti del blocco di codice
+                if (typeof CodeManager !== 'undefined' && typeof CodeManager.updateFloatingActions === 'function') {
+                    CodeManager.updateFloatingActions(editorScrollArea);
                 }
             });
         }

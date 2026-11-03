@@ -362,7 +362,7 @@
                             </div>
                         </div>
 
-                        <input type="text" id="noteTitle" name="dummy_title_field" class="title-input" readonly autocomplete="off" spellcheck="false"
+                        <input type="text" id="noteTitle" name="dummy_title_field" class="title-input" readonly autocomplete="off" spellcheck="false" maxlength="255"
                             oninput="UI.updateCurrentNote()">
                         <script>document.getElementById('noteTitle').placeholder = I18n.t('editor.note_title_placeholder');</script>
 

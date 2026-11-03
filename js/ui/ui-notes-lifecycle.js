@@ -18,6 +18,17 @@ Object.assign(UI, {
     updateCurrentNoteTimer: null,
     _lastHighlightedWidget: null,
 
+    // Sanitizzazione preventiva del titolo: max 255 caratteri, rimozione tag HTML e caratteri invisibili
+    sanitizeNoteTitle: (rawTitle) => {
+        if (!rawTitle || typeof rawTitle !== 'string') return '';
+        return rawTitle
+            .replace(/<[^>]*>/g, '') // Rimuove tag HTML
+            .replace(/[\u200B-\u200D\uFEFF]/g, '') // Rimuove Zero-Width Spaces e caratteri invisibili
+            .replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ') // Converte a capo, tab e caratteri di controllo in spazi
+            .replace(/\s{2,}/g, ' ') // Comprime spazi multipli consecutivi
+            .slice(0, 255); // Limite standard di sicurezza conforme al File System (255 caratteri)
+    },
+
     addNote: (parentId = null) => {
         AppState.isSwitchingNote = true;
 
@@ -544,11 +555,21 @@ Object.assign(UI, {
         if (!note || note.deletedAt) return; 
 
         const titleInput = document.getElementById('noteTitle');
-        if (titleInput && note.title !== titleInput.value) {
-            note.title = titleInput.value;
-            note._isDirty = true;
-        }
+        if (titleInput) {
+            // Sanitizzazione preventiva del titolo con clamp esatto a 255 caratteri
+            const rawVal = titleInput.value;
+            const cleanVal = UI.sanitizeNoteTitle(rawVal);
+            if (cleanVal !== rawVal) {
+                const caretPos = titleInput.selectionStart;
+                titleInput.value = cleanVal;
+                try { titleInput.setSelectionRange(caretPos, caretPos); } catch (_) {}
+            }
 
+            if (note.title !== cleanVal) {
+                note.title = cleanVal;
+                note._isDirty = true;
+            }
+        }
         // Sincronizza reattivamente in tempo reale il titolo della nota nell'header su due righe
         UI.updateHeaderTitles(AppState.fileName, note.title);
 
@@ -558,7 +579,17 @@ Object.assign(UI, {
             let iconColorStr = '';
             const hasBookmark = note.content && note.content.includes('adv-bookmark-marker');
 
-            if (note.isRecordNote) {
+            // Verifica se la nota appartiene al ramo di un record di database (diretto o tramite antenati)
+            const isDbDescendant = Boolean(note.isRecordNote || (() => {
+                let curr = note.parentId ? Store.getNote(note.parentId) : null;
+                while (curr) {
+                    if (curr.isRecordNote) return true;
+                    curr = curr.parentId ? Store.getNote(curr.parentId) : null;
+                }
+                return false;
+            })());
+
+            if (isDbDescendant) {
                 customIcon = Icons.recordPage;
                 iconColorStr = 'color:var(--record-color);';
             } else {

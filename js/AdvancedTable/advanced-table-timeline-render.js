@@ -69,6 +69,7 @@ Object.assign(AdvancedTimeline, {
             return AdvancedTable._renderAsTable(wrapper, state, tableId);
         }
 
+        const currentLocale = (typeof I18n !== 'undefined' && I18n.currentLang) ? I18n.currentLang : 'it';
         const isCited = tableId.includes('_cited_');
         const isEdit = AppState.isEditMode && !isCited;
 
@@ -76,10 +77,10 @@ Object.assign(AdvancedTimeline, {
         if (!bodyContainer) {
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;"></span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('widget_manager.loading')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -93,18 +94,18 @@ Object.assign(AdvancedTimeline, {
         const isGrouped = state.timelineGroupBy ? true : false;
 
         if (typeof WidgetManager !== 'undefined') {
-            const tools =[];
-            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewTimeline, label: 'Timeline', onClick: AdvancedBoard.openViewMenu });
-            tools.push({ id: `adv-timeline-group-btn-${tableId}`, icon: Icons.group, label: 'Raggruppa', active: isGrouped, onClick: AdvancedTimeline.openGroupMenu });
+            const tools = [];
+            tools.push({ id: `adv-view-btn-${tableId}`, icon: Icons.viewTimeline, label: I18n.t('adv_board.timeline_view'), onClick: AdvancedBoard.openViewMenu });
+            tools.push({ id: `adv-timeline-group-btn-${tableId}`, icon: Icons.group, label: I18n.t('timeline_render.group_btn'), active: isGrouped, onClick: AdvancedTimeline.openGroupMenu });
             if (!state.isLinkedView) {
-                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: 'Automazioni', onClick: AdvancedAutomations.openPanel });
+                tools.push({ icon: Icons.lightning, active: hasActiveAuto, editOnly: true, title: I18n.t('table.automations'), onClick: AdvancedAutomations.openPanel });
             }
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina', active: hasSort, onClick: AdvancedTable.openSortMenu });
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra', active: hasFilter, onClick: AdvancedTable.openFilterMenu });
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('table.sort'), active: hasSort, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('table.filter'), active: hasFilter, onClick: AdvancedTable.openFilterMenu });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: state.isLinkedView ? Icons.link : '',
-                title: state.title || 'Database',
+                title: state.title || I18n.t('editor.database'),
                 optionsId: `adv-opt-btn-${tableId}`,
                 tools: tools,
                 onTitleChange: AdvancedTable.updateTitle,
@@ -114,7 +115,7 @@ Object.assign(AdvancedTimeline, {
             });
         }
 
-        let viewRows =[];
+        let viewRows = [];
         let minTime = Infinity;
         let maxTime = -Infinity;
 
@@ -163,8 +164,8 @@ Object.assign(AdvancedTimeline, {
         viewRows = AdvancedTable.filterRows(viewRows, state);
         viewRows = AdvancedTable.sortRows(viewRows, state);
 
-        let scheduledRows =[];
-        let unscheduledRows =[];
+        let scheduledRows = [];
+        let unscheduledRows = [];
 
         viewRows.forEach(r => {
             if (r._timeStart !== null && !isNaN(r._timeStart)) {
@@ -224,14 +225,14 @@ Object.assign(AdvancedTimeline, {
         let html = '';
         html += `<div class="adv-timeline-toolbar" style="display:flex; justify-content:space-between; align-items:center; width:100%; padding: 5px 0;">
                     <div class="adv-cal-nav-group" style="display:flex; gap:5px;">
-                        <button class="adv-add-btn" style="padding:4px 8px; border:1px solid var(--border-color); color:currentColor;" onclick="AdvancedTimeline.navigate('${tableId}', -1)" title="Indietro">${Icons.chevronLeft}</button>
-                        <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 10px; color:currentColor; font-weight:bold;" onclick="AdvancedTimeline.scrollToToday('${tableId}')" title="Centra sulla data di oggi">Oggi</button>
-                        <button class="adv-add-btn" style="padding:4px 8px; border:1px solid var(--border-color); color:currentColor;" onclick="AdvancedTimeline.navigate('${tableId}', 1)" title="Avanti">${Icons.chevronRight}</button>
+                        <button class="adv-add-btn" style="padding:4px 8px; border:1px solid var(--border-color); color:currentColor;" onclick="AdvancedTimeline.navigate('${tableId}', -1)" title="${I18n.t('timeline_render.nav_back')}">${Icons.chevronLeft}</button>
+                        <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 10px; color:currentColor; font-weight:bold;" onclick="AdvancedTimeline.scrollToToday('${tableId}')" title="${I18n.t('timeline_render.nav_today')}">${I18n.t('adv_timeline.btn_today')}</button>
+                        <button class="adv-add-btn" style="padding:4px 8px; border:1px solid var(--border-color); color:currentColor;" onclick="AdvancedTimeline.navigate('${tableId}', 1)" title="${I18n.t('timeline_render.nav_forward')}">${Icons.chevronRight}</button>
                     </div>
                     <div style="display:flex; gap:5px;">
-                        <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.changeZoom('${tableId}', -10)" title="Riduci Zoom">${Icons.zoomOut}</button>
-                        <button id="adv-zoom-menu-${tableId}" class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.openZoomMenu(event, '${tableId}')" title="Zoom Preimpostati (Giorno, Mese, Trimestre...)">${Icons.chevronDown}</button>
-                        <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.changeZoom('${tableId}', 10)" title="Aumenta Zoom">${Icons.zoomIn}</button>
+                        <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.changeZoom('${tableId}', -10)" title="${I18n.t('timeline_render.zoom_out')}">${Icons.zoomOut}</button>
+                        <button id="adv-zoom-menu-${tableId}" class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.openZoomMenu(event, '${tableId}')" title="${I18n.t('timeline_render.zoom_presets')}">${Icons.chevronDown}</button>
+                        <button class="adv-add-btn" style="border:1px solid var(--border-color); padding:2px 8px; color:currentColor;" onclick="AdvancedTimeline.changeZoom('${tableId}', 10)" title="${I18n.t('timeline_render.zoom_in')}">${Icons.zoomIn}</button>
                     </div>
                  </div>`;
 
@@ -241,12 +242,12 @@ Object.assign(AdvancedTimeline, {
         let headerDays = '';
         let currDate = new Date(startDate);
         
-        let hourSteps =[];
+        let hourSteps = [];
         if (dateCol.type === 'datetime') {
-            if (colWidth >= 600) hourSteps =[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
-            else if (colWidth >= 300) hourSteps =[2, 4, 6, 8, 10, 14, 16, 18, 20, 22]; 
-            else if (colWidth >= 150) hourSteps =[3, 6, 9, 15, 18, 21];
-            else if (colWidth >= 80) hourSteps =[6, 18]; 
+            if (colWidth >= 600) hourSteps = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23];
+            else if (colWidth >= 300) hourSteps = [2, 4, 6, 8, 10, 14, 16, 18, 20, 22]; 
+            else if (colWidth >= 150) hourSteps = [3, 6, 9, 15, 18, 21];
+            else if (colWidth >= 80) hourSteps = [6, 18]; 
         }
 
         const todayTimestamp = new Date().setHours(0,0,0,0);
@@ -257,10 +258,10 @@ Object.assign(AdvancedTimeline, {
                 daysInMonth = Math.round((endDate.getTime() - currDate.getTime()) / dayMs) + 1;
             }
 
-            const monthName = currDate.toLocaleString('it-IT', { month: 'long', year: 'numeric' }).toUpperCase();
+            const monthName = currDate.toLocaleString(currentLocale, { month: 'long', year: 'numeric' }).toUpperCase();
             let printedMonthName = monthName;
             if(currDate.getDate() > 1 && currDate.getTime() === startDate.getTime()) {
-               printedMonthName = currDate.toLocaleString('it-IT', { month: 'long', year: 'numeric' }).toUpperCase();
+               printedMonthName = currDate.toLocaleString(currentLocale, { month: 'long', year: 'numeric' }).toUpperCase();
             }
 
             headerMonths += `<div class="adv-timeline-month-block" style="width:${daysInMonth * colWidth}px;"><span style="position:sticky; left:10px;">${printedMonthName}</span></div>`;
@@ -316,7 +317,7 @@ Object.assign(AdvancedTimeline, {
         // Indicatore verticale della data odierna (linea rossa)
         if (todayTimestamp >= startDate.getTime() && todayTimestamp <= endDate.getTime()) {
             const todayAbsolutePx = AdvancedTimeline._getPxFromDate(todayTimestamp, startDate.getTime(), colWidth);
-            verticalLinesHTML += `<div style="position:absolute; left:${todayAbsolutePx}px; top:0; bottom:0; width:2px; background:var(--danger-color); opacity:0.8; z-index:10; pointer-events:none;" title="Oggi"></div>`;
+            verticalLinesHTML += `<div style="position:absolute; left:${todayAbsolutePx}px; top:0; bottom:0; width:2px; background:var(--danger-color); opacity:0.8; z-index:10; pointer-events:none;" title="${I18n.t('calendar_view.today')}"></div>`;
         }
 
         verticalLinesHTML += `</div>`;
@@ -337,10 +338,10 @@ Object.assign(AdvancedTimeline, {
             scheduledRows.forEach((r) => {
                 
                 // Risolve dinamicamente il titolo se è una pagina dedicata
-                let tVal = r.virtualCells[titleCol.id] || 'Senza Titolo';
+                let tVal = r.virtualCells[titleCol.id] || I18n.t('editor.untitled');
                 if (titleCol.type === 'record_note') {
                     const noteObj = typeof Store !== 'undefined' ? Store.getNote(tVal) : null;
-                    if (noteObj) tVal = noteObj.title || 'Senza Titolo';
+                    if (noteObj) tVal = noteObj.title || I18n.t('editor.untitled');
                 }
                 tVal = String(tVal).replace(/</g, '&lt;').replace(/>/g, '&gt;');
                 
@@ -393,7 +394,7 @@ Object.assign(AdvancedTimeline, {
                 const rightHandle = (isEdit && !isMilestone) ? `<div style="position:absolute; right:0; top:0; bottom:0; width:10px; cursor:ew-resize; z-index:10;" onmousedown="AdvancedTimeline.startDrag(event, '${tableId}', '${r.id}', 'end')"></div>` : '';
 
                 const linkHandle = (isEdit) ? `
-                    <span id="link-handle-${r.id}" class="timeline-link-handle" title="Trascina per collegare" onmousedown="AdvancedTimeline.startLinkDrag(event, '${tableId}', '${r.id}')"
+                    <span id="link-handle-${r.id}" class="timeline-link-handle" title="${I18n.t('timeline_render.drag_to_connect')}" onmousedown="AdvancedTimeline.startLinkDrag(event, '${tableId}', '${r.id}')"
                          style="position:absolute; left:${startPx + widthPx}px; top:${topPx + 13}px; transform:translateY(-50%); width:16px; height:16px; min-height:16px !important; padding:0 !important; display:flex; align-items:center; justify-content:flex-start; opacity:0; pointer-events:none; transition:opacity 0.2s, filter 0.2s; z-index:30; cursor:crosshair;"
                          onmouseenter="this.style.opacity='1'; this.style.pointerEvents='auto'; const b=document.getElementById('bar-${r.id}'); if(b) b.style.filter='brightness(1.1)';"
                          onmouseleave="this.style.opacity='0'; this.style.pointerEvents='none'; const b=document.getElementById('bar-${r.id}'); if(b) b.style.filter='none';">
@@ -421,7 +422,7 @@ Object.assign(AdvancedTimeline, {
                          onmouseenter="const h = document.getElementById('link-handle-${r.id}'); if(h) { h.style.opacity='0.7'; h.style.pointerEvents='auto'; }"
                          onmouseleave="const h = document.getElementById('link-handle-${r.id}'); if(h) { h.style.opacity='0'; h.style.pointerEvents='none'; }"
                          data-row-id="${r.id}"
-                         title="${tVal} (Doppio click per aprire)">
+                         title="${I18n.t('timeline_render.double_click_open', { title: tVal })}">
                         ${leftHandle}
                         ${textInsideBar}
                         ${rightHandle}
@@ -445,12 +446,12 @@ Object.assign(AdvancedTimeline, {
                             const tr = tState.rows.find(tx => tx.id === tid);
                             return tr ? tr.cells[groupCol.targetColId] : 'Orfano';
                         }).join(', ');
-                    } else gVal = 'Senza Gruppo';
+                    } else gVal = I18n.t('timeline_render.no_group');
                 } else if(Array.isArray(gVal)) {
                     gVal = gVal.join(', ');
                 }
                 
-                gVal = String(gVal || 'Senza Gruppo').trim();
+                gVal = String(gVal || I18n.t('timeline_render.no_group')).trim();
                 if(!groupedRows[gVal]) groupedRows[gVal] = [];
                 groupedRows[gVal].push(r);
             });
@@ -460,7 +461,7 @@ Object.assign(AdvancedTimeline, {
             for (const [gName, rowsInGroup] of Object.entries(groupedRows)) {
                 rowsInGroup.sort((a, b) => a._timeStart - b._timeStart);
                 
-                let groupLanes =[];
+                let groupLanes = [];
                 rowsInGroup.forEach(r => {
                     let placed = false;
                     for (let i = 0; i < groupLanes.length; i++) {
@@ -569,8 +570,8 @@ Object.assign(AdvancedTimeline, {
         html += verticalLinesHTML;
         
         // Elementi Fluttuanti di Navigazione Corsia
-        html += `<button id="timeline-nav-prev-${tableId}" class="adv-timeline-nav-arrow" style="display:none;" title="Attività precedente fuori vista">${arrowSvgLeft}</button>`;
-        html += `<button id="timeline-nav-next-${tableId}" class="adv-timeline-nav-arrow" style="display:none;" title="Attività successiva fuori vista">${arrowSvgRight}</button>`;
+        html += `<button id="timeline-nav-prev-${tableId}" class="adv-timeline-nav-arrow" style="display:none;" title="${I18n.t('timeline_render.prev_task_out_of_view')}">${arrowSvgLeft}</button>`;
+        html += `<button id="timeline-nav-next-${tableId}" class="adv-timeline-nav-arrow" style="display:none;" title="${I18n.t('timeline_render.next_task_out_of_view')}">${arrowSvgRight}</button>`;
 
         const relationCols = state.columns.filter(c => c.type === 'relation' && c.targetTableId === tableId);
         
@@ -649,12 +650,12 @@ Object.assign(AdvancedTimeline, {
 
         if (unscheduledRows.length > 0) {
             html += `<div style="margin-top:10px; font-size:0.8rem; color:var(--text-secondary); padding: 5px;">
-                        <b><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Record senza data (${unscheduledRows.length}):</b></span> 
+                        <b><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} ${I18n.t('timeline_render.unscheduled_records', { count: unscheduledRows.length })}</b></span> 
                         ${unscheduledRows.map(r => {
-                            let tTitle = r.virtualCells[titleCol.id] || 'Senza Titolo';
+                            let tTitle = r.virtualCells[titleCol.id] || I18n.t('editor.untitled');
                             if (titleCol.type === 'record_note') {
                                 const noteObj = typeof Store !== 'undefined' ? Store.getNote(tTitle) : null;
-                                if (noteObj) tTitle = noteObj.title || 'Senza Titolo';
+                                if (noteObj) tTitle = noteObj.title || I18n.t('editor.untitled');
                             }
                             tTitle = String(tTitle).replace(/</g, '&lt;').replace(/>/g, '&gt;');
                             
