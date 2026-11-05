@@ -6,11 +6,10 @@
  * FIX CITAZIONI: Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
  * FEAT DOWNLOAD: Aggiunto pulsante nell'header per scaricare il codice in un file fisico con estensione dinamica.
  * FIX REFACTORING: Integrata la lingua "formula" per unificare l'evidenziazione sintattica dei database.
- * FEAT AUTO-DETECT: Analizzatore euristico a punteggio (detectLanguage) per rilevare automaticamente
- * il linguaggio su blocchi appena creati o su incolla, con rispetto assoluto del testo semplice.
- * FEAT POST-NEWLINE & MIN-WORDS DETECTION: L'analisi automatica durante la digitazione scatta esclusivamente
- * se il widget è in modalità automatica (!manualLanguage), dopo almeno un a capo (\n) e con un minimo di 4 parole,
- * prevenendo classificazioni premature su testi non ancora strutturati.
+ * FEAT AUTO-DETECT & LANGUAGE CONSOLIDATION: Analizzatore euristico a punteggio (detectLanguage).
+ * Al superamento della soglia minima (almeno 4 parole e un a capo), il linguaggio identificato viene
+ * consolidato in modo definitivo (manualLanguage = true): il selettore si sposta sul linguaggio riconosciuto
+ * e l'applicazione interrompe le scansioni continue durante la digitazione.
  * FEAT MANUAL LANGUAGE LOCK: La selezione esplicita di un linguaggio da menu (incluso Testo Semplice) blocca l'auto-rilevatore.
  * FEAT FLOATING STICKY ACTIONS & SCROLL RESTORATION: Visualizzazione automatica dei pulsanti "Copia" e icona di riduzione
  * ancorati in cima alla viewport quando l'intestazione scorre fuori vista, con riallineamento automatico della visuale
@@ -280,7 +279,7 @@ const CodeManager = {
     init: () => {
         CodeManager._typingTimer = null;
 
-        // Rilevamento automatico su incolla (paste) all'interno di blocchi con sintassi non ancora bloccata manualmente
+        // Rilevamento automatico su incolla (paste) all'interno di blocchi con sintassi non ancora consolidata manualmente
         document.addEventListener('paste', (e) => {
             const pre = e.target && e.target.closest ? e.target.closest('pre.code-content') : null;
             if (!pre) return;
@@ -299,7 +298,7 @@ const CodeManager = {
             const pastedText = (e.clipboardData || window.clipboardData)?.getData('text/plain');
             if (!pastedText) return;
 
-            // Su incolla: verifichiamo che ci siano almeno 4 parole o una struttura formale (es. JSON) prima di mutare
+            // Su incolla: verifichiamo che ci siano almeno 4 parole o una struttura formale (es. JSON) prima di consolidare
             const pastedWords = (pastedText.match(/[a-zA-Z0-9_$#]+/g) || []);
             const isJsonStruct = (pastedText.trim().startsWith('{') && pastedText.trim().endsWith('}')) || (pastedText.trim().startsWith('[') && pastedText.trim().endsWith(']'));
             if (pastedWords.length < 4 && !isJsonStruct) {
@@ -309,7 +308,8 @@ const CodeManager = {
             const detected = CodeManager.detectLanguage(pastedText);
             if (detected && detected !== 'none') {
                 setTimeout(() => {
-                    CodeManager.setLanguage(wrapper.id, detected, true, false);
+                    // Imposta isUserManualChoice = true per consolidare la sintassi rilevata e bloccare ulteriori loop
+                    CodeManager.setLanguage(wrapper.id, detected, true, true);
                     if (typeof UI !== 'undefined' && UI.showToast) {
                         UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }) || `Sintassi rilevata: ${detected.toUpperCase()}`, "info");
                     }
@@ -352,9 +352,9 @@ const CodeManager = {
                             }
                         }
 
-                        // AUTO-RILEVAMENTO:
-                        // L'analisi euristica in digitazione scatta ESCLUSIVAMENTE se:
-                        // 1. Il widget è in modalità automatica (!curState.manualLanguage).
+                        // AUTO-RILEVAMENTO IN DIGITAZIONE:
+                        // Scatta ESCLUSIVAMENTE se:
+                        // 1. Il widget è in modalità automatica (manualLanguage !== true).
                         // 2. Il testo contiene almeno un a capo (\n).
                         // 3. Sono presenti almeno 4 parole/token significativi nel testo.
                         if (wrapper && trueId && AppState.databases && AppState.databases[trueId]) {
@@ -367,9 +367,13 @@ const CodeManager = {
                             if (isLanguageUnlocked && rawText && rawText.includes('\n') && hasEnoughWords) {
                                 const detected = CodeManager.detectLanguage(rawText);
                                 if (detected && detected !== 'none') {
-                                    curState.language = detected;
-                                    e.target.setAttribute('data-language', detected);
-                                    CodeManager._updateShell(wrapper.id, detected, wrapper.classList.contains('collapsed'), curState.title);
+                                    // CONSOLIDAMENTO: Assegna definitivamente il linguaggio rilevato
+                                    // bloccando ulteriori rilevamenti e spostando la spunta nel menu opzioni
+                                    CodeManager.setLanguage(wrapper.id, detected, true, true);
+                                    if (typeof UI !== 'undefined' && UI.showToast) {
+                                        const langLabel = detected.toUpperCase();
+                                        UI.showToast(I18n.t('code_widget.detected_toast', { lang: langLabel }), "info");
+                                    }
                                 }
                             }
                         }
@@ -407,7 +411,7 @@ const CodeManager = {
         const state = (AppState.databases && AppState.databases[trueId]) ? AppState.databases[trueId] : null;
         const text = state?.content || wrapper.querySelector('pre')?.innerText || '';
 
-        // Sblocca la selezione manuale quando l'utente clicca esplicitamente "Rileva Automaticamente"
+        // Rimuove il lock manuale per consentire una nuova rilevazione
         if (state) {
             delete state.manualLanguage;
         }
@@ -418,11 +422,18 @@ const CodeManager = {
             detected = CodeManager.detectLanguage(text);
         }
 
-        CodeManager.setLanguage(wrapperId, detected, false, false);
-
-        if (typeof UI !== 'undefined' && UI.showToast) {
-            const langLabel = detected === 'none' ? I18n.t('code_widget.lang_plain') : detected.toUpperCase();
-            UI.showToast(I18n.t('code_widget.detected_toast', { lang: langLabel }) || `Sintassi rilevata: ${langLabel}`, "info");
+        if (detected !== 'none') {
+            // Se il testo attuale permette già di classificare la sintassi, consolida la lingua trovata
+            CodeManager.setLanguage(wrapperId, detected, false, true);
+            if (typeof UI !== 'undefined' && UI.showToast) {
+                UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }), "info");
+            }
+        } else {
+            // Se le parole non sono ancora sufficienti, imposta 'none' e mantiene lo stato aperto per la digitazione futura
+            CodeManager.setLanguage(wrapperId, 'none', false, false);
+            if (typeof UI !== 'undefined' && UI.showToast) {
+                UI.showToast(I18n.t('code_widget.auto_detect'), "info");
+            }
         }
     },
 
@@ -499,7 +510,7 @@ const CodeManager = {
         
         state.language = langId;
 
-        // Se l'utente ha scelto esplicitamente la lingua dal menu (incluso Testo Semplice), blocca l'auto-rilevatore
+        // Se l'utente ha scelto esplicitamente la lingua o è stata consolidata dal detector, blocca l'auto-rilevatore
         if (isUserManualChoice) {
             state.manualLanguage = true;
         }

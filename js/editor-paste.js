@@ -13,9 +13,53 @@
  *   la frase in paragrafi vuoti o isolati).
  * - FIX EXCEL RASTER IMAGE OVERRIDE: Neutralizzazione del file image/png accessorio generato da Microsoft Excel
  *   quando si copiano celle, garantendo l'incollamento del testo o della tabella ed evitando lo screenshot raster.
+ * - FIX CARET UNCOLLAPSED ON WIDGET PASTE: Riposizionamento e collasso esatto del cursore alla fine del testo
+ *   incollato all'interno di Snippet Copiabili e celle di Tabelle Semplici, eliminando la selezione persistente del testo.
+ * - REFACTOR DRY: Centralizzazione di _formatTextToInlineHTML e _insertInlineHTMLAndCollapse per eliminare
+ *   duplicazioni di codice tra snippet, tabelle, liste e mini-editor.
  */
 
 Object.assign(Editor, {
+
+    // Helper per convertire testo puro in HTML inline preservando spaziature, tab e ritorni a capo
+    _formatTextToInlineHTML: (text) => {
+        if (!text) return "";
+        return text.replace(/&/g, '&amp;')
+                   .replace(/</g, '&lt;')
+                   .replace(/>/g, '&gt;')
+                   .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+                   .replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length))
+                   .replace(/\r\n|\n|\r/g, '<br>');
+    },
+
+    // Inserisce un frammento HTML inline nel Range collassando il cursore all'esatta fine del contenuto
+    _insertInlineHTMLAndCollapse: (htmlString, range, selection) => {
+        if (!range || !selection) return;
+
+        range.deleteContents();
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = htmlString;
+        const frag = document.createDocumentFragment();
+        while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+
+        const lastChild = frag.lastChild;
+        range.insertNode(frag);
+
+        if (lastChild) {
+            const newRange = document.createRange();
+            if (lastChild.nodeType === Node.TEXT_NODE) {
+                newRange.setStart(lastChild, lastChild.nodeValue.length);
+            } else {
+                newRange.setStartAfter(lastChild);
+            }
+            newRange.collapse(true);
+            selection.removeAllRanges();
+            selection.addRange(newRange);
+            if (typeof Editor !== 'undefined') {
+                Editor.savedRange = newRange.cloneRange();
+            }
+        }
+    },
 
     handlePaste: (e) => {
         const clipboardData = (e.clipboardData || window.clipboardData);
@@ -274,21 +318,10 @@ Object.assign(Editor, {
                         return;
                     }
 
-                    // Snippet copiabile multi-linea: Incolla l'HTML pulito con <br> per non spezzare lo span
-                    if (snippetText) {
-                        let cleanTextWithBrs = pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        cleanTextWithBrs = cleanTextWithBrs.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
-                        cleanTextWithBrs = cleanTextWithBrs.replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length));
-                        cleanTextWithBrs = cleanTextWithBrs.replace(/\r\n|\n|\r/g, '<br>');
-
-                        const curRange = sel.getRangeAt(0);
-                        curRange.deleteContents();
-                        const spanTemp = document.createElement('span');
-                        spanTemp.innerHTML = cleanTextWithBrs;
-                        const frag = document.createDocumentFragment();
-                        while (spanTemp.firstChild) frag.appendChild(spanTemp.firstChild);
-                        curRange.insertNode(frag);
-
+                    // Snippet copiabile e celle di tabelle semplici: gestione unificata e priva di selezioni persistenti
+                    if (snippetText || targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th')) {
+                        const inlineHtml = Editor._formatTextToInlineHTML(pastedText);
+                        Editor._insertInlineHTMLAndCollapse(inlineHtml, sel.getRangeAt(0), sel);
                         Store.triggerAutoSave();
                         return;
                     }
@@ -320,23 +353,7 @@ Object.assign(Editor, {
                         if (typeof CodeManager !== 'undefined') CodeManager.highlightBlock(preNode, true);
                         if (typeof Editor._setCodeOffset === 'function') Editor._setCodeOffset(preNode, targetCaretPos, targetCaretPos);
                     } else {
-                        // All'interno di celle di tabelle semplici preserviamo formattazione ed entità
-                        if (targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th')) {
-                            let formattedCellText = pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                            formattedCellText = formattedCellText.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
-                            formattedCellText = formattedCellText.replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length));
-                            formattedCellText = formattedCellText.replace(/\r\n|\n|\r/g, '<br>');
-
-                            const curRange = sel.getRangeAt(0);
-                            curRange.deleteContents();
-                            const spanTemp = document.createElement('span');
-                            spanTemp.innerHTML = formattedCellText;
-                            const frag = document.createDocumentFragment();
-                            while (spanTemp.firstChild) frag.appendChild(spanTemp.firstChild);
-                            curRange.insertNode(frag);
-                        } else {
-                            document.execCommand('insertText', false, cleanText);
-                        }
+                        document.execCommand('insertText', false, cleanText);
                     }
                     Store.triggerAutoSave();
                     return;
@@ -373,17 +390,8 @@ Object.assign(Editor, {
                             finalHTML = Editor._formatPlainTextForHTML(pastedText);
                         }
                     } else if (currentTargetNode.closest('td, th, li')) {
-                        let escaped = pastedText.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        escaped = escaped.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
-                        escaped = escaped.replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length));
-                        escaped = escaped.replace(/\r\n|\n|\r/g, '<br>');
-                        const curRange = freshSel.getRangeAt(0);
-                        curRange.deleteContents();
-                        const tempDiv = document.createElement('div');
-                        tempDiv.innerHTML = escaped;
-                        const frag = document.createDocumentFragment();
-                        while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
-                        curRange.insertNode(frag);
+                        const inlineHtml = Editor._formatTextToInlineHTML(pastedText);
+                        Editor._insertInlineHTMLAndCollapse(inlineHtml, freshSel.getRangeAt(0), freshSel);
                         Store.triggerAutoSave();
                         return;
                     } else {
@@ -1027,36 +1035,11 @@ document.addEventListener('paste', (e) => {
             ? Editor.sanitizeMiniText(pastedHTML)
             : pastedHTML;
     } else {
-        // Testo semplice: preservazione rigorosa di tutti gli spazi iniziali, intermedi e finali
-        let formatted = pastedText
-            .replace(/&/g, '&amp;')
-            .replace(/</g, '&lt;')
-            .replace(/>/g, '&gt;');
-
-        formatted = formatted.replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;');
-        formatted = formatted.replace(/ {2,}/g, m => '&nbsp;'.repeat(m.length));
-        if (formatted.startsWith(' ')) formatted = '&nbsp;' + formatted.slice(1);
-        if (formatted.endsWith(' ')) formatted = formatted.slice(0, -1) + '&nbsp;';
-        formatted = formatted.replace(/\r\n|\n|\r/g, '<br>');
-        cleanHTML = formatted;
+        cleanHTML = Editor._formatTextToInlineHTML(pastedText);
     }
 
     const sel = window.getSelection();
     if (sel && sel.rangeCount > 0) {
-        const range = sel.getRangeAt(0);
-        range.deleteContents();
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = cleanHTML;
-        const frag = document.createDocumentFragment();
-        while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
-        const lastChild = frag.lastChild;
-        range.insertNode(frag);
-        if (lastChild) {
-            const newRange = document.createRange();
-            newRange.setStartAfter(lastChild);
-            newRange.collapse(true);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-        }
+        Editor._insertInlineHTMLAndCollapse(cleanHTML, sel.getRangeAt(0), sel);
     }
 }, true);

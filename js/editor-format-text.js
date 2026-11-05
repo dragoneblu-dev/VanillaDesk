@@ -12,7 +12,7 @@
  * con l'evento di Paste, eliminando codice duplicato ed Over Engineering.
  * FIX TABELLE & STILI ALIENI: Sanificazione rigorosa del contenuto delle celle delle tabelle semplici,
  * con srotolamento di tutti gli span parassiti, rimozione di classi non native e supporto alle celle selezionate.
- * ZERO-FONT UNIFICATION: Eliminazione integrale del tag legacy <font> sostituito ovunque da <span> standard W3C,
+ * ZERO-FONT UNIFICATION: Eliminazione integrale di ogni gestione del tag legacy <font> sostituito da standard W3C,
  * garantendo la preservazione assoluta delle classi di stile VanillaDesk (ff-*, fs-*, hl-c*, tx-c*).
  * WIDGET PROTECTION: Esclusione categorica di tutti i widget complessi di VanillaDesk dalla gomma formattazioni.
  * FEAT MULTI-CELL FORMATTING: Supporto a Maiuscolo/Minuscolo (toggleCase) e Carattere/Dimensione (applyTextFormat)
@@ -21,6 +21,9 @@
  * post-execCommand.
  * FIX FONT INSPECTION ACCURACY: Rilevamento deterministico di font e dimensione tramite closest() sul punto di selezione,
  * prevenendo che ricerche non mirate forzino falsi positivi su font EasyReading da span non selezionati.
+ * FEAT WORD-SNAP IN TOGGLE CASE: Integrazione coerente di Smart Caret Collapse in Editor.toggleCase.
+ * FIX PARTIAL CELL TEXT FORMATTING & ERASER: Tutela della selezione parziale di testo all'interno di una singola cella
+ * di tabella semplice, impedendo la mutazione o pulizia indiscriminata dell'intera cella.
  */
 
 Object.assign(Editor, {
@@ -39,8 +42,9 @@ Object.assign(Editor, {
 
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 TableManager.Selection.selectedCells && 
-                                 TableManager.Selection.selectedCells.length > 0;
+                                 (typeof TableManager.Selection.hasCellSelection === 'function'
+                                     ? TableManager.Selection.hasCellSelection()
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
             const firstCell = TableManager.Selection.selectedCells[0];
@@ -364,10 +368,14 @@ Object.assign(Editor, {
     },
 
     toggleCase: () => {
+        // GESTIONE FORMATTAZIONE MULTICELLA TABELLA
+        // Se c'è una selezione di testo parziale dentro una singola cella, hasCellSelection ritorna false
+        // per consentire l'inversione di case solo della selezione testuale parziale
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 TableManager.Selection.selectedCells && 
-                                 TableManager.Selection.selectedCells.length > 0;
+                                 (typeof TableManager.Selection.hasCellSelection === 'function'
+                                     ? TableManager.Selection.hasCellSelection()
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         // GESTIONE MULTICELLA TABELLA (Preserva la struttura HTML interna mutando solo i nodi testuali con snapshot forzato)
         if (hasSelectedCells) {
@@ -415,9 +423,12 @@ Object.assign(Editor, {
         }
 
         const selection = window.getSelection();
+        let wasAutoExpanded = false;
+
+        // AUTO-ESPANSIONE SULLA PAROLA CORRENTE (WORD-SNAP) SE IL CURSORE È COLLASSATO
         if (selection.rangeCount > 0 && selection.isCollapsed) {
             if (typeof ColorManager !== 'undefined' && typeof ColorManager.expandSelectionToWord === 'function') {
-                ColorManager.expandSelectionToWord(selection);
+                wasAutoExpanded = ColorManager.expandSelectionToWord(selection);
             }
         }
         if (!selection.rangeCount || selection.isCollapsed) return;
@@ -426,14 +437,29 @@ Object.assign(Editor, {
         Editor.saveSnapshot();
         let newText = (text === text.toUpperCase()) ? text.toLowerCase() : text.toUpperCase();
         document.execCommand('insertText', false, newText);
+
+        // SMART CARET COLLAPSE: Collassa a fine parola per evitare sovrascritture accidentali
+        if (wasAutoExpanded) {
+            const currentSel = window.getSelection();
+            if (currentSel && currentSel.rangeCount > 0) {
+                currentSel.collapseToEnd();
+                if (typeof Editor !== 'undefined') {
+                    Editor.savedRange = currentSel.getRangeAt(0).cloneRange();
+                }
+            }
+        }
+
+        Store.triggerAutoSave();
+        Editor.updateToolbarFormatting();
     },
 
     applyTextFormat: (prefix, className) => {
         // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Font Family & Font Size con snapshot forzato)
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 TableManager.Selection.selectedCells && 
-                                 TableManager.Selection.selectedCells.length > 0;
+                                 (typeof TableManager.Selection.hasCellSelection === 'function'
+                                     ? TableManager.Selection.hasCellSelection()
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
             Editor.saveSnapshot(true);
@@ -474,14 +500,25 @@ Object.assign(Editor, {
                     }
                 }
 
-                // Pulizia di span rimasti privi di attributi
-                cell.querySelectorAll('span').forEach(sp => {
-                    if (sp.classList.length === 0 && !sp.hasAttribute('style') && sp.attributes.length === 0) {
-                        const parent = sp.parentNode;
-                        while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
-                        sp.remove();
-                    }
-                });
+                // Srotolamento ricorsivo di tutti gli span rimasti privi di classi o attributi
+                let cleanChanged = true;
+                while (cleanChanged) {
+                    cleanChanged = false;
+                    cell.querySelectorAll('span').forEach(sp => {
+                        if (sp.getAttribute('class') === '') sp.removeAttribute('class');
+                        if (sp.getAttribute('style') === '') sp.removeAttribute('style');
+                        const hasNoClass = !sp.hasAttribute('class') || sp.getAttribute('class').trim() === '';
+                        const hasNoStyle = !sp.hasAttribute('style') || sp.getAttribute('style').trim() === '';
+                        if (sp.attributes.length === 0 || (hasNoClass && hasNoStyle)) {
+                            const parent = sp.parentNode;
+                            if (parent) {
+                                while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+                                sp.remove();
+                                cleanChanged = true;
+                            }
+                        }
+                    });
+                }
             });
 
             Editor.healWidgetWrappers();
@@ -582,7 +619,7 @@ Object.assign(Editor, {
             }
         }
 
-        // Conversione post-taglio dai magic tags (face/size) alle classi pulite dell'applicazione
+        // Conversione post-taglio dai magic tags alle classi pulite dell'applicazione
         editor.querySelectorAll('*').forEach(el => {
             if (typeof ColorManager !== 'undefined' && !ColorManager._isSafeToColor(el)) return;
 
@@ -655,12 +692,20 @@ Object.assign(Editor, {
                 if (el.getAttribute('size') === '') el.removeAttribute('size');
                 if (el.getAttribute('color') === '') el.removeAttribute('color');
 
-                if (el.tagName === 'SPAN') {
-                    if (el.attributes.length === 0 || (el.classList.length === 0 && !el.hasAttribute('style'))) {
+                if (el.tagName === 'SPAN' || el.tagName === 'FONT') {
+                    const hasNoClass = !el.hasAttribute('class') || el.getAttribute('class').trim() === '';
+                    const hasNoStyle = !el.hasAttribute('style') || el.getAttribute('style').trim() === '';
+                    const hasNoFace = !el.hasAttribute('face');
+                    const hasNoSize = !el.hasAttribute('size');
+                    const hasNoColor = !el.hasAttribute('color');
+
+                    if (el.attributes.length === 0 || (hasNoClass && hasNoStyle && hasNoFace && hasNoSize && hasNoColor)) {
                         const parent = el.parentNode;
-                        while (el.firstChild) parent.insertBefore(el.firstChild, el);
-                        parent.removeChild(el);
-                        changed = true;
+                        if (parent) {
+                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                            parent.removeChild(el);
+                            changed = true;
+                        }
                     }
                 }
             });
@@ -700,7 +745,7 @@ Object.assign(Editor, {
 
         const isProtectedComplexWidget = (node) => {
             if (!node || !node.closest) return false;
-            if (node.closest('.simple-table-wrapper')) return false;
+            if (node.closest('.simple-table-wrapper') || node.closest('table:not(.adv-table)')) return false;
             if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(node)) return true;
             const shell = node.closest('.adv-widget-shell, .adv-table-wrapper, .adv-journal-wrapper, .code-wrapper, .block-citation, .adv-action-button-wrapper, [data-widget-type]');
             if (!shell) return false;
@@ -718,29 +763,32 @@ Object.assign(Editor, {
         container.querySelectorAll('script, style, meta, link, noscript').forEach(el => {
             if (!isProtectedComplexWidget(el)) el.remove();
         });
-        // ZERO-FONT CONVERSION INIZIALE: Trasforma preventivamente qualsiasi tag FONT in SPAN (escludendo i widget protetti)
-        container.querySelectorAll('font').forEach(fontEl => {
+
+        // Conversione preventiva di tag legacy <font> in <span> per preservare classi e conformità W3C
+        const fontElements = Array.from(container.querySelectorAll('font'));
+        fontElements.forEach(fontEl => {
             if (isProtectedComplexWidget(fontEl)) return;
             const span = doc.createElement('span');
-            while (fontEl.attributes.length > 0) {
-                span.setAttribute(fontEl.attributes[0].name, fontEl.attributes[0].value);
-                fontEl.removeAttribute(fontEl.attributes[0].name);
-            }
+            Array.from(fontEl.attributes).forEach(attr => {
+                span.setAttribute(attr.name, attr.value);
+            });
             while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
-            fontEl.parentNode.replaceChild(span, fontEl);
+            if (fontEl.parentNode) {
+                fontEl.parentNode.replaceChild(span, fontEl);
+            }
         });
 
         const isSafeToTouch = (node) => {
             if (!node || node.nodeType !== Node.ELEMENT_NODE) return false;
             if (node.id === 'noteContent') return false;
 
-            // I widget di VanillaDesk (e tutto ciò che contengono) non devono MAI essere toccati dalla gomma formattazioni
+            // I widget complessi di VanillaDesk non devono MAI essere toccati dalla gomma formattazioni
             if (isProtectedComplexWidget(node)) {
                 return false;
             }
 
-            // Se il nodo si trova all'interno di una tabella semplice (.simple-table-wrapper o tag table non complessa)
-            if (node.closest && (node.closest('.simple-table-wrapper') || (node.closest('table') && !isProtectedComplexWidget(node)))) {
+            // Se il nodo si trova all'interno di una tabella semplice, è testo sempre editabile e pulibile
+            if (node.closest && (node.closest('.simple-table-wrapper') || node.closest('table:not(.adv-table)'))) {
                 return true;
             }
 
@@ -922,6 +970,8 @@ Object.assign(Editor, {
             changed = false;
             container.querySelectorAll('span').forEach(sp => {
                 if (isSafeToTouch(sp) && !isProtectedComplexWidget(sp)) {
+                    if (sp.getAttribute('class') === '') sp.removeAttribute('class');
+                    if (sp.getAttribute('style') === '') sp.removeAttribute('style');
                     const hasValidClass = sp.getAttribute('class') && sp.getAttribute('class').trim() !== '';
                     const hasValidData = Array.from(sp.attributes).some(a => allowedDataAttrs.includes(a.name));
                     if (!hasValidClass && !hasValidData) {
@@ -942,7 +992,15 @@ Object.assign(Editor, {
         Editor.restoreSelection();
 
         // 1. Controllo selezione multipla celle di TableManager
-        if (typeof TableManager !== 'undefined' && TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0) {
+        // Se c'è una selezione di testo parziale all'interno di una singola cella, hasCellSelection ritorna false
+        // per permettere alla gomma di agire solo sui caratteri selezionati
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 (typeof TableManager.Selection.hasCellSelection === 'function'
+                                     ? TableManager.Selection.hasCellSelection()
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
+
+        if (hasSelectedCells) {
             TableManager.Selection.selectedCells.forEach(cell => {
                 Editor.cleanDOMTree(cell);
                 // Pulizia degli attributi inline style superflui da td/th preservando solo text-align valido
@@ -982,8 +1040,12 @@ Object.assign(Editor, {
         const simpleTable = container.closest('.simple-table-wrapper') || (container.closest('table') && !container.closest('.adv-widget-shell:not(.simple-table-wrapper), .adv-table-wrapper'));
 
         if (tableCell && simpleTable) {
-            // Se la selezione è all'interno di una singola cella di tabella semplice, sanifichiamo l'intera cella
-            container = tableCell;
+            // Se la selezione copre l'intero testo della cella o è collassata, sanifichiamo l'intera cella;
+            // se invece è selezionata solo una porzione parziale, sanifichiamo solo il container della selezione
+            const isFullCellSelected = selection.isCollapsed || range.toString().trim() === tableCell.textContent.trim();
+            if (isFullCellSelected) {
+                container = tableCell;
+            }
         } else if (tableCell && !simpleTable) {
             // È una cella appartenente a un Database o altro widget complesso: non toccare!
             return;

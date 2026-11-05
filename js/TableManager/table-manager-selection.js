@@ -9,6 +9,10 @@
  * FIX TOOLBAR INTEGRATION: Rimozione pulsante B ridondante dal menu fluttuante e protezione della selezione
  * al click sugli strumenti e palette colori della toolbar principale.
  * FIX DIFENSIVO: Verifica sicura sull'esistenza di Editor.saveSnapshot per evitare eccezioni in ambienti modulari o headless.
+ * FEAT HAS CELL SELECTION GUARD: Priorità assoluta alla selezione multicella (> 1 cella) rispetto a selezioni testuali
+ * residue, e delega alla formattazione testuale inline esclusivamente in caso di selezione parziale dentro una singola cella.
+ * FIX RACE CONDITION: Protezione della selezione celle durante l'interazione con i menu contestuali di colore.
+ * FEAT CLEAR MULTI-CELL ON CANC: Supporto all'azzeramento del contenuto delle celle su pressione del tasto CANC (Delete/Backspace).
  */
 
 Object.assign(TableManager.Selection, {
@@ -16,6 +20,40 @@ Object.assign(TableManager.Selection, {
     startCell: null,
     selectedCells: [],
     _baseSelection: [], // Salva lo stato precedente durante il drag con CTRL
+
+    // Determina se è attiva una selezione a livello di intere celle oppure se la priorità
+    // appartiene a una selezione parziale di testo all'interno di una singola cella
+    hasCellSelection: () => {
+        const cells = TableManager.Selection.selectedCells;
+        if (!cells || cells.length === 0) return false;
+
+        // REGOLA 1: Se sono selezionate 2 o più celle, la priorità è SEMPRE e categoricamente la multi-cella.
+        // Eventuali selezioni parziali di testo ereditate da mousedown/drag vengono scavalcate dall'intenzione di griglia.
+        if (cells.length > 1) {
+            return true;
+        }
+
+        // REGOLA 2: È presente una sola cella. Verifichiamo se l'utente ha selezionato una porzione di testo al suo interno.
+        const sel = window.getSelection();
+        if (sel && !sel.isCollapsed && sel.rangeCount > 0) {
+            let a = sel.anchorNode;
+            if (a && a.nodeType === 3) a = a.parentNode;
+            const aCell = a ? a.closest('td, th') : null;
+
+            let f = sel.focusNode;
+            if (f && f.nodeType === 3) f = f.parentNode;
+            const fCell = f ? f.closest('td, th') : null;
+
+            // Se entrambi i capi della selezione testuale risiedono nella stessa cella,
+            // l'utente sta esplicitamente formattando un frammento di testo: priorità al testo parziale.
+            if (aCell && fCell && aCell === fCell) {
+                return false;
+            }
+        }
+
+        // Cella singola senza testo selezionato (cursore collassato o click): priorità all'intera cella.
+        return true;
+    },
 
     init: () => {
         document.addEventListener('mousedown', TableManager.Selection.handleMouseDown);
@@ -32,13 +70,61 @@ Object.assign(TableManager.Selection, {
         });
     },
 
+    clearSelectedCellsContent: () => {
+        const cells = (TableManager.Selection.selectedCells || []).filter(c => c && document.body.contains(c));
+        if (cells.length <= 1) return;
+
+        if (typeof Editor !== 'undefined' && typeof Editor.saveSnapshot === 'function') {
+            Editor.saveSnapshot();
+        }
+
+        cells.forEach(cell => {
+            cell.innerHTML = '<br>';
+        });
+
+        // Riposiziona il cursore all'interno della prima cella svuotata
+        if (cells[0]) {
+            const range = document.createRange();
+            range.setStart(cells[0], 0);
+            range.collapse(true);
+            const sel = window.getSelection();
+            if (sel) {
+                sel.removeAllRanges();
+                sel.addRange(range);
+            }
+        }
+
+        if (typeof AppState !== 'undefined' && AppState.currentNoteId && typeof Store !== 'undefined') {
+            const note = Store.getNote(AppState.currentNoteId);
+            if (note && typeof Editor !== 'undefined' && typeof Editor.getCleanHTML === 'function') {
+                note.content = Editor.getCleanHTML();
+                note._isDirty = true;
+                note.updatedAt = new Date().toISOString();
+            }
+        }
+
+        if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
+            Store.triggerAutoSave();
+        }
+
+        if (typeof Editor !== 'undefined' && typeof Editor.updateUndoRedoUI === 'function') {
+            Editor.updateUndoRedoUI();
+        }
+    },
+
     handleMouseDown: (e) => {
         if (!AppState.isEditMode) return;
         const cell = e.target.closest('td, th');
         
         // Ignora sia i Database Avanzati che qualsiasi tabella dentro il Drawer laterale
         if (!cell || cell.closest('.adv-table') || cell.closest('.adv-drawer')) {
-            if (!e.target.closest('#adv-tbl-selection-popover') && !e.target.closest('.color-swatch') && !e.target.closest('#editorToolbar') && !e.target.closest('.color-picker-group') && !e.target.closest('.adv-dropdown')) {
+            if (!e.target.closest('#adv-tbl-selection-popover') && 
+                !e.target.closest('.color-swatch') && 
+                !e.target.closest('.color-option') && 
+                !e.target.closest('#editorToolbar') && 
+                !e.target.closest('.color-picker-group') && 
+                !e.target.closest('.adv-dropdown') &&
+                !e.target.closest('.adv-context-menu')) {
                 TableManager.Selection.clearSelection();
             }
             return;
@@ -117,12 +203,14 @@ Object.assign(TableManager.Selection, {
     },
 
     handleClickOutside: (e) => {
-        // Protezione della selezione se l'utente clicca sulla toolbar dell'editor o sui relativi popup di colore/formato
+        // Protezione della selezione se l'utente interagisce con toolbar, menu contestuali o palette
         if (e.target.closest('#editorToolbar') || 
             e.target.closest('.color-picker-group') || 
             e.target.closest('.adv-dropdown') || 
             e.target.closest('.adv-context-menu') || 
             e.target.closest('.color-dropdown') || 
+            e.target.closest('.color-option') ||
+            e.target.closest('.color-swatch') ||
             e.target.closest('#adv-tbl-selection-popover') || 
             e.target.closest('table:not(.adv-table)')) {
             return;
@@ -175,7 +263,7 @@ Object.assign(TableManager.Selection, {
             }
         }
 
-        // Unisce la selezione base (fatta coi click precedenti) con il nuovo blocco trascinato
+        // Unisce la selezione base con il nuovo rettangolo geometrico trascinato
         const baseSet = new Set(TableManager.Selection._baseSelection || []);
         const combined = new Set([...baseSet, ...newBoxCells]);
 
@@ -222,8 +310,6 @@ Object.assign(TableManager.Selection, {
             }
         }
         
-        // Se il numero di celle selezionate dall'utente coincide esattamente 
-        // col numero di celle fisiche presenti in quell'area, la selezione è contigua.
         return cells.length === expectedCount;
     },
 
@@ -467,7 +553,6 @@ Object.assign(TableManager.Selection, {
             `;
         }
 
-        // REFACTOR: Rimosso pulsante Grassetto duplicato, delegato nativamente alla toolbar principale
         popover.innerHTML = `
             <button onclick="TableManager.UI.performAction('alignCell', 'text-left')" title="Allinea a Sinistra">${Icons.alignLeft}</button>
             <button onclick="TableManager.UI.performAction('alignCell', 'text-center')" title="Allinea al Centro">${Icons.alignCenter}</button>

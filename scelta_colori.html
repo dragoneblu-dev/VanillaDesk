@@ -1,0 +1,1284 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VanillaDesk - Color Space & Contrast Inspector</title>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🎨</text></svg>">
+    
+    <style>
+        :root {
+            --ui-bg: #111827;
+            --ui-surface: #1f2937;
+            --ui-surface-hover: #374151;
+            --ui-border: #374151;
+            --ui-text-primary: #f9fafb;
+            --ui-text-secondary: #9ca3af;
+            --ui-accent: #38bdf8;
+            --font-stack: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            --font-mono: "Menlo", "Consolas", "Monaco", monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: var(--font-stack);
+            background: var(--ui-bg);
+            color: var(--ui-text-primary);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        header {
+            height: 54px;
+            background: var(--ui-surface);
+            border-bottom: 1px solid var(--ui-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        .brand-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-weight: 700;
+            font-size: 1rem;
+            color: #ffffff;
+        }
+
+        .brand-title span {
+            font-size: 0.75rem;
+            color: var(--ui-accent);
+            background: rgba(56, 189, 248, 0.12);
+            padding: 2px 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(56, 189, 248, 0.25);
+        }
+
+        .header-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-ui {
+            background: #374151;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            padding: 6px 12px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            transition: all 0.15s ease;
+        }
+
+        .btn-ui:hover {
+            background: #4b5563;
+            color: #ffffff;
+        }
+
+        .btn-ui-primary {
+            background: #0284c7;
+            border-color: #38bdf8;
+            color: #ffffff;
+        }
+
+        .btn-ui-primary:hover {
+            background: #0369a1;
+        }
+
+        select.select-ui {
+            background: #111827;
+            color: #f3f4f6;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+            padding: 5px 10px;
+            font-size: 0.8rem;
+            outline: none;
+            cursor: pointer;
+        }
+
+        .source-status-badge {
+            font-size: 0.72rem;
+            padding: 3px 8px;
+            border-radius: 6px;
+            border: 1px solid #4b5563;
+            background: #111827;
+            color: var(--ui-text-secondary);
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        .source-status-badge.live {
+            border-color: #059669;
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .main-layout {
+            flex: 1;
+            display: grid;
+            grid-template-columns: 460px 1fr;
+            overflow: hidden;
+        }
+
+        /* PANNELLO SINISTRA (Spazio Colore e Grafici) */
+        .color-space-panel {
+            background: var(--ui-surface);
+            border-right: 1px solid var(--ui-border);
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            gap: 16px;
+            overflow-y: auto;
+        }
+
+        .canvas-container {
+            position: relative;
+            width: 100%;
+            height: 270px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.4);
+            border: 1px solid #4b5563;
+            cursor: crosshair;
+        }
+
+        #colorSpaceCanvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        .slider-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.78rem;
+            color: var(--ui-text-secondary);
+        }
+
+        .hue-slider {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 16px;
+            border-radius: 8px;
+            outline: none;
+            cursor: pointer;
+            background: linear-gradient(to right, 
+                #ff0000 0%, #ffff00 17%, #00ff00 33%, 
+                #00ffff 50%, #0000ff 67%, #ff00ff 83%, #ff0000 100%);
+            border: 1px solid #4b5563;
+        }
+
+        .hue-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ffffff;
+            border: 2px solid #000000;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+
+        .category-filter-chips {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .chip {
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 0.72rem;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid transparent;
+            user-select: none;
+            transition: all 0.15s ease;
+        }
+
+        .chip.active {
+            box-shadow: 0 0 0 2px var(--ui-accent);
+        }
+
+        .chip-texts { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; border-color: #0284c7; }
+        .chip-highlights { background: rgba(234, 179, 8, 0.15); color: #fde047; border-color: #ca8a04; }
+        .chip-layout { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; border-color: #059669; }
+
+        .active-color-card {
+            background: #111827;
+            border: 1px solid var(--ui-border);
+            border-radius: 8px;
+            padding: 14px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .active-color-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .color-preview-box {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .color-swatch-large {
+            width: 44px;
+            height: 44px;
+            border-radius: 6px;
+            border: 1px solid #4b5563;
+            box-shadow: inset 0 0 4px rgba(0,0,0,0.3);
+            position: relative;
+            cursor: pointer;
+        }
+
+        .native-color-input {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .hex-input-group {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            background: #1f2937;
+            padding: 3px 8px;
+            border: 1px solid #4b5563;
+            border-radius: 6px;
+        }
+
+        .hex-input-group:focus-within {
+            border-color: var(--ui-accent);
+        }
+
+        .hex-text-input {
+            background: transparent;
+            border: none;
+            color: #ffffff;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            font-weight: 700;
+            width: 84px;
+            outline: none;
+            text-transform: uppercase;
+        }
+
+        .active-color-details {
+            font-family: var(--font-mono);
+            font-size: 0.78rem;
+            color: var(--ui-text-secondary);
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+
+        /* PANNELLO DESTRA (Matrici di Contrasto e Leggibilità) */
+        .workspace-panel {
+            background: #0b0f19;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .workspace-toolbar {
+            height: 48px;
+            background: var(--ui-surface);
+            border-bottom: 1px solid var(--ui-border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+            font-size: 0.8rem;
+        }
+
+        .workspace-scroll {
+            flex: 1;
+            overflow-y: auto;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .section-box {
+            background: var(--ui-surface);
+            border: 1px solid var(--ui-border);
+            border-radius: 8px;
+            padding: 18px;
+            display: flex;
+            flex-direction: column;
+            gap: 14px;
+        }
+
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid var(--ui-border);
+            padding-bottom: 8px;
+        }
+
+        .section-title {
+            font-size: 0.88rem;
+            font-weight: 700;
+            color: var(--ui-accent);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        /* GRIGLIA CARDS CONTRASTO */
+        .contrast-cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+
+        .contrast-card {
+            border-radius: 6px;
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            border: 1px solid var(--ui-border);
+            background: #111827;
+            transition: transform 0.15s, border-color 0.15s;
+            cursor: pointer;
+        }
+
+        .contrast-card:hover {
+            transform: translateY(-2px);
+            border-color: var(--ui-accent);
+        }
+
+        .contrast-card.is-selected {
+            border-color: var(--ui-accent);
+            box-shadow: 0 0 0 2px rgba(56, 189, 248, 0.3);
+        }
+
+        .contrast-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-family: var(--font-mono);
+        }
+
+        .contrast-badge {
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 2px 6px;
+            border-radius: 4px;
+            text-transform: uppercase;
+        }
+
+        .badge-aaa { background: #065f46; color: #a7f3d0; border: 1px solid #10b981; }
+        .badge-aa { background: #1e3a8a; color: #bfdbfe; border: 1px solid #3b82f6; }
+        .badge-aalarge { background: #854d0e; color: #fef08a; border: 1px solid #eab308; }
+        .badge-fail { background: #7f1d1d; color: #fecaca; border: 1px solid #ef4444; }
+
+        .sample-preview-box {
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-size: 0.88rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border: 1px solid rgba(0,0,0,0.1);
+        }
+
+        /* MATRICE INCROCIATA (HEATMAP TABLE) */
+        .matrix-table-wrapper {
+            overflow-x: auto;
+            border: 1px solid var(--ui-border);
+            border-radius: 6px;
+        }
+
+        table.contrast-matrix {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.72rem;
+            font-family: var(--font-mono);
+            text-align: center;
+        }
+
+        table.contrast-matrix th,
+        table.contrast-matrix td {
+            padding: 6px 8px;
+            border: 1px solid var(--ui-border);
+            white-space: nowrap;
+        }
+
+        table.contrast-matrix th {
+            background: #111827;
+            color: var(--ui-text-secondary);
+            font-weight: 600;
+        }
+
+        .matrix-cell {
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .matrix-cell:hover {
+            transform: scale(1.08);
+            z-index: 5;
+            box-shadow: 0 0 6px rgba(0,0,0,0.5);
+        }
+
+        .export-textarea {
+            width: 100%;
+            height: 140px;
+            background: #0f172a;
+            color: #38bdf8;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            padding: 10px;
+            border-radius: 6px;
+            border: 1px solid #334155;
+            outline: none;
+            resize: vertical;
+        }
+
+        .toast-notify {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: #1f2937;
+            border: 1px solid var(--ui-accent);
+            color: #ffffff;
+            padding: 8px 16px;
+            border-radius: 6px;
+            font-size: 0.82rem;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            display: none;
+            z-index: 9999;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="brand-title">
+            🎨 VanillaDesk Palette & Contrast Studio
+            <span>Inspector HSB & WCAG 2.1</span>
+        </div>
+
+        <div class="header-controls">
+            <span class="source-status-badge" id="sourceBadge">Verifica css/variables.css...</span>
+
+            <input type="file" id="cssFileInput" accept=".css" style="display:none;" onchange="Inspector.handleManualFile(this)">
+            <button class="btn-ui" onclick="document.getElementById('cssFileInput').click()" title="Seleziona manualmente un file CSS se il caricamento automatico locale è bloccato">
+                📂 Carica CSS Manuale
+            </button>
+
+            <label style="font-size:0.8rem; color:var(--ui-text-secondary); margin-left:6px;">Tema:</label>
+            <select class="select-ui" id="themeSelector" onchange="Inspector.changeTheme(this.value)">
+                <option value="default">Carta Avorio (:root)</option>
+                <option value="white">Bianco Puro ([data-theme="white"])</option>
+                <option value="pastel">Fresco Pastello ([data-theme="pastel"])</option>
+                <option value="dark">Blu Lavagna ([data-theme="dark"])</option>
+                <option value="notion-dark">Notte Stellata ([data-theme="notion-dark"])</option>
+            </select>
+
+            <button class="btn-ui btn-ui-primary" onclick="Inspector.exportCSS()">
+                📋 Esporta Variabili CSS
+            </button>
+        </div>
+    </header>
+
+    <div class="main-layout">
+        
+        <!-- PANNELLO SINISTRA: PIANO HSB 2D & SELEZIONATORE -->
+        <aside class="color-space-panel">
+            
+            <div>
+                <div class="slider-label" style="margin-bottom:6px;">
+                    <span style="font-weight:bold; color:var(--ui-text-primary);">Spazio Colore Saturazione / Valore (HSV 2D)</span>
+                    <span id="canvasCoordsHint">S: 0%, B: 0%</span>
+                </div>
+                
+                <div class="canvas-container" id="canvasBox">
+                    <canvas id="colorSpaceCanvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Slider Tonalità (Hue 0-360°) -->
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span>Tonalità Spettrale (Hue)</span>
+                    <b id="hueValueLabel">120°</b>
+                </div>
+                <input type="range" min="0" max="360" value="120" class="hue-slider" id="hueRange" oninput="Inspector.setHue(this.value)">
+            </div>
+
+            <!-- Filtri Categorie Nodi nello Spazio Colore -->
+            <div>
+                <span class="slider-label" style="margin-bottom:6px;">Mostra sullo Spazio Colore:</span>
+                <div class="category-filter-chips">
+                    <div class="chip chip-texts active" id="chip-texts" onclick="Inspector.toggleCategory('texts')">
+                        ✏️ Testi (--tx-*)
+                    </div>
+                    <div class="chip chip-highlights active" id="chip-highlights" onclick="Inspector.toggleCategory('highlights')">
+                        🖍️ Evidenziatori (--hl-*)
+                    </div>
+                    <div class="chip chip-layout active" id="chip-layout" onclick="Inspector.toggleCategory('layout')">
+                        🖼️ Sfondi Layout
+                    </div>
+                </div>
+            </div>
+
+            <!-- Dettagli e Modifica Diretta del Colore Attivo -->
+            <div class="active-color-card" id="activeColorCard">
+                <div class="active-color-header">
+                    <div>
+                        <div style="font-weight:bold; font-size:0.95rem;" id="activeColorVar">--tx-c6</div>
+                        <div style="font-size:0.75rem; color:var(--ui-text-secondary);" id="activeColorRole">Colore Testo</div>
+                    </div>
+                    
+                    <div class="color-preview-box">
+                        <div class="hex-input-group">
+                            <span style="color:var(--ui-text-secondary); font-size:0.8rem; font-family:var(--font-mono);">#</span>
+                            <input type="text" class="hex-text-input" id="hexDirectInput" maxlength="7" spellcheck="false" 
+                                   oninput="Inspector.handleDirectHexInput(this.value)">
+                        </div>
+
+                        <div class="color-swatch-large" id="activeColorSwatch" title="Clicca per aprire il color picker nativo">
+                            <input type="color" class="native-color-input" id="nativeColorPicker" oninput="Inspector.handleNativeColorPicker(this.value)">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="active-color-details">
+                    <div>RGB: <span id="valRgb">rgb(0, 181, 0)</span></div>
+                    <div>HSB: <span id="valHsb">120°, 100%, 71%</span></div>
+                    <div>Luminanza Relativa WCAG: <span id="valLuminance">0.342</span></div>
+                </div>
+
+                <div style="display:flex; gap:8px; margin-top:4px;">
+                    <button class="btn-ui" style="flex:1; justify-content:center;" onclick="Inspector.setAsActiveBackground()">
+                        Imposta come Sfondo di Prova
+                    </button>
+                </div>
+            </div>
+
+            <!-- Selettore Rapido Sfondo Attivo per i Contrasti -->
+            <div style="display:flex; flex-direction:column; gap:6px;">
+                <label style="font-size:0.78rem; color:var(--ui-text-secondary); font-weight:600;">Sfondo di Confronto Contrasto:</label>
+                <select class="select-ui" id="bgCompareSelector" onchange="Inspector.setCompareBackground(this.value)">
+                    <option value="editor-bg">Sfondo Editor (--editor-bg)</option>
+                    <option value="sidebar-bg">Sfondo Sidebar (--sidebar-bg)</option>
+                    <option value="bg-color">Sfondo Applicazione (--bg-color)</option>
+                    <option value="white">Bianco Assoluto (#ffffff)</option>
+                    <option value="black">Nero Assoluto (#000000)</option>
+                </select>
+            </div>
+
+        </aside>
+
+        <!-- PANNELLO DESTRA: CONTRASTI WCAG E MATRICE INCROCIATA -->
+        <main class="workspace-panel">
+            
+            <div class="workspace-toolbar">
+                <div style="display:flex; align-items:center; gap:8px;">
+                    <span>Sfondo Attivo di Confronto:</span>
+                    <span id="currentBgLabel" style="font-family:var(--font-mono); font-weight:bold; color:var(--ui-accent);">--editor-bg (#f9f8f3)</span>
+                </div>
+                <div>Standard Accessibilità: <b>WCAG 2.1 (AA ≥ 4.5:1, AAA ≥ 7:1)</b></div>
+            </div>
+
+            <div class="workspace-scroll">
+                
+                <!-- 1. ANALISI CONTRASTO TESTI SU SFONDO ATTIVO -->
+                <div class="section-box">
+                    <div class="section-header">
+                        <span class="section-title">✏️ Contrasto Colori Testo (--tx-c1..c10) sullo Sfondo</span>
+                        <span style="font-size:0.75rem; color:var(--ui-text-secondary);">Clicca su una card per modificarne il colore a sinistra</span>
+                    </div>
+
+                    <div class="contrast-cards-grid" id="textContrastGrid"></div>
+                </div>
+
+                <!-- 2. ANALISI CONTRASTO EVIDENZIATORI SU SFONDO ATTIVO -->
+                <div class="section-box">
+                    <div class="section-header">
+                        <span class="section-title">🖍️ Contrasto Sfondi Evidenziatori (--hl-c1..c10) sullo Sfondo</span>
+                        <span style="font-size:0.75rem; color:var(--ui-text-secondary);">Dovrebbero staccare chiaramente dallo sfondo</span>
+                    </div>
+
+                    <div class="contrast-cards-grid" id="highlightContrastGrid"></div>
+                </div>
+
+                <!-- 3. MATRICE INCROCIATA (TESTI SU EVIDENZIATORI) -->
+                <div class="section-box">
+                    <div class="section-header">
+                        <span class="section-title">📊 Matrice Incrociata: Testi su Evidenziatori (Pillole & Tag)</span>
+                        <span style="font-size:0.75rem; color:var(--ui-text-secondary);">Leggibilità reale tra Testo e Pillola</span>
+                    </div>
+
+                    <div class="matrix-table-wrapper">
+                        <table class="contrast-matrix" id="crossMatrixTable"></table>
+                    </div>
+                </div>
+
+                <!-- 4. ESPORTAZIONE RAPIDA CSS -->
+                <div class="section-box">
+                    <div class="section-header">
+                        <span class="section-title">💾 Esportazione CSS (Pronto per variables.css o custom.css)</span>
+                        <button class="btn-ui" onclick="Inspector.copyExportText()">Copia Negli Appunti</button>
+                    </div>
+
+                    <textarea class="export-textarea" id="exportCssArea" readonly spellcheck="false"></textarea>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <div class="toast-notify" id="inspectorToast">Messaggio</div>
+
+    <script>
+        const ColorMath = {
+            hexToRgb: (hex) => {
+                let c = (hex || '').replace('#', '').trim();
+                if (c.length === 3) c = c.split('').map(x => x + x).join('');
+                if (c.length !== 6) return { r: 0, g: 0, b: 0 };
+                const num = parseInt(c, 16);
+                return {
+                    r: (num >> 16) & 255,
+                    g: (num >> 8) & 255,
+                    b: num & 255
+                };
+            },
+
+            rgbToHex: (r, g, b) => {
+                const toHex = (n) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+                return `#${toHex(r)}${toHex(g)}${toHex(b)}`;
+            },
+
+            rgbToHsb: (r, g, b) => {
+                r /= 255; g /= 255; b /= 255;
+                const max = Math.max(r, g, b), min = Math.min(r, g, b);
+                const d = max - min;
+                let h = 0;
+                const s = max === 0 ? 0 : d / max;
+                const v = max;
+
+                if (max !== min) {
+                    switch (max) {
+                        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+                        case g: h = (b - r) / d + 2; break;
+                        case b: h = (r - g) / d + 4; break;
+                    }
+                    h /= 6;
+                }
+                return { h: Math.round(h * 360), s: s, b: v };
+            },
+
+            hsbToRgb: (h, s, b) => {
+                h = (h % 360) / 360;
+                let r, g, bl;
+                const i = Math.floor(h * 6);
+                const f = h * 6 - i;
+                const p = b * (1 - s);
+                const q = b * (1 - f * s);
+                const t = b * (1 - (1 - f) * s);
+
+                switch (i % 6) {
+                    case 0: r = b; g = t; bl = p; break;
+                    case 1: r = q; g = b; bl = p; break;
+                    case 2: r = p; g = b; bl = t; break;
+                    case 3: r = p; g = q; bl = b; break;
+                    case 4: r = t; g = p; bl = b; break;
+                    case 5: r = b; g = p; bl = q; break;
+                }
+                return { r: r * 255, g: g * 255, b: bl * 255 };
+            },
+
+            getRelativeLuminance: (rgb) => {
+                const sRGB = [rgb.r / 255, rgb.g / 255, rgb.b / 255].map(val => {
+                    return val <= 0.03928 ? val / 12.92 : Math.pow((val + 0.055) / 1.055, 2.4);
+                });
+                return 0.2126 * sRGB[0] + 0.7152 * sRGB[1] + 0.0722 * sRGB[2];
+            },
+
+            getContrastRatio: (hex1, hex2) => {
+                try {
+                    const rgb1 = ColorMath.hexToRgb(hex1);
+                    const rgb2 = ColorMath.hexToRgb(hex2);
+                    const l1 = ColorMath.getRelativeLuminance(rgb1);
+                    const l2 = ColorMath.getRelativeLuminance(rgb2);
+                    const lighter = Math.max(l1, l2);
+                    const darker = Math.min(l1, l2);
+                    return (lighter + 0.05) / (darker + 0.05);
+                } catch (_) {
+                    return 1.0;
+                }
+            }
+        };
+
+        const Inspector = {
+            parsedThemes: {},
+            currentThemeKey: 'default',
+            activeHue: 120,
+            selectedColorVar: '--tx-c6',
+            compareBgColorHex: '#f9f8f3',
+            compareBgVarName: '--editor-bg',
+            
+            categories: {
+                texts: true,
+                highlights: true,
+                layout: true
+            },
+
+            init: async () => {
+                Inspector.initCanvas();
+                await Inspector.loadLiveCSS();
+            },
+
+            // Tenta il caricamento diretto via HTTP/fetch di css/variables.css
+            loadLiveCSS: async () => {
+                const badge = document.getElementById('sourceBadge');
+                try {
+                    const res = await fetch('css/variables.css');
+                    if (res.ok) {
+                        const cssText = await res.text();
+                        Inspector.parseFullCSS(cssText);
+                        badge.textContent = "✓ css/variables.css caricato in diretta";
+                        badge.classList.add('live');
+                        return;
+                    }
+                } catch (_) {}
+
+                badge.textContent = "⚠️ Apri tramite server o usa 'Carica CSS'";
+                badge.classList.remove('live');
+
+                // Se fetch fallisce (es. protocollo file://), inizializza la struttura base per accogliere il file
+                Inspector.initializeEmptyThemeStructure();
+                Inspector.renderAll();
+            },
+
+            handleManualFile: (input) => {
+                if (!input.files || !input.files[0]) return;
+                const file = input.files[0];
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const cssText = e.target.result;
+                    Inspector.parseFullCSS(cssText);
+                    const badge = document.getElementById('sourceBadge');
+                    badge.textContent = `✓ ${file.name} caricato manualmente`;
+                    badge.classList.add('live');
+                    Inspector.showToast(`File ${file.name} analizzato con successo!`);
+                };
+                reader.readAsText(file);
+            },
+
+            // PARSER UNIVERSALE CSS PER TUTTI I BLOCCHI TEMA
+            parseFullCSS: (cssText) => {
+                if (!cssText) return;
+
+                // Rimuove i commenti CSS per evitare interferenze
+                const cleanCss = cssText.replace(/\/\*[\s\S]*?\*\//g, '');
+
+                const themes = {
+                    default: { name: "Carta Avorio (:root)", selector: ":root", layout: {}, highlights: {}, texts: {} },
+                    white: { name: "Bianco Puro", selector: '\\[data-theme="white"\\]', layout: {}, highlights: {}, texts: {} },
+                    dark: { name: "Blu Lavagna (Dark)", selector: '\\[data-theme="dark"\\]', layout: {}, highlights: {}, texts: {} },
+                    "notion-dark": { name: "Notte Stellata (Notion Dark)", selector: '\\[data-theme="notion-dark"\\]', layout: {}, highlights: {}, texts: {} },
+                    pastel: { name: "Fresco Pastello", selector: '\\[data-theme="pastel"\\]', layout: {}, highlights: {}, texts: {} }
+                };
+
+                for (const [key, tObj] of Object.entries(themes)) {
+                    const regex = new RegExp(tObj.selector + '\\s*\\{([^}]+)\\}', 'i');
+                    const match = cleanCss.match(regex);
+                    if (match && match[1]) {
+                        const declarations = match[1].split(';');
+                        declarations.forEach(decl => {
+                            const [prop, val] = decl.split(':');
+                            if (!prop || !val) return;
+                            const p = prop.trim();
+                            let v = val.trim().split(' ')[0]; // Rimuove eventuali commenti inline
+                            if (!v.startsWith('#') && !v.startsWith('rgb')) return;
+
+                            if (p.startsWith('--tx-c')) {
+                                tObj.texts[p] = v;
+                            } else if (p.startsWith('--hl-c')) {
+                                tObj.highlights[p] = v;
+                            } else if (['--bg-color', '--sidebar-bg', '--editor-bg', '--text-primary', '--text-secondary', '--accent-color', '--border-color'].includes(p)) {
+                                tObj.layout[p] = v;
+                            }
+                        });
+                    }
+                }
+
+                // Eredita nel white/pastel le definizioni layout se mancanti
+                Inspector.parsedThemes = themes;
+
+                // Seleziona il tema attuale o default
+                Inspector.changeTheme(Inspector.currentThemeKey || 'default');
+            },
+
+            initializeEmptyThemeStructure: () => {
+                Inspector.parsedThemes = {
+                    default: {
+                        name: "Carta Avorio (:root)",
+                        layout: { "--bg-color": "#f3f4f6", "--sidebar-bg": "#f9f8f3", "--editor-bg": "#f9f8f3", "--text-primary": "#000000", "--text-secondary": "#566172", "--accent-color": "#4f8b00", "--border-color": "#e5e7eb" },
+                        highlights: { "--hl-c1": "#eeeeee", "--hl-c2": "#d1d1d1", "--hl-c3": "#e1ad93", "--hl-c4": "#fad0aa", "--hl-c5": "#ffff83", "--hl-c6": "#b1e0c9", "--hl-c7": "#a8d5fa", "--hl-c8": "#d1b4e6", "--hl-c9": "#f4c2d7", "--hl-c10": "#ffb1af" },
+                        texts: { "--tx-c1": "#32302c", "--tx-c2": "#878787", "--tx-c3": "#b15a35", "--tx-c4": "#ff8600", "--tx-c5": "#b1b100", "--tx-c6": "#00b500", "--tx-c7": "#0f5ddf", "--tx-c8": "#853bc7", "--tx-c9": "#c52779", "--tx-c10": "#db0000" }
+                    }
+                };
+            },
+
+            initCanvas: () => {
+                const canvas = document.getElementById('colorSpaceCanvas');
+                const box = document.getElementById('canvasBox');
+
+                const resizeCanvas = () => {
+                    const rect = box.getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    Inspector.drawColorSpace();
+                };
+
+                window.addEventListener('resize', resizeCanvas);
+                resizeCanvas();
+
+                canvas.addEventListener('click', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+
+                    const sat = Math.max(0, Math.min(1, x / canvas.width));
+                    const val = Math.max(0, Math.min(1, 1 - (y / canvas.height)));
+
+                    if (Inspector.selectedColorVar) {
+                        const rgb = ColorMath.hsbToRgb(Inspector.activeHue, sat, val);
+                        const newHex = ColorMath.rgbToHex(rgb.r, rgb.g, rgb.b);
+                        Inspector.updateColorValue(Inspector.selectedColorVar, newHex);
+                    }
+                });
+
+                canvas.addEventListener('mousemove', (e) => {
+                    const rect = canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const sat = Math.round(Math.max(0, Math.min(1, x / canvas.width)) * 100);
+                    const val = Math.round(Math.max(0, Math.min(1, 1 - (y / canvas.height))) * 100);
+                    document.getElementById('canvasCoordsHint').innerText = `S: ${sat}%, B: ${val}%`;
+                });
+            },
+
+            // GESTORE MODIFICA DIRETTA CODICE ESADECIMALE
+            handleDirectHexInput: (rawVal) => {
+                let clean = rawVal.trim().replace(/^#+/, '');
+                if (clean.length === 3) {
+                    clean = clean.split('').map(c => c + c).join('');
+                }
+
+                if (/^[0-9a-fA-F]{6}$/.test(clean)) {
+                    const formattedHex = '#' + clean.toLowerCase();
+                    Inspector.updateColorValue(Inspector.selectedColorVar, formattedHex);
+                }
+            },
+
+            handleNativeColorPicker: (hexVal) => {
+                if (hexVal && hexVal.startsWith('#')) {
+                    Inspector.updateColorValue(Inspector.selectedColorVar, hexVal);
+                }
+            },
+
+            setHue: (val) => {
+                Inspector.activeHue = parseInt(val, 10);
+                document.getElementById('hueValueLabel').innerText = `${Inspector.activeHue}°`;
+                Inspector.drawColorSpace();
+
+                // Se l'utente ruota lo slider della tonalità, ricalcola il colore attivo mantenendone saturazione e valore
+                if (Inspector.selectedColorVar) {
+                    const hex = Inspector.getColorHex(Inspector.selectedColorVar);
+                    const rgb = ColorMath.hexToRgb(hex);
+                    const hsb = ColorMath.rgbToHsb(rgb.r, rgb.g, rgb.b);
+                    const newRgb = ColorMath.hsbToRgb(Inspector.activeHue, hsb.s, hsb.b);
+                    const newHex = ColorMath.rgbToHex(newRgb.r, newRgb.g, newRgb.b);
+                    Inspector.updateColorValue(Inspector.selectedColorVar, newHex, false);
+                }
+            },
+
+            toggleCategory: (catKey) => {
+                Inspector.categories[catKey] = !Inspector.categories[catKey];
+                const chip = document.getElementById(`chip-${catKey}`);
+                if (chip) {
+                    if (Inspector.categories[catKey]) chip.classList.add('active');
+                    else chip.classList.remove('active');
+                }
+                Inspector.drawColorSpace();
+            },
+
+            changeTheme: (themeKey) => {
+                Inspector.currentThemeKey = themeKey;
+                const themeData = Inspector.parsedThemes[themeKey] || Inspector.parsedThemes['default'];
+                if (!themeData) return;
+
+                const defBg = themeData.layout['--editor-bg'] || themeData.layout['--bg-color'] || '#ffffff';
+                Inspector.compareBgColorHex = defBg;
+                Inspector.compareBgVarName = '--editor-bg';
+                document.getElementById('bgCompareSelector').value = 'editor-bg';
+
+                Inspector.selectColor(Inspector.selectedColorVar || '--tx-c6');
+                Inspector.renderAll();
+            },
+
+            setCompareBackground: (val) => {
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return;
+                const layout = theme.layout;
+
+                if (val === 'editor-bg') {
+                    Inspector.compareBgColorHex = layout['--editor-bg'] || '#ffffff';
+                    Inspector.compareBgVarName = '--editor-bg';
+                } else if (val === 'sidebar-bg') {
+                    Inspector.compareBgColorHex = layout['--sidebar-bg'] || '#f9fafb';
+                    Inspector.compareBgVarName = '--sidebar-bg';
+                } else if (val === 'bg-color') {
+                    Inspector.compareBgColorHex = layout['--bg-color'] || '#f3f4f6';
+                    Inspector.compareBgVarName = '--bg-color';
+                } else if (val === 'white') {
+                    Inspector.compareBgColorHex = '#ffffff';
+                    Inspector.compareBgVarName = 'Bianco Puro';
+                } else if (val === 'black') {
+                    Inspector.compareBgColorHex = '#000000';
+                    Inspector.compareBgVarName = 'Nero Puro';
+                }
+                Inspector.renderAll();
+            },
+
+            setAsActiveBackground: () => {
+                const hex = Inspector.getColorHex(Inspector.selectedColorVar);
+                Inspector.compareBgColorHex = hex;
+                Inspector.compareBgVarName = Inspector.selectedColorVar;
+                document.getElementById('bgCompareSelector').value = 'custom';
+                Inspector.renderAll();
+                Inspector.showToast(`Sfondo di confronto impostato su ${Inspector.selectedColorVar} (${hex})`);
+            },
+
+            getColorHex: (varName) => {
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return '#ffffff';
+                return theme.texts[varName] || theme.highlights[varName] || theme.layout[varName] || '#ffffff';
+            },
+
+            updateColorValue: (varName, newHex, syncHue = true) => {
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return;
+
+                if (theme.texts[varName]) theme.texts[varName] = newHex;
+                else if (theme.highlights[varName]) theme.highlights[varName] = newHex;
+                else if (theme.layout[varName]) theme.layout[varName] = newHex;
+
+                if (syncHue) {
+                    const rgb = ColorMath.hexToRgb(newHex);
+                    const hsb = ColorMath.rgbToHsb(rgb.r, rgb.g, rgb.b);
+                    Inspector.activeHue = hsb.h;
+                    document.getElementById('hueRange').value = hsb.h;
+                    document.getElementById('hueValueLabel').innerText = `${hsb.h}°`;
+                }
+
+                Inspector.renderAll();
+            },
+
+            drawColorSpace: () => {
+                const canvas = document.getElementById('colorSpaceCanvas');
+                const ctx = canvas.getContext('2d');
+                const w = canvas.width;
+                const h = canvas.height;
+
+                // 1. Orizzontale: Bianco -> Colore Tonalità Pura
+                const pureRgb = ColorMath.hsbToRgb(Inspector.activeHue, 1, 1);
+                const pureHex = ColorMath.rgbToHex(pureRgb.r, pureRgb.g, pureRgb.b);
+
+                const gradH = ctx.createLinearGradient(0, 0, w, 0);
+                gradH.addColorStop(0, '#ffffff');
+                gradH.addColorStop(1, pureHex);
+                ctx.fillStyle = gradH;
+                ctx.fillRect(0, 0, w, h);
+
+                // 2. Verticale: Trasparente -> Nero Assoluto
+                const gradV = ctx.createLinearGradient(0, 0, 0, h);
+                gradV.addColorStop(0, 'rgba(0, 0, 0, 0)');
+                gradV.addColorStop(1, '#000000');
+                ctx.fillStyle = gradV;
+                ctx.fillRect(0, 0, w, h);
+
+                // 3. Plotting di tutti i colori del tema attivo
+                const plotColor = (varName, hex, category, label) => {
+                    if (!Inspector.categories[category]) return;
+                    if (!hex || !hex.startsWith('#')) return;
+
+                    const rgb = ColorMath.hexToRgb(hex);
+                    const hsb = ColorMath.rgbToHsb(rgb.r, rgb.g, rgb.b);
+
+                    const cx = hsb.s * w;
+                    const cy = (1 - hsb.b) * h;
+
+                    const isSelected = Inspector.selectedColorVar === varName;
+
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.arc(cx, cy, isSelected ? 8 : 5, 0, Math.PI * 2);
+
+                    ctx.fillStyle = hex;
+                    ctx.fill();
+
+                    ctx.lineWidth = isSelected ? 3 : 1.5;
+                    ctx.strokeStyle = isSelected ? '#ffffff' : (hsb.b > 0.5 ? '#000000' : '#ffffff');
+                    ctx.stroke();
+
+                    if (isSelected || hsb.b > 0.15) {
+                        ctx.font = isSelected ? 'bold 11px monospace' : '9px monospace';
+                        ctx.fillStyle = '#ffffff';
+                        ctx.shadowColor = '#000000';
+                        ctx.shadowBlur = 4;
+                        ctx.fillText(label, cx + 8, cy + 3);
+                    }
+                    ctx.restore();
+                };
+
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return;
+
+                if (Inspector.categories.layout) {
+                    for (const [k, v] of Object.entries(theme.layout)) {
+                        plotColor(k, v, 'layout', k.replace('--', ''));
+                    }
+                }
+                if (Inspector.categories.highlights) {
+                    for (const [k, v] of Object.entries(theme.highlights)) {
+                        plotColor(k, v, 'highlights', k.replace('--hl-', 'hl:'));
+                    }
+                }
+                if (Inspector.categories.texts) {
+                    for (const [k, v] of Object.entries(theme.texts)) {
+                        plotColor(k, v, 'texts', k.replace('--tx-', 'tx:'));
+                    }
+                }
+            },
+
+            selectColor: (varName) => {
+                Inspector.selectedColorVar = varName;
+                const hex = Inspector.getColorHex(varName);
+
+                if (hex.startsWith('#')) {
+                    const rgb = ColorMath.hexToRgb(hex);
+                    const hsb = ColorMath.rgbToHsb(rgb.r, rgb.g, rgb.b);
+                    Inspector.activeHue = hsb.h;
+                    document.getElementById('hueRange').value = hsb.h;
+                    document.getElementById('hueValueLabel').innerText = `${hsb.h}°`;
+                }
+
+                Inspector.renderAll();
+            },
+
+            renderActiveColorCard: () => {
+                const varName = Inspector.selectedColorVar;
+                const hex = Inspector.getColorHex(varName);
+                const rgb = ColorMath.hexToRgb(hex);
+                const hsb = ColorMath.rgbToHsb(rgb.r, rgb.g, rgb.b);
+                const lum = ColorMath.getRelativeLuminance(rgb).toFixed(3);
+
+                document.getElementById('activeColorVar').innerText = varName;
+                document.getElementById('activeColorRole').innerText = varName.startsWith('--tx') ? "Colore Testo" : (varName.startsWith('--hl') ? "Evidenziatore Sfondo" : "Layout");
+                
+                // Aggiorna l'input esadecimale e il picker nativo
+                const hexClean = hex.replace('#', '').toUpperCase();
+                const hexInput = document.getElementById('hexDirectInput');
+                if (document.activeElement !== hexInput) {
+                    hexInput.value = hexClean;
+                }
+                document.getElementById('nativeColorPicker').value = hex.startsWith('#') ? hex : '#ffffff';
+                document.getElementById('activeColorSwatch').style.backgroundColor = hex;
+
+                document.getElementById('valRgb').innerText = `rgb(${Math.round(rgb.r)}, ${Math.round(rgb.g)}, ${Math.round(rgb.b)})`;
+                document.getElementById('valHsb').innerText = `${hsb.h}°, ${Math.round(hsb.s * 100)}%, ${Math.round(hsb.b * 100)}%`;
+                document.getElementById('valLuminance').innerText = lum;
+            },
+
+            renderContrastGrids: () => {
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return;
+                const bgHex = Inspector.compareBgColorHex;
+                document.getElementById('currentBgLabel').innerText = `${Inspector.compareBgVarName} (${bgHex})`;
+
+                const buildCard = (varName, hex, isText) => {
+                    const ratio = ColorMath.getContrastRatio(hex, bgHex);
+                    const ratioStr = ratio.toFixed(2) + ':1';
+
+                    let badgeClass = 'badge-fail';
+                    let badgeText = 'FAIL';
+
+                    if (ratio >= 7.0) { badgeClass = 'badge-aaa'; badgeText = 'AAA (7.0+)'; }
+                    else if (ratio >= 4.5) { badgeClass = 'badge-aa'; badgeText = 'AA (4.5+)'; }
+                    else if (ratio >= 3.0) { badgeClass = 'badge-aalarge'; badgeText = 'AA Large (3.0+)'; }
+
+                    const isSelected = Inspector.selectedColorVar === varName;
+
+                    return `
+                        <div class="contrast-card ${isSelected ? 'is-selected' : ''}" onclick="Inspector.selectColor('${varName}')">
+                            <div class="contrast-header">
+                                <span style="font-weight:bold; color:var(--ui-text-primary);">${varName}</span>
+                                <span class="contrast-badge ${badgeClass}">${badgeText}</span>
+                            </div>
+                            <div class="sample-preview-box" style="background-color: ${bgHex}; color: ${hex};">
+                                <span style="font-weight:bold;">${isText ? 'Esempio Testo Leggibile' : 'Pillola Sfondo'}</span>
+                                <span style="font-family:var(--font-mono); font-size:0.75rem;">${ratioStr}</span>
+                            </div>
+                            <div style="display:flex; justify-content:space-between; font-size:0.7rem; color:var(--ui-text-secondary); font-family:var(--font-mono);">
+                                <span>HEX: ${hex}</span>
+                                <span>Luminanza: ${ColorMath.getRelativeLuminance(ColorMath.hexToRgb(hex)).toFixed(2)}</span>
+                            </div>
+                        </div>
+                    `;
+                };
+
+                const textGrid = document.getElementById('textContrastGrid');
+                textGrid.innerHTML = Object.entries(theme.texts).map(([k, v]) => buildCard(k, v, true)).join('');
+
+                const hlGrid = document.getElementById('highlightContrastGrid');
+                hlGrid.innerHTML = Object.entries(theme.highlights).map(([k, v]) => buildCard(k, v, false)).join('');
+            },
+
+            renderCrossMatrix: () => {
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return;
+
+                const texts = Object.entries(theme.texts);
+                const highlights = Object.entries(theme.highlights);
+
+                let html = '<thead><tr><th>Testo ➔<br>Pillola ⬇</th>';
+                texts.forEach(([tKey]) => {
+                    html += `<th>${tKey.replace('--tx-', '')}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+
+                highlights.forEach(([hKey, hHex]) => {
+                    html += `<tr><th>${hKey.replace('--hl-', '')}</th>`;
+                    texts.forEach(([tKey, tHex]) => {
+                        const ratio = ColorMath.getContrastRatio(tHex, hHex);
+                        const ratioShort = ratio.toFixed(1);
+
+                        let bgBadge = '#7f1d1d';
+                        let textBadge = '#ffffff';
+
+                        if (ratio >= 7.0) { bgBadge = '#065f46'; }
+                        else if (ratio >= 4.5) { bgBadge = '#1e3a8a'; }
+                        else if (ratio >= 3.0) { bgBadge = '#854d0e'; }
+
+                        html += `
+                            <td class="matrix-cell" style="background-color:${hHex}; color:${tHex};" title="${tKey} su ${hKey}: ${ratio.toFixed(2)}:1" onclick="Inspector.selectColor('${tKey}')">
+                                <div style="font-weight:bold; font-size:0.8rem;">Ab</div>
+                                <div style="font-size:0.6rem; background:${bgBadge}; color:${textBadge}; border-radius:2px; margin-top:2px;">${ratioShort}</div>
+                            </td>
+                        `;
+                    });
+                    html += '</tr>';
+                });
+
+                html += '</tbody>';
+                document.getElementById('crossMatrixTable').innerHTML = html;
+            },
+
+            updateExportText: () => {
+                const theme = Inspector.parsedThemes[Inspector.currentThemeKey] || Inspector.parsedThemes['default'];
+                if (!theme) return;
+
+                let css = `/* VanillaDesk: ${theme.name} */\n`;
+                css += `/* Generato da Color Space & Contrast Studio */\n\n`;
+
+                const selector = theme.selector.replace(/\\/g, '');
+                css += `${selector} {\n`;
+
+                css += `    /* --- LAYOUT --- */\n`;
+                for (const [k, v] of Object.entries(theme.layout)) {
+                    css += `    ${k}: ${v};\n`;
+                }
+
+                css += `\n    /* --- EVIDENZIATORI (--hl-c*) --- */\n`;
+                for (const [k, v] of Object.entries(theme.highlights)) {
+                    css += `    ${k}: ${v};\n`;
+                }
+
+                css += `\n    /* --- TESTI (--tx-c*) --- */\n`;
+                for (const [k, v] of Object.entries(theme.texts)) {
+                    css += `    ${k}: ${v};\n`;
+                }
+
+                css += `}\n`;
+
+                document.getElementById('exportCssArea').value = css;
+            },
+
+            renderAll: () => {
+                Inspector.drawColorSpace();
+                Inspector.renderActiveColorCard();
+                Inspector.renderContrastGrids();
+                Inspector.renderCrossMatrix();
+                Inspector.updateExportText();
+            },
+
+            copyExportText: () => {
+                const ta = document.getElementById('exportCssArea');
+                navigator.clipboard.writeText(ta.value).then(() => {
+                    Inspector.showToast("Variabili CSS copiate negli appunti!");
+                });
+            },
+
+            exportCSS: () => {
+                Inspector.copyExportText();
+            },
+
+            showToast: (msg) => {
+                const t = document.getElementById('inspectorToast');
+                if (!t) return;
+                t.innerText = msg;
+                t.style.display = 'block';
+                setTimeout(() => { t.style.display = 'none'; }, 2500);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', Inspector.init);
+    </script>
+</body>
+</html>

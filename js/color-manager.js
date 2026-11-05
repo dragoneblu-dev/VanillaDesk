@@ -24,6 +24,12 @@
  * FEAT SMART FORMATTING ESCAPE ON SPACES: Se il cursore si trova su spazi vuoti o a fine span senza parole selezionate,
  * la pressione dell'evidenziatore o del colore testo estrae il cursore dallo span formattato (trasferendo gli spazi all'esterno)
  * consentendo all'utente di riprendere a scrivere all'istante in testo neutro non colorato.
+ * FIX PARTIAL CELL TEXT COLORING: Se l'utente seleziona solo una porzione di testo dentro una cella di tabella semplice,
+ * la formattazione viene applicata esclusivamente alla porzione selezionata preservando lo sfondo e la struttura della cella.
+ * FIX ZERO-FONT & UNWRAP DEFINITIVO: Rimossa ogni gestione del tag legacy <font> e introdotto lo srotolamento
+ * ricorsivo a tappeto di qualsiasi span rimasto privo di classi (anche con attributi vuoti come class="").
+ * FIX TOGGLE OFF CELLA & MULTI-CELLA: Riconoscimento universale della rimozione colore quando una o più celle hanno già una formattazione attiva.
+ * FIX RACE CONDITION SELECT COLOR: Esecuzione di applyColor prima della chiusura del menu per prevenire lo svuotamento della selezione celle.
  */
 
 const ColorManager = {
@@ -41,7 +47,7 @@ const ColorManager = {
         // Mappatura per Sottolineatura Colorata (hl-u-c1 .. hl-u-c10)
         'hl-u-c1': {rgb: 'rgb(251, 11, 11)', hex: '#fb0b0b'}, 'hl-u-c2': {rgb: 'rgb(251, 12, 12)', hex: '#fb0c0c'},
         'hl-u-c3': {rgb: 'rgb(251, 13, 13)', hex: '#fb0d0d'}, 'hl-u-c4': {rgb: 'rgb(251, 14, 14)', hex: '#fb0e0e'},
-        'hl-u-c5': {rgb: 'rgb(251, 15, 15)', hex: '#fb0f0f'}, 'hl-u-c6': {rgb: 'rgb(251, 16, 16)', hex: '#fb1010'},
+        'hl-u-c5': {rgb: 'rgb(251, 15, 15)', hex: '#fb0f0f'}, 'hl-u-c6': {rgb: 'rgb(251, 16, 16)', hex: '#fb0f10'},
         'hl-u-c7': {rgb: 'rgb(251, 17, 17)', hex: '#fb1111'}, 'hl-u-c8': {rgb: 'rgb(251, 18, 18)', hex: '#fb1212'},
         'hl-u-c9': {rgb: 'rgb(251, 19, 19)', hex: '#fb1313'}, 'hl-u-c10':{rgb: 'rgb(251, 20, 20)', hex: '#fb1414'}
     },
@@ -326,18 +332,23 @@ const ColorManager = {
         UI.Menu.buildContextMenu(anchorId, items);
     },
 
-    // Identifica se il nodo di partenza della selezione possiede già il colore target
+    // Identifica se la selezione possiede già una colorazione attiva del tipo richiesto per gestire il Toggle
     _isSelectionAlreadyColored: (type, targetClass) => {
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 TableManager.Selection.selectedCells && 
-                                 TableManager.Selection.selectedCells.length > 0;
+                                 (typeof TableManager.Selection.hasCellSelection === 'function' 
+                                     ? TableManager.Selection.hasCellSelection() 
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
+
+        const prefix = type === 'highlight' ? 'hl-' : 'tx-';
 
         if (hasSelectedCells) {
             const cells = TableManager.Selection.selectedCells;
+            // Nel contesto di intere celle, il toggle scatta se tutte le celle hanno già una formattazione di quel tipo
             return cells.every(cell => {
-                const spanWithClass = cell.querySelector(`.${targetClass}`);
-                return !!spanWithClass;
+                const hasOnCell = Array.from(cell.classList).some(c => c.startsWith(prefix));
+                const hasInside = !!cell.querySelector(`[class*="${prefix}"]`);
+                return hasOnCell || hasInside;
             });
         }
 
@@ -348,38 +359,47 @@ const ColorManager = {
         if (!node) return false;
         if (node.nodeType === 3) node = node.parentNode;
 
-        // Risaliamo il DOM per vedere se il nodo di partenza possiede già quella classe
-        while (node && node.id !== 'noteContent' && node !== document.body) {
-            if (node.classList && node.classList.contains(targetClass)) {
+        // Se c'è una selezione estesa parziale di testo, controlliamo anche il contenitore comune
+        if (!sel.isCollapsed) {
+            const range = sel.getRangeAt(0);
+            const common = range.commonAncestorContainer;
+            const containerEl = common.nodeType === 3 ? common.parentNode : common;
+            if (containerEl && containerEl.classList && Array.from(containerEl.classList).some(c => c.startsWith(prefix))) {
                 return true;
             }
-            
-            // Se incontra un'altra classe colore dello STESSO TIPO, significa che il colore primario qui è un altro.
-            // Ci fermiamo perché non vogliamo falsi positivi da span nidificati esternamente.
-            if (type === 'highlight' && Array.from(node.classList).some(c => (c.startsWith('hl-c') || c.startsWith('hl-u-c')) && c !== targetClass)) {
-                return false;
+            if (containerEl && containerEl.querySelector && containerEl.querySelector(`[class*="${prefix}"]`)) {
+                return true;
             }
-            if (type === 'text' && Array.from(node.classList).some(c => c.startsWith('tx-') && c !== targetClass)) {
-                return false;
+        }
+
+        // Risalita del DOM dal nodo di ancoraggio (arrestandosi ai bordi della cella o dell'editor)
+        while (node && node.id !== 'noteContent' && node !== document.body && node.tagName !== 'TD' && node.tagName !== 'TH') {
+            if (node.classList && Array.from(node.classList).some(c => c.startsWith(prefix))) {
+                return true;
             }
-            
             node = node.parentNode;
         }
         return false;
     },
 
     applyLast: (type) => {
+        const hasSelectedCells = typeof TableManager !== 'undefined' && 
+                                 TableManager.Selection && 
+                                 (typeof TableManager.Selection.hasCellSelection === 'function' 
+                                     ? TableManager.Selection.hasCellSelection() 
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
+
         const editor = document.getElementById('noteContent');
         const sel = window.getSelection();
         let wasAutoExpanded = false;
 
-        // Se il cursore è collassato all'interno dell'editor, prova l'espansione sulla parola corrente
-        if (sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+        // Auto-espansione della parola ESCLUSIVAMENTE se non ci sono celle selezionate nella tabella
+        if (!hasSelectedCells && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
             wasAutoExpanded = ColorManager.expandSelectionToWord(sel);
         }
 
         // SMART ESCAPE SU SPAZI: se non tocca alcuna parola ed è collassato, verifica se siamo in uscita da uno span
-        if (!wasAutoExpanded && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+        if (!hasSelectedCells && !wasAutoExpanded && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
             const escaped = ColorManager.escapeFormattingSpan(type, sel, editor);
             if (escaped) {
                 Store.triggerAutoSave();
@@ -396,7 +416,7 @@ const ColorManager = {
             return;
         }
 
-        // Verifica se il colore è già presente. Se sì, agisce da "Toggle Off" (Rimuove)
+        // Se la selezione o le celle contengono già una colorazione di quel tipo, attiva la rimozione (Toggle OFF)
         const isAlreadyColored = ColorManager._isSelectionAlreadyColored(type, targetColor);
         
         if (isAlreadyColored) {
@@ -420,8 +440,12 @@ const ColorManager = {
             }
             ColorManager.updateToolbarIcon('text', colorClass || 'tx-auto');
         }
-        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
+
+        // FIX RACE CONDITION: Applica la colorazione PRIMA di chiudere il menu
+        // per evitare che il bubbling del click svuoti TableManager.Selection.selectedCells
         ColorManager.applyColor(type, colorClass);
+
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
     },
 
     updateToolbarIcon: (type, colorClass) => {
@@ -456,6 +480,15 @@ const ColorManager = {
     _isSafeToColor: (el) => {
         if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
         if (el.id === 'noteContent') return false;
+        // Non manipolare direttamente il tag contenitore della cella
+        if (el.tagName === 'TD' || el.tagName === 'TH') return false;
+
+        // Se l'elemento è contenuto dentro una cella di tabella semplice, è testo editabile sicuro al 100%
+        const parentCell = el.closest('td, th');
+        if (parentCell && !parentCell.closest('.adv-table')) {
+            return true;
+        }
+
         if (typeof WidgetManager !== 'undefined') {
             if (WidgetManager.isInsideEditableWidgetArea(el)) return true;
             if (WidgetManager.isProtectedBlock(el) || WidgetManager.isProtectedInline(el)) return false;
@@ -465,10 +498,12 @@ const ColorManager = {
 
     applyColor: (type, colorClass, forceAutoExpanded = false) => {
         // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Colore Testo ed Evidenziatore)
+        // Se ci sono più celle selezionate o l'intera cella è priva di selezione di testo parziale, hasCellSelection() è true
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 TableManager.Selection.selectedCells && 
-                                 TableManager.Selection.selectedCells.length > 0;
+                                 (typeof TableManager.Selection.hasCellSelection === 'function'
+                                     ? TableManager.Selection.hasCellSelection()
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
             // Forza l'inserimento dello snapshot di partenza per garantire l'Undo (Ctrl+Z)
@@ -476,14 +511,17 @@ const ColorManager = {
             const cells = TableManager.Selection.selectedCells;
 
             cells.forEach(cell => {
-                // 1. Rimuove le classi e stili del tipo specificato (text o highlight) da tutti gli elementi interni alla cella
+                // 1. Rimuove le classi e stili sia dal TD/TH stesso sia da tutti gli elementi interni alla cella
                 if (type === 'text') {
-                    cell.querySelectorAll('[class*="tx-c"], [color]').forEach(el => {
+                    Array.from(cell.classList).filter(c => c.startsWith('tx-c')).forEach(c => cell.classList.remove(c));
+                    cell.style.color = '';
+                    cell.querySelectorAll('[class*="tx-c"]').forEach(el => {
                         Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
-                        el.removeAttribute('color');
                         el.style.color = '';
                     });
                 } else {
+                    Array.from(cell.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => cell.classList.remove(c));
+                    cell.style.backgroundColor = '';
                     cell.querySelectorAll('[class*="hl-c"], [class*="hl-u-c"]').forEach(el => {
                         Array.from(el.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => el.classList.remove(c));
                         el.style.backgroundColor = '';
@@ -493,22 +531,38 @@ const ColorManager = {
                 // 2. Se è stato specificato un colore (non null/rimozione), avvolge tutto il contenuto utile
                 if (colorClass) {
                     const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                    const span = document.createElement('span');
+                    span.className = colorClass;
+
                     if (textOnly || cell.querySelector('img, audio, input, svg')) {
-                        const span = document.createElement('span');
-                        span.className = colorClass;
                         while (cell.firstChild) span.appendChild(cell.firstChild);
-                        cell.appendChild(span);
+                    } else {
+                        // Cella vuota: assicura il marcatore <br> per consentire la digitazione immediata nello stile scelto
+                        span.innerHTML = '<br>';
+                        cell.innerHTML = '';
                     }
+                    cell.appendChild(span);
                 }
 
-                // 3. Pulizia di span rimasti vuoti o privi di attributi
-                cell.querySelectorAll('span').forEach(sp => {
-                    if (sp.classList.length === 0 && !sp.hasAttribute('style') && sp.attributes.length === 0) {
-                        const parent = sp.parentNode;
-                        while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
-                        sp.remove();
-                    }
-                });
+                // 3. Srotolamento ricorsivo di TUTTI gli span rimasti privi di classi o attributi
+                let cleanChanged = true;
+                while (cleanChanged) {
+                    cleanChanged = false;
+                    cell.querySelectorAll('span, font').forEach(sp => {
+                        if (sp.getAttribute('class') === '') sp.removeAttribute('class');
+                        if (sp.getAttribute('style') === '') sp.removeAttribute('style');
+                        const hasNoClass = !sp.hasAttribute('class') || sp.getAttribute('class').trim() === '';
+                        const hasNoStyle = !sp.hasAttribute('style') || sp.getAttribute('style').trim() === '';
+                        if (sp.attributes.length === 0 || (hasNoClass && hasNoStyle)) {
+                            const parent = sp.parentNode;
+                            if (parent) {
+                                while (sp.firstChild) parent.insertBefore(sp.firstChild, sp);
+                                sp.remove();
+                                cleanChanged = true;
+                            }
+                        }
+                    });
+                }
             });
 
             Editor.healWidgetWrappers();
@@ -564,7 +618,7 @@ const ColorManager = {
         document.execCommand('styleWithCSS', false, true);
 
         try {
-            // 1. Converte tutte le classi attuali in colori finti, ESCLUDENDO l'infrastruttura Widget
+            // 1. Converte tutte le classi attuali in colori finti, ESCLUDENDO l'infrastruttura Widget e i tag cella TD/TH
             editor.querySelectorAll('*').forEach(el => {
                 if (!ColorManager._isSafeToColor(el)) return;
 
@@ -606,16 +660,8 @@ const ColorManager = {
                     const bg = cleanStr(el.style.backgroundColor);
                     if (bg === cleanStr(ColorManager.removeHl.rgb) || bg === cleanStr(ColorManager.removeHl.hex)) {
                         el.style.backgroundColor = '';
-                        // Neutralizza l'eventuale background temporaneo dei genitori per evitare ripristini spuri
-                        let p = el.parentNode;
-                        while (p && p.id !== 'noteContent') {
-                            for (let cls in ColorManager.magicHl) {
-                                if (p.style && (cleanStr(p.style.backgroundColor) === cleanStr(ColorManager.magicHl[cls].rgb) || cleanStr(p.style.backgroundColor) === cleanStr(ColorManager.magicHl[cls].hex))) {
-                                    p.style.backgroundColor = '';
-                                }
-                            }
-                            p = p.parentNode;
-                        }
+                        // Rimuove tassativamente qualsiasi classe di evidenziazione dal nodo ripulito
+                        Array.from(el.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => el.classList.remove(c));
                     } else {
                         for (let cls in ColorManager.magicHl) {
                             if (bg === cleanStr(ColorManager.magicHl[cls].rgb) || bg === cleanStr(ColorManager.magicHl[cls].hex)) {
@@ -626,27 +672,16 @@ const ColorManager = {
                         }
                     }
                 } else {
-                    const fgAttr = el.hasAttribute('color') ? cleanStr(el.getAttribute('color')) : '';
-                    const fg = cleanStr(el.style.color) || fgAttr;
+                    const fg = cleanStr(el.style.color);
                     if (fg === cleanStr(ColorManager.removeTx.rgb) || fg === cleanStr(ColorManager.removeTx.hex)) { 
                         el.style.color = ''; 
-                        el.removeAttribute('color'); 
-                        // Neutralizza l'eventuale colore temporaneo dei genitori per evitare che riassegnino la classe .tx-c*
-                        let p = el.parentNode;
-                        while (p && p.id !== 'noteContent') {
-                            for (let cls in ColorManager.magicTx) {
-                                if (p.style && (cleanStr(p.style.color) === cleanStr(ColorManager.magicTx[cls].rgb) || cleanStr(p.style.color) === cleanStr(ColorManager.magicTx[cls].hex))) {
-                                    p.style.color = '';
-                                }
-                            }
-                            p = p.parentNode;
-                        }
+                        // Rimuove tassativamente qualsiasi classe colore testo dal nodo ripulito
+                        Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
                     } else {
                         for (let cls in ColorManager.magicTx) {
                             if (fg === cleanStr(ColorManager.magicTx[cls].rgb) || fg === cleanStr(ColorManager.magicTx[cls].hex)) {
                                 el.classList.add(cls); 
                                 el.style.color = ''; 
-                                el.removeAttribute('color'); 
                                 break;
                             }
                         }
@@ -654,7 +689,7 @@ const ColorManager = {
                 }
             });
 
-            // 4. Pulizia definitiva dei nodi e attributi svuotati
+            // 4. Pulizia definitiva e srotolamento ricorsivo di tutti i nodi e span parassiti vuoti
             let changed = true;
             while (changed) {
                 changed = false;
@@ -666,11 +701,17 @@ const ColorManager = {
                     if (el.getAttribute('color') === '') el.removeAttribute('color');
 
                     if (el.tagName === 'SPAN' || el.tagName === 'FONT') {
-                        if (el.attributes.length === 0 || (el.classList.length === 0 && !el.hasAttribute('style'))) {
-                            const parent = el.parentNode;
+                    const hasNoClass = !el.hasAttribute('class') || el.getAttribute('class').trim() === '';
+                    const hasNoStyle = !el.hasAttribute('style') || el.getAttribute('style').trim() === '';
+                        const hasNoColorAttr = !el.hasAttribute('color');
+
+                        if (el.attributes.length === 0 || (hasNoClass && hasNoStyle && hasNoColorAttr)) {
+                        const parent = el.parentNode;
+                        if (parent) {
                             while (el.firstChild) parent.insertBefore(el.firstChild, el);
                             parent.removeChild(el);
                             changed = true;
+                            }
                         }
                     }
                 });

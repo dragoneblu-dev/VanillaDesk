@@ -11,6 +11,10 @@
  * per applicare o rimuovere la formattazione a tutte le celle selezionate in TableManager.
  * FIX INSERT CODE CARET POSITION: insertCodeBlock preserva la selezione attiva del cursore se già presente
  * nell'editor invece di ripristinare uno snapshot stantio, garantendo l'inserimento esatto su shortcut inline (''' e ```).
+ * FEAT WORD-SNAP IN EXEC: Integrazione automatica di expandSelectionToWord e Smart Caret Collapse in Editor.exec
+ * per estendere la formattazione da tastiera (Ctrl+B, Ctrl+I, Ctrl+U) alla parola sotto cursore collassato.
+ * FIX PARTIAL CELL TEXT FORMATTING: Se è presente una selezione di testo parziale dentro una cella di tabella,
+ * la formattazione opera esclusivamente sul testo selezionato senza alterare l'intera cella.
  */
 
 Object.assign(Editor, {
@@ -285,10 +289,13 @@ Object.assign(Editor, {
 
     exec: (cmd, val = null) => {
         // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (B, I, U, S)
+        // Se c'è una selezione di testo parziale all'interno di una cella, hasCellSelection ritorna false
+        // per permettere la normale formattazione inline del testo selezionato
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 TableManager.Selection.selectedCells && 
-                                 TableManager.Selection.selectedCells.length > 0;
+                                 (typeof TableManager.Selection.hasCellSelection === 'function'
+                                     ? TableManager.Selection.hasCellSelection()
+                                     : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         const formattingCommands = ['bold', 'italic', 'underline', 'strikeThrough'];
 
@@ -345,14 +352,37 @@ Object.assign(Editor, {
             return;
         }
 
+        const editor = document.getElementById('noteContent');
+        const sel = window.getSelection();
+        let wasAutoExpanded = false;
+
+        // AUTO-ESPANSIONE SULLA PAROLA CORRENTE (WORD-SNAP) SE IL CURSORE È COLLASSATO
+        if (sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            if (typeof ColorManager !== 'undefined' && typeof ColorManager.expandSelectionToWord === 'function') {
+                wasAutoExpanded = ColorManager.expandSelectionToWord(sel);
+            }
+        }
+
         Editor.saveSnapshot();
         document.execCommand(cmd, false, val);
         
         Editor.healWidgetWrappers();
+
+        // SMART CARET COLLAPSE: Se la parola è stata auto-estesa da un cursore collassato,
+        // collassa il cursore a fine parola per prevenire la sovrascrittura accidentale del testo
+        if (wasAutoExpanded) {
+            const currentSel = window.getSelection();
+            if (currentSel && currentSel.rangeCount > 0) {
+                currentSel.collapseToEnd();
+                if (typeof Editor !== 'undefined') {
+                    Editor.savedRange = currentSel.getRangeAt(0).cloneRange();
+                }
+            }
+        }
         
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
-            let node = sel.getRangeAt(0).commonAncestorContainer;
+        const currentSel = window.getSelection();
+        if (currentSel.rangeCount > 0) {
+            let node = currentSel.getRangeAt(0).commonAncestorContainer;
             if (node.nodeType === 3) node = node.parentNode;
             const editableElement = node.closest('[contenteditable="true"]');
             if (editableElement) editableElement.focus();

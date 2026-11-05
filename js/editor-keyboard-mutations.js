@@ -17,6 +17,12 @@
  * RESET EREDITÀ FORMATTAZIONE: Disattivazione automatica del comando bold residuo all'uscita dai titoli H1..H6 con Invio.
  * FIX AUTOSAVE DELETE/CANC: Parità operativa tra Backspace e Delete con salvataggio automatico (Store.triggerAutoSave)
  * preservando il blocco di sicurezza per i widget inline (.adv-inline-shell).
+ * REFACTOR UNIFIED SELECTION DELETION: Centralizzazione della cancellazione di selezioni estese in deleteSelection(e),
+ * eliminando codice duplicato e gestendo in modo omogeneo tabelle, blocchi di codice e testo normale.
+ * FIX DELETE BOUNDARY (POST-RANGE): Calcolo esatto di isAtEnd tramite postRange sull'intero blocco genitore,
+ * impedendo che Canc a fine di un tag inline (es. <b>) scavalchi caratteri successivi dello stesso paragrafo.
+ * PREVENT LINK SPLIT ON ENTER: Riposizionamento del cursore subito dopo il tag <a> prima che l'Invio nativo
+ * possa clonare il link sulla nuova riga, eliminando sdoppiamenti alla radice senza pezze a posteriori.
  */
 
 Object.assign(Editor, {
@@ -136,6 +142,72 @@ Object.assign(Editor, {
             }
         }
         return true;
+    },
+
+    /**
+     * GESTORE UNIFICATO CANCELLAZIONE SELEZIONI ESTESE (!isCollapsed)
+     * Condiviso in modo omogeneo da Backspace, CANC (Delete) e typing su selezione.
+     */
+    deleteSelection: (e) => {
+        // 1. Tabelle Semplici: Cancellazione simultanea multi-cella
+        if (typeof TableManager !== 'undefined' && TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 1) {
+            e.preventDefault();
+            TableManager.Selection.clearSelectedCellsContent();
+            return;
+        }
+
+        const selection = window.getSelection();
+        if (!selection || !selection.rangeCount || selection.isCollapsed) return;
+
+        const range = selection.getRangeAt(0);
+        let node = range.commonAncestorContainer;
+        if (node.nodeType === 3) node = node.parentNode;
+
+        // 2. Blocchi di Codice (pre.code-content): Mappatura lineare e ancoraggio esatto a startPos
+        const preNode = node.closest ? node.closest('pre.code-content') : null;
+        if (preNode) {
+            e.preventDefault();
+            Editor.saveSnapshot();
+
+            let startPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+            let endPos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
+            if (startPos > endPos) { const t = startPos; startPos = endPos; endPos = t; }
+
+            let rawText = Editor._getRawText(preNode);
+            if (rawText.endsWith('\n')) rawText = rawText.slice(0, -1);
+
+            const newText = rawText.substring(0, startPos) + rawText.substring(endPos);
+
+            const wrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+            if (wrapper) {
+                const trueId = wrapper.id.split('_cited_')[0];
+                if (!AppState.databases) AppState.databases = {};
+                if (!AppState.databases[trueId]) AppState.databases[trueId] = { title: I18n.t('code_widget.default_title'), language: 'none', content: '' };
+                AppState.databases[trueId].content = newText;
+            }
+
+            if (typeof CodeManager !== 'undefined') {
+                CodeManager.highlightBlock(preNode, true, newText);
+            } else {
+                preNode.textContent = newText;
+            }
+
+            Editor._setCodeOffset(preNode, startPos, startPos);
+            Store.triggerAutoSave();
+            return;
+        }
+
+        // 3. Salvaguardia Widget Complessi nel testo normale (Database, Diari, ecc.)
+        if (!Editor.handleBulkWidgetDeletion()) {
+            e.preventDefault();
+            return;
+        }
+
+        // 4. Testo Normale: Snapshot Undo (Ctrl+Z) e cancellazione nativa del browser (focus e cursore intatti)
+        Editor.saveSnapshot();
+        setTimeout(() => {
+            if (typeof Store !== 'undefined') Store.triggerAutoSave();
+        }, 10);
     },
 
     handleEnterKey: (e) => {
@@ -318,6 +390,31 @@ Object.assign(Editor, {
             }
         }
 
+        // --- GESTIONE INVIO A FINE LINK (<a>): ESTRAZIONE PREVENTIVA DEL CURSORE ---
+        // Se il cursore si trova alla fine del link, lo posizioniamo subito dopo nel testo neutro
+        // prima che l'Invio del browser sdoppi il tag <a> creando link fantasma sulla nuova riga
+        const activeLink = node.closest ? node.closest('a') : null;
+        if (activeLink && !activeLink.closest('.adv-widget-shell, .adv-inline-shell')) {
+            const range = selection.getRangeAt(0);
+            const postRange = range.cloneRange();
+            postRange.selectNodeContents(activeLink);
+            postRange.setStart(range.endContainer, range.endOffset);
+
+            if (postRange.toString().length === 0) {
+                let afterNode = activeLink.nextSibling;
+                if (!afterNode || afterNode.nodeType !== Node.TEXT_NODE) {
+                    afterNode = document.createTextNode('');
+                    activeLink.parentNode.insertBefore(afterNode, activeLink.nextSibling);
+                }
+                const newRange = document.createRange();
+                newRange.setStart(afterNode, 0);
+                newRange.collapse(true);
+                selection.removeAllRanges();
+                selection.addRange(newRange);
+                // Nessun e.preventDefault(): il browser crea nativamente il nuovo paragrafo privo del link
+            }
+        }
+
         const closestLi = node.closest('li');
         const closestList = closestLi ? closestLi.parentElement : null;
 
@@ -382,26 +479,38 @@ Object.assign(Editor, {
     },
 
     handleBackspaceKey: (e) => {
+        // 1. INTERCETTAZIONE CANCELLAZIONE MULTI-CELLA TABELLA SEMPLICE
+        if (typeof TableManager !== 'undefined' && TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 1) {
+            e.preventDefault();
+            TableManager.Selection.clearSelectedCellsContent();
+            return;
+        }
+
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
 
+        // Se c'è del testo selezionato, la gestione è identica e unificata per tutta l'applicazione
         if (!selection.isCollapsed) {
-            if (!Editor.handleBulkWidgetDeletion()) {
-                e.preventDefault();
-                return;
-            }
-            e.preventDefault();
-            Editor.saveSnapshot();
-            document.execCommand('delete', false, null);
-            Store.triggerAutoSave();
+            Editor.deleteSelection(e);
             return;
         }
 
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
+        const editorRoot = document.getElementById('noteContent');
+
+        // Blocco codice a cursore collassato: impedisce di cancellare il widget o evadere all'indietro da offset 0
+        let node = container.nodeType === 3 ? container.parentNode : container;
+        const preNode = node.closest ? node.closest('pre.code-content') : null;
+        if (preNode) {
+            let currentPos = Editor._getCodeOffset(preNode, selection.anchorNode, selection.anchorOffset);
+            if (currentPos === 0) {
+                e.preventDefault();
+            }
+            return;
+        }
 
         // CANCELLAZIONE SEPARATORE <HR> CON BACKSPACE (Quando il cursore è direttamente nel root editor prima/dopo <hr>)
-        const editorRoot = document.getElementById('noteContent');
         if (container === editorRoot && range.startOffset > 0) {
             const nodeBefore = editorRoot.childNodes[range.startOffset - 1];
             if (nodeBefore && nodeBefore.tagName === 'HR') {
@@ -413,12 +522,18 @@ Object.assign(Editor, {
             }
         }
 
-        // CANCELLAZIONE ATOMICA WIDGET INLINE (BACKSPACE): Copre snippet, note inline e segnalibri
+        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
+
+        // CANCELLAZIONE ATOMICA WIDGET INLINE (BACKSPACE): Copre snippet, note inline e segnalibri anche se annidati in tag inline
         let inlineBefore = null;
         if (container.nodeType === 3) {
             const textBeforeCaret = container.nodeValue.substring(0, range.startOffset).replace(/[\u200B\uFEFF]/g, '');
             if (textBeforeCaret.length === 0) {
-                let prev = container.previousSibling;
+                let curr = container;
+                while (curr && curr.parentNode && curr.parentNode !== editorRoot && (!block || curr.parentNode !== block) && !curr.previousSibling) {
+                    curr = curr.parentNode;
+                }
+                let prev = curr ? curr.previousSibling : null;
                 while (prev && prev.nodeType === 3 && prev.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
                     prev = prev.previousSibling;
                 }
@@ -521,15 +636,26 @@ Object.assign(Editor, {
             }
         }
 
-        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
-        
-        // Verifica se il cursore è all'inizio del blocco corrente
+        // Verifica se il cursore è all'inizio del blocco corrente tenendo conto di tag inline e media
         let isAtBlockStart = false;
         if (block) {
-            const preRange = range.cloneRange();
-            preRange.selectNodeContents(block);
-            preRange.setEnd(range.startContainer, range.startOffset);
-            isAtBlockStart = !preRange.toString().replace(/[\u200B\uFEFF\u00A0\n\r]/g, '');
+            const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+            const isEmptyBlock = cleanText(block.textContent) === '' && !block.querySelector('img, audio, iframe, .adv-widget-shell, .adv-inline-shell, hr');
+
+            if (isEmptyBlock) {
+                isAtBlockStart = true;
+            } else {
+                try {
+                    const preRange = range.cloneRange();
+                    preRange.selectNodeContents(block);
+                    preRange.setEnd(range.startContainer, range.startOffset);
+                    const textBefore = preRange.toString().replace(/[\u200B\uFEFF\u00A0\n\r]/g, '');
+                    const hasMedia = !!preRange.cloneContents().querySelector('img, audio, iframe, svg, .adv-widget-shell, .adv-inline-shell, hr');
+                    isAtBlockStart = (textBefore.length === 0 && !hasMedia);
+                } catch (_) {
+                    isAtBlockStart = false;
+                }
+            }
         }
 
         if (block && isAtBlockStart) {
@@ -653,26 +779,65 @@ Object.assign(Editor, {
     },
 
     handleDeleteKey: (e) => {
+        // 1. INTERCETTAZIONE CANCELLAZIONE MULTI-CELLA TABELLA SEMPLICE
+        if (typeof TableManager !== 'undefined' && TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 1) {
+            e.preventDefault();
+            TableManager.Selection.clearSelectedCellsContent();
+            return;
+        }
+
         const selection = window.getSelection();
         if (!selection.rangeCount) return;
 
+        // Se c'è del testo selezionato, la gestione è identica e unificata per tutta l'applicazione
         if (!selection.isCollapsed) {
-            if (!Editor.handleBulkWidgetDeletion()) {
-                e.preventDefault();
-                return;
-            }
-            e.preventDefault();
-            Editor.saveSnapshot();
-            document.execCommand('delete', false, null);
-            Store.triggerAutoSave();
+            Editor.deleteSelection(e);
             return;
         }
 
         const range = selection.getRangeAt(0);
         let container = range.startContainer;
+        const editorRoot = document.getElementById('noteContent');
+
+        // Blocco codice a cursore collassato: cancella 1 carattere in avanti senza intaccare widget esterni
+        let node = container.nodeType === 3 ? container.parentNode : container;
+        const preNode = node.closest ? node.closest('pre.code-content') : null;
+        if (preNode) {
+            let currentPos = Editor._getCodeOffset(preNode, selection.anchorNode, selection.anchorOffset);
+            let rawText = Editor._getRawText(preNode);
+            if (rawText.endsWith('\n')) rawText = rawText.slice(0, -1);
+
+            // Alla fine assoluta del codice non cancellare i blocchi o widget esterni successivi
+            if (currentPos >= rawText.length) {
+                e.preventDefault();
+                return;
+            }
+
+            e.preventDefault();
+            Editor.saveSnapshot();
+
+            const newText = rawText.substring(0, currentPos) + rawText.substring(currentPos + 1);
+
+            const wrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+            if (wrapper) {
+                const trueId = wrapper.id.split('_cited_')[0];
+                if (!AppState.databases) AppState.databases = {};
+                if (!AppState.databases[trueId]) AppState.databases[trueId] = { title: I18n.t('code_widget.default_title'), language: 'none', content: '' };
+                AppState.databases[trueId].content = newText;
+            }
+
+            if (typeof CodeManager !== 'undefined') {
+                CodeManager.highlightBlock(preNode, true, newText);
+            } else {
+                preNode.textContent = newText;
+            }
+
+            Editor._setCodeOffset(preNode, currentPos, currentPos);
+            Store.triggerAutoSave();
+            return;
+        }
 
         // CANCELLAZIONE SEPARATORE <HR> CON CANC/DELETE (Quando il cursore è direttamente nel root editor prima di <hr>)
-        const editorRoot = document.getElementById('noteContent');
         if (container === editorRoot && range.startOffset < editorRoot.childNodes.length) {
             const nodeAfter = editorRoot.childNodes[range.startOffset];
             if (nodeAfter && nodeAfter.tagName === 'HR') {
@@ -684,12 +849,18 @@ Object.assign(Editor, {
             }
         }
 
-        // CANCELLAZIONE ATOMICA WIDGET INLINE (DELETE / CANC): Copre snippet, note inline e segnalibri
+        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
+
+        // CANCELLAZIONE ATOMICA WIDGET INLINE (DELETE / CANC): Copre snippet, note inline e segnalibri anche se annidati in tag inline
         let inlineAfter = null;
         if (container.nodeType === 3) {
             const textAfterCaret = container.nodeValue.substring(range.startOffset).replace(/[\u200B\uFEFF]/g, '');
             if (textAfterCaret.length === 0) {
-                let next = container.nextSibling;
+                let curr = container;
+                while (curr && curr.parentNode && curr.parentNode !== editorRoot && (!block || curr.parentNode !== block) && !curr.nextSibling) {
+                    curr = curr.parentNode;
+                }
+                let next = curr ? curr.nextSibling : null;
                 while (next && next.nodeType === 3 && next.nodeValue.replace(/[\u200B\uFEFF]/g, '') === '') {
                     next = next.nextSibling;
                 }
@@ -732,32 +903,37 @@ Object.assign(Editor, {
             return;
         }
 
-        let block = container.nodeType === 3 ? container.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : (container.closest ? container.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null);
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
 
         if (block) {
             let isAtEnd = false;
             
-            if (container.nodeType === 3 && range.startOffset === container.length) {
-                const walker = document.createTreeWalker(document.getElementById('noteContent'), NodeFilter.SHOW_ELEMENT | NodeFilter.SHOW_TEXT, null, false);
-                walker.currentNode = container;
-                let nextTextNode = walker.nextNode();
-                while (nextTextNode && nextTextNode.nodeType === 3 && nextTextNode.textContent.trim() === '') nextTextNode = walker.nextNode();
-                
-                // Se c'è un BR nativo che il browser può rimuovere, lasciamo fare a lui
-                if (nextTextNode && nextTextNode.nodeName === 'BR') {
-                    setTimeout(() => { if (typeof Store !== 'undefined') Store.triggerAutoSave(); }, 10);
-                    return; 
-                }
-                isAtEnd = true;
-            } 
-            else if (container.nodeType !== 3 && range.startOffset >= container.childNodes.length - 1) {
-                isAtEnd = true;
-            }
-            
             const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-            const isEmptyBlock = cleanText(block.textContent) === '';
-            if (isEmptyBlock) isAtEnd = true;
+            const isEmptyBlock = cleanText(block.textContent) === '' && !block.querySelector('img, audio, iframe, .adv-widget-shell, .adv-inline-shell, hr');
+
+            if (isEmptyBlock) {
+                isAtEnd = true;
+            } else {
+                try {
+                    const postRange = range.cloneRange();
+                    postRange.selectNodeContents(block);
+                    postRange.setStart(range.endContainer, range.endOffset);
+
+                    const remainingText = cleanText(postRange.toString());
+                    const frag = postRange.cloneContents();
+                    const hasMediaOrWidget = !!frag.querySelector('img, audio, iframe, svg, .adv-widget-shell, .adv-inline-shell, hr');
+                    const brCount = frag.querySelectorAll('br').length;
+
+                    // Se dopo il cursore nello stesso blocco c'è ancora testo visibile, un widget/media o più di un <br>
+                    if (remainingText.length > 0 || hasMediaOrWidget || brCount > 1) {
+                        isAtEnd = false;
+                    } else {
+                        isAtEnd = true;
+                    }
+                } catch (_) {
+                    isAtEnd = false;
+                }
+            }
 
             if (isAtEnd) {
                 // GESTIONE MINIMALE HR CON CANC: Se l'elemento successivo è un <hr>, eliminalo

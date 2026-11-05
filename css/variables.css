@@ -113,10 +113,10 @@
     --hl-c4: #995216; /* Arancione */
     --hl-c5: #a09800; /* Giallo senape */
     --hl-c6: #2c6c2c; /* Verde */
-    --hl-c7: #263da1; /* Blu */
-    --hl-c8: #4f2d78; /* Viola */
+    --hl-c7: #1B3CA0; /* Blu */
+    --hl-c8: #4B1C9D; /* Viola */
     --hl-c9: #812d61; /* Rosa */
-    --hl-c10: #7b2525; /* Rosso */
+    --hl-c10: #800000; /* Rosso */
 
     /* Colori Testo per le Pillole calcolati per Contrasto (Dark Mode) */
     --hl-tc-c1: #ffffff;
@@ -169,12 +169,12 @@
     --hl-c2: #5a5a5a; /* Grigio Scuro */
     --hl-c3: #603b2c; /* Marrone */
     --hl-c4: #995216; /* Arancione */
-    --hl-c5: #a8a800; /* Giallo */
-    --hl-c6: #2c6c2c; /* Verde */
-    --hl-c7: #263da1; /* Blu */
-    --hl-c8: #4f2d78; /* Viola */
-    --hl-c9: #812d61; /* Rosa */
-    --hl-c10: #7b2525; /* Rosso */
+    --hl-c5: #9E9E01; /* Giallo */
+    --hl-c6: #196c19; /* Verde */
+    --hl-c7: #1B3CA0; /* Blu */
+    --hl-c8: #4B1C9D; /* Viola */
+    --hl-c9: #941663; /* Rosa */
+    --hl-c10: #800000; /* Rosso */
 
     /* Colori Testo per le Pillole calcolati per Contrasto (Dark Mode) */
     --hl-tc-c1: #ffffff;

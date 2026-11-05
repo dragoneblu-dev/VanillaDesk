@@ -8,6 +8,9 @@
  * - Architettura Nativa VanillaDesk: riconosce solo collegamenti univoci reali (<a data-note-id="...">),
  *   citazioni (<blockquote data-ref-note="...">), gerarchie padre-figlio e tag censiti.
  * - Zero Nodi Fantasma: se un link punta a una nota eliminata o inesistente, viene ignorato.
+ * - EREDITARIETÀ RAMO RECORD DATABASE: Tutte le note facenti parte di normali database
+ *   (sia le record note primarie sia tutte le loro sotto-note discendenti) ereditano stabilmente
+ *   il colore verde smeraldo (#10b981) e il tipo record_note, escludendo lo Shadow Database.
  * - Colorazione Deterministica e Legenda Dinamica con scorciatoie cliccabili per i filtri.
  */
 
@@ -64,6 +67,23 @@ window.GraphData = {
             noteByIdMap.set(n.id, n);
         });
 
+        // Helper deterministico con protezione anti-ciclo: rileva se una nota o un suo antenato appartiene a un database normale
+        const isNormalDatabaseBranch = (noteObj) => {
+            let curr = noteObj;
+            const visitedParents = new Set();
+
+            while (curr && !visitedParents.has(curr.id)) {
+                visitedParents.add(curr.id);
+
+                // Se la nota è legata a una tabella reale ed è diversa dallo Shadow Database delle proprietà di sistema
+                if (curr.isRecordNote && curr.linkedTableId && curr.linkedTableId !== 'SYS_PROPERTIES_DB') {
+                    return true;
+                }
+                curr = curr.parentId ? noteByIdMap.get(curr.parentId) : null;
+            }
+            return false;
+        };
+
         // 3. Mappa tag primario (da SYS_PROPERTIES_DB o scansione hashtag)
         const notePrimaryTagMap = new Map();
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
@@ -96,12 +116,13 @@ window.GraphData = {
 
         const colorMode = GraphData.options.colorMode || 'type';
 
-        // 4. Creazione Nodi Note
+        // 4. Creazione Nodi Note con ereditarietà del ramo database
         let folderCounter = 0;
         let tagCounter = 0;
 
         notes.forEach((n, idx) => {
-            const isRecord = !!n.isRecordNote;
+            // Verifica se la nota è una record note diretta o una sotto-nota discendente di un normale database
+            const isRecord = isNormalDatabaseBranch(n);
             if (isRecord && !GraphData.options.showRecordNotes) return;
 
             // Recupera la posizione dalla memoria persistente
@@ -129,7 +150,7 @@ window.GraphData = {
                 GraphData.tagColorMap.set(primaryTag, GraphData._getDistinctColor(tagCounter++));
             }
 
-            // Assegnazione colore
+            // Assegnazione colore deterministica: verde smeraldo per l'intero albero dei database normali, blu per note standard
             let nodeColor = isRecord ? '#10b981' : '#2563eb';
             if (colorMode === 'folder') {
                 nodeColor = GraphData.folderColorMap.get(folderName);
@@ -162,7 +183,7 @@ window.GraphData = {
             const sourceId = n.id;
             if (!GraphData.nodeMap.has(sourceId)) return;
 
-            // A. Gerarchia Padre-Figlio (Cartelle)
+            // A. Gerarchia Padre-Figlio (Cartelle e Sotto-note)
             if (GraphData.options.showHierarchy && n.parentId && validNoteIds.has(n.parentId)) {
                 if (GraphData.nodeMap.has(n.parentId)) {
                     GraphData.addLink(sourceId, n.parentId, 'hierarchy');
@@ -360,7 +381,7 @@ window.GraphData = {
                 </div>
                 <div class="legend-item interactive ${opts.showRecordNotes ? '' : 'inactive'}" 
                      onclick="GraphUI.toggleOption('showRecordNotes')" 
-                     title="Clicca per mostrare/nascondere le Pagine Record di Database">
+                     title="Clicca per mostrare/nascondere le Pagine Record di Database e relative sotto-note">
                     <span class="legend-dot" style="background:#10b981;"></span> Record DB
                 </div>
                 <div class="legend-item interactive ${opts.showTags ? '' : 'inactive'}" 
