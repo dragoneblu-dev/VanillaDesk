@@ -354,7 +354,7 @@ Object.assign(Editor, {
         const elements = Array.from(rootNode.querySelectorAll(blockTags.join(',')));
 
         elements.forEach(el => {
-            if (WidgetManager.isTotallyProtected(el) || el.closest('.inline-note-wrapper')) {
+            if (WidgetManager.isTotallyProtected(el) || el.closest('.inline-note-wrapper, .adv-bookmark-marker, .adv-inline-shell')) {
                 return;
             }
 
@@ -363,7 +363,7 @@ Object.assign(Editor, {
             const cleanText = el.innerText.replace(/\u200B/g, '').trim();
 
             // Normalizzazione dei blocchi con <br> multipli (es. <p><br><br><br><br></p>) in singoli <p><br></p>
-            if ((tag === 'P' || tag === 'DIV') && !el.closest('table, td, th, ul, ol, li, pre, code, .adv-widget-shell, .adv-inline-shell, .inline-note-wrapper')) {
+            if ((tag === 'P' || tag === 'DIV') && !el.closest('table, td, th, ul, ol, li, pre, code, .adv-widget-shell, .adv-inline-shell, .inline-note-wrapper, .adv-bookmark-marker')) {
                 const textOnly = el.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
                 const hasMedia = el.querySelector('img, audio, iframe, input, svg, hr, table, .adv-widget-shell');
                 const brCount = el.querySelectorAll('br').length;
@@ -508,6 +508,7 @@ Object.assign(Editor, {
             const note = Store.getNote(AppState.currentNoteId);
             if (note) {
                 note.content = Editor.minifyHTMLForStorage(editor.innerHTML, false);
+                note._isDirty = true;
             }
         }
         

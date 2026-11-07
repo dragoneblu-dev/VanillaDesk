@@ -335,7 +335,7 @@ trash: {
     confirm_hard_delete_branch: "Attenzione: Stai per eliminare DEFINITIVAMENTE la nota e le sue {subnotes} sotto-note ({count} note totali).\nQuesta operazione è irreversibile. Procedere?",
     orphans_title: "Allegati non utilizzati nelle note: <b>{count} file</b>",
     orphans_desc: "File immagine o audio rimossi dai testi. Spazio recuperabile: <b>{size}</b>",
-    btn_clean_orphans: "🧹 Elimina Allegati Inutilizzati",
+    btn_clean_orphans: "Elimina Allegati Inutilizzati",
     confirm_clean_orphans: "Eliminare definitivamente dal disco tutti i file immagine e audio non più utilizzati in nessuna nota?",
     toast_orphans_cleaned: "Eliminati {count} allegati orfani dal disco."
 },
@@ -1943,7 +1943,7 @@ trash: {
     confirm_hard_delete_branch: "Warning: You are about to PERMANENTLY delete this note and its {subnotes} sub-notes ({count} total notes).\nThis operation is irreversible. Proceed?",
     orphans_title: "Unused attachments in notes: <b>{count} files</b>",
     orphans_desc: "Image or audio files removed from notes. Recoverable space: <b>{size}</b>",
-    btn_clean_orphans: "🧹 Delete Unused Attachments",
+    btn_clean_orphans: "Delete Unused Attachments",
     confirm_clean_orphans: "Permanently delete all image and audio files no longer used in any note from disk?",
     toast_orphans_cleaned: "Deleted {count} orphaned attachments from disk."
 },
@@ -3550,7 +3550,7 @@ trash: {
     confirm_hard_delete_branch: "Advertencia: Estás a punto de eliminar DEFINITIVAMENTE esta nota y sus {subnotes} subnotas ({count} notas en total).\nEsta operación es irreversible. ¿Deseas continuar?",
     orphans_title: "Adjuntos no utilizados en las notas: <b>{count} archivos</b>",
     orphans_desc: "Imágenes o audios eliminados de los textos. Espacio recuperable: <b>{size}</b>",
-    btn_clean_orphans: "🧹 Eliminar Adjuntos No Utilizados",
+    btn_clean_orphans: "Eliminar Adjuntos No Utilizados",
     confirm_clean_orphans: "¿Eliminar definitivamente del disco todos los archivos de imagen y audio que ya no se usan en ninguna nota?",
     toast_orphans_cleaned: "Se eliminaron {count} archivos adjuntos huérfanos del disco."
 },
@@ -5157,7 +5157,7 @@ trash: {
     confirm_hard_delete_branch: "Warnung: Sie sind im Begriff, diese Notiz und ihre {subnotes} Unternotizen ({count} Notizen insgesamt) ENDGÜLTIG zu löschen.\nDieser Vorgang kann nicht rückgängig gemacht werden. Fortfahren?",
     orphans_title: "Ungenutzte Anhänge in Notizen: <b>{count} Dateien</b>",
     orphans_desc: "Aus Notizen entfernte Bild- oder Audiodateien. Freigebbarer Speicherplatz: <b>{size}</b>",
-    btn_clean_orphans: "🧹 Ungenutzte Anhänge löschen",
+    btn_clean_orphans: "Ungenutzte Anhänge löschen",
     confirm_clean_orphans: "Alle Bild- und Audiodateien, die in keiner Notiz mehr verwendet werden, endgültig von der Festplatte löschen?",
     toast_orphans_cleaned: "{count} verwaiste Anhänge von der Festplatte gelöscht."
 },

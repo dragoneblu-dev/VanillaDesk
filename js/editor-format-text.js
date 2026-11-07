@@ -859,16 +859,28 @@ Object.assign(Editor, {
             // Se il nodo si trova all'interno di un'area editabile generica fuori dai widget complessi
             if (typeof WidgetManager !== 'undefined' && WidgetManager.isInsideEditableWidgetArea(node)) return true; 
 
-            if (node.closest && node.closest('.internal-link, .file-link')) {
+            // PROTEZIONE ANCESTRALE RIGOROSA WIDGET INLINE & LINK:
+            // Se il nodo o uno qualsiasi dei suoi antenati appartiene a link, segnalibri, appunti nascosti o snippet, NON toccarlo!
+            if (node.closest && (
+                node.closest('.internal-link, .file-link, a') ||
+                node.closest('.adv-bookmark-marker') ||
+                node.closest('.inline-note-wrapper') ||
+                node.closest('.adv-copy-snippet') ||
+                node.closest('.adv-inline-shell')
+            )) {
                 return false;
             }
             if (node.classList && (
                 node.classList.contains('internal-link') || 
                 node.classList.contains('file-link') || 
                 node.classList.contains('inline-note-marker') || 
+                node.classList.contains('inline-note-data') || 
                 node.classList.contains('adv-bookmark-marker') || 
+                node.classList.contains('bookmark-icon') || 
+                node.classList.contains('bookmark-comment-data') || 
                 node.classList.contains('adv-copy-snippet') ||
-                node.classList.contains('snippet-copy-btn')
+                node.classList.contains('snippet-copy-btn') ||
+                node.classList.contains('snippet-text')
             )) {
                 return false;
             }
@@ -982,7 +994,7 @@ Object.assign(Editor, {
                 // Preserva i modificatori di fusione celle per th e td
                 if ((attr.name === 'colspan' || attr.name === 'rowspan') && (tag === 'TD' || tag === 'TH')) return;
                 if (attr.name === 'contenteditable') return;
-                if (attr.name === 'id' && (isProtectedWidget || currentEl.classList.contains('simple-table-wrapper') || currentEl.closest('.simple-table-wrapper'))) return;
+                if (attr.name === 'id' && (isProtectedWidget || currentEl.classList.contains('simple-table-wrapper') || currentEl.closest('.simple-table-wrapper') || currentEl.classList.contains('adv-bookmark-marker'))) return;
 
                 if (attr.name === 'class') {
                     const classes = attr.value.split(/\s+/).filter(cls => allowedClasses.includes(cls) || allowedPrefixes.some(p => cls.startsWith(p)));
@@ -1057,7 +1069,7 @@ Object.assign(Editor, {
         // =========================================================================
         const isProtectedContext = (el) => {
             if (!el || !el.closest) return false;
-            return !!el.closest('table, td, th, ul, ol, li, pre, code, .adv-widget-shell, .adv-inline-shell, .inline-note-wrapper, .inline-note-data, .bookmark-comment-data, [data-widget-type]');
+            return !!el.closest('table, td, th, ul, ol, li, pre, code, .adv-widget-shell, .adv-inline-shell, .inline-note-wrapper, .inline-note-data, .adv-bookmark-marker, .bookmark-comment-data, [data-widget-type]');
         };
 
         // 1. I <br> orfani a livello radice del container diventano <p><br></p>

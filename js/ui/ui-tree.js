@@ -14,6 +14,7 @@
  * - FIX RECORD NOTE SUBNOTES HIERARCHY: Sbloccata la ricorsione gerarchica sui figli delle record note senza alterare la struttura delle radici.
  * - FIX RECORD BRANCH ICON: Ereditarietà automatica dell'icona verde record per tutti i rami discendenti delle pagine di database.
  * - FIX WHITESPACE SEARCH PARITY: Parità e normalizzazione tra spazi ASCII e caratteri &nbsp; (\u00A0) in extractSearchableText e matching.
+ * - FIX BOOKMARK COMMENT MULTILINE REGEX: Utilizzo di [\s\S]*? per catturare note su più righe senza perdere il fumetto nell'albero.
  */
 
 Object.assign(UI, {
@@ -621,7 +622,7 @@ Object.assign(UI, {
         title.innerHTML = `<span style="opacity:0.8; ${iconColorStyle}">${customIcon}</span> <span>${node.title || I18n.t('editor.untitled')}</span>`;
 
         if (reqBook && !isGhost && node.content) {
-            const commentMatch = node.content.match(/<span[^>]*class=["'][^"']*bookmark-comment-data[^"']*["'][^>]*>(.*?)<\/span>/i);
+            const commentMatch = node.content.match(/<span[^>]*class=["'][^"']*bookmark-comment-data[^"']*["'][^>]*>([\s\S]*?)<\/span>/i);
             if (commentMatch && commentMatch[1]) {
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = commentMatch[1];

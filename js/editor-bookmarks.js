@@ -157,6 +157,7 @@ Object.assign(Editor, {
             const editorEl = document.getElementById('noteContent');
             if (curNote && editorEl) {
                 curNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                curNote._isDirty = true;
                 curNote.updatedAt = new Date().toISOString();
             }
         }
@@ -178,6 +179,7 @@ Object.assign(Editor, {
             const editorEl = document.getElementById('noteContent');
             if (curNote && editorEl) {
                 curNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                curNote._isDirty = true;
                 curNote.updatedAt = new Date().toISOString();
             }
         }
@@ -210,6 +212,7 @@ Object.assign(Editor, {
                     const currentNote = Store.getNote(noteId);
                     if (currentNote) {
                         currentNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                        currentNote._isDirty = true;
                         currentNote.updatedAt = new Date().toISOString();
                     }
                 }
@@ -235,6 +238,7 @@ Object.assign(Editor, {
                     }
                     tagContent += ` data-timer-expire="${newExpire}"`;
                     note.content = note.content.replace(regex, `${tagContent}>`);
+                    note._isDirty = true;
                     note.updatedAt = new Date().toISOString();
                     updated = true;
                 }
@@ -402,12 +406,13 @@ Object.assign(Editor, {
             marker.removeAttribute('data-tooltip');
         }
 
-        // Sincronizza nel content della nota corrente
+        // Sincronizza nel content della nota corrente impostando _isDirty a true
         if (AppState.currentNoteId) {
             const curNote = Store.getNote(AppState.currentNoteId);
             const editorEl = document.getElementById('noteContent');
             if (curNote && editorEl) {
                 curNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                curNote._isDirty = true;
                 curNote.updatedAt = new Date().toISOString();
             }
         }
@@ -437,6 +442,15 @@ Object.assign(Editor, {
             }
             Editor.saveSnapshot();
             Editor.activeBookmark.remove();
+            if (AppState.currentNoteId) {
+                const curNote = Store.getNote(AppState.currentNoteId);
+                const editorEl = document.getElementById('noteContent');
+                if (curNote && editorEl) {
+                    curNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                    curNote._isDirty = true;
+                    curNote.updatedAt = new Date().toISOString();
+                }
+            }
             Store.triggerAutoSave();
             if (typeof UI !== 'undefined' && UI.renderTree) UI.renderTree();
         }
@@ -465,6 +479,7 @@ Object.assign(Editor, {
                             const editorEl = document.getElementById('noteContent');
                             if (curNote && editorEl) {
                                 curNote.content = Editor.minifyHTMLForStorage(editorEl.innerHTML);
+                                curNote._isDirty = true;
                                 curNote.updatedAt = new Date().toISOString();
                             }
                         }
@@ -509,6 +524,7 @@ Object.assign(Editor, {
 
                                 const cleanedTag = tagWithId.replace(/\s*data-timer-expire=["']\d+["']/, '');
                                 note.content = note.content.replace(originalTag, cleanedTag);
+                                note._isDirty = true;
                                 noteModified = true;
                                 needsSave = true;
 
