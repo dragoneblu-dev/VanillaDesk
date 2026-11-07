@@ -9,7 +9,7 @@
  * garantendo la dis-espansione degli antenati collassati.
  * AUTO-HEAL APERTURA NOTA (CASO C): Controllo mirato ultrarapido tramite regex (ZWS duplicati o intrappolati tra lettere)
  * per avviare la bonifica dei cuscinetti solo in presenza di reali anomalie, evitando scansioni inutili su widget legittimi.
- * FEAT BRANCH TRASH QUANTIFICATION (4A): Calcolo esatto delle sotto-note e dei soli database primari reali (escluse viste/pivot).
+ * FEAT BRANCH TRASH QUANTIFICATION (4A): Calcolo esatto delle sotto-note e dei soli database primari reali (escluse viste/pivot e citazioni).
  * FIX SUB-NOTE CLONING ROOT-CAUSE: Eliminata assegnazione prematura di currentNoteId in addNote e preservazione
  * della sincronicità contrattuale con bypass di syncWidgetsForNote sulle note bozza.
  * FEAT PER-NOTE SPELLCHECK APPLICATION: Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
@@ -119,8 +119,6 @@ Object.assign(UI, {
     selectNote: async (id, anchorText = null, refId = null, scrollToTop = false, isHistoryNavigation = false) => {
         // =========================================================================
         // FAST-PATH: NAVIGAZIONE INTERNA ALLA STESSA NOTA GIÀ APERTA A SCHERMO
-        // Impedisce la distruzione del DOM vivo e lo sfarfallio se si clicca un elemento
-        // o citazione che punta a un capitolo/blocco della nota attualmente attiva.
         // =========================================================================
         if (AppState.currentNoteId === id) {
             AppState.isSwitchingNote = false;
@@ -579,7 +577,7 @@ Object.assign(UI, {
         const treeTitleContainer = document.querySelector(`.node-wrapper[data-id="${AppState.currentNoteId}"] > .node-content .node-title`);
         if (treeTitleContainer) {
             let customIcon = Icons.file;
-            let iconColorStr = '';
+            let iconColorStyle = "";
             const hasBookmark = note.content && note.content.includes('adv-bookmark-marker');
 
             // Verifica se la nota appartiene al ramo di un record di database (diretto o tramite antenati)
@@ -594,20 +592,20 @@ Object.assign(UI, {
 
             if (isDbDescendant) {
                 customIcon = Icons.recordPage;
-                iconColorStr = 'color:var(--record-color);';
+                iconColorStyle = 'color:var(--record-color);';
             } else {
                 if (note.isMarked && hasBookmark) {
                     customIcon = Icons.starFilled;
-                    iconColorStr = 'color:var(--tx-c4);'; 
+                    iconColorStyle = 'color:var(--tx-c4);'; 
                 } else if (note.isMarked) {
                     customIcon = Icons.starFilled;
-                    iconColorStr = 'color:var(--marked-border);'; 
+                    iconColorStyle = 'color:var(--marked-border);'; 
                 } else if (hasBookmark) {
-                    iconColorStr = 'color:var(--tx-c4);'; 
+                    iconColorStyle = 'color:var(--tx-c4);'; 
                 }
             }
 
-            treeTitleContainer.innerHTML = `<span style="opacity:0.8; ${iconColorStr}">${customIcon}</span> <span>${note.title || I18n.t('editor.untitled')}</span>`;
+            treeTitleContainer.innerHTML = `<span style="opacity:0.8; ${iconColorStyle}">${customIcon}</span> <span>${note.title || I18n.t('editor.untitled')}</span>`;
         }
 
         UI.updateBreadcrumb(note);
@@ -685,14 +683,17 @@ Object.assign(UI, {
         const subnotesCount = subnotes.length;
         const allNotesToCheck = [note, ...subnotes];
         const foundDbIds = new Set();
-        const dbRegex = /\bid=["'](adv_tbl_[a-zA-Z0-9_]+|adv_pivot_[a-zA-Z0-9_]+|adv_journal_[a-zA-Z0-9_]+)["']/g;
+        // Lo spazio iniziale \sid= esclude automaticamente i data-ref-id delle citazioni
+        const dbRegex = /\sid=["'](adv_tbl_[a-zA-Z0-9_]+|adv_pivot_[a-zA-Z0-9_]+|adv_journal_[a-zA-Z0-9_]+)["']/g;
 
         allNotesToCheck.forEach(n => {
             if (!n.content) return;
+
             let match;
             dbRegex.lastIndex = 0;
             while ((match = dbRegex.exec(n.content)) !== null) {
-                const trueId = match[1].split('_cited_')[0];
+                if (match[1].includes('_cited_')) continue;
+                const trueId = match[1];
                 if (trueId === 'SYS_PROPERTIES_DB') continue;
                 const dbState = AppState.databases ? AppState.databases[trueId] : null;
                 // Conta solo database primari reali (esclude viste collegate e pivot prive di dati autonomi)

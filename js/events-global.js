@@ -30,12 +30,14 @@
  * lo snapshot iniziale prima di cancellazioni continue o prolungate, proteggendo interi capitoli su Undo (Ctrl+Z).
  * REFACTOR: Rimosso listener fallback middle-click da click (gestito nativamente da auxclick).
  * FEAT VERTICAL SHIFT SELECTION HOOK: Intercettazione di Shift+ArrowUp/Down prima del table handler.
+ * FIX IDEMPOTENT INIT: Guardia _initialized per prevenire l'accumulo di listener multipli su riesecuzione dei test.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
 
 Object.assign(EventsGlobal, {
     _lastMiddleClickTime: 0,
+    _initialized: false,
 
     // Risoluzione ed esecuzione diretta dei link (usata da click, auxclick e Ctrl+Click)
     openLinkDirectly: (link) => {
@@ -105,6 +107,9 @@ Object.assign(EventsGlobal, {
     },
 
     init: () => {
+        if (EventsGlobal._initialized) return;
+        EventsGlobal._initialized = true;
+
         const editorEl = document.getElementById('noteContent');
         const scrollArea = document.getElementById('editorScrollContent');
 

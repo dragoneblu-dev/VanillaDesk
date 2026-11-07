@@ -2,136 +2,130 @@
  * tests/test-link-manager.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: link-manager
- * Conteggio test case: 6
- * Generato automaticamente il: 2026-09-25 11:19:11
  */
 
-describe("LinkManager: Link Interni, Esterni, File Locali & YouTube (6 Test)", () => {
+describe("LinkManager: Link Interni, Esterni, File Locali & YouTube (test-link-manager.js)", () => {
 
     test("LinkManager: _decodeEntities decodifica entità HTML native", () => {
-            Assert.strictEqual(LinkManager._decodeEntities('&lt;b&gt;&quot;Test&quot;&lt;/b&gt;'), '<b>"Test"</b>');
-        });
+        Assert.strictEqual(LinkManager._decodeEntities('&lt;b&gt;&quot;Test&quot;&lt;/b&gt;'), '<b>"Test"</b>');
+    });
 
     test("LinkManager: confirmExternalLink sanitizza caratteri pericolosi in data-link-note", () => {
-            const dummyUrl = document.createElement('input'); dummyUrl.id = 'externalLinkUrl'; dummyUrl.value = 'https://safe.com';
-            const dummyTxt = document.createElement('input'); dummyTxt.id = 'externalLinkText'; dummyTxt.value = 'Safe';
-            const dummyNote = document.createElement('textarea'); dummyNote.id = 'externalLinkNote'; dummyNote.value = '<script>alert("xss")</script>';
-            document.body.appendChild(dummyUrl); document.body.appendChild(dummyTxt); document.body.appendChild(dummyNote);
+        const dummyUrl = document.createElement('input'); dummyUrl.id = 'externalLinkUrl'; dummyUrl.value = 'https://safe.com';
+        const dummyTxt = document.createElement('input'); dummyTxt.id = 'externalLinkText'; dummyTxt.value = 'Safe';
+        const dummyNote = document.createElement('textarea'); dummyNote.id = 'externalLinkNote'; dummyNote.value = '<script>alert("xss")</script>';
+        document.body.appendChild(dummyUrl); document.body.appendChild(dummyTxt); document.body.appendChild(dummyNote);
 
-            let editor = document.getElementById('noteContent');
-            editor.innerHTML = '<p><br></p>';
-            const r = document.createRange();
-            r.setStart(editor.querySelector('p'), 0);
-            r.collapse(true);
-            window.getSelection().removeAllRanges();
-            window.getSelection().addRange(r);
+        let editor = document.getElementById('noteContent');
+        editor.innerHTML = '<p><br></p>';
+        const r = document.createRange();
+        r.setStart(editor.querySelector('p'), 0);
+        r.collapse(true);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(r);
 
-            try {
-                LinkManager.confirmExternalLink();
-                const link = editor.querySelector('a');
-                Assert.isNotNull(link);
-                const noteAttr = link.getAttribute('data-link-note');
-                Assert.isFalse(noteAttr.includes('<script>'));
-                Assert.isTrue(noteAttr.includes('&lt;script&gt;'));
-            } finally {
-                dummyUrl.remove(); dummyTxt.remove(); dummyNote.remove();
-            }
-        });
+        try {
+            LinkManager.confirmExternalLink();
+            const link = editor.querySelector('a');
+            Assert.isNotNull(link);
+            const noteAttr = link.getAttribute('data-link-note');
+            Assert.isFalse(noteAttr.includes('<script>'));
+            Assert.isTrue(noteAttr.includes('&lt;script&gt;'));
+        } finally {
+            dummyUrl.remove(); dummyTxt.remove(); dummyNote.remove();
+        }
+    });
 
     test("LinkManager: confirmFileLink antepone icona documento 📄 al nome visualizzato", () => {
-            const dummyName = document.createElement('input'); dummyName.id = 'fileLinkName'; dummyName.value = 'Specifiche.pdf';
-            const dummyPath = document.createElement('input'); dummyPath.id = 'fileLinkPath'; dummyPath.value = 'C:\\docs\\file.pdf';
-            const dummyNote = document.createElement('textarea'); dummyNote.id = 'fileLinkNote'; dummyNote.value = '';
-            document.body.appendChild(dummyName); document.body.appendChild(dummyPath); document.body.appendChild(dummyNote);
+        const dummyName = document.createElement('input'); dummyName.id = 'fileLinkName'; dummyName.value = 'Specifiche.pdf';
+        const dummyPath = document.createElement('input'); dummyPath.id = 'fileLinkPath'; dummyPath.value = 'C:\\docs\\file.pdf';
+        const dummyNote = document.createElement('textarea'); dummyNote.id = 'fileLinkNote'; dummyNote.value = '';
+        document.body.appendChild(dummyName); document.body.appendChild(dummyPath); document.body.appendChild(dummyNote);
 
-            let editor = document.getElementById('noteContent');
-            editor.innerHTML = '<p><br></p>';
-            const r = document.createRange();
-            r.setStart(editor.querySelector('p'), 0);
-            r.collapse(true);
-            window.getSelection().removeAllRanges();
-            window.getSelection().addRange(r);
+        let editor = document.getElementById('noteContent');
+        editor.innerHTML = '<p><br></p>';
+        const r = document.createRange();
+        r.setStart(editor.querySelector('p'), 0);
+        r.collapse(true);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(r);
 
-            try {
-                LinkManager.confirmFileLink();
-                const link = editor.querySelector('a.file-link');
-                Assert.isNotNull(link);
-                Assert.isTrue(link.textContent.includes('📄 Specifiche.pdf'));
-            } finally {
-                dummyName.remove(); dummyPath.remove(); dummyNote.remove();
-            }
-        });
+        try {
+            LinkManager.confirmFileLink();
+            const link = editor.querySelector('a.file-link');
+            Assert.isNotNull(link);
+            Assert.isTrue(link.textContent.includes('📄 Specifiche.pdf'));
+        } finally {
+            dummyName.remove(); dummyPath.remove(); dummyNote.remove();
+        }
+    });
 
     test("LinkManager: confirmYoutube valida che l'ID sia lungo esattamente 11 caratteri", () => {
-            const dummyInput = document.createElement('input');
-            dummyInput.id = 'youtubeUrlInput';
-            dummyInput.value = 'https://youtu.be/short_id'; // Troppo corto (non 11 char)
-            document.body.appendChild(dummyInput);
+        const dummyInput = document.createElement('input');
+        dummyInput.id = 'youtubeUrlInput';
+        dummyInput.value = 'https://youtu.be/short_id'; // Troppo corto (non 11 char)
+        document.body.appendChild(dummyInput);
 
-            let alertShown = false;
-            const origAlert = window.alert;
-            window.alert = () => { alertShown = true; };
+        let alertShown = false;
+        const origAlert = window.alert;
+        window.alert = () => { alertShown = true; };
 
-            try {
-                LinkManager.confirmYoutube();
-                Assert.isTrue(alertShown);
-            } finally {
-                window.alert = origAlert;
-                dummyInput.remove();
-            }
-        });
+        try {
+            LinkManager.confirmYoutube();
+            Assert.isTrue(alertShown);
+        } finally {
+            window.alert = origAlert;
+            dummyInput.remove();
+        }
+    });
 
     test("LinkManager: insertNodeAtSelection inietta solo uno Zero-Width Space DOPO il nodo", () => {
-            let editor = document.getElementById('noteContent');
-            editor.innerHTML = '<p id="p_target_link">Inizio </p>';
-            const p = editor.querySelector('#p_target_link');
+        let editor = document.getElementById('noteContent');
+        editor.innerHTML = '<p id="p_target_link">Inizio </p>';
+        const p = editor.querySelector('#p_target_link');
 
-            const r = document.createRange();
-            r.setStart(p.firstChild, 7);
-            r.collapse(true);
-            window.getSelection().removeAllRanges();
-            window.getSelection().addRange(r);
+        const r = document.createRange();
+        r.setStart(p.firstChild, 7);
+        r.collapse(true);
+        window.getSelection().removeAllRanges();
+        window.getSelection().addRange(r);
 
-            const newLink = document.createElement('a');
-            newLink.textContent = 'Collegamento';
+        const newLink = document.createElement('a');
+        newLink.textContent = 'Collegamento';
 
-            LinkManager.insertNodeAtSelection(newLink);
+        LinkManager.insertNodeAtSelection(newLink);
 
-        // 1. Il link deve essere presente nel DOM all'interno del paragrafo
         Assert.strictEqual(newLink.parentNode, p);
         Assert.strictEqual(newLink.textContent, 'Collegamento');
 
-        // 2. Garanzia di pulizia DOM: nessun nodo Zero-Width Space (\u200B) deve essere iniettato artificialmente dopo il tag <a>
-            const next = newLink.nextSibling;
+        const next = newLink.nextSibling;
         if (next && next.nodeType === Node.TEXT_NODE) {
             Assert.isFalse(next.nodeValue.includes('\u200B'));
         }
 
-        // 3. Verifica del posizionamento corretto del cursore (Caret) subito dopo il link inserito
         const sel = window.getSelection();
         Assert.isTrue(sel.rangeCount > 0);
         const curRange = sel.getRangeAt(0);
         Assert.isTrue(curRange.collapsed);
-        });
+    });
 
     test("LinkManager: openLinkDirect su link interno delega a UI.selectNote", () => {
-            const link = document.createElement('a');
-            link.className = 'internal-link';
-            link.setAttribute('data-note-id', 'note_target_999');
+        const link = document.createElement('a');
+        link.className = 'internal-link';
+        link.setAttribute('data-note-id', 'note_target_999');
 
-            let targetSelected = null;
-            const origSelect = UI.selectNote;
-            UI.selectNote = (id) => { targetSelected = id; };
+        let targetSelected = null;
+        const origSelect = UI.selectNote;
+        UI.selectNote = (id) => { targetSelected = id; };
 
-            try {
-                LinkManager.openLinkDirect(link);
-                Assert.strictEqual(targetSelected, 'note_target_999');
-            } finally {
-                UI.selectNote = origSelect;
-            }
-        });
+        try {
+            LinkManager.openLinkDirect(link);
+            Assert.strictEqual(targetSelected, 'note_target_999');
+        } finally {
+            UI.selectNote = origSelect;
+        }
+    });
 
-        
     test("LinkManager: associazione note descrittive in data-link-note", () => {
         const link = document.createElement('a');
         link.setAttribute('data-link-note', 'Descrizione importante del link');
@@ -211,5 +205,80 @@ describe("LinkManager: Link Interni, Esterni, File Locali & YouTube (6 Test)", (
         Assert.strictEqual(url, "https://www.wikipedia.org");
     });
 
+    test("LinkManager: _truncateUrl accorcia indirizzi web eccedenti 60 caratteri", () => {
+        const longUrl = "https://subdomain.example.com/very/deeply/nested/path/to/resource?param=value&tracking=true";
+        const truncated = LinkManager._truncateUrl(longUrl, 60);
+
+        Assert.isTrue(truncated.length <= 60);
+        Assert.isTrue(truncated.endsWith('...'));
+
+        const shortUrl = "https://short.com";
+        Assert.strictEqual(LinkManager._truncateUrl(shortUrl, 60), shortUrl);
+    });
+
+    test("LinkManager: _setCaretAfterLink posiziona il cursore dopo il link preservando lo scroll", () => {
+        let editor = document.getElementById('noteContent');
+        editor.innerHTML = '<p id="p_link_caret"><a id="target_a">Mio Link</a></p>';
+        const link = editor.querySelector('#target_a');
+
+        LinkManager._setCaretAfterLink(link);
+
+        const sel = window.getSelection();
+        Assert.isTrue(sel.rangeCount > 0);
+        const r = sel.getRangeAt(0);
+
+        Assert.strictEqual(r.startContainer, link.nextSibling);
+        Assert.strictEqual(r.startOffset, 0);
+    });
+
+    test("LinkManager: copyExternalLinkUrl copia l'URL pulito nella clipboard e mostra toast", () => {
+        const link = document.createElement('a');
+        link.href = "https://example.com/test";
+        LinkManager.activeLink = link;
+
+        let toastShown = false;
+        const origToast = UI.showToast;
+        UI.showToast = () => { toastShown = true; };
+
+        let copiedText = "";
+        const origWriteText = navigator.clipboard.writeText;
+        navigator.clipboard.writeText = async (txt) => { copiedText = txt; };
+
+        try {
+            LinkManager.copyExternalLinkUrl();
+            Assert.isTrue(copiedText.includes("example.com/test"));
+        } finally {
+            UI.showToast = origToast;
+            navigator.clipboard.writeText = origWriteText;
+            LinkManager.activeLink = null;
+        }
+    });
+
+    test("LinkManager: confirmExternalLink in modalità modifica aggiorna l'elemento esistente senza duplicarlo", () => {
+        const dummyUrl = document.createElement('input'); dummyUrl.id = 'externalLinkUrl'; dummyUrl.value = 'https://updated.org';
+        const dummyTxt = document.createElement('input'); dummyTxt.id = 'externalLinkText'; dummyTxt.value = 'Nuovo Testo';
+        const dummyNote = document.createElement('textarea'); dummyNote.id = 'externalLinkNote'; dummyNote.value = 'Nota Aggiornata';
+        document.body.appendChild(dummyUrl); document.body.appendChild(dummyTxt); document.body.appendChild(dummyNote);
+
+        let editor = document.getElementById('noteContent');
+        editor.innerHTML = '<p><a id="edit_target_a" href="https://old.org">Vecchio Testo</a></p>';
+        const link = editor.querySelector('#edit_target_a');
+
+        LinkManager.isEditingMode = true;
+        LinkManager.editingLink = link;
+
+        try {
+            LinkManager.confirmExternalLink();
+
+            Assert.strictEqual(link.href, 'https://updated.org/');
+            Assert.strictEqual(link.textContent, 'Nuovo Testo');
+            Assert.strictEqual(link.getAttribute('data-link-note'), 'Nota Aggiornata');
+            Assert.strictEqual(editor.querySelectorAll('a').length, 1, "Non deve inserire un secondo link nel DOM");
+        } finally {
+            dummyUrl.remove(); dummyTxt.remove(); dummyNote.remove();
+            LinkManager.isEditingMode = false;
+            LinkManager.editingLink = null;
+        }
+    });
 
 });

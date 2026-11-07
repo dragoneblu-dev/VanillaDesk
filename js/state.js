@@ -9,6 +9,9 @@
  * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto a findNext/findPrevious per note senza tag/proprietà valorizzata.
  * FIX DATE RANGE & NOTE LINK MATCHING: Risoluzione simmetrica delle date intervallo e note_link nella navigazione tra riscontri.
  * FIX WHITESPACE SEARCH MATCHING: Equiparazione trasparente di \u00A0 (&nbsp;) allo spazio standard per findNext e findPrevious.
+ * FIX SEARCH NAVIGATION IN DB NOTES: Inclusione completa e ordinata delle note di database (isRecordNote)
+ * e relative sotto-note in _findNextNoteWithMatches per consentire alle frecce di scorrere tutti i risultati.
+ * FIX EXCLUDE CITED DB FROM SEQUENCE: Riconoscimento esatto con \sid= per non catturare i data-ref-id delle citazioni.
  */
 
 const AppState = {
@@ -134,24 +137,55 @@ const AppState = {
 
     _findNextNoteWithMatches: (direction = 1) => {
         const flatNotes = [];
-        
+        const visited = new Set();
+
+        const addNoteWithDescendants = (noteId) => {
+            if (visited.has(noteId)) return;
+            visited.add(noteId);
+            const n = Store.getNote(noteId);
+            if (!n || n.deletedAt) return;
+            flatNotes.push(n);
+
+            // Raccoglie ricorsivamente tutte le sotto-note discendenti
+            const children = AppState.notes.filter(c => c.parentId === noteId && !c.deletedAt);
+            children.forEach(c => addNoteWithDescendants(c.id));
+        };
+
         if (AppState.showDbNotesInTree) {
+            // Scheda dedicata "Database": scorre tutti i database e le relative record note
             AppState.getRelationalDatabaseIds().forEach(dbId => {
                 const dbState = AppState.databases[dbId];
                 if (dbState && !dbState.isPivot && !dbState.isLinkedView) {
-                    const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId);
-                    flatNotes.push(...dbNotes);
+                    const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId && !n.parentId);
+                    dbNotes.forEach(rn => addNoteWithDescendants(rn.id));
                 }
             });
         } else {
-            const traverse = (parentId) => {
-                const children = AppState.notes.filter(n => n.parentId === parentId && !n.deletedAt && !n.isRecordNote);
-                children.forEach(c => {
-                    flatNotes.push(c);
-                    traverse(c.id);
-                });
-            };
-            traverse(null);
+            // Scheda standard "Note":
+            // 1. Radici standard e relativi discendenti
+            const roots = AppState.notes.filter(n => n.parentId === null && !n.deletedAt && !n.isRecordNote);
+            roots.forEach(r => {
+                addNoteWithDescendants(r.id);
+
+                // Se la nota ospita database incorporati legittimi (lo spazio \s esclude data-ref-id delle citazioni)
+                if (r.content && r.content.includes('adv_tbl_')) {
+                    const dbRegex = /\sid=["'](adv_tbl_[a-zA-Z0-9_]+)["']/g;
+                    let match;
+                    while ((match = dbRegex.exec(r.content)) !== null) {
+                        if (match[1].includes('_cited_')) continue;
+                        const dbId = match[1];
+                        const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId && !n.parentId);
+                        dbNotes.forEach(rn => addNoteWithDescendants(rn.id));
+                    }
+                }
+            });
+
+            // 2. Include in sequenza tutte le record note dei database non ancora visitate
+            AppState.notes.forEach(n => {
+                if (!n.deletedAt && n.isRecordNote && !visited.has(n.id)) {
+                    addNoteWithDescendants(n.id);
+                }
+            });
         }
 
         if (flatNotes.length === 0) return null;

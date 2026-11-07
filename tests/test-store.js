@@ -2,21 +2,9 @@
  * tests/test-store.js
  * Suite Modulare di Collaudo Unitario per il Core Storage di VanillaDesk.
  * Modulo testato: js/store.js
- * Responsabilità verificate:
- * - Hashing deterministico, parità di terminatori di linea CRLF/LF e prefissi crittografici
- * - Gestione sessione crittografica Workspace (Vault Salt, reset)
- * - Rilevamento modifiche in tempo reale (hasUnsavedChanges, DOM vivo editor, flag _isDirty e _isDraft)
- * - Orchestrazione del debounce di salvataggio automatico (triggerAutoSave)
- * - Lifecycle note, modelli e navigazione gerarchica (generateId, getChildren, prepareForSave)
- * - Scanner centralizzato delle risorse attive (scanActiveEntities), protezione asset nel cestino e nello stack Undo
- * - Pulizia e Garbage Collection della memoria RAM (cleanOrphanedRAMCaches, _needsPhysicalGC)
  */
 
-describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner RAM", () => {
-
-    // =========================================================================
-    // 1. GESTIONE SESSIONE CRITTOGRAFICA & WORKSPACE VAULT SALT
-    // =========================================================================
+describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner RAM (test-store.js)", () => {
 
     test("Store: _getWorkspaceSalt inizializza e mantiene coerente AppState.vaultSaltHex", () => {
         AppState.vaultSaltHex = null;
@@ -39,10 +27,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         Assert.strictEqual(Store._diskHashes.index, "");
         Assert.deepEqual(Store._diskHashes.notes, {});
     });
-
-    // =========================================================================
-    // 2. HASHING DETERMINISTICO & PARITÀ CROSS-PLATFORM
-    // =========================================================================
 
     test("Hashing: parità di hash tra terminatori di linea Windows (\\r\\n) e Unix (\\n)", () => {
         const textA = '{\n  "name": "Database",\n  "rows": [1, 2, 3]\n}';
@@ -82,10 +66,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         const hEnc = Store._hashObj(payload, "ENC_");
         Assert.isFalse(hRaw === hEnc);
     });
-
-    // =========================================================================
-    // 3. RILEVAMENTO MODIFICHE & LIVE DOM DETECTION (hasUnsavedChanges)
-    // =========================================================================
 
     test("Store: hasUnsavedChanges restituisce false se non ci sono mutazioni in RAM", () => {
         Store.isDirty = false;
@@ -146,7 +126,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         }
 
         try {
-            // L'utente cancella del testo nel DOM vivo (rimane solo <p><br></p>)
             editorEl.innerHTML = '<p><br></p>';
             Assert.isTrue(Store.hasUnsavedChanges(), "La cancellazione di testo nel DOM vivo deve essere rilevata come mutazione non salvata");
         } finally {
@@ -186,16 +165,13 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         AppState.workspaceHandle = { name: "TestWS" };
 
         try {
-            // Prima chiamata
             Store.triggerAutoSave(false, true);
             Assert.isTrue(Store.isDirty);
             Assert.strictEqual(saveToFileCalls, 0, "Non deve eseguire saveToFile immediatamente senza forceImmediate");
 
-            // Seconda chiamata immediata (simula digitazione continua)
             Store.triggerAutoSave(false, true);
             Assert.strictEqual(saveToFileCalls, 0, "Il debounce deve accorpare le chiamate consecutive");
 
-            // Verifica asincrona dopo il tempo di debounce (1600ms)
             await new Promise(resolve => setTimeout(resolve, 1600));
 
             Assert.strictEqual(saveToFileCalls, 1, "saveToFile deve essere eseguito una sola volta al termine del debounce");
@@ -205,10 +181,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
             Store.isDirty = false;
         }
     });
-
-    // =========================================================================
-    // 4. METODI DI SUPPORTO AL CICLO DI VITA E GERARCHIA
-    // =========================================================================
 
     test("Store: generateId produce identificatori univoci privi di trattini", () => {
         const id1 = Store.generateId();
@@ -225,16 +197,13 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
             { id: 'subchild1', parentId: 'child1', title: 'Nipote' }
         ];
 
-        // Figli diretti attivi
         const activeChildren = Store.getChildren('root', false);
         Assert.strictEqual(activeChildren.length, 1);
         Assert.strictEqual(activeChildren[0].id, 'child1');
 
-        // Figli diretti inclusi cestinati
         const allChildren = Store.getChildren('root', true);
         Assert.strictEqual(allChildren.length, 2);
 
-        // Risoluzione nipote attivo
         const grandChildren = Store.getChildren('child1', false);
         Assert.strictEqual(grandChildren.length, 1);
         Assert.strictEqual(grandChildren[0].id, 'subchild1');
@@ -253,10 +222,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         Assert.strictEqual(savedNote._isDraft, undefined);
         Assert.strictEqual(savedNote._baseRevId, undefined);
     });
-
-    // =========================================================================
-    // 5. SCANNER RISORSE, ASSET E PULIZIA RAM
-    // =========================================================================
 
     test("Store: scanActiveEntities rileva database attivi, immagini e audio nelle note", () => {
         AppState.notes = [
@@ -345,7 +310,6 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
         Store.markNeedsPhysicalGC();
         Assert.isTrue(Store._needsPhysicalGC);
 
-        // Simuliamo l'esecuzione di executePhysicalGarbageCollection senza workspace per verificare il reset del flag
         const origHandle = AppState.workspaceHandle;
         AppState.workspaceHandle = null;
 
@@ -356,4 +320,60 @@ describe("Store: Core Storage Engine, Hashing, Live Change Detection & Scanner R
             AppState.workspaceHandle = origHandle;
         }
     });
+
+    test("Store: downloadSnapshot genera un elemento anchor con download e timestamp corretto", () => {
+        AppState.fileName = "MioWorkspace";
+        let clicked = false;
+        let downloadedFilename = "";
+
+        const origCreate = document.createElement;
+        document.createElement = function(tag) {
+            const el = origCreate.call(document, tag);
+            if (tag === 'a') {
+                el.click = () => { clicked = true; };
+                const origSetAttr = el.setAttribute;
+                el.setAttribute = function(name, val) {
+                    if (name === 'download') downloadedFilename = val;
+                    return origSetAttr.apply(this, arguments);
+                };
+            }
+            return el;
+        };
+
+        try {
+            Store.downloadSnapshot();
+            Assert.isTrue(clicked, "Deve simulare il click sul tag <a> per avviare il download");
+            Assert.isTrue(downloadedFilename.startsWith("MioWorkspace_Backup_"));
+            Assert.isTrue(downloadedFilename.endsWith(".json"));
+        } finally {
+            document.createElement = origCreate;
+        }
+    });
+
+    test("Store: getOrphanedAssets identifica file presenti in assetsHandle non referenziati dalle note", async () => {
+        const filesMap = new Map([
+            ['img_referenced.png', { name: 'img_referenced.png', kind: 'file', getFile: async () => ({ size: 1024 }) }],
+            ['img_orphan.png', { name: 'img_orphan.png', kind: 'file', getFile: async () => ({ size: 2048 }) }]
+        ]);
+
+        AppState.assetsHandle = {
+            values: async function* () {
+                for (const f of filesMap.values()) yield f;
+            }
+        };
+
+        AppState.notes = [
+            { id: 'n1', content: '<img data-image-ref="img_referenced.png">' }
+        ];
+
+        try {
+            const result = await Store.getOrphanedAssets();
+            Assert.strictEqual(result.count, 1);
+            Assert.strictEqual(result.files[0].name, 'img_orphan.png');
+            Assert.strictEqual(result.totalSize, 2048);
+        } finally {
+            AppState.assetsHandle = null;
+        }
+    });
+
 });

@@ -2,10 +2,9 @@
  * tests/test-editor-history.js
  * Suite Modulare di Collaudo Unitario e di Integrazione ad Altissima Copertura (100%).
  * Modulo testato: editor-history (Undo/Redo Engine, Snapshots, B64 State & Record Note Resurrection)
- * Conteggio test case: 19
  */
 
-describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note Resurrection (19 Test)", () => {
+describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note Resurrection (test-editor-history.js)", () => {
 
     test("History: saveSnapshot accumula snapshot nello stack undo e svuota redoStack", () => {
         let editorEl = document.getElementById('noteContent');
@@ -335,87 +334,118 @@ describe("Editor History: Undo/Redo Engine, Snapshots, B64 State & Record Note R
         Assert.strictEqual(restored.automations[0].id, 'auto_1');
     });
 
-    beforeEach(() => {
-        TestFramework.resetAppState();
+    test("History: saveSnapshot ripulisce la classe transitoria .adv-cell-selected dallo snapshot", () => {
+        let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
+
+        editorEl.innerHTML = '<table><tr><td class="adv-cell-selected">Dato</td></tr></table>';
+        Editor.saveSnapshot();
+
+        const snapshot = Editor.undoStack[0];
+        Assert.isFalse(snapshot.includes('adv-cell-selected'), "Le classi di selezione celle devono essere epurate dallo snapshot storico");
     });
 
-    test("History: Inizializzazione corretta dello stack vuoto", () => {
-        Assert.strictEqual(Editor.undoStack.length, 0);
-        Assert.strictEqual(Editor.redoStack.length, 0);
+    test("History: _b64Cache riutilizza la stringa Base64 serializzata se lo stato del DB è invariato", () => {
+        let editorEl = document.getElementById('noteContent');
+        Editor.clearHistory();
+
+        const dbId = 'db_cache_test';
+        AppState.databases[dbId] = {
+            id: dbId,
+            title: 'Cache Test DB',
+            columns: [{ id: 'col1', type: 'text' }],
+            rows: [{ id: 'r1', cells: { col1: 'Static' } }]
+        };
+        editorEl.innerHTML = `<div id="${dbId}" class="adv-widget-shell adv-table-wrapper" data-widget-type="database"></div>`;
+
+        Editor.saveSnapshot();
+        const cachedEntry = Editor._b64Cache.get(dbId);
+        Assert.isNotNull(cachedEntry);
+
+        // Secondo salvataggio con testo modificato ma stato DB identico
+        editorEl.innerHTML = `<p>Testo aggiunto</p><div id="${dbId}" class="adv-widget-shell adv-table-wrapper" data-widget-type="database"></div>`;
+        Editor.saveSnapshot();
+
+        const secondEntry = Editor._b64Cache.get(dbId);
+        Assert.strictEqual(cachedEntry.b64, secondEntry.b64, "Deve riusare la stringa Base64 memorizzata in cache");
+    });
+
+    test("History: updateUndoRedoUI aggiorna correttamente la visibilità e lo stato disabilitato dei tasti toolbar", () => {
+        const toolbar = document.createElement('div');
+        toolbar.id = 'editorToolbar';
+        toolbar.innerHTML = `
+            <button title="Annulla Ultima Modifica"></button>
+            <button title="Ripeti (Ctrl+Y)"></button>
+        `;
+        document.body.appendChild(toolbar);
+
+        const undoBtn = toolbar.querySelector('button[title*="Annulla Ultima Modifica"]');
+        const redoBtn = toolbar.querySelector('button[title*="Ripeti ("]');
+
+        try {
+            Editor.undoStack = [];
+            Editor.redoStack = [];
+            Editor.updateUndoRedoUI();
+            Assert.isTrue(undoBtn.disabled);
+            Assert.isTrue(redoBtn.disabled);
+
+            Editor.undoStack = ['<p>Uno</p>'];
+            Editor.updateUndoRedoUI();
+            Assert.isFalse(undoBtn.disabled);
+            Assert.isTrue(redoBtn.disabled);
+
+            Editor.redoStack = ['<p>Due</p>'];
+            Editor.updateUndoRedoUI();
+            Assert.isFalse(undoBtn.disabled);
+            Assert.isFalse(redoBtn.disabled);
+        } finally {
+            toolbar.remove();
+        }
+    });
+
+    test("History: registerTypingStart su Enter o Tab consolida immediatamente lo snapshot", () => {
+        let editorEl = document.getElementById('noteContent');
+        Editor.clearHistory();
+
+        editorEl.innerHTML = '<p>Riga 1</p>';
+        Editor.registerTypingStart('Enter');
+
+        Assert.strictEqual(Editor.undoStack.length, 1, "Invio deve scattare un salvataggio immediato");
         Assert.isFalse(Editor.isTyping);
+
+        editorEl.innerHTML = '<p>Riga 2</p>';
+        Editor.registerTypingStart('Tab');
+
+        Assert.strictEqual(Editor.undoStack.length, 2, "Tab deve consolidare lo snapshot");
     });
 
-    test("History: saveSnapshot salva lo stato dell'editor e pulisce il redoStack", () => {
-        let editorEl = document.getElementById('noteContent');
-        editorEl.innerHTML = '<p>Testo Iniziale</p>';
-        
-        Editor.saveSnapshot();
-        Assert.strictEqual(Editor.undoStack.length, 1);
-
-        Editor.redoStack.push('<p>Redo</p>');
-        Assert.strictEqual(Editor.redoStack.length, 1);
-
-        editorEl.innerHTML = '<p>Testo Modificato</p>';
-        Editor.saveSnapshot();
-        
-        Assert.strictEqual(Editor.undoStack.length, 2);
-        Assert.strictEqual(Editor.redoStack.length, 0, "Il redoStack deve essere azzerato dopo una nuova azione");
-    });
-
-    test("History: registerTypingStart su spazio conclude la parola senza duplicare lo snapshot", () => {
+    test("History: Smart Fallback su snapshot privo di marker ancora il cursore al blocco attivo", () => {
         let editorEl = document.getElementById('noteContent');
         Editor.clearHistory();
 
-        editorEl.innerHTML = '<p>Parola</p>';
-        Editor.registerTypingStart('a'); 
-        Assert.isTrue(Editor.isTyping);
-        Assert.strictEqual(Editor.undoStack.length, 1);
+        editorEl.innerHTML = `
+            <p id="bk1">Paragrafo Uno</p>
+            <p id="bk2">Paragrafo Due</p>
+            <p id="bk3">Paragrafo Tre</p>
+        `;
 
-        editorEl.innerHTML = '<p>Parola </p>';
-        Editor.registerTypingStart(' ');
-        Assert.isFalse(Editor.isTyping, "isTyping deve essere spento alla fine della parola");
-        Assert.strictEqual(Editor.undoStack.length, 1, "Lo spazio non deve raddoppiare lo snapshot nello stack");
+        // Simulazione di cursore collassato sul terzo blocco
+        const bk3 = editorEl.querySelector('#bk3');
+        const r = document.createRange();
+        r.setStart(bk3.firstChild, 4);
+        r.collapse(true);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(r);
 
-        editorEl.innerHTML = '<p>Parola nuova</p>';
-        Editor.registerTypingStart('n');
-        Assert.isTrue(Editor.isTyping);
-        Assert.strictEqual(Editor.undoStack.length, 2, "La nuova parola deve creare esattamente il secondo snapshot");
+        // Snapshot puro privo di marker temporaneo
+        const rawHtmlWithoutMarker = editorEl.innerHTML;
+        Editor._restoreSnapshotWithCursor(rawHtmlWithoutMarker);
+
+        const currentSel = window.getSelection();
+        Assert.isTrue(currentSel.rangeCount > 0);
+        const activeContainer = currentSel.anchorNode.nodeType === 3 ? currentSel.anchorNode.parentNode : currentSel.anchorNode;
+        Assert.strictEqual(activeContainer.closest('p').id, 'bk3', "Il cursore deve riatterrare sul blocco bk3 senza saltare a riga 1");
     });
 
-    test("History: Undo e Redo ripristinano fedelmente il contenuto", () => {
-        let editorEl = document.getElementById('noteContent');
-        Editor.clearHistory();
-
-        editorEl.innerHTML = '<p>Stato 1</p>';
-        Editor.saveSnapshot();
-
-        editorEl.innerHTML = '<p>Stato 2</p>';
-        Editor.saveSnapshot();
-
-        editorEl.innerHTML = '<p>Stato 3</p>';
-
-        Editor.undo();
-        Assert.isTrue(editorEl.innerHTML.includes('Stato 2'));
-        Assert.strictEqual(Editor.redoStack.length, 1);
-
-        Editor.redo();
-        Assert.isTrue(editorEl.innerHTML.includes('Stato 3'));
-        Assert.strictEqual(Editor.redoStack.length, 0);
-    });
-
-    test("History: Deduplicazione evita di salvare snapshot con contenuto identico", () => {
-        let editorEl = document.getElementById('noteContent');
-        Editor.clearHistory();
-
-        editorEl.innerHTML = '<p>Identico</p>';
-        Editor.saveSnapshot();
-        Assert.strictEqual(Editor.undoStack.length, 1);
-
-        Editor.saveSnapshot(false);
-        Assert.strictEqual(Editor.undoStack.length, 1, "Non deve aggiungere duplicati con lo stesso markup");
-
-        Editor.saveSnapshot(true);
-        Assert.strictEqual(Editor.undoStack.length, 2, "forcePush deve forzare l'inserimento");
-    });
 });

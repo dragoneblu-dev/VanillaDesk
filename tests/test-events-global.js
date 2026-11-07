@@ -2,10 +2,9 @@
  * tests/test-events-global.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: events-global (Router Eventi, Scorciatoie e Interazioni)
- * Conteggio test case: 11
  */
 
-describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)", () => {
+describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (test-events-global.js)", () => {
 
     let mockEditorEl;
     let originalAppState;
@@ -29,7 +28,6 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
         const oldSearch = document.getElementById('searchInput');
         if (oldSearch) oldSearch.remove();
 
-        EventsGlobal._initialized = false;
         EventsGlobal.init();
     });
 
@@ -43,6 +41,9 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
         if (typeof UI !== 'undefined' && typeof UI.closeDrawer === 'function') {
             UI.closeDrawer(true);
         }
+
+        const selector = document.getElementById('adv-global-row-selector');
+        if (selector) selector.remove();
     });
 
     test("EventsGlobal: openLinkDirectly invoca UI.selectNote per link interni con noteId e parametri", () => {
@@ -106,6 +107,22 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
         }
     });
 
+    test("EventsGlobal: openLinkDirectly normalizza percorsi assoluti Windows in formato file:///", () => {
+        const link = document.createElement('a');
+        link.setAttribute('href', 'C:\\Documenti\\Report.pdf');
+
+        let openedUrl = null;
+        const origOpen = window.open;
+        window.open = (url) => { openedUrl = url; };
+
+        try {
+            EventsGlobal.openLinkDirectly(link);
+            Assert.strictEqual(openedUrl, 'file:///C:/Documenti/Report.pdf');
+        } finally {
+            window.open = origOpen;
+        }
+    });
+
     test("EventsGlobal: openLinkDirectly esegue lo scrollIntoView per ancore hash interne (#)", () => {
         const link = document.createElement('a');
         link.setAttribute('href', '#target-section');
@@ -122,6 +139,25 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
             Assert.isTrue(scrolled);
         } finally {
             targetEl.remove();
+        }
+    });
+
+    test("EventsGlobal: openLinkDirectly con ancora non trovata risale alla macro-sezione sec-*", () => {
+        const link = document.createElement('a');
+        link.setAttribute('href', '#sec-3-dettaglio-avanzato');
+
+        const macroSec = document.createElement('div');
+        macroSec.id = 'sec-3';
+        document.body.appendChild(macroSec);
+
+        let scrolled = false;
+        macroSec.scrollIntoView = () => { scrolled = true; };
+
+        try {
+            EventsGlobal.openLinkDirectly(link);
+            Assert.isTrue(scrolled, "Deve effettuare il fallback su sec-3");
+        } finally {
+            macroSec.remove();
         }
     });
 
@@ -198,6 +234,27 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
         }
     });
 
+    test("EventsGlobal: Alt+ArrowLeft e Alt+ArrowRight attivano la navigazione cronologica", () => {
+        let backCalled = false;
+        let forwardCalled = false;
+
+        const origBack = UI.navHistoryBack;
+        const origForward = UI.navHistoryForward;
+        UI.navHistoryBack = () => { backCalled = true; };
+        UI.navHistoryForward = () => { forwardCalled = true; };
+
+        try {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowLeft', altKey: true, bubbles: true }));
+            Assert.isTrue(backCalled, "Alt+Left deve chiamare navHistoryBack");
+
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowRight', altKey: true, bubbles: true }));
+            Assert.isTrue(forwardCalled, "Alt+Right deve chiamare navHistoryForward");
+        } finally {
+            UI.navHistoryBack = origBack;
+            UI.navHistoryForward = origForward;
+        }
+    });
+
     test("EventsGlobal: Ctrl+A circoscrive la selezione esclusivamente al campo cella (.adv-cell-text) attivo", () => {
         AppState.isEditMode = true;
 
@@ -241,6 +298,52 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
             Assert.strictEqual(lastTag, 'p');
         } finally {
             Editor.toggleHeader = origToggle;
+        }
+    });
+
+    test("EventsGlobal: scorciatoie Ctrl+B, I, U e K chiamano le funzioni di formattazione corrispondenti", () => {
+        AppState.isEditMode = true;
+        let lastExec = null;
+        let toggleCaseCalled = false;
+
+        const origExec = Editor.exec;
+        const origToggleCase = Editor.toggleCase;
+        Editor.exec = (cmd) => { lastExec = cmd; };
+        Editor.toggleCase = () => { toggleCaseCalled = true; };
+
+        try {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'b', ctrlKey: true, bubbles: true }));
+            Assert.strictEqual(lastExec, 'bold');
+
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'i', ctrlKey: true, bubbles: true }));
+            Assert.strictEqual(lastExec, 'italic');
+
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'u', ctrlKey: true, bubbles: true }));
+            Assert.strictEqual(lastExec, 'underline');
+
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }));
+            Assert.isTrue(toggleCaseCalled);
+        } finally {
+            Editor.exec = origExec;
+            Editor.toggleCase = origToggleCase;
+        }
+    });
+
+    test("EventsGlobal: scorciatoie Ctrl+Shift+H e Ctrl+Alt+H attivano evidenziatore e colore testo", () => {
+        AppState.isEditMode = true;
+        let lastColorType = null;
+
+        const origApplyLast = ColorManager.applyLast;
+        ColorManager.applyLast = (type) => { lastColorType = type; };
+
+        try {
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', code: 'KeyH', ctrlKey: true, shiftKey: true, bubbles: true }));
+            Assert.strictEqual(lastColorType, 'highlight');
+
+            document.dispatchEvent(new KeyboardEvent('keydown', { key: 'h', code: 'KeyH', ctrlKey: true, altKey: true, bubbles: true }));
+            Assert.strictEqual(lastColorType, 'text');
+        } finally {
+            ColorManager.applyLast = origApplyLast;
         }
     });
 
@@ -309,6 +412,78 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (11 Test)",
             Assert.isNull(cb.getAttribute('checked'));
         } finally {
             Store.triggerAutoSave = origSave;
+        }
+    });
+
+    test("EventsGlobal: auxclick (tasto centrale) su link delega a openLinkDirectly", () => {
+        const link = document.createElement('a');
+        link.className = 'file-link';
+        link.setAttribute('data-file-path', 'documenti/note.txt');
+        mockEditorEl.appendChild(link);
+
+        let directlyOpened = null;
+        const origOpen = EventsGlobal.openLinkDirectly;
+        EventsGlobal.openLinkDirectly = (l) => { directlyOpened = l; };
+
+        try {
+            const ev = new MouseEvent('auxclick', { button: 1, bubbles: true, cancelable: true });
+            link.dispatchEvent(ev);
+            Assert.strictEqual(directlyOpened, link);
+        } finally {
+            EventsGlobal.openLinkDirectly = origOpen;
+            link.remove();
+        }
+    });
+
+    test("EventsGlobal: focusin su noteTitle disattiva la toolbar dell'editor", () => {
+        AppState.isEditMode = true;
+
+        const titleInput = document.createElement('input');
+        titleInput.id = 'noteTitle';
+        document.body.appendChild(titleInput);
+
+        let toolbarEnabled = null;
+        const origToggle = Editor.toggleAdvancedToolbar;
+        Editor.toggleAdvancedToolbar = (enable) => { toolbarEnabled = enable; };
+
+        try {
+            titleInput.dispatchEvent(new FocusEvent('focusin', { bubbles: true }));
+            Assert.isFalse(toolbarEnabled, "Su focusin del titolo la toolbar avanzata deve essere disabilitata");
+        } finally {
+            Editor.toggleAdvancedToolbar = origToggle;
+            titleInput.remove();
+        }
+    });
+
+    test("EventsGlobal: click su .cit-toggle espande e collassa il blocco citazione", () => {
+        const block = document.createElement('div');
+        block.className = 'block-citation';
+        const toggleBtn = document.createElement('span');
+        toggleBtn.className = 'cit-toggle';
+        const body = document.createElement('div');
+        body.className = 'citation-body';
+        block.appendChild(toggleBtn);
+        block.appendChild(body);
+        document.body.appendChild(block);
+
+        let autoSaved = false;
+        const origSave = Store.triggerAutoSave;
+        Store.triggerAutoSave = () => { autoSaved = true; };
+
+        try {
+            // Primo click: collassa
+            toggleBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            Assert.strictEqual(block.getAttribute('data-collapsed'), 'true');
+            Assert.strictEqual(body.style.display, 'none');
+
+            // Secondo click: ri-espande
+            toggleBtn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+            Assert.isNull(block.getAttribute('data-collapsed'));
+            Assert.strictEqual(body.style.display, 'block');
+            Assert.isTrue(autoSaved);
+        } finally {
+            Store.triggerAutoSave = origSave;
+            block.remove();
         }
     });
 

@@ -4,12 +4,26 @@
  * Gestione della navigazione: Cronologia di navigazione lineare (History Stack),
  * transizione verso la Dashboard (goHome) e risoluzione salti verso i widget (jumpToWidget).
  * Sincronizzazione automatica del titolo nell'header su due righe al ritorno alla Dashboard.
+ * FEAT FEEDFORWARD TOOLTIPS: Mostra nel tooltip delle frecce Indietro/Avanti il titolo esatto della nota di destinazione.
  */
 
 Object.assign(UI, {
     // Cronologia di Navigazione Note e Dashboard (History Stack)
     _navHistory: [],
     _navHistoryIndex: -1,
+
+    // Helper leggero per identificare la nota valida di destinazione senza mutare la cronologia
+    _peekNavHistoryTarget: (direction) => {
+        let idx = UI._navHistoryIndex + direction;
+        while (idx >= 0 && idx < UI._navHistory.length) {
+            const id = UI._navHistory[idx];
+            if (id === null) return { id: null, title: I18n.t('home_dashboard.title') };
+            const note = Store.getNote(id);
+            if (note && !note.deletedAt) return note;
+            idx += direction;
+        }
+        return null;
+    },
 
     updateNavHistoryUI: () => {
         const btnBack = document.getElementById('navBackBtn');
@@ -23,12 +37,28 @@ Object.assign(UI, {
             btnBack.disabled = !canGoBack;
             btnBack.style.opacity = canGoBack ? '1' : '0.3';
             btnBack.style.cursor = canGoBack ? 'pointer' : 'default';
+
+            if (canGoBack) {
+                const prev = UI._peekNavHistoryTarget(-1);
+                const prevTitle = prev ? (prev.title || I18n.t('editor.untitled')) : I18n.t('home_dashboard.title');
+                btnBack.title = `${I18n.t('toolbar.nav_back')}\n[${prevTitle}]`;
+            } else {
+                btnBack.title = I18n.t('toolbar.nav_back');
+            }
         }
 
         if (btnForward) {
             btnForward.disabled = !canGoForward;
             btnForward.style.opacity = canGoForward ? '1' : '0.3';
             btnForward.style.cursor = canGoForward ? 'pointer' : 'default';
+
+            if (canGoForward) {
+                const next = UI._peekNavHistoryTarget(1);
+                const nextTitle = next ? (next.title || I18n.t('editor.untitled')) : I18n.t('home_dashboard.title');
+                btnForward.title = `${I18n.t('toolbar.nav_forward')}\n[${nextTitle}]`;
+            } else {
+                btnForward.title = I18n.t('toolbar.nav_forward');
+            }
         }
 
         if (btnUp) {

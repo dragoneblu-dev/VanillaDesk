@@ -11,6 +11,8 @@
  * intempestiva del menu quando l'utente annulla lo scarto di una modifica su blur.
  * FIX MODAL PEAK ELEVATION: Supporto per z-index elevato (100005) e ricerca corretta dell'ancora se posizionata
  * all'interno dell'overlay galleggiante di anteprima (#advRelationPeekModalOverlay).
+ * FIX SPREAD & FLIP VERTICALE SOTTOMENU SELECT: Calcolo dinamico dello spazio verticale per adv-select-edit-menu:
+ * se lo spazio in basso è insufficiente, il sottomenu risale verso l'alto per mostrarsi integralmente nello schermo.
  */
 
 Object.assign(UI, {
@@ -70,11 +72,31 @@ Object.assign(UI, {
                 }
 
                 if (dropdown.classList.contains('adv-select-edit-menu')) {
+                    // Posizionamento orizzontale: di base a destra del pulsante tre puntini
                     finalLeft = rect.right + window.scrollX + 5;
                     finalTop = rect.top + window.scrollY - 10;
                     
-                    if (finalLeft + dropRect.width > window.innerWidth) {
+                    // Inversione orizzontale a sinistra se sfora oltre il bordo destro
+                    if (finalLeft + dropRect.width > window.innerWidth - margin + window.scrollX) {
                         finalLeft = rect.left + window.scrollX - dropRect.width - 5;
+                    }
+                    if (finalLeft < margin + window.scrollX) {
+                        finalLeft = margin + window.scrollX;
+                    }
+
+                    // GESTIONE INTELLIGENTE DELLO SPAZIO VERTICALE:
+                    // Se il sottomenu sfora sotto il bordo visibile della finestra, risale verso l'alto
+                    const topInViewport = finalTop - window.scrollY;
+                    if (topInViewport + dropRect.height > window.innerHeight - margin) {
+                        finalTop = window.innerHeight - dropRect.height - margin + window.scrollY;
+                    }
+
+                    // Clamp superiore di sicurezza se lo schermo è molto compatto
+                    if (finalTop < margin + window.scrollY) {
+                        finalTop = margin + window.scrollY;
+                        finalMaxHeight = window.innerHeight - (margin * 2);
+                    } else {
+                        finalMaxHeight = window.innerHeight - (finalTop - window.scrollY) - margin;
                     }
                 } else {
                     if (finalLeft + dropRect.width > window.innerWidth) {

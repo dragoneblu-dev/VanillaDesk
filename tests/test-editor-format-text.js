@@ -5,7 +5,7 @@
  * Conteggio test case: 25
  */
 
-describe("Editor Format Text: Toggle Header, Blockquote, Gomma & Typography (25 Test)", () => {
+describe("Editor Format Text: Toggle Header, Blockquote, Gomma & Typography (test-editor-format-text.js)", () => {
 
     test("Editor.toggleBlockquote: unwrap di blockquote esistente ripristina paragrafi standard", () => {
         let editor = document.getElementById('noteContent');

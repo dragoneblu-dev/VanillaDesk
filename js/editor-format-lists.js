@@ -22,8 +22,16 @@ Object.assign(Editor, {
             e.preventDefault();
             e.stopPropagation();
         }
+
+        const selection = window.getSelection();
+        const editor = document.getElementById('noteContent');
+        if (!selection || !selection.rangeCount || !editor || !editor.contains(selection.anchorNode)) {
+            Editor.restoreSelection();
+        } else {
+            Editor.savedRange = selection.getRangeAt(0).cloneRange();
+        }
+
         Editor.saveSnapshot();
-        Editor.restoreSelection();
 
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
@@ -295,7 +303,14 @@ Object.assign(Editor, {
     },
 
     insertList: (type, style = null) => {
-        Editor.restoreSelection();
+        const selection = window.getSelection();
+        const editor = document.getElementById('noteContent');
+        if (!selection || !selection.rangeCount || !editor || !editor.contains(selection.anchorNode)) {
+            Editor.restoreSelection();
+        } else {
+            Editor.savedRange = selection.getRangeAt(0).cloneRange();
+        }
+
         Editor.saveSnapshot();
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
 
@@ -410,7 +425,6 @@ Object.assign(Editor, {
         }
         
         // Srotola le liste dal tag P in cui il browser (es. Chrome) le avvolge erroneamente
-        const editor = document.getElementById('noteContent');
         if (editor) {
             const malformedLists = editor.querySelectorAll('p > ul, p > ol');
             malformedLists.forEach(list => {
@@ -459,8 +473,15 @@ Object.assign(Editor, {
     },
 
     insertChecklist: () => {
+        const selection = window.getSelection();
+        const editor = document.getElementById('noteContent');
+        if (!selection || !selection.rangeCount || !editor || !editor.contains(selection.anchorNode)) {
+            Editor.restoreSelection();
+        } else {
+            Editor.savedRange = selection.getRangeAt(0).cloneRange();
+        }
+
         Editor.saveSnapshot();
-        Editor.restoreSelection();
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
 
         const sel = window.getSelection();

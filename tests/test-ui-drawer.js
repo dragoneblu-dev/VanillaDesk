@@ -6,7 +6,7 @@
  * modalità trasparenza X-Ray (Ghost) e ancoraggio Destra/Sinistra (Dock).
  */
 
-describe("UI Drawer: Pannello Laterale, Storico Schermate, Dock & Ghost", () => {
+describe("UI Drawer: Pannello Laterale, Storico Schermate, Dock & Ghost (test-ui-drawer.js)", () => {
 
     const setupDrawerDOM = () => {
         let sandbox = document.getElementById('testSandBox');
@@ -34,6 +34,12 @@ describe("UI Drawer: Pannello Laterale, Storico Schermate, Dock & Ghost", () => 
         UI._drawerStack = [];
     };
 
+    afterEach(() => {
+        if (typeof UI !== 'undefined' && typeof UI.closeDrawer === 'function') {
+            UI.closeDrawer(true);
+        }
+    });
+
     test("Drawer: Apertura e chiusura corretta con iniezione di contenuto e footer", () => {
         setupDrawerDOM();
 
@@ -45,7 +51,7 @@ describe("UI Drawer: Pannello Laterale, Storico Schermate, Dock & Ghost", () => 
         Assert.isTrue(document.getElementById('advDrawerBody').innerHTML.includes('Corpo del pannello'));
         Assert.isTrue(document.getElementById('advDrawerFooter').innerHTML.includes('btnTest'));
 
-        UI.closeDrawer();
+        UI.closeDrawer(true);
         Assert.isFalse(drawer.classList.contains('open'));
     });
 
@@ -66,6 +72,30 @@ describe("UI Drawer: Pannello Laterale, Storico Schermate, Dock & Ghost", () => 
         Assert.strictEqual(UI._drawerStack.length, 0);
         Assert.strictEqual(document.getElementById('advDrawerTitle').innerText, 'Livello 1');
         Assert.isTrue(document.getElementById('advDrawerBody').innerHTML.includes('Contenuto 1'));
+    });
+
+    test("Drawer: goBackDrawer emette l'evento globale 'drawer-restored'", () => {
+        setupDrawerDOM();
+
+        let restoredEventFired = false;
+        let restoredTitle = '';
+
+        const handler = (e) => {
+            restoredEventFired = true;
+            restoredTitle = e.detail?.titleText;
+        };
+        document.addEventListener('drawer-restored', handler);
+
+        try {
+            UI.openDrawer("Schermata A", "<div>A</div>");
+            UI.openDrawer("Schermata B", "<div>B</div>");
+            UI.goBackDrawer();
+
+            Assert.isTrue(restoredEventFired);
+            Assert.strictEqual(restoredTitle, "Schermata A");
+        } finally {
+            document.removeEventListener('drawer-restored', handler);
+        }
     });
 
     test("Drawer: Alternanza modalità X-Ray (Ghost Mode)", () => {
@@ -92,6 +122,44 @@ describe("UI Drawer: Pannello Laterale, Storico Schermate, Dock & Ghost", () => 
 
         UI.toggleDrawerDock();
         Assert.isFalse(drawer.classList.contains('dock-right'));
+    });
+
+    test("Drawer: closeDrawer blocca la chiusura se advLongTextInput è stato modificato e l'utente rifiuta lo scarto", () => {
+        setupDrawerDOM();
+
+        const bodyHTML = `
+            <textarea id="advLongTextInput" data-original-value="Testo Iniziale">Testo Modificato</textarea>
+        `;
+        UI.openDrawer("Modifica Testo", bodyHTML, "<button>Salva</button>");
+
+        const origConfirm = window.confirm;
+        window.confirm = () => false; // Rifiuta lo scarto delle modifiche
+
+        try {
+            UI.closeDrawer(false);
+            const drawer = document.getElementById('advGlobalDrawer');
+            Assert.isTrue(drawer.classList.contains('open'), "Il drawer deve rimanere aperto se l'utente rifiuta lo scarto");
+        } finally {
+            window.confirm = origConfirm;
+        }
+    });
+
+    test("Drawer: Ctrl+Enter attiva il pulsante primario nel footer del drawer", () => {
+        setupDrawerDOM();
+
+        let primaryClicked = false;
+        const footerHTML = `
+            <button class="btn btn-primary" id="btnTestSave">Salva</button>
+        `;
+        UI.openDrawer("Test Shortcut", "<div>Test</div>", footerHTML);
+
+        const btnSave = document.getElementById('btnTestSave');
+        btnSave.onclick = () => { primaryClicked = true; };
+
+        const drawer = document.getElementById('advGlobalDrawer');
+        drawer.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true }));
+
+        Assert.isTrue(primaryClicked, "Ctrl+Enter deve attivare il pulsante primario");
     });
 
 });

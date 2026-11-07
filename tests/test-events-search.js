@@ -2,10 +2,9 @@
  * tests/test-events-search.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: events-search (Sottomodulo di EventsGlobal)
- * Conteggio test case: 10
  */
 
-describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (10 Test)", () => {
+describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (test-events-search.js)", () => {
 
     let originalAppState;
     let mockSearchInput;
@@ -52,6 +51,8 @@ describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (10 Test
         } else {
             mockEditorEl.innerHTML = '';
         }
+
+        EventsGlobal.initSearchEvents();
     });
 
     afterEach(() => {
@@ -84,6 +85,30 @@ describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (10 Test
         Assert.isTrue(mockSearchControls.classList.contains('hidden'));
     });
 
+    test("EventsSearch: _executeSearchLogic rispetta la soglia minima di caratteri (minimo 2 per testo normale senza Invio)", () => {
+        mockSearchInput.value = "a";
+        EventsGlobal._executeSearchLogic(mockSearchInput, false);
+
+        Assert.strictEqual(AppState.searchFilter, "", "Un solo carattere senza Invio forzato non deve avviare la ricerca");
+
+        EventsGlobal._executeSearchLogic(mockSearchInput, true);
+        Assert.strictEqual(AppState.searchFilter, "a", "Con forceSubmit=true un singolo carattere è consentito");
+    });
+
+    test("EventsSearch: _executeSearchLogic consente ricerche per tag con singolo carattere", () => {
+        mockSearchInput.value = "#u";
+        EventsGlobal._executeSearchLogic(mockSearchInput, false);
+
+        Assert.strictEqual(AppState.searchFilter, "#u", "La query con prefisso '#' deve superare la soglia anche con un carattere");
+    });
+
+    test("EventsSearch: _executeSearchLogic normalizza gli spazi unificatori non-breaking", () => {
+        mockSearchInput.value = "parola1\u00A0parola2";
+        EventsGlobal._executeSearchLogic(mockSearchInput, false);
+
+        Assert.strictEqual(AppState.searchFilter, "parola1 parola2", "Deve convertire \\u00A0 in spazio standard");
+    });
+
     test("EventsSearch: _executeSearchLogic mantiene visibili i controlli se sono attivi filtri proprietà anche con testo vuoto", () => {
         mockSearchInput.value = "";
         AppState.activePropertyFilters = [{ colId: 'sys_c_tags', realValue: 'Urgente' }];
@@ -93,6 +118,9 @@ describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (10 Test
     });
 
     test("EventsSearch: executeTagSearch espande la sidebar e seleziona il tab note", () => {
+        const oldSidebar = document.getElementById('sidebar');
+        if (oldSidebar) oldSidebar.remove();
+
         const sidebar = document.createElement('aside');
         sidebar.id = 'sidebar';
         sidebar.classList.add('collapsed');
@@ -199,6 +227,28 @@ describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (10 Test
         }
     });
 
+    test("EventsSearch: _getClickedHashtagAtPoint estrae tag gerarchici complessi con slash", () => {
+        const textNode = document.createTextNode("Organizzato in #lavoro/progetto/fase1");
+        mockEditorEl.appendChild(textNode);
+
+        const origRangeFromPoint = document.caretRangeFromPoint;
+        document.caretRangeFromPoint = (x, y) => {
+            const range = document.createRange();
+            range.setStart(textNode, 22);
+            range.collapse(true);
+            return range;
+        };
+
+        try {
+            const result = EventsGlobal._getClickedHashtagAtPoint(100, 100);
+            Assert.isNotNull(result);
+            Assert.strictEqual(result.fullTag, "#lavoro/progetto/fase1");
+            Assert.strictEqual(result.cleanTag, "lavoro/progetto/fase1");
+        } finally {
+            document.caretRangeFromPoint = origRangeFromPoint;
+        }
+    });
+
     test("EventsSearch: _getClickedHashtagAtPoint rifiuta codici esadecimali a 3 e 6 caratteri", () => {
         const textNode = document.createTextNode("Colore: #fff e #1a2b3c non sono tag");
         mockEditorEl.appendChild(textNode);
@@ -246,6 +296,42 @@ describe("EventsSearch: Ricerca Full-Text, Autocomplete Tag & Highlight (10 Test
             Assert.isNull(result);
         } finally {
             document.caretRangeFromPoint = origRangeFromPoint;
+        }
+    });
+
+    test("EventsSearch: Escape su searchInput azzera testo e filtri attivi", () => {
+        mockSearchInput.value = "Ricerca attiva";
+        AppState.searchFilter = "ricerca attiva";
+        AppState.activePropertyFilters = [{ colId: 'sys_c_tags', realValue: 'test' }];
+
+        mockSearchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+
+        Assert.strictEqual(mockSearchInput.value, "");
+        Assert.strictEqual(AppState.searchFilter, "");
+        Assert.strictEqual(AppState.activePropertyFilters.length, 0);
+    });
+
+    test("EventsSearch: Enter e Shift+Enter invocano la navigazione findNext e findPrevious", () => {
+        AppState.searchFilter = "test";
+        mockSearchInput.value = "test";
+
+        let nextCalled = false;
+        let prevCalled = false;
+
+        const origNext = AppState.findNext;
+        const origPrev = AppState.findPrevious;
+        AppState.findNext = () => { nextCalled = true; };
+        AppState.findPrevious = () => { prevCalled = true; };
+
+        try {
+            mockSearchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            Assert.isTrue(nextCalled);
+
+            mockSearchInput.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', shiftKey: true, bubbles: true }));
+            Assert.isTrue(prevCalled);
+        } finally {
+            AppState.findNext = origNext;
+            AppState.findPrevious = origPrev;
         }
     });
 

@@ -6,7 +6,7 @@
  * filtraggio testuale e per proprietà (Tag, *EXISTS*, booleani, array, date).
  */
 
-describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
+describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina (test-ui-tree.js)", () => {
 
     const setupDOM = () => {
         let sandbox = document.getElementById('testSandBox');
@@ -43,6 +43,11 @@ describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
         AppState.showDbNotesInTree = false;
     };
 
+    afterEach(() => {
+        const container = document.getElementById('treeContainer');
+        if (container) container.innerHTML = '';
+    });
+
     test("Tree: Costruzione dell'albero gerarchico radici e sotto-note", () => {
         setupDOM();
 
@@ -70,15 +75,12 @@ describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
 
         AppState.notes = [rootNote, matchChild, otherRoot];
         
-        // Inizializza il DB delle proprietà con il tag associato
         AdvancedTable.ensureSystemPropertiesDB();
         const propsDb = AppState.databases['SYS_PROPERTIES_DB'];
         
-        // Assegna il tag 'Urgente' alla nota figlia
         const row = propsDb.rows.find(r => r.cells['sys_c_note'] === 'n_target');
         row.cells['sys_c_tags'] = ['Urgente'];
 
-        // Attiva il filtro proprietà per il Tag 'Urgente'
         AppState.activePropertyFilters = [
             { colId: 'sys_c_tags', realValue: 'Urgente', colName: 'Tag', visualText: 'Tag: Urgente' }
         ];
@@ -87,15 +89,12 @@ describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
 
         const container = document.getElementById('treeContainer');
         
-        // La nota non pertinente deve essere esclusa
         Assert.isTrue(container.querySelector('.node-wrapper[data-id="n_other"]') === null);
 
-        // Il genitore deve essere visibile come Ghost Node per dare contesto
         const parentNode = container.querySelector('.node-wrapper[data-id="n_parent"]');
         Assert.isTrue(parentNode !== null);
         Assert.isTrue(parentNode.querySelector('.node-content').classList.contains('tree-ghost-node'));
 
-        // Il nodo target che ha il tag deve essere visibile e NON ghost
         const targetNode = container.querySelector('.node-wrapper[data-id="n_target"]');
         Assert.isTrue(targetNode !== null);
         Assert.isFalse(targetNode.querySelector('.node-content').classList.contains('tree-ghost-node'));
@@ -134,7 +133,6 @@ describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
         AdvancedTable.ensureSystemPropertiesDB();
         const propsDb = AppState.databases['SYS_PROPERTIES_DB'];
         
-        // Simula inserimento di una riga corrotta (priva di cells o null)
         propsDb.rows.push({ id: 'sys_r_corrupted', createdAt: Date.now() }); 
         propsDb.rows.push(null);
 
@@ -142,7 +140,6 @@ describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
             { colId: 'sys_c_tags', realValue: '*EXISTS*', colName: 'Tag' }
         ];
 
-        // L'invocazione non deve sollevare TypeError
         let errorThrown = false;
         try {
             UI.renderTree();
@@ -161,19 +158,86 @@ describe("UI Tree: Albero Gerarchico, Filtraggio e Tag di Pagina", () => {
         
         AppState.notes = [favNote, normNote];
 
-        // Scheda Note (Tutte)
         UI.switchToNotes();
         Assert.isFalse(AppState.showFavoritesInTree);
         let container = document.getElementById('treeContainer');
         Assert.isTrue(container.querySelector('.node-wrapper[data-id="n_fav"]') !== null);
         Assert.isTrue(container.querySelector('.node-wrapper[data-id="n_norm"]') !== null);
 
-        // Scheda Preferiti
         UI.toggleFavoritesInTree();
         Assert.isTrue(AppState.showFavoritesInTree);
         container = document.getElementById('treeContainer');
         Assert.isTrue(container.querySelector('.node-wrapper[data-id="n_fav"]') !== null);
         Assert.isTrue(container.querySelector('.node-wrapper[data-id="n_norm"]') === null);
+    });
+
+    test("Tree: renderTree genera lo stato di zero risultati con pulsanti di reset quando ricerca e filtri non trovano corrispondenze", () => {
+        setupDOM();
+
+        AppState.notes = [{ id: 'n1', parentId: null, title: 'Alpha', content: '<p>Testo</p>' }];
+        AppState.searchFilter = "inesistente";
+        AppState.activePropertyFilters = [{ colId: 'sys_c_tags', realValue: 'NessunTag' }];
+
+        UI.renderTree();
+
+        const container = document.getElementById('treeContainer');
+        const emptyState = container.querySelector('.tree-empty-search-state');
+        Assert.isNotNull(emptyState);
+        Assert.isTrue(emptyState.textContent.includes('Nessuna nota trovata'));
+        Assert.isTrue(emptyState.querySelectorAll('button').length >= 1);
+    });
+
+    test("Tree: extractSearchableText indicizza blocchi di codice e diari", () => {
+        const dbId = 'adv_code_index_test';
+        AppState.databases[dbId] = {
+            title: 'Algoritmo',
+            content: 'function calcolaFibonacci(n) { return n; }'
+        };
+
+        const html = `
+            <p>Descrizione</p>
+            <div id="${dbId}" class="code-wrapper"></div>
+        `;
+
+        const extracted = UI.extractSearchableText(html);
+        Assert.isTrue(extracted.includes('calcolaFibonacci'), "Deve estrarre il codice sorgente dall'oggetto in memoria");
+        Assert.isTrue(extracted.includes('Descrizione'));
+    });
+
+    test("Tree: Generazione TOC dinamico per la nota attualmente aperta", () => {
+        setupDOM();
+
+        const activeNote = {
+            id: 'n_active_toc',
+            parentId: null,
+            title: 'Guida Completa',
+            content: '<h1>Capitolo 1</h1><p>Testo</p><h2>Sezione 1.1</h2><h3>Dettaglio</h3>',
+            expanded: true
+        };
+        AppState.notes = [activeNote];
+        AppState.currentNoteId = 'n_active_toc';
+
+        UI.renderTree();
+
+        const container = document.getElementById('treeContainer');
+        const toc = container.querySelector('.dynamic-toc-container');
+        Assert.isNotNull(toc, "La nota attiva con intestazioni deve generare il TOC");
+
+        Assert.isNotNull(toc.querySelector('.toc-h1'));
+        Assert.isNotNull(toc.querySelector('.toc-h2'));
+        Assert.isNotNull(toc.querySelector('.toc-h3'));
+    });
+
+    test("Tree: highlightTreeNode attiva la classe sul nodo specificato", () => {
+        setupDOM();
+        AppState.notes = [{ id: 'n_target_hl', parentId: null, title: 'Bersaglio' }];
+        UI.renderTree();
+
+        UI.highlightTreeNode('n_target_hl');
+
+        const activeNode = document.querySelector('.node-wrapper[data-id="n_target_hl"] > .node-content');
+        Assert.isNotNull(activeNode);
+        Assert.isTrue(activeNode.classList.contains('active'));
     });
 
 });

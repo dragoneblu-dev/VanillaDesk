@@ -862,7 +862,7 @@ Object.assign(Editor, {
             // PROTEZIONE ANCESTRALE RIGOROSA WIDGET INLINE & LINK:
             // Se il nodo o uno qualsiasi dei suoi antenati appartiene a link, segnalibri, appunti nascosti o snippet, NON toccarlo!
             if (node.closest && (
-                node.closest('.internal-link, .file-link, a') ||
+                node.closest('.internal-link, .file-link') ||
                 node.closest('.adv-bookmark-marker') ||
                 node.closest('.inline-note-wrapper') ||
                 node.closest('.adv-copy-snippet') ||

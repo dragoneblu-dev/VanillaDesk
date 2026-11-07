@@ -240,9 +240,36 @@ describe("Editor Keyboard Navigation: Frecce, Snippet, Tabelle & Format Escape (
         Assert.isFalse(defaultPrevented, "Shift+ArrowRight non deve mai attivare l'escape della formattazione");
     });
 
-    // =========================================================================
-    // SEZIONE 2: NAVIGAZIONE ATTRAVERSO SNIPPET COPIABILI (.adv-copy-snippet)
-    // =========================================================================
+    test("Home/End: handleHomeEndNavigation muove su lineboundary e ritorna true", () => {
+        const editor = setupEditor('<p id="p_soft">Riga di testo con soft wrap visivo</p>');
+        const p = editor.querySelector('#p_soft');
+        setCaret(p.firstChild, 10);
+
+        let modifyCalled = false;
+        let modifyDirection = null;
+        let modifyAlter = null;
+
+        const sel = window.getSelection();
+        sel.modify = (alter, direction, granularity) => {
+            modifyCalled = true;
+            modifyAlter = alter;
+            modifyDirection = direction;
+        };
+
+        const evHome = { key: 'Home', shiftKey: false, preventDefault: () => {} };
+        const handledHome = Editor.handleHomeEndNavigation(evHome);
+
+        Assert.isTrue(handledHome);
+        Assert.isTrue(modifyCalled);
+        Assert.strictEqual(modifyAlter, "move");
+        Assert.strictEqual(modifyDirection, "backward");
+
+        const evEndShift = { key: 'End', shiftKey: true, preventDefault: () => {} };
+        Editor.handleHomeEndNavigation(evEndShift);
+
+        Assert.strictEqual(modifyAlter, "extend");
+        Assert.strictEqual(modifyDirection, "forward");
+    });
 
     test("Snippet: ArrowRight dalla fine dello snippet scavalca il cuscinetto ZWS e atterra dopo di esso", () => {
         const editor = setupEditor('<p id="test_p">Testo <span class="adv-copy-snippet adv-inline-shell" data-widget-type="snippet"><span class="snippet-text">TOKEN123</span><span class="snippet-copy-btn">📋</span></span> finale</p>');

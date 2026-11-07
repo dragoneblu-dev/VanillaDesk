@@ -6,7 +6,7 @@
  * hard delete permanente ricorsivo e svuotamento del cestino.
  */
 
-describe("UI Trash: Gestione Cestino & Garbage Collection", () => {
+describe("UI Trash: Gestione Cestino & Garbage Collection (test-ui-trash.js)", () => {
 
     const setupTrashDOM = () => {
         let sandbox = document.getElementById('testSandBox');
@@ -38,6 +38,12 @@ describe("UI Trash: Gestione Cestino & Garbage Collection", () => {
         AdvancedTable.ensureSystemPropertiesDB();
     };
 
+    afterEach(() => {
+        if (typeof UI !== 'undefined' && typeof UI.closeDrawer === 'function') {
+            UI.closeDrawer(true);
+        }
+    });
+
     test("Trash: Apertura cestino elenca unicamente le note eliminate", () => {
         setupTrashDOM();
 
@@ -47,6 +53,22 @@ describe("UI Trash: Gestione Cestino & Garbage Collection", () => {
         Assert.isTrue(body.innerHTML.includes('Bozza 1'));
         Assert.isTrue(body.innerHTML.includes('Bozza 2'));
         Assert.isFalse(body.innerHTML.includes('Nota Attiva'));
+    });
+
+    test("Trash: visualizza stato vuoto se non vi sono note eliminate nè allegati orfani", async () => {
+        setupTrashDOM();
+        AppState.notes = [{ id: 'n_only', parentId: null, title: 'Attiva', content: '<p>A</p>' }];
+
+        const origGetOrphans = Store.getOrphanedAssets;
+        Store.getOrphanedAssets = async () => ({ count: 0, formattedSize: '0 Bytes', files: [] });
+
+        try {
+            await UI.Trash.open();
+            const body = document.getElementById('advDrawerBody');
+            Assert.isTrue(body.querySelector('.ui-empty-state') !== null);
+        } finally {
+            Store.getOrphanedAssets = origGetOrphans;
+        }
     });
 
     test("Trash: Ripristino rimuove il flag deletedAt e re-inserisce la nota tra quelle attive", () => {
@@ -59,6 +81,19 @@ describe("UI Trash: Gestione Cestino & Garbage Collection", () => {
         Assert.isTrue(restored.deletedAt === undefined);
     });
 
+    test("Trash: Ripristino assegna parentId null se la nota madre risulta a sua volta nel Cestino", () => {
+        setupTrashDOM();
+
+        const trashedParent = { id: 'p_trash', parentId: null, title: 'Padre Cestinato', deletedAt: Date.now() };
+        const trashedChild = { id: 'c_trash', parentId: 'p_trash', title: 'Figlio Cestinato', deletedAt: Date.now() };
+        AppState.notes.push(trashedParent, trashedChild);
+
+        UI.Trash.restore('c_trash');
+
+        const restoredChild = Store.getNote('c_trash');
+        Assert.strictEqual(restoredChild.parentId, null, "La nota restaurata con genitore nel cestino deve essere riposizionata alla radice");
+    });
+
     test("Trash: Eliminazione permanente cancella fisicamente la nota dalla memoria", () => {
         setupTrashDOM();
 
@@ -66,6 +101,46 @@ describe("UI Trash: Gestione Cestino & Garbage Collection", () => {
 
         Assert.strictEqual(Store.getNote('n_trash2'), null);
         Assert.strictEqual(AppState.notes.length, 2);
+    });
+
+    test("Trash: cleanOrphanAttachments invoca Store.deleteOrphanedAssets e mostra toast di conferma", async () => {
+        setupTrashDOM();
+
+        let deleteCalled = false;
+        let toastShown = false;
+
+        const origConfirm = window.confirm;
+        const origDelete = Store.deleteOrphanedAssets;
+        const origToast = UI.showToast;
+
+        window.confirm = () => true;
+        Store.deleteOrphanedAssets = async () => { deleteCalled = true; return 3; };
+        UI.showToast = () => { toastShown = true; };
+
+        try {
+            await UI.Trash.cleanOrphanAttachments();
+            Assert.isTrue(deleteCalled);
+            Assert.isTrue(toastShown);
+        } finally {
+            window.confirm = origConfirm;
+            Store.deleteOrphanedAssets = origDelete;
+            UI.showToast = origToast;
+        }
+    });
+
+    test("Trash: empty svuota tutte le note cestinate preservando quelle attive", async () => {
+        setupTrashDOM();
+
+        const origConfirm = window.confirm;
+        window.confirm = () => true;
+
+        try {
+            await UI.Trash.empty();
+            Assert.strictEqual(AppState.notes.length, 1);
+            Assert.strictEqual(AppState.notes[0].id, 'n_live');
+        } finally {
+            window.confirm = origConfirm;
+        }
     });
 
 });

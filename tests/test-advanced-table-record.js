@@ -5,7 +5,7 @@
  * Conteggio test case: 11
  */
 
-describe("AdvancedTable Record: Dettaglio Record, Macro, Commenti Colonna e Relazioni (11 Test)", () => {
+describe("AdvancedTable Record: Dettaglio Record, Macro, Commenti Colonna e Relazioni (test-advanced-table-record.js)", () => {
 
     // Helper di configurazione di un database mock con relativo wrapper montato nel sandbox DOM
     const setupMockDatabase = (tableId) => {

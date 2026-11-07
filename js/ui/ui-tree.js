@@ -15,6 +15,8 @@
  * - FIX RECORD BRANCH ICON: Ereditarietà automatica dell'icona verde record per tutti i rami discendenti delle pagine di database.
  * - FIX WHITESPACE SEARCH PARITY: Parità e normalizzazione tra spazi ASCII e caratteri &nbsp; (\u00A0) in extractSearchableText e matching.
  * - FIX BOOKMARK COMMENT MULTILINE REGEX: Utilizzo di [\s\S]*? per catturare note su più righe senza perdere il fumetto nell'albero.
+ * - FIX AUTO-SCROLL TO ACTIVE NODE: Riposizionamento automatico dello scroll dell'albero sulla nota attiva (per note di database e navigazione cronologia).
+ * - FIX EXCLUDE DATA-REF-ID: Riconoscimento esatto dell'attributo id tramite spazio iniziale per non catturare le citazioni live.
  */
 
 Object.assign(UI, {
@@ -248,7 +250,6 @@ Object.assign(UI, {
     extractSearchableText: (htmlContent) => {
         if (!htmlContent) return "";
 
-        // SANIFICAZIONE PREVENTIVA: Rimozione selettiva di frame, script e stili prima del parsing DOM.
         const cleanMarkup = htmlContent
             .replace(/<iframe\b[^>]*>([\s\S]*?<\/iframe>)?/gi, '')
             .replace(/<script\b[^>]*>([\s\S]*?<\/script>)?/gi, '')
@@ -289,7 +290,7 @@ Object.assign(UI, {
 
         // Controllo aggiuntivo per identificatori di blocchi codice tramite Regex nel markup
         if (AppState.databases) {
-            const codeRegex = /id=["'](adv_code_[^"']+)["']/g;
+            const codeRegex = /\sid=["'](adv_code_[^"']+)["']/g;
             let match;
             while ((match = codeRegex.exec(htmlContent)) !== null) {
                 const trueId = match[1].split('_cited_')[0];
@@ -468,10 +469,13 @@ Object.assign(UI, {
         let hasMatchDbChild = false;
         
         if (!AppState.showDbNotesInTree && !isDefaultView && node.content) {
-            const dbRegex = /id=["'](adv_tbl_[^"']+|adv_pivot_[^"']+|adv_journal_[^"']+)["']/g;
+            // Isolamento rigoroso: lo spazio iniziale \s esclude data-ref-id delle citazioni senza manipolare il DOM
+            const dbRegex = /\sid=["'](adv_tbl_[a-zA-Z0-9_]+|adv_pivot_[a-zA-Z0-9_]+|adv_journal_[a-zA-Z0-9_]+)["']/g;
             let match;
             while ((match = dbRegex.exec(node.content)) !== null) {
-                const dbId = match[1].split('_cited_')[0];
+                if (match[1].includes('_cited_')) continue;
+
+                const dbId = match[1];
                 if (AppState.databases && AppState.databases[dbId]) {
                     const dbState = AppState.databases[dbId];
                     if (!dbState.isPivot && !dbState.isLinkedView && dbId !== 'SYS_PROPERTIES_DB') {
@@ -742,6 +746,20 @@ Object.assign(UI, {
     highlightTreeNode: (id) => {
         document.querySelectorAll('.node-content').forEach(el => el.classList.remove('active'));
         const el = document.querySelector(`.node-wrapper[data-id="${id}"] > .node-content`);
-        if (el) el.classList.add('active');
+        if (el) {
+            el.classList.add('active');
+            const treeContainer = document.getElementById('treeContainer');
+            if (treeContainer) {
+                const scrollIntoViewIfNeeded = () => {
+                    const elRect = el.getBoundingClientRect();
+                    const containerRect = treeContainer.getBoundingClientRect();
+                    if (elRect.top < containerRect.top || elRect.bottom > containerRect.bottom) {
+                        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                };
+                scrollIntoViewIfNeeded();
+                setTimeout(scrollIntoViewIfNeeded, 100);
+            }
+        }
     }
 });
