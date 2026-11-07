@@ -14,6 +14,7 @@
  * FEAT FLOATING STICKY ACTIONS & SCROLL RESTORATION: Visualizzazione automatica dei pulsanti "Copia" e icona di riduzione
  * ancorati in cima alla viewport quando l'intestazione scorre fuori vista, con riallineamento automatico della visuale
  * all'inizio del widget in caso di compressione di blocchi lunghi.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 const CodeManager = {
@@ -311,7 +312,7 @@ const CodeManager = {
                     // Imposta isUserManualChoice = true per consolidare la sintassi rilevata e bloccare ulteriori loop
                     CodeManager.setLanguage(wrapper.id, detected, true, true);
                     if (typeof UI !== 'undefined' && UI.showToast) {
-                        UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }) || `Sintassi rilevata: ${detected.toUpperCase()}`, "info");
+                        UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }), "info");
                     }
                 }, 50);
             }
@@ -371,8 +372,7 @@ const CodeManager = {
                                     // bloccando ulteriori rilevamenti e spostando la spunta nel menu opzioni
                                     CodeManager.setLanguage(wrapper.id, detected, true, true);
                                     if (typeof UI !== 'undefined' && UI.showToast) {
-                                        const langLabel = detected.toUpperCase();
-                                        UI.showToast(I18n.t('code_widget.detected_toast', { lang: langLabel }), "info");
+                                        UI.showToast(I18n.t('code_widget.detected_toast', { lang: detected.toUpperCase() }), "info");
                                     }
                                 }
                             }
@@ -474,7 +474,7 @@ const CodeManager = {
         const langSubmenu = [
             {
                 icon: Icons.lightning || '✨',
-                label: (I18n.t('code_widget.auto_detect') || "Rileva Automaticamente (Auto)") + (isAuto ? chkMark : ''),
+                label: I18n.t('code_widget.auto_detect') + (isAuto ? chkMark : ''),
                 onClick: () => CodeManager.autoDetectLanguage(wrapper.id)
             },
             { type: 'divider' },
@@ -766,7 +766,7 @@ const CodeManager = {
             const rawCollapseKey = typeof I18n !== 'undefined' ? I18n.t('code_widget.collapse_block') : '';
             const collapseTitle = (rawCollapseKey && rawCollapseKey !== 'code_widget.collapse_block')
                 ? rawCollapseKey
-                : ((typeof I18n !== 'undefined' && I18n.t('citation.expand_collapse')) || "Riduci a blocco");
+                : I18n.t('citation.expand_collapse');
 
             bar.innerHTML = `
                 <button class="adv-code-floating-btn" id="btnCodeFloatCopy" title="${copyTitle}">

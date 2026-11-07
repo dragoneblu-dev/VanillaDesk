@@ -7,6 +7,7 @@
  * 3. Scanner Centralizzato Risorse: Scansione transitiva dipendenze e pulizia RAM (scanActiveEntities, cleanOrphanedRAMCaches).
  * 4. Orchestrazione Autosave: Gestione timer di debounce e segnalazione modifiche fisiche (triggerAutoSave, markNeedsPhysicalGC).
  * 5. Crash Recovery & Snapshot Standalone: Persistenza di emergenza su IndexedDB e import/export di file JSON monolitici.
+ * 6. Audit Allegati Orfani: Censimento degli asset non referenziati su disco con calcolo peso (getOrphanedAssets, deleteOrphanedAssets).
  * Ottimizzazione O(1) di hasUnsavedChanges per prevenire blocchi computazionali su collezioni con 1000+ note.
  */
 
@@ -133,7 +134,7 @@ const Store = {
     // =========================================================================
     // SCANNER UNIFICATO IDENTIFICATORI ATTIVI & TRANSIZIONE (RAM & DISK)
     // =========================================================================
-    scanActiveEntities: () => {
+    scanActiveEntities: (includeUndoStack = true) => {
         const activeDbIds = new Set(['SYS_PROPERTIES_DB']);
         const activeImageIds = new Set();
         const activeAudioIds = new Set();
@@ -157,9 +158,11 @@ const Store = {
         if (editor) extractIds(editor.innerHTML);
         (AppState.notes || []).forEach(note => extractIds(note.content));
 
-        // 2. Scansiona Stack di Undo/Redo per preservare asset ripristinabili
-        if (Editor.undoStack) Editor.undoStack.forEach(extractIds);
-        if (Editor.redoStack) Editor.redoStack.forEach(extractIds);
+        // 2. Scansiona Stack di Undo/Redo per preservare asset ripristinabili (escluso durante verifiche orfani esplicite)
+        if (includeUndoStack) {
+            if (Editor.undoStack) Editor.undoStack.forEach(extractIds);
+            if (Editor.redoStack) Editor.redoStack.forEach(extractIds);
+        }
 
         // 3. Scansiona Template (contenuto e widget interni)
         if (AppState.templates) {
@@ -266,7 +269,7 @@ const Store = {
     },
 
     cleanOrphanedRAMCaches: () => {
-        const { activeDbIds, activeImageIds, activeAudioIds } = Store.scanActiveEntities();
+        const { activeDbIds, activeImageIds, activeAudioIds } = Store.scanActiveEntities(true);
 
         // 1. Purga DB Orfani in RAM (preservando SYS_PROPERTIES_DB e le dipendenze transitive)
         if (AppState.databases) {
@@ -294,6 +297,81 @@ const Store = {
                 }
             });
         }
+    },
+
+    // Scansiona fisicamente la cartella assets/ del Workspace rilevando file orfani e spazio occupato
+    getOrphanedAssets: async () => {
+        if (!AppState.assetsHandle) {
+            return { count: 0, totalSize: 0, formattedSize: '0 Bytes', files: [] };
+        }
+
+        const { activeImageIds, activeAudioIds } = Store.scanActiveEntities(false);
+        const orphanFiles = [];
+        let totalBytes = 0;
+
+        try {
+            for await (const entry of AppState.assetsHandle.values()) {
+                if (entry.kind === 'file') {
+                    const isImg = entry.name.startsWith('img_');
+                    const isAud = entry.name.startsWith('aud_');
+
+                    if ((isImg && !activeImageIds.has(entry.name)) || (isAud && !activeAudioIds.has(entry.name))) {
+                        let size = 0;
+                        try {
+                            const file = await entry.getFile();
+                            size = file.size || 0;
+                        } catch (_) {}
+
+                        totalBytes += size;
+                        orphanFiles.push({
+                            name: entry.name,
+                            size: size,
+                            type: isImg ? 'img' : 'aud'
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            console.warn("[STORE] Errore scansione allegati orfani:", e);
+        }
+
+        const formattedSize = typeof UI._formatBytes === 'function' 
+            ? UI._formatBytes(totalBytes) 
+            : `${Math.round(totalBytes / 1024)} KB`;
+
+        return {
+            count: orphanFiles.length,
+            totalSize: totalBytes,
+            formattedSize: formattedSize,
+            files: orphanFiles
+        };
+    },
+
+    // Elimina fisicamente dalla cartella assets/ su disco solo i file orfani non utilizzati
+    deleteOrphanedAssets: async (orphansList = null) => {
+        if (!AppState.assetsHandle) return 0;
+
+        const orphans = orphansList || (await Store.getOrphanedAssets()).files;
+        let deletedCount = 0;
+
+        for (const fileInfo of orphans) {
+            try {
+                await AppState.assetsHandle.removeEntry(fileInfo.name);
+                deletedCount++;
+
+                if (fileInfo.type === 'img' && Editor.imageCache && Editor.imageCache[fileInfo.name]) {
+                    try { URL.revokeObjectURL(Editor.imageCache[fileInfo.name]); } catch (_) {}
+                    delete Editor.imageCache[fileInfo.name];
+                } else if (fileInfo.type === 'aud' && Editor.audioCache && Editor.audioCache[fileInfo.name]) {
+                    try { URL.revokeObjectURL(Editor.audioCache[fileInfo.name]); } catch (_) {}
+                    delete Editor.audioCache[fileInfo.name];
+                }
+            } catch (err) {
+                console.warn(`[STORE] Impossibile eliminare allegato orfano ${fileInfo.name}:`, err);
+            }
+        }
+
+        return deletedCount;
     },
 
     prepareForSave: () => {

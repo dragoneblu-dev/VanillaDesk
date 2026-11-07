@@ -15,6 +15,8 @@
  * vincolando l'escape con ArrowRight alla reale fine corsa del testo all'interno dell'intero blocco contenitore.
  * FEAT VISUAL LINE HOME/END: Gestione deterministica di Home, End, Shift+Home e Shift+End sulle righe visive con soft-wrap.
  * FEAT PRECISE LINE-BY-LINE SELECTION: Risoluzione del salto a inizio paragrafo su Shift+Frecce tramite raycast geometrico.
+ * FIX OUTDENT SPAN SPACES: Risolta la rimozione di 4 spazi con Shift+Tab anche quando gli spazi iniziali
+ * si trovano all'interno di tag inline di formattazione (span colore sfondo o testo).
  */
 
 Object.assign(Editor, {
@@ -835,10 +837,33 @@ Object.assign(Editor, {
                 } else {
                     // Indentazione per paragrafi standard (Aggiunge \u00A0 - Spazi Unificatori)
                     if (e.shiftKey) {
-                        let textNode = block.firstChild;
-                        while (textNode && textNode.nodeType !== 3) textNode = textNode.nextSibling;
-                        if (textNode && textNode.nodeType === 3) {
-                            textNode.nodeValue = textNode.nodeValue.replace(/^[\s\u00A0]{1,4}/, '');
+                        let spacesToRemove = 4;
+                        const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null, false);
+                        let tNode;
+                        while (spacesToRemove > 0 && (tNode = walker.nextNode())) {
+                            if (tNode.parentNode && tNode.parentNode.id && (tNode.parentNode.id.startsWith('tab-start-') || tNode.parentNode.id.startsWith('tab-end-'))) {
+                                continue;
+                            }
+                            const val = tNode.nodeValue;
+                            if (!val) continue;
+
+                            const match = val.match(/^([\u200B\uFEFF]*)([ \t\u00A0]+)/);
+                            if (match) {
+                                const zwsPrefix = match[1];
+                                const spacesStr = match[2];
+                                const count = Math.min(spacesStr.length, spacesToRemove);
+                                const newSpaces = spacesStr.substring(count);
+                                const remainder = val.substring(match[0].length);
+                                tNode.nodeValue = zwsPrefix + newSpaces + remainder;
+                                spacesToRemove -= count;
+                                if (newSpaces.length > 0 || remainder.length > 0) {
+                                    break;
+                                }
+                            } else {
+                                if (val.replace(/[\u200B\uFEFF]/g, '').length > 0) {
+                                    break;
+                                }
+                            }
                         }
                     } else {
                         let textNode = block.firstChild;

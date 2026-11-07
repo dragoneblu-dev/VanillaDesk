@@ -7,6 +7,8 @@
  * FEAT TAG DISAMBIGUATION: Gestione unificata navigazione tag con prefisso '#' - Selezione diretta se univoco, autocompletamento se ambiguo.
  * FEAT MIN SEARCH THRESHOLD: Ricerca as-you-type attiva da 2 caratteri in su (o da 1 carattere su Invio esplicito), prevenendo overload da singola lettera.
  * FIX LIVE IN-PLACE HIGHLIGHTING: Evidenziazione diretta in-place sull'editor attivo senza distruggere la pagina con selectNote.
+ * FEAT PRESERVE WHITESPACE ON TEXT SEARCH: Mantenimento rigoroso degli spazi iniziali e finali digitati per consentire la ricerca mirata di parole esatte.
+ * FIX NBSP NORMALIZATION: Normalizzazione trasparente tra spazi normali e non-breaking spaces (\u00A0 / &nbsp;).
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -43,7 +45,10 @@ Object.assign(EventsGlobal, {
         }
 
         if (meetsThreshold) {
-            AppState.searchFilter = trimmed.toLowerCase();
+            // Se è una ricerca per tag (#...) applichiamo il trim; per il testo semplice preserviamo gli spazi digitati
+            // normalizzando i caratteri \u00A0 (&nbsp;) in spazi standard per la comparazione
+            const rawFilter = isTagQuery ? trimmed.toLowerCase() : rawValue.toLowerCase();
+            AppState.searchFilter = rawFilter.replace(/\u00A0/g, ' ');
         } else {
             // Sotto la soglia minima: azzera il filtro testuale per non sovraccaricare l'albero
             AppState.searchFilter = "";
@@ -362,7 +367,7 @@ Object.assign(EventsGlobal, {
                     e.preventDefault();
                     
                     // Se la ricerca non era ancora partita perché sotto soglia, Invio forza l'esecuzione immediata
-                    if (!AppState.searchFilter && searchInput.value.trim().length > 0) {
+                    if (!AppState.searchFilter && searchInput.value.length > 0) {
                         EventsGlobal._executeSearchLogic(searchInput, true);
                         return;
                     }

@@ -7,6 +7,8 @@
  * - Modalità avanzata Raw HTML Source Editor a tutto schermo (openRawHtmlEditor, applyRawHtml, copyRawHtmlToClipboard).
  * - Boundary enforcement, selezione widget e smart escape dai blocchi (enforceBoundaries, handleSmartClickEscape).
  * - Ispezione del contesto di selezione per la toolbar (checkContext, editContextElement, toggleAdvancedToolbar).
+ * - FEAT RASSICURAZIONE SESSIONE RIPRISTINATA (Soluzione A): Segnaposto rassicurante in attesa di ricollegamento
+ *   quando !AppState.assetsHandle, prevenendo il panico dell'utente con grafica e testi chiari.
  */
 
 const Editor = {
@@ -17,14 +19,39 @@ const Editor = {
     imageCache: {},
     _pendingAssetPromises: new Map(),
 
-    // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine cancellata o non reperibile
+    // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine:
+    // Se il Workspace non è collegato (!AppState.assetsHandle), mostra un segnaposto rassicurante di attesa (Soluzione A);
+    // altrimenti mostra il segnaposto di immagine eliminata dal disco.
     getBrokenImagePlaceholder: (ref = '') => {
         const cleanRef = (ref || I18n.t('editor_core.missing_image'))
             .replace(/&/g, '&amp;')
             .replace(/</g, '&lt;')
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
+
+        // SOLUZIONE A: Se siamo in sessione ripristinata o senza cartella Workspace aperta
+        const isWorkspaceDisconnected = !AppState.assetsHandle;
+
+        if (isWorkspaceDisconnected) {
+            const titleText = I18n.t('editor_core.waiting_workspace_title');
+            const descText = I18n.t('editor_core.waiting_workspace_desc');
+
+            const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="380" height="110" viewBox="0 0 380 110">
+                <rect x="2" y="2" width="376" height="106" rx="8" fill="#f0f9ff" stroke="#38bdf8" stroke-width="2" stroke-dasharray="6,4"/>
+                <g transform="translate(16, 28)">
+                    <rect x="0" y="0" width="48" height="48" rx="8" fill="#e0f2fe" stroke="#38bdf8" stroke-width="1.5"/>
+                    <path d="M10 16 L22 16 L26 20 L38 20 A2 2 0 0 1 40 22 L40 34 A2 2 0 0 1 38 36 L10 36 A2 2 0 0 1 8 34 L8 18 A2 2 0 0 1 10 16 Z" fill="#0284c7" opacity="0.75"/>
+                </g>
+                <text x="76" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="13" font-weight="bold" fill="#0369a1">${titleText}</text>
+                <text x="76" y="62" font-family="monospace" font-size="11" fill="#0284c7">${cleanRef.length > 34 ? cleanRef.slice(0, 31) + '...' : cleanRef}</text>
+                <text x="76" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="10.5" fill="#0c4a6e" opacity="0.85">${descText}</text>
+            </svg>`;
+            return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+        }
         
+        // Segnaposto standard per file effettivamente mancante da disco
+        const brokenTitle = I18n.t('editor_core.broken_image_title');
+        const brokenDesc = I18n.t('editor_core.broken_image_desc');
         const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="340" height="110" viewBox="0 0 340 110">
             <rect x="2" y="2" width="336" height="106" rx="8" fill="#fff5f5" stroke="#ef4444" stroke-width="2" stroke-dasharray="6,4"/>
             <g transform="translate(16, 28)">
@@ -33,9 +60,9 @@ const Editor = {
                 <circle cx="18" cy="14" r="4" fill="#ef4444" opacity="0.6"/>
                 <line x1="6" y1="42" x2="42" y2="6" stroke="#dc2626" stroke-width="3" stroke-linecap="round"/>
             </g>
-            <text x="76" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="bold" fill="#991b1b">${I18n.t('editor_core.broken_image_title')}</text>
+            <text x="76" y="42" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="14" font-weight="bold" fill="#991b1b">${brokenTitle}</text>
             <text x="76" y="62" font-family="monospace" font-size="11" fill="#b91c1c">${cleanRef.length > 32 ? cleanRef.slice(0, 29) + '...' : cleanRef}</text>
-            <text x="76" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" fill="#7f1d1d" opacity="0.8">${I18n.t('editor_core.broken_image_desc')}</text>
+            <text x="76" y="80" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, sans-serif" font-size="11" fill="#7f1d1d" opacity="0.8">${brokenDesc}</text>
         </svg>`;
         return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
     },
@@ -46,7 +73,11 @@ const Editor = {
         img.removeAttribute('src');
         img.setAttribute('data-broken', 'true');
         img.src = Editor.getBrokenImagePlaceholder(ref);
-        img.setAttribute('title', I18n.t('editor_core.broken_image_tooltip', { ref }));
+        
+        const tooltip = !AppState.assetsHandle 
+            ? I18n.t('editor_core.waiting_workspace_tooltip')
+            : I18n.t('editor_core.broken_image_tooltip', { ref });
+        img.setAttribute('title', tooltip);
     },
 
     handleImageError: (img) => {
@@ -208,7 +239,7 @@ const Editor = {
     _ensureLastLineBreak: (editorEl) => {
         if (!editorEl) return;
         const lastChild = editorEl.lastElementChild;
-        if (lastChild && (WidgetManager.isProtectedBlock(lastChild) || ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE'].includes(lastChild.tagName))) {
+        if (lastChild && (WidgetManager.isProtectedBlock(lastChild) || ['H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'TABLE', 'IMG'].includes(lastChild.tagName))) {
             const p = document.createElement('p');
             p.innerHTML = '<br>';
             editorEl.appendChild(p);
@@ -313,7 +344,8 @@ const Editor = {
             </button>
         `;
 
-        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.code : '</>'} ${I18n.t('editor_core.raw_html_drawer_title', { title: safeTitle })}</span>`, bodyHTML, footerHTML);
+        const drawerTitle = I18n.t('editor_core.raw_html_drawer_title', { title: safeTitle });
+        UI.openDrawer(`<span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.code : '</>'} ${drawerTitle}</span>`, bodyHTML, footerHTML);
 
         setTimeout(() => {
             const ta = document.getElementById('advRawHtmlTextarea');

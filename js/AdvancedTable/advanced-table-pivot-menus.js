@@ -5,12 +5,18 @@
  * FIX CONTROLLI: Reintegrato il comando per abilitare/disabilitare l'aggiunta di nuove righe dalle Viste Collegate.
  * FEAT WBS LINKED VIEW: Aggiunta la possibilità di creare Viste Collegate in formato Gerarchia WBS (Albero).
  * EREDITARIETÀ SEMANTICA: Lettura di col.treeDirection per assegnare automaticamente la direzione della WBS.
+ * FEAT ALPHABETICAL SOURCE SELECTION: Selettore del database di origine ordinato alfabeticamente A-Z,
+ * con ricerca testuale simultanea su nome DB e pagina contenitrice, card a due righe a tutta altezza,
+ * allineamento flex dell'icona di ricerca e pieno supporto al tasto Invio.
+ * FEAT DUAL ANALYTICS BUTTONS: Separazione del pulsante analitico dello Step 2 in due pulsanti distinti
+ * per l'autoselezione immediata di "Tabella Pivot" o "Grafico Visivo".
  */
 
 const AdvancedPivotMenus = {
     pendingConfig: null,
     draggedIndex: null,
     draggedType: null,
+    _availableDbList: [],
 
     openOptions: (e, tableId) => {
         if (e) e.stopPropagation();
@@ -137,7 +143,6 @@ const AdvancedPivotMenus = {
     },
 
     switchToFullConfig: (tableId) => {
-        // Preserva le opzioni estetiche correntemente modificate a video prima di cambiare schermata
         if (AdvancedPivotMenus.pendingConfig) {
             const chartTypeInput = document.getElementById('pivotChartStyle');
             const stackCheck = document.getElementById('chartStacked');
@@ -158,20 +163,149 @@ const AdvancedPivotMenus = {
         AdvancedPivotMenus.openCreateWizard(tableId, false);
     },
 
+    // =========================================================================
+    // SELETTORE ORIGINE DATI: Render e Filtraggio Dinamico delle Card Database
+    // =========================================================================
+    renderSourceDatabaseCards: (filterQuery = '') => {
+        const container = document.getElementById('pivotSourceCardsContainer');
+        if (!container) return;
+
+        const cleanFilter = (filterQuery || '').trim().toLowerCase();
+        const databases = AdvancedPivotMenus._availableDbList || [];
+
+        const filtered = databases.filter(db => {
+            if (!cleanFilter) return true;
+            const matchTitle = db.title.toLowerCase().includes(cleanFilter);
+            const matchParent = db.parentNote.toLowerCase().includes(cleanFilter);
+            return matchTitle || matchParent;
+        });
+
+        if (filtered.length === 0) {
+            container.innerHTML = `
+                <div style="padding: 30px 15px; text-align: center; color: var(--text-secondary); font-style: italic; background: rgba(0,0,0,0.02); border: 1px dashed var(--border-color); border-radius: 6px;">
+                    ${I18n.t('adv_pivot_menu.no_databases_found') || 'Nessun database trovato corrispondente alla ricerca.'}
+                </div>
+            `;
+            return;
+        }
+
+        let html = '';
+        filtered.forEach((db) => {
+            const safeTitle = UI.escapeHTML(db.title);
+            const safeParent = UI.escapeHTML(db.parentNote);
+            const formattedRecords = db.rowCount.toLocaleString();
+            const countLabel = I18n.t('adv_pivot_menu.source_records_count', { records: formattedRecords, cols: db.colCount }) || `${formattedRecords} record • ${db.colCount} col.`;
+
+            let renderedTitle = safeTitle;
+            let renderedParent = safeParent;
+            if (cleanFilter) {
+                const escapedQuery = cleanFilter.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regex = new RegExp(`(${escapedQuery})`, 'gi');
+                renderedTitle = renderedTitle.replace(regex, '<mark class="search-highlight" style="display:inline; padding:0 2px; border-radius:2px;">$1</mark>');
+                renderedParent = renderedParent.replace(regex, '<mark class="search-highlight" style="display:inline; padding:0 2px; border-radius:2px;">$1</mark>');
+            }
+
+            html += `
+                <div class="source-db-card" 
+                     data-db-id="${db.id}" 
+                     tabindex="0"
+                     style="display: flex; align-items: center; justify-content: space-between; border: 1px solid var(--border-color); padding: 10px 14px; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; background: var(--bg-color); margin-bottom: 8px; outline: none;"
+                     onmouseenter="this.style.borderColor='var(--accent-color)'; this.style.backgroundColor='var(--item-hover)';"
+                     onmouseleave="this.style.borderColor='var(--border-color)'; this.style.backgroundColor='var(--bg-color)';"
+                     onclick="AdvancedPivotMenus.selectSourceDatabase('${db.id}')">
+                    
+                    <div style="display: flex; align-items: center; gap: 12px; overflow: hidden; min-width: 0; flex: 1;">
+                        <span style="color: var(--accent-color); display: inline-flex; flex-shrink: 0; transform: scale(1.15);">${Icons.tableDatabase}</span>
+                        <div style="display: flex; flex-direction: column; overflow: hidden; min-width: 0; gap: 3px;">
+                            <span style="font-weight: 700; font-size: 0.92rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                                ${renderedTitle}
+                            </span>
+                            <span style="font-size: 0.75rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: flex; align-items: center; gap: 4px;">
+                                <span style="opacity: 0.7; display: inline-flex; width: 12px; justify-content: center;">${Icons.file}</span>
+                                <span>${renderedParent}</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0; margin-left: 10px;">
+                        <span style="font-size: 0.72rem; color: var(--text-secondary); background: rgba(0,0,0,0.04); border: 1px solid var(--border-color); padding: 2px 8px; border-radius: 10px; font-family: monospace; font-variant-numeric: tabular-nums;">
+                            ${countLabel}
+                        </span>
+                        <span style="color: var(--accent-color); font-size: 1rem; display: inline-flex; opacity: 0.7;">›</span>
+                    </div>
+                </div>
+            `;
+        });
+
+        container.innerHTML = html;
+    },
+
+    selectSourceDatabase: (sourceId) => {
+        if (!sourceId) return;
+
+        AdvancedPivotMenus.pendingConfig.sourceId = sourceId;
+        const hiddenSelect = document.getElementById('pivotSourceSelect');
+        if (hiddenSelect) hiddenSelect.value = sourceId;
+
+        AdvancedPivotMenus.pendingConfig.groupBy = [];
+        AdvancedPivotMenus.pendingConfig.aggregations = [];
+
+        AdvancedPivotMenus.loadSchemaForStep2();
+    },
+
+    resetToSourceSelection: () => {
+        const step2 = document.getElementById('linkedStep2');
+        if (step2) step2.style.display = 'none';
+
+        const pStep2 = document.getElementById('pivotStep2');
+        if (pStep2) pStep2.style.display = 'none';
+
+        const pVis = document.getElementById('pivotVisualSettings');
+        if (pVis) pVis.style.display = 'none';
+
+        const finalizeBtn = document.getElementById('btnFinalizePivot');
+        if (finalizeBtn) finalizeBtn.style.display = 'none';
+
+        const step1 = document.getElementById('linkedStep1');
+        if (step1) {
+            step1.style.display = 'flex';
+            const searchInput = document.getElementById('pivotSourceSearch');
+            if (searchInput) {
+                searchInput.value = '';
+                AdvancedPivotMenus.renderSourceDatabaseCards('');
+                setTimeout(() => searchInput.focus(), 50);
+            }
+        }
+    },
+
     openCreateWizard: (editTableId = null, chartOnlyMode = false) => {
         AdvancedTable.closeDropdowns(true);
         const dbList = [];
         let sourceDbTitle = '';
         let sourceState = null;
 
+        // POPOLAMENTO E ORDINAMENTO ALFABETICO NATURALE (A-Z) DI TUTTI I DATABASE
         if (AppState.databases) {
             AppState.getRelationalDatabaseIds().forEach(id => {
                 const s = AppState.databases[id];
                 if (s && !s.isPivot && !s.isLinkedView && s.columns && !id.includes('adv_code_') && !id.includes('adv_btnbar_') && !id.includes('adv_cols_') && !id.includes('adv_journal_')) {
-                    dbList.push({ id: id, title: s.title || I18n.t('editor.database') });
+                    const parentName = typeof AdvancedTable.getParentNoteName === 'function' 
+                        ? AdvancedTable.getParentNoteName(id) 
+                        : (typeof UI.getParentNoteName === 'function' ? UI.getParentNoteName(id) : 'Workspace');
+                    
+                    dbList.push({ 
+                        id: id, 
+                        title: s.title || I18n.t('editor.database'),
+                        parentNote: parentName || 'Workspace',
+                        rowCount: (s.rows || []).length,
+                        colCount: (s.columns || []).length
+                    });
                 }
             });
         }
+
+        dbList.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }));
+        AdvancedPivotMenus._availableDbList = dbList;
 
         if (!AdvancedPivotMenus.pendingConfig || AdvancedPivotMenus.pendingConfig.tableId !== editTableId) {
             AdvancedPivotMenus.pendingConfig = {
@@ -299,26 +433,68 @@ const AdvancedPivotMenus = {
             `;
         }
 
+        const searchPlaceholder = I18n.t('adv_pivot_menu.search_source_placeholder');
+
         const bodyHTML = `
-            <div style="display: ${chartOnlyMode ? 'none' : 'block'};">
-                <div id="linkedStep1" style="${isEditing ? 'display:none;' : ''}">
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_pivot_menu.step1_title')}</label>
-                    <select id="pivotSourceSelect" class="modern-input" style="margin-bottom:20px; margin-top:5px; width:100%;" onchange="AdvancedPivotMenus.loadSchemaForStep2()">
-                        <option value="">${I18n.t('adv_actions.select_db_placeholder')}</option>
-                        ${dbList.map(db => `<option value="${db.id}">➔ ${db.title}</option>`).join('')}
-                    </select>
+            <div style="display:flex; flex-direction:column; flex:1; min-height:0; height:100%;">
+                <!-- STEP 1: SELEZIONE DEL DATABASE ORIGINALE CON BARRA DI RICERCA NATIVA E LISTA A TUTTA ALTEZZA -->
+                <div id="linkedStep1" style="${isEditing ? 'display:none;' : 'display:flex; flex-direction:column; flex:1; min-height:0;'}">
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; display:block; flex-shrink:0;">
+                        ${I18n.t('adv_pivot_menu.step1_title')}
+                    </label>
+
+                    <!-- Input nascosto per preservare l'ID DOM per test e retrocompatibilità -->
+                    <input type="hidden" id="pivotSourceSelect" value="">
+
+                    <!-- Barra di ricerca in layout flexbox: icona fissa a sinistra immune da shift verticali -->
+                    <div style="display:flex; align-items:center; gap:8px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; padding:6px 10px; margin-bottom:12px; box-sizing:border-box; flex-shrink:0;">
+                        <span style="opacity:0.6; display:inline-flex; align-items:center; color:var(--text-secondary); flex-shrink:0;">${Icons.search}</span>
+                        <input type="text" id="pivotSourceSearch" 
+                               placeholder="${searchPlaceholder}" 
+                               autocomplete="off" 
+                               style="border:none; background:transparent; color:var(--text-primary); font-size:0.85rem; width:100%; outline:none; padding:0; margin:0;"
+                               oninput="AdvancedPivotMenus.renderSourceDatabaseCards(this.value)">
+                    </div>
+
+                    <!-- Contenitore lista a espansione fluida 100% altezza -->
+                    <div id="pivotSourceCardsContainer" class="adv-scroll-container" style="flex:1; min-height:0; overflow-y:auto; padding-right:2px;">
+                        <!-- Popolato dinamicamente da renderSourceDatabaseCards -->
+                    </div>
                 </div>
 
-                <div id="linkedStep2" style="display:none;">
+                <!-- STEP 2: SCELTA DEL LAYOUT DELLA VISTA COLLEGATA O ANALITICA -->
+                <div id="linkedStep2" style="display:none; flex-direction:column;">
+                    <div id="selectedSourceHeaderBadge" style="background: rgba(37,99,235,0.06); border: 1px solid rgba(37,99,235,0.25); border-radius: 6px; padding: 10px 14px; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-shrink:0;">
+                        <!-- Popolato dinamicamente con il database scelto e il tasto 'Cambia' -->
+                    </div>
+
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); margin-bottom:10px; display:block;">${I18n.t('adv_pivot_menu.step2_title')}</label>
                     <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom: 20px;" id="linkedViewButtonsArea"></div>
                     <div class="separator-h" style="margin:20px 0;"></div>
-                    <label style="font-size:0.8rem; font-weight:bold; color:var(--tx-c4); margin-bottom:10px; display:block;">${I18n.t('adv_pivot_menu.analytics_view_title')}</label>
-                    <button class="btn" style="width:100%; justify-content:center; padding:15px; border-radius:8px; border:1px dashed var(--tx-c4); background:rgba(255, 134, 0, 0.05);" onclick="AdvancedPivotMenus.showPivotConfig()">
-                        <span style="display:flex; flex-direction:column; align-items:center; gap:5px; color:var(--tx-c4);">
-                            <span style="font-size:1.5rem; display:inline-flex;">${Icons.tablePivot}</span> ${I18n.t('adv_pivot_menu.btn_create_pivot_chart')}
-                        </span>
-                    </button>
+                    
+                    <!-- SEZIONE ANALITICA SEPARATA IN DUE PULSANTI DISTINTI: TABELLA PIVOT VS GRAFICO VISIVO -->
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:10px; display:block;">
+                        ${I18n.t('adv_pivot_menu.analytics_view_title')}
+                    </label>
+                    
+                    <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; margin-bottom: 10px;">
+                        <!-- 1. Pulsante Tabella Pivot -->
+                        <button type="button" class="btn" style="justify-content:center; padding:14px 10px; border-radius:8px; border:1px dashed var(--tx-c4); background:rgba(255, 134, 0, 0.05); cursor:pointer;" onclick="AdvancedPivotMenus.showPivotConfig('table')">
+                            <span style="display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--tx-c4);">
+                                <span style="font-size:1.4rem; display:inline-flex;">${Icons.tablePivot}</span>
+                                <span style="font-weight:bold; font-size:0.85rem;">Tabella Pivot</span>
+                                <span style="font-size:0.7rem; color:var(--text-secondary); opacity:0.8; font-weight:normal; text-align:center;">Dati aggregati a griglia</span>
+                            </span>
+                        </button>
+                        <!-- 2. Pulsante Grafico Visivo -->
+                        <button type="button" class="btn" style="justify-content:center; padding:14px 10px; border-radius:8px; border:1px dashed var(--tx-c4); background:rgba(255, 134, 0, 0.05); cursor:pointer;" onclick="AdvancedPivotMenus.showPivotConfig('chart')">
+                            <span style="display:flex; flex-direction:column; align-items:center; gap:6px; color:var(--tx-c4);">
+                                <span style="font-size:1.4rem; display:inline-flex;">${Icons.data || Icons.tablePivot}</span>
+                                <span style="font-weight:bold; font-size:0.85rem;">Grafico Visivo</span>
+                                <span style="font-size:0.7rem; color:var(--text-secondary); opacity:0.8; font-weight:normal; text-align:center;">Barre, torta, linee</span>
+                            </span>
+                        </button>
+                    </div>
                 </div>
 
                 <div id="pivotStep2" style="${isEditing ? 'display:block;' : 'display:none;'}">
@@ -349,88 +525,90 @@ const AdvancedPivotMenus = {
                         <div id="pivotAggList" style="display:flex; flex-direction:column; gap:5px;"></div>
                     </div>
                 </div> 
-            </div> 
 
-            <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius:6px; margin-bottom:20px; border: 1px solid var(--border-color); ${!isEditing && !chartOnlyMode ? 'display:none;' : ''}" id="pivotVisualSettings">
-                
-                ${summaryHTML}
-                
-                <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.result_view_title')}</label>
-                
-                <select id="pivotDisplayType" class="modern-input" style="width:100%; margin-bottom:10px; font-weight:bold; ${chartOnlyMode ? 'display:none;' : ''}" onchange="AdvancedPivotMenus.toggleChartOptions(this.value)">
-                    <option value="table" ${!isChart && !chartOnlyMode ? 'selected' : ''}>${I18n.t('adv_pivot_menu.view_as_pivot')}</option>
-                    <option value="chart" ${isChart || chartOnlyMode ? 'selected' : ''}>${I18n.t('adv_pivot_menu.view_as_chart')}</option>
-                </select>
-
-                <div id="pivotChartOptions" style="${isChart || chartOnlyMode ? 'display:block;' : 'display:none;'} margin-top:10px; border-top:1px dashed var(--border-color); padding-top:10px;">
+                <div style="background: rgba(0,0,0,0.02); padding: 15px; border-radius:6px; margin-bottom:20px; border: 1px solid var(--border-color); ${!isEditing && !chartOnlyMode ? 'display:none;' : ''}" id="pivotVisualSettings">
                     
-                    <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.chart_style_label')}</label>
+                    ${summaryHTML}
                     
-                    <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;">
-                        <input type="hidden" id="pivotChartStyle" value="${chartType}">
-                        <div class="chart-type-card" data-type="bar" onclick="AdvancedPivotMenus.selectChartType('bar')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_bar')}</span>
-                        </div>
-                        <div class="chart-type-card" data-type="horizontalBar" onclick="AdvancedPivotMenus.selectChartType('horizontalBar')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgHBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_horizontal_bar')}</span>
-                        </div>
-                        <div class="chart-type-card" data-type="line" onclick="AdvancedPivotMenus.selectChartType('line')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgLine}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_line')}</span>
-                        </div>
-                        <div class="chart-type-card" data-type="doughnut" onclick="AdvancedPivotMenus.selectChartType('doughnut')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgDoughnut}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_doughnut')}</span>
-                        </div>
-                        <div class="chart-type-card" data-type="pie" onclick="AdvancedPivotMenus.selectChartType('pie')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
-                            <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgPie}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_pie')}</span>
-                        </div>
-                    </div>
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.result_view_title')}</label>
+                    
+                    <select id="pivotDisplayType" class="modern-input" style="width:100%; margin-bottom:10px; font-weight:bold; ${chartOnlyMode ? 'display:none;' : ''}" onchange="AdvancedPivotMenus.toggleChartOptions(this.value)">
+                        <option value="table" ${!isChart && !chartOnlyMode ? 'selected' : ''}>${I18n.t('adv_pivot_menu.view_as_pivot')}</option>
+                        <option value="chart" ${isChart || chartOnlyMode ? 'selected' : ''}>${I18n.t('adv_pivot_menu.view_as_chart')}</option>
+                    </select>
 
-                    <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.color_palettes_label')}</label>
-                    ${paletteHTML}
-
-                    <div style="display:flex; flex-direction:column; gap:12px; border-top: 1px solid var(--border-color); padding-top:15px;">
-                        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
-                            <input type="checkbox" id="chartStacked" style="transform:scale(1.1);" ${cCfg.stacked ? 'checked' : ''}>
-                            ${I18n.t('adv_pivot_menu.chart_stacked')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_stacked_hint')}</span>
-                        </label>
+                    <div id="pivotChartOptions" style="${isChart || chartOnlyMode ? 'display:block;' : 'display:none;'} margin-top:10px; border-top:1px dashed var(--border-color); padding-top:10px;">
                         
-                        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
-                            <input type="checkbox" id="chartShowLabels" style="transform:scale(1.1);" ${cCfg.showLabels !== false ? 'checked' : ''}>
-                            ${I18n.t('adv_pivot_menu.chart_show_labels')}
-                        </label>
+                        <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.chart_style_label')}</label>
                         
-                        <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
-                            <input type="checkbox" id="chartCenterTotal" style="transform:scale(1.1);" ${cCfg.centerTotal !== false ? 'checked' : ''}>
-                            ${I18n.t('adv_pivot_menu.chart_center_total')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_center_total_hint')}</span>
-                        </label>
-
-                        <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
-                            <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.legend_position')}</label>
-                            <select id="chartLegendPos" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
-                                <option value="bottom" ${legendPos === 'bottom' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_bottom')}</option>
-                                <option value="right" ${legendPos === 'right' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_right')}</option>
-                                <option value="left" ${legendPos === 'left' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_left')}</option>
-                                <option value="none" ${legendPos === 'none' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_none')}</option>
-                            </select>
+                        <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; margin-bottom: 20px;">
+                            <input type="hidden" id="pivotChartStyle" value="${chartType}">
+                            <div class="chart-type-card" data-type="bar" onclick="AdvancedPivotMenus.selectChartType('bar')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
+                                <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_bar')}</span>
+                            </div>
+                            <div class="chart-type-card" data-type="horizontalBar" onclick="AdvancedPivotMenus.selectChartType('horizontalBar')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
+                                <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgHBar}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_horizontal_bar')}</span>
+                            </div>
+                            <div class="chart-type-card" data-type="line" onclick="AdvancedPivotMenus.selectChartType('line')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
+                                <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgLine}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_line')}</span>
+                            </div>
+                            <div class="chart-type-card" data-type="doughnut" onclick="AdvancedPivotMenus.selectChartType('doughnut')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
+                                <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgDoughnut}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_doughnut')}</span>
+                            </div>
+                            <div class="chart-type-card" data-type="pie" onclick="AdvancedPivotMenus.selectChartType('pie')" style="border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display: flex; flex-direction: column; align-items: center; cursor: pointer; transition: all 0.2s; background: var(--bg-color);">
+                                <span class="chart-type-icon" style="color:var(--text-secondary); margin-bottom:5px;">${svgPie}</span><span style="font-size:0.7rem; font-weight:bold; text-align:center;">${I18n.t('adv_pivot_menu.chart_pie')}</span>
+                            </div>
                         </div>
 
-                        <!-- Selettore Dimensione / Altezza Grafico -->
-                        <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
-                            <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.chart_height_label') || 'Altezza grafico:'}</label>
-                            <select id="chartHeight" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
-                                <option value="small" ${currentHeight === 'small' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_small') || 'Piccola (Compatta)'}</option>
-                                <option value="medium" ${currentHeight === 'medium' || !currentHeight ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_medium') || 'Media (Standard)'}</option>
-                                <option value="large" ${currentHeight === 'large' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_large') || 'Grande (Estesa)'}</option>
-                            </select>
+                        <label style="font-size:0.75rem; color:var(--text-secondary); display:block; margin-bottom:10px;">${I18n.t('adv_pivot_menu.color_palettes_label')}</label>
+                        ${paletteHTML}
+
+                        <div style="display:flex; flex-direction:column; gap:12px; border-top: 1px solid var(--border-color); padding-top:15px;">
+                            <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
+                                <input type="checkbox" id="chartStacked" style="transform:scale(1.1);" ${cCfg.stacked ? 'checked' : ''}>
+                                ${I18n.t('adv_pivot_menu.chart_stacked')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_stacked_hint')}</span>
+                            </label>
+                            
+                            <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
+                                <input type="checkbox" id="chartShowLabels" style="transform:scale(1.1);" ${cCfg.showLabels !== false ? 'checked' : ''}>
+                                ${I18n.t('adv_pivot_menu.chart_show_labels')}
+                            </label>
+                            
+                            <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
+                                <input type="checkbox" id="chartCenterTotal" style="transform:scale(1.1);" ${cCfg.centerTotal !== false ? 'checked' : ''}>
+                                ${I18n.t('adv_pivot_menu.chart_center_total')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_center_total_hint')}</span>
+                            </label>
+
+                            <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
+                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.legend_position')}</label>
+                                <select id="chartLegendPos" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
+                                    <option value="bottom" ${legendPos === 'bottom' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_bottom')}</option>
+                                    <option value="right" ${legendPos === 'right' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_right')}</option>
+                                    <option value="left" ${legendPos === 'left' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_left')}</option>
+                                    <option value="none" ${legendPos === 'none' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_none')}</option>
+                                </select>
+                            </div>
+
+                            <!-- Selettore Dimensione / Altezza Grafico -->
+                            <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
+                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.chart_height_label')}</label>
+                                <select id="chartHeight" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
+                                    <option value="small" ${currentHeight === 'small' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_small')}</option>
+                                    <option value="medium" ${currentHeight === 'medium' || !currentHeight ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_medium')}</option>
+                                    <option value="large" ${currentHeight === 'large' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_large')}</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         `;
 
+        const showFinalizeBtn = isEditing || chartOnlyMode;
+
         const footerHTML = `
             <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
-            <button class="btn btn-primary" onclick="AdvancedPivotMenus.finalizePivot()">${isEditing && !chartOnlyMode ? I18n.t('adv_pivot_menu.save_config') : I18n.t('adv_pivot_menu.save_chart')}</button>
+            <button class="btn btn-primary" id="btnFinalizePivot" style="${showFinalizeBtn ? '' : 'display:none;'}" onclick="AdvancedPivotMenus.finalizePivot()">${isEditing && !chartOnlyMode ? I18n.t('adv_pivot_menu.save_config') : I18n.t('adv_pivot_menu.save_chart')}</button>
         `;
 
         const titleHTML = `<span style="display:flex; align-items:center; gap:5px;"><span style="display:inline-flex;">${Icons.link}</span> ${chartOnlyMode ? I18n.t('adv_pivot_menu.drawer_customize_chart') : (isEditing ? I18n.t('adv_pivot_menu.drawer_edit_analytics_view') : I18n.t('adv_pivot_menu.drawer_create_linked_view'))}</span>`;
@@ -446,7 +624,23 @@ const AdvancedPivotMenus = {
             }, 50);
         } else {
             setTimeout(() => {
+                AdvancedPivotMenus.renderSourceDatabaseCards('');
                 AdvancedPivotMenus.selectChartType('bar');
+
+                const searchInput = document.getElementById('pivotSourceSearch');
+                if (searchInput) {
+                    searchInput.focus();
+                    searchInput.addEventListener('keydown', (e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            const firstCard = document.querySelector('#pivotSourceCardsContainer .source-db-card');
+                            if (firstCard) {
+                                const dbId = firstCard.getAttribute('data-db-id');
+                                if (dbId) AdvancedPivotMenus.selectSourceDatabase(dbId);
+                            }
+                        }
+                    });
+                }
             }, 50);
         }
     },
@@ -456,21 +650,63 @@ const AdvancedPivotMenus = {
         if (optDiv) {
             optDiv.style.display = val === 'chart' ? 'block' : 'none';
         }
+        const finalizeBtn = document.getElementById('btnFinalizePivot');
+        if (finalizeBtn) {
+            finalizeBtn.textContent = val === 'chart'
+                ? (I18n.t('adv_pivot_menu.save_chart'))
+                : (I18n.t('adv_pivot_menu.save_config'));
+        }
     },
 
     loadSchemaForStep2: () => {
-        const sourceId = document.getElementById('pivotSourceSelect').value;
+        const hiddenSelect = document.getElementById('pivotSourceSelect');
+        const sourceId = (hiddenSelect && hiddenSelect.value) ? hiddenSelect.value : (AdvancedPivotMenus.pendingConfig ? AdvancedPivotMenus.pendingConfig.sourceId : null);
         if (!sourceId) {
-            document.getElementById('linkedStep2').style.display = 'none';
+            const step2 = document.getElementById('linkedStep2');
+            if (step2) step2.style.display = 'none';
             return;
+        }
+
+        if (AdvancedPivotMenus.pendingConfig) {
+            AdvancedPivotMenus.pendingConfig.sourceId = sourceId;
         }
 
         const sourceState = AdvancedTable.getTableState(sourceId);
         if (!sourceState) return;
 
-        AdvancedPivotMenus.pendingConfig.sourceId = sourceId;
-        AdvancedPivotMenus.pendingConfig.groupBy = [];
-        AdvancedPivotMenus.pendingConfig.aggregations = [];
+        // Nascondi Step 1 e mostra Step 2
+        const step1 = document.getElementById('linkedStep1');
+        if (step1) step1.style.display = 'none';
+
+        const step2 = document.getElementById('linkedStep2');
+        if (step2) step2.style.display = 'block';
+
+        // Aggiorna badge origine selezionata con pulsante 'Cambia'
+        const badgeContainer = document.getElementById('selectedSourceHeaderBadge');
+        if (badgeContainer) {
+            const safeTitle = UI.escapeHTML(sourceState.title || I18n.t('editor.database'));
+            const parentNote = typeof AdvancedTable.getParentNoteName === 'function' 
+                ? AdvancedTable.getParentNoteName(sourceId) 
+                : (typeof UI.getParentNoteName === 'function' ? UI.getParentNoteName(sourceId) : 'Workspace');
+            const changeBtnLabel = I18n.t('adv_pivot_menu.change_source_btn');
+
+            badgeContainer.innerHTML = `
+                <div style="display: flex; align-items: center; gap: 8px; overflow: hidden; min-width: 0;">
+                    <span style="color: var(--accent-color); display: inline-flex;">${Icons.tableDatabase}</span>
+                    <div style="display: flex; flex-direction: column; overflow: hidden;">
+                        <span style="font-weight: 700; font-size: 0.88rem; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${safeTitle}
+                        </span>
+                        <span style="font-size: 0.72rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">
+                            ${UI.escapeHTML(parentNote)}
+                        </span>
+                    </div>
+                </div>
+                <button type="button" class="btn" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink: 0;" onclick="AdvancedPivotMenus.resetToSourceSelection()">
+                    ${changeBtnLabel}
+                </button>
+            `;
+        }
 
         const hasSelect = sourceState.columns.some(c => c.type === 'select');
         const hasCalendarDate = sourceState.columns.some(c => c.type === 'date' || c.type === 'datetime');
@@ -554,13 +790,34 @@ const AdvancedPivotMenus = {
         }
 
         document.getElementById('linkedViewButtonsArea').innerHTML = buttonsHTML;
-        document.getElementById('linkedStep2').style.display = 'block';
     },
 
-    showPivotConfig: () => {
-        document.getElementById('linkedStep2').style.display = 'none';
-        document.getElementById('pivotStep2').style.display = 'block';
-        document.getElementById('pivotVisualSettings').style.display = 'block';
+    showPivotConfig: (preferredDisplayType = 'table') => {
+        const step2 = document.getElementById('linkedStep2');
+        if (step2) step2.style.display = 'none';
+
+        const pStep2 = document.getElementById('pivotStep2');
+        if (pStep2) pStep2.style.display = 'block';
+
+        const pVis = document.getElementById('pivotVisualSettings');
+        if (pVis) pVis.style.display = 'block';
+
+        // Imposta e sincronizza il selettore di visualizzazione (table o chart)
+        const displaySelect = document.getElementById('pivotDisplayType');
+        if (displaySelect) {
+            displaySelect.value = preferredDisplayType;
+            AdvancedPivotMenus.toggleChartOptions(preferredDisplayType);
+        }
+
+        // Mostra il pulsante di salvataggio per la configurazione analitica
+        const finalizeBtn = document.getElementById('btnFinalizePivot');
+        if (finalizeBtn) {
+            finalizeBtn.style.display = '';
+            finalizeBtn.textContent = preferredDisplayType === 'chart'
+                ? (I18n.t('adv_pivot_menu.save_chart'))
+                : (I18n.t('adv_pivot_menu.save_config'));
+        }
+
         AdvancedPivotMenus.populateSelectors();
         AdvancedPivotMenus.updateAggTypeOptions();
         AdvancedPivotMenus.renderLists();
@@ -609,7 +866,6 @@ const AdvancedPivotMenus = {
                 linkedState.treeRelationColId = selfRelCol.id;
                 linkedState.treeRelationDirection = selfRelCol.treeDirection || (selfRelCol.singleRecord ? 'parent' : 'children');
 
-                // Collasso automatico iniziale dei nodi genitore
                 const allParentIds = new Set();
                 (sourceState.rows || []).forEach(r => {
                     let targets = r.cells[selfRelCol.id];

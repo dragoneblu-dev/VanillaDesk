@@ -3,10 +3,12 @@
  * Core dell'Interfaccia Utente: Handler Base dell'Editor e dell'oggetto window.UI.
  * FEEDBACK VISIVO HEADER: Sincronizzazione automatica della classe header-unsaved
  * per colorare l'intera prima riga di rosso quando la sessione è ripristinata o non salvata su disco.
- * FEAT WORKSPACE GUIDE: Modale esplicativo guidato per nuovi utenti prima della selezione della cartella.
+ * FEAT WORKSPACE GUIDE ADATTIVA: Modale contestuale rassicurante in caso di salvataggio sessione / recovery,
+ * distinguendo chiaramente tra ricollegamento del workspace esistente e creazione da zero.
  * FEAT GRAPH VIEW DISPATCH: Apertura nativa a schermo intero (In-App Fullscreen) con zero latenza,
  * focalizzazione automatica del nodo corrente e chiusura istantanea su selezione.
  * FEAT DUAL TITLE HEADER: Metodo updateHeaderTitles per visualizzare Workspace (riga 1) e Documento attivo (riga 2).
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 window.UI = {
@@ -109,19 +111,19 @@ window.UI = {
         const container = document.getElementById('fileNameDisplay');
         if (!container) return;
 
-        const defaultNoWs = typeof I18n !== 'undefined' ? I18n.t('common.no_workspace') : 'Nessun Workspace';
+        const defaultNoWs = I18n.t('common.no_workspace');
         const ws = (workspaceName !== null && workspaceName !== undefined) 
             ? workspaceName 
             : (AppState.fileName || defaultNoWs);
 
         let noteText = '';
         if (noteTitle !== null && noteTitle !== undefined) {
-            noteText = noteTitle.trim() || (typeof I18n !== 'undefined' ? I18n.t('editor.untitled') : 'Senza Titolo');
+            noteText = noteTitle.trim() || I18n.t('editor.untitled');
         } else if (AppState.currentNoteId) {
             const currentNote = typeof Store !== 'undefined' ? Store.getNote(AppState.currentNoteId) : null;
-            noteText = currentNote ? (currentNote.title || (typeof I18n !== 'undefined' ? I18n.t('editor.untitled') : 'Senza Titolo')) : '';
+            noteText = currentNote ? (currentNote.title || I18n.t('editor.untitled')) : '';
         } else {
-            noteText = typeof I18n !== 'undefined' ? I18n.t('home_dashboard.title') : 'Dashboard Workspace';
+            noteText = I18n.t('home_dashboard.title');
         }
 
         const wsSpan = container.querySelector('.header-workspace-name');
@@ -137,46 +139,79 @@ window.UI = {
             `;
         }
 
-        const homeTooltip = typeof I18n !== 'undefined' ? I18n.t('toolbar.breadcrumb_home') : 'Torna alla Home';
-        container.title = homeTooltip;
+        container.title = I18n.t('toolbar.breadcrumb_home');
     },
 
     updateFileName: (name) => { 
         UI.updateHeaderTitles(name, null);
     },
 
-    promptWorkspaceGuide: () => {
+    promptWorkspaceGuide: (isSavingSession = false) => {
         return new Promise((resolve) => {
             const overlay = document.createElement('div');
             overlay.className = 'link-modal-overlay';
             overlay.style.zIndex = '9999';
 
+            let titleTxt = '';
+            let introHtml = '';
+            let boxTitle = '';
+            let stepsHtml = '';
+            let btnTxt = '';
+
+            if (isSavingSession) {
+                // MODALITÀ RASSICURANTE: L'utente sta salvando/aggiornando dati già esistenti in memoria
+                titleTxt = I18n.t('workspace_guide.save_title');
+                introHtml = `
+                    <p style="margin-bottom: 14px;">
+                        ${I18n.t('workspace_guide.save_p1')}
+                    </p>
+                `;
+                boxTitle = I18n.t('workspace_guide.save_box_title');
+                stepsHtml = `
+                    <li>${I18n.t('workspace_guide.save_step_existing')}</li>
+                    <li>${I18n.t('workspace_guide.save_step_new')}</li>
+                    <li>${I18n.t('workspace_guide.save_step_permissions')}</li>
+                `;
+                btnTxt = I18n.t('workspace_guide.btn_save_confirm');
+            } else {
+                // MODALITÀ INTRODUTTIVA: Utente alle prime armi o creazione nuovo workspace da zero
+                titleTxt = I18n.t('workspace_guide.title');
+                introHtml = `
+                    <p style="margin-bottom: 12px;">
+                        ${I18n.t('workspace_guide.p1')}
+                    </p>
+                    <p style="margin-bottom: 15px;">
+                        ${I18n.t('workspace_guide.p2')}
+                    </p>
+                `;
+                boxTitle = I18n.t('workspace_guide.box_title');
+                stepsHtml = `
+                    <li>${I18n.t('workspace_guide.step1')}</li>
+                    <li>${I18n.t('workspace_guide.step2')}</li>
+                    <li>${I18n.t('workspace_guide.step3')}</li>
+                `;
+                btnTxt = I18n.t('workspace_guide.btn_confirm');
+            }
+
             overlay.innerHTML = `
-                <div class="link-modal modal-animate" style="width: 560px; max-width: 95vw; padding: 25px; border-radius: 8px;">
+                <div class="link-modal modal-animate" style="width: 580px; max-width: 95vw; padding: 25px; border-radius: 8px;">
                     <div style="display:flex; align-items:center; gap:12px; margin-bottom: 15px; border-bottom: 1px solid var(--border-color); padding-bottom: 15px;">
                         <span style="color:var(--accent-color); display:inline-flex; transform:scale(1.2);">${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'}</span>
-                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">${I18n.t('workspace_guide.title')}</h2>
+                        <h2 style="margin:0; font-size: 1.25rem; color:var(--text-primary);">${titleTxt}</h2>
                     </div>
                     <div style="font-size: 0.9rem; line-height: 1.6; color: var(--text-primary); margin-bottom: 20px;">
-                        <p style="margin-bottom: 12px;">
-                            ${I18n.t('workspace_guide.p1')}
-                        </p>
-                        <p style="margin-bottom: 15px;">
-                            ${I18n.t('workspace_guide.p2')}
-                        </p>
+                        ${introHtml}
                         <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 6px; padding: 12px 16px; margin-bottom: 10px;">
-                            <div style="font-weight: bold; font-size: 0.8rem; color: var(--accent-color); text-transform: uppercase; margin-bottom: 6px;">${I18n.t('workspace_guide.box_title')}</div>
+                            <div style="font-weight: bold; font-size: 0.8rem; color: var(--accent-color); text-transform: uppercase; margin-bottom: 6px;">${boxTitle}</div>
                             <ol style="padding-left: 20px; font-size: 0.85rem; color: var(--text-secondary); line-height: 1.6;">
-                                <li>${I18n.t('workspace_guide.step1')}</li>
-                                <li>${I18n.t('workspace_guide.step2')}</li>
-                                <li>${I18n.t('workspace_guide.step3')}</li>
+                                ${stepsHtml}
                             </ol>
                         </div>
                     </div>
                     <div style="display:flex; justify-content:flex-end; gap:10px;">
                         <button class="btn" id="btnCancelWorkspaceGuide">${I18n.t('common.cancel')}</button>
                         <button class="btn btn-primary" id="btnConfirmWorkspaceGuide" style="padding: 8px 18px;">
-                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'} ${I18n.t('workspace_guide.btn_confirm')}</span>
+                            <span style="display:inline-flex; align-items:center; gap:6px;">${typeof Icons !== 'undefined' ? Icons.folderOpen : '📁'} ${btnTxt}</span>
                         </button>
                     </div>
                 </div>

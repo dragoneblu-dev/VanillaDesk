@@ -6,9 +6,19 @@
  * Aggiunta voce "Modifica Sorgente HTML..." nel menu contestuale della nota.
  * FEAT BADGE CONTATORI HEADER: Calcolo e rendering pillole [N] per Proprietà (🏷️) e Backlinks (ℹ️).
  * FEAT HEADER PROPERTIES TOGGLE: Voci di menu contestuali per mostrare/nascondere le proprietà in cima alla pagina.
+ * FEAT PER-NOTE SPELLCHECK TOGGLE: Gestione e sincronizzazione del controllo ortografico (spellcheck) attivabile/disattivabile per singola nota.
  */
 
 Object.assign(UI, {
+
+    applyNoteSpellcheck: (note) => {
+        const contentEl = document.getElementById('noteContent');
+        const titleInput = document.getElementById('noteTitle');
+        const isSpellcheckDisabled = note ? note.disableSpellcheck === true : false;
+        const val = isSpellcheckDisabled ? 'false' : 'true';
+        if (contentEl) contentEl.setAttribute('spellcheck', val);
+        if (titleInput) titleInput.setAttribute('spellcheck', val);
+    },
 
     checkAndUpdatePropertiesIcon: (noteId) => {
         const btn = document.getElementById('btnNoteProperties');
@@ -204,6 +214,26 @@ Object.assign(UI, {
 
                 items.push({ type: 'divider' });
             }
+
+            // CONTROLLO ORTOGRAFICO (SPELLCHECK) PER LA NOTA CORRENTE
+            const isSpellcheckActive = currentNote ? currentNote.disableSpellcheck !== true : true;
+            const chkSpellcheck = isSpellcheckActive ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+            const labelSpellcheck = I18n.t('notes_utils.menu_spellcheck');
+
+            items.push({
+                icon: '<span style="font-family:sans-serif; font-weight:bold; font-size:0.80rem; text-decoration:underline wavy var(--accent-color); display:inline-flex; align-items:center;">Ab</span>',
+                label: labelSpellcheck + chkSpellcheck,
+                onClick: () => {
+                    if (currentNote) {
+                        currentNote.disableSpellcheck = isSpellcheckActive;
+                        currentNote._isDirty = true;
+                        UI.applyNoteSpellcheck(currentNote);
+                        Store.triggerAutoSave();
+                    }
+                }
+            });
+
+            items.push({ type: 'divider' });
 
             items.push({ icon: Icons.save, label: I18n.t('notes_utils.menu_save_template'), onClick: () => TemplateManager.saveCurrentNoteAsTemplate() });
             items.push({ icon: Icons.tableSimple, label: I18n.t('notes_utils.menu_manage_templates'), onClick: () => TemplateManager.openManager() });

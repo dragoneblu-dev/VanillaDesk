@@ -206,7 +206,7 @@ const ColumnManager = {
         bodyContainer.innerHTML = `
             <div class="adv-columns-container-wrap">
                 ${isEdit ? `
-                <span class="widget-drag-handle adv-drag-handle columns-drag-handle" title="${(typeof I18n !== 'undefined' && I18n.t('adv_render.drag_to_move')) || 'Trascina per spostare'}" draggable="true" ondragstart="ColumnManager.onDragStart(event, '${id}')" ondragend="ColumnManager.onDragEnd(event)">
+                <span class="widget-drag-handle adv-drag-handle columns-drag-handle" title="${I18n.t('adv_render.drag_to_move')}" draggable="true" ondragstart="ColumnManager.onDragStart(event, '${id}')" ondragend="ColumnManager.onDragEnd(event)">
                     ${Icons.dragHandle}
                 </span>
                 <button class="adv-icon-btn columns-opt-btn" id="col-opt-${id}" title="${I18n.t('columns_widget.opt_title')}" onclick="ColumnManager.openMenu(event, '${id}')">

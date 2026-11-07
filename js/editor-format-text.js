@@ -24,6 +24,11 @@
  * FEAT WORD-SNAP IN TOGGLE CASE: Integrazione coerente di Smart Caret Collapse in Editor.toggleCase.
  * FIX PARTIAL CELL TEXT FORMATTING & ERASER: Tutela della selezione parziale di testo all'interno di una singola cella
  * di tabella semplice, impedendo la mutazione o pulizia indiscriminata dell'intera cella.
+ * FEAT FONT & SIZE PREVIEW ICONS: Mini-anteprima visiva del carattere e della grandezza accanto a ciascuna voce del menu.
+ * FIX BLOCKQUOTE LIST WRAP: Supporto completo e fedele per la citazione a blocco di elenchi puntati (UL) e numerati (OL)
+ * insieme al testo normale, preservando l'integrità strutturale della lista all'interno del tag blockquote.
+ * FIX BR NORMALIZATION (SNELLO E LINEARE): Conversione di ogni <br> che rappresenta una riga in singoli paragrafi <p><br></p>,
+ * preservando tutte le righe vuote consecutive senza comprimerle né lasciare <br> nudi a livello root.
  */
 
 Object.assign(Editor, {
@@ -42,8 +47,8 @@ Object.assign(Editor, {
 
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 (typeof TableManager.Selection.hasCellSelection === 'function'
-                                     ? TableManager.Selection.hasCellSelection()
+                                 (typeof TableManager.Selection.hasCellSelection === 'function' 
+                                     ? TableManager.Selection.hasCellSelection() 
                                      : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
@@ -94,15 +99,43 @@ Object.assign(Editor, {
 
         const items = [
             { type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom: 2px;">${I18n.t('format_text.font_group')}</div>` },
-            { label: I18n.t('format_text.font_default') + (activeFF === 'ff-default' ? chk : ''), onClick: () => executeFormat('ff', 'ff-default') },
-            { label: I18n.t('format_text.font_serif') + (activeFF === 'ff-serif' ? chk : ''), onClick: () => executeFormat('ff', 'ff-serif') },
-            { label: I18n.t('format_text.font_cursive') + (activeFF === 'ff-cursive' ? chk : ''), onClick: () => executeFormat('ff', 'ff-cursive') },
-            { label: I18n.t('format_text.font_easyreading') + (activeFF === 'ff-easyreading' ? chk : ''), onClick: () => executeFormat('ff', 'ff-easyreading') },
+            { 
+                icon: '<span style="font-size:0.70rem; font-weight:bold; line-height:1;">Ft</span>',
+                label: '<span class="ff-default">'+I18n.t('format_text.font_default')+'</span>' + (activeFF === 'ff-default' ? chk : ''), 
+                onClick: () => executeFormat('ff', 'ff-default') 
+            },
+            { 
+                icon: '<span style="font-size:0.70rem; font-weight:bold; line-height:1;">Ft</span>',
+                label: '<span class="ff-serif">'+I18n.t('format_text.font_serif')+'</span>' + (activeFF === 'ff-serif' ? chk : ''), 
+                onClick: () => executeFormat('ff', 'ff-serif') 
+            },
+            { 
+                icon: '<span style="font-size:0.70rem; font-weight:bold; line-height:1;">Ft</span>',
+                label: '<span class="ff-cursive">'+I18n.t('format_text.font_cursive')+'</span>' + (activeFF === 'ff-cursive' ? chk : ''), 
+                onClick: () => executeFormat('ff', 'ff-cursive') 
+            },
+            { 
+                icon: '<span style="font-size:0.70rem; font-weight:bold; line-height:1;">Ft</span>',
+                label:'<span class="ff-easyreading">'+I18n.t('format_text.font_easyreading')+'</span>' + (activeFF === 'ff-easyreading' ? chk : ''), 
+                onClick: () => executeFormat('ff', 'ff-easyreading') 
+            },
             { type: 'divider' },
             { type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom: 2px;">${I18n.t('format_text.size_group')}</div>` },
-            { label: I18n.t('format_text.size_small') + (activeFS === 'fs-small' ? chk : ''), onClick: () => executeFormat('fs', 'fs-small') },
-            { label: I18n.t('format_text.size_standard') + (activeFS === 'fs-standard' ? chk : ''), onClick: () => executeFormat('fs', 'fs-standard') },
-            { label: I18n.t('format_text.size_large') + (activeFS === 'fs-large' ? chk : ''), onClick: () => executeFormat('fs', 'fs-large') }
+            { 
+                icon: '<span class="fs-small" style="display:inline-flex; align-items:center; justify-content:center; font-size:0.70rem; font-weight:bold; line-height:1;">A</span>',
+                label: I18n.t('format_text.size_small') + (activeFS === 'fs-small' ? chk : ''), 
+                onClick: () => executeFormat('fs', 'fs-small') 
+            },
+            { 
+                icon: '<span class="fs-standard" style="display:inline-flex; align-items:center; justify-content:center; font-size:0.85rem; font-weight:bold; line-height:1;">A</span>',
+                label: I18n.t('format_text.size_standard') + (activeFS === 'fs-standard' ? chk : ''), 
+                onClick: () => executeFormat('fs', 'fs-standard') 
+            },
+            { 
+                icon: '<span class="fs-large" style="display:inline-flex; align-items:center; justify-content:center; font-size:1.9rem; font-weight:bold; line-height:1;">A</span>',
+                label: I18n.t('format_text.size_large') + (activeFS === 'fs-large' ? chk : ''), 
+                onClick: () => executeFormat('fs', 'fs-large') 
+            }
         ];
 
         UI.Menu.buildContextMenu(anchorId, items);
@@ -219,9 +252,8 @@ Object.assign(Editor, {
         let container = range.commonAncestorContainer;
         if (container.nodeType === 3) container = container.parentNode;
 
-        // Protezione: non alterare blocchi di codice, celle di tabelle complesse o liste
+        // Protezione: non alterare blocchi di codice protetti o widget complessi (eccetto le citazioni)
         if (container.closest('.code-content') || container.closest('.adv-widget-shell:not(.block-citation)')) return;
-        if (container.closest('li')) return;
 
         const editorRoot = document.getElementById('noteContent') || document.getElementById('inlineNoteInput');
         if (!editorRoot || !editorRoot.contains(container)) return;
@@ -251,8 +283,10 @@ Object.assign(Editor, {
             range.insertNode(marker);
 
             const parent = existingBq.parentNode;
+
+            // Se existingBq contiene blocchi strutturati (p, div, ul, ol, h1..h6, table), li estrae direttamente
             const hasBlockChildren = Array.from(existingBq.children).some(c => 
-                ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(c.tagName)
+                ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'TABLE'].includes(c.tagName)
             );
 
             if (hasBlockChildren) {
@@ -288,17 +322,38 @@ Object.assign(Editor, {
 
         } else {
             // 2. ATTIVAZIONE / WRAP: Raggruppa i blocchi selezionati in un unico <blockquote>
+
+            // Helper di risoluzione: individua il blocco top-level rispetto all'editor (risalendo i LI ai loro UL/OL)
+            const getTopBlock = (node) => {
+                let curr = node.nodeType === 3 ? node.parentNode : node;
+                while (curr && curr.parentNode && curr.parentNode !== editorRoot && curr !== editorRoot) {
+                    if (curr.tagName === 'LI' && (curr.parentNode.tagName === 'UL' || curr.parentNode.tagName === 'OL')) {
+                        curr = curr.parentNode;
+                        continue;
+                    }
+                    if (['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'BLOCKQUOTE', 'TABLE', 'PRE'].includes(curr.tagName)) {
+                        if (curr.parentNode === editorRoot) break;
+                    }
+                    curr = curr.parentNode;
+                }
+                return (curr && curr !== editorRoot) ? curr : null;
+            };
+
+            const startBlock = getTopBlock(range.startContainer);
+            const endBlock = getTopBlock(range.endContainer);
+
             let blocksToWrap = [];
 
-            if (!range.collapsed && typeof Editor.getSelectedBlocks === 'function') {
-                blocksToWrap = Editor.getSelectedBlocks(range);
-            }
-
-            if (blocksToWrap.length === 0) {
-                let singleBlock = container.closest('p, div, h1, h2, h3, h4, h5, h6');
-                if (singleBlock && singleBlock !== editorRoot) {
-                    blocksToWrap.push(singleBlock);
+            if (startBlock && endBlock) {
+                // Raccoglie in sequenza tutti i blocchi fratelli compresi tra startBlock e endBlock
+                let curr = startBlock;
+                while (curr) {
+                    blocksToWrap.push(curr);
+                    if (curr === endBlock) break;
+                    curr = curr.nextElementSibling;
                 }
+            } else if (startBlock) {
+                blocksToWrap.push(startBlock);
             }
 
             if (blocksToWrap.length === 0) {
@@ -318,35 +373,43 @@ Object.assign(Editor, {
             firstBlock.parentNode.insertBefore(bq, firstBlock);
 
             blocksToWrap.forEach(b => {
-                // Se il blocco contiene interruzioni di riga <br>, ogni riga deve diventare un <p> separato
-                const hasBr = b.querySelector && b.querySelector('br');
-                if (hasBr) {
-                    let currentP = document.createElement('p');
-                    while (b.firstChild) {
-                        const child = b.firstChild;
-                        if (child.nodeType === 1 && child.tagName === 'BR') {
-                            child.remove();
-                            if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
-                            bq.appendChild(currentP);
-                            currentP = document.createElement('p');
-                        } else {
-                            currentP.appendChild(child);
-                        }
-                    }
-                    if (currentP.childNodes.length > 0) {
-                        const cleanT = currentP.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-                        if (cleanT !== '' || currentP.querySelector('img, audio, iframe, input, svg') || bq.children.length === 0) {
-                            bq.appendChild(currentP);
-                        }
-                    }
-                    b.remove();
-                } else if (b.tagName === 'P') {
+                // Se il blocco è una lista (UL o OL), la inseriamo INTERA dentro il blockquote preservando elenchi e punti
+                if (b.tagName === 'UL' || b.tagName === 'OL') {
                     bq.appendChild(b);
-                } else {
-                    const p = document.createElement('p');
-                    while (b.firstChild) p.appendChild(b.firstChild);
-                    b.remove();
-                    bq.appendChild(p);
+                } 
+                // Se è un paragrafo normale
+                else if (b.tagName === 'P') {
+                    bq.appendChild(b);
+                } 
+                // Se è un blocco generico contenente interruzioni di riga <br>
+                else {
+                    const hasBr = b.querySelector && b.querySelector('br');
+                    if (hasBr) {
+                        let currentP = document.createElement('p');
+                        while (b.firstChild) {
+                            const child = b.firstChild;
+                            if (child.nodeType === 1 && child.tagName === 'BR') {
+                                child.remove();
+                                if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
+                                bq.appendChild(currentP);
+                                currentP = document.createElement('p');
+                            } else {
+                                currentP.appendChild(child);
+                            }
+                        }
+                        if (currentP.childNodes.length > 0) {
+                            const cleanT = currentP.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                            if (cleanT !== '' || currentP.querySelector('img, audio, iframe, input, svg') || bq.children.length === 0) {
+                                bq.appendChild(currentP);
+                            }
+                        }
+                        b.remove();
+                    } else {
+                        const p = document.createElement('p');
+                        while (b.firstChild) p.appendChild(b.firstChild);
+                        b.remove();
+                        bq.appendChild(p);
+                    }
                 }
             });
         }
@@ -373,8 +436,8 @@ Object.assign(Editor, {
         // per consentire l'inversione di case solo della selezione testuale parziale
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 (typeof TableManager.Selection.hasCellSelection === 'function'
-                                     ? TableManager.Selection.hasCellSelection()
+                                 (typeof TableManager.Selection.hasCellSelection === 'function' 
+                                     ? TableManager.Selection.hasCellSelection() 
                                      : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         // GESTIONE MULTICELLA TABELLA (Preserva la struttura HTML interna mutando solo i nodi testuali con snapshot forzato)
@@ -457,8 +520,8 @@ Object.assign(Editor, {
         // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Font Family & Font Size con snapshot forzato)
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 (typeof TableManager.Selection.hasCellSelection === 'function'
-                                     ? TableManager.Selection.hasCellSelection()
+                                 (typeof TableManager.Selection.hasCellSelection === 'function' 
+                                     ? TableManager.Selection.hasCellSelection() 
                                      : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
@@ -594,7 +657,7 @@ Object.assign(Editor, {
 
         document.execCommand(command, false, targetValue);
 
-        // PRESERVAZIONE DELLA SELEZIONE MULTI-BLOCCO TRAMITE MARKER TEMPORANEI
+        // PRESERVAZIONE DELLA SELEZIONE MULTI-PARAGRAFO TRAMITE MARKER TEMPORANEI
         let startMarker = null;
         let endMarker = null;
 
@@ -739,6 +802,7 @@ Object.assign(Editor, {
      * rimozione totale di stili alieni (-webkit, margin, padding, user-select)
      * e conservazione garantita delle classi di stile VanillaDesk (hl-c*, hl-u-c*, tx-c*, ff-*, fs-*).
      * TUTELA ASSOLUTA: Esclusione totale e blindata dei widget complessi di VanillaDesk.
+     * NORMALIZZAZIONE STRUTTURALE DEI BR: Converte i <br> multipli o orfani a livello di blocco in singoli paragrafi <p> e <p><br></p>.
      */
     cleanDOMTree: (container) => {
         if (!container) return;
@@ -935,8 +999,7 @@ Object.assign(Editor, {
                     } else if (isProtectedWidget) {
                         return;
                     } else {
-                        // RIMOZIONE CATEGORICA DI TUTTI GLI STILI INLINE (color, background, font-family, font-size, -webkit, margin, padding, user-select)
-                        // Sia fuori che dentro le celle delle tabelle semplici
+                        // RIMOZIONE CATEGORICA DI TUTTI GLI STILI INLINE
                         currentEl.removeAttribute('style'); 
                     }
                 } else if (attr.name.startsWith('data-')) {
@@ -985,6 +1048,104 @@ Object.assign(Editor, {
                 }
             });
         }
+
+        // =========================================================================
+        // NORMALIZZAZIONE STRUTTURALE BR -> P (SNELLA, O(N), SENZA OVER-ENGINEERING):
+        // 1. Converte ogni <br> orfano a livello contenitore (es. tra due <p> o tra <p> e <ul>) in <p><br></p>.
+        // 2. Converte blocchi <p>/<div> con <br> multipli (<p><br><br><br></p>) in singoli <p><br></p>.
+        // 3. Converte i <br> che separano testo in distinti paragrafi <p>.
+        // =========================================================================
+        const isProtectedContext = (el) => {
+            if (!el || !el.closest) return false;
+            return !!el.closest('table, td, th, ul, ol, li, pre, code, .adv-widget-shell, .adv-inline-shell, .inline-note-wrapper, .inline-note-data, .bookmark-comment-data, [data-widget-type]');
+        };
+
+        // 1. I <br> orfani a livello radice del container diventano <p><br></p>
+        Array.from(container.children).forEach(child => {
+            if (child.tagName === 'BR' && !isProtectedContext(child)) {
+                const p = doc.createElement('p');
+                p.innerHTML = '<br>';
+                container.replaceChild(p, child);
+            }
+        });
+
+        // 2. I blocchi <p> e <div> contenenti <br>
+        const blocksWithBr = Array.from(container.querySelectorAll('p, div')).filter(b => {
+            if (isProtectedContext(b)) return false;
+            if (b.querySelector('table, ul, ol, pre, hr, .adv-widget-shell, [data-widget-type]')) return false;
+            return b.querySelector('br') !== null;
+        });
+
+        blocksWithBr.forEach(block => {
+            const parent = block.parentNode;
+            if (!parent) return;
+
+            const textOnly = block.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+            const hasMedia = block.querySelector('img, audio, iframe, input, svg');
+            const brList = block.querySelectorAll('br');
+
+            // Caso A: Paragrafo già conforme (<p><br></p> singolo)
+            if (!textOnly && !hasMedia && brList.length === 1 && block.childNodes.length === 1 && block.tagName === 'P') {
+                return;
+            }
+
+            // Srotola preventivamente elementi inline che racchiudono solo <br>
+            block.querySelectorAll('span, b, i, u, s, font').forEach(inlineEl => {
+                const iText = inlineEl.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+                const iMedia = inlineEl.querySelector('img, audio, iframe, input, svg');
+                if (!iText && !iMedia && inlineEl.querySelector('br')) {
+                    const pNode = inlineEl.parentNode;
+                    while (inlineEl.firstChild) pNode.insertBefore(inlineEl.firstChild, inlineEl);
+                    inlineEl.remove();
+                }
+            });
+
+            const cleanTextAfter = block.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+            const hasMediaAfter = block.querySelector('img, audio, iframe, input, svg');
+            const totalBrs = block.querySelectorAll('br').length;
+
+            // Caso B: Blocco con soli <br> (es. <p><br><br><br><br></p>) -> N singoli <p><br></p>
+            if (!cleanTextAfter && !hasMediaAfter) {
+                const frag = doc.createDocumentFragment();
+                for (let i = 0; i < totalBrs; i++) {
+                    const p = doc.createElement('p');
+                    p.innerHTML = '<br>';
+                    frag.appendChild(p);
+                }
+                parent.replaceChild(frag, block);
+                return;
+            }
+
+            // Caso C: Blocco con testo e <br> -> spezza sui <br> diretti
+            if (Array.from(block.childNodes).some(n => n.nodeType === Node.ELEMENT_NODE && n.tagName === 'BR')) {
+                const frag = doc.createDocumentFragment();
+                let currentP = doc.createElement('p');
+                if (block.className) currentP.className = block.className;
+
+                while (block.firstChild) {
+                    const child = block.firstChild;
+                    if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'BR') {
+                        child.remove();
+                        if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
+                        frag.appendChild(currentP);
+                        currentP = doc.createElement('p');
+                        if (block.className) currentP.className = block.className;
+                    } else {
+                        currentP.appendChild(child);
+                    }
+                }
+
+                if (currentP.childNodes.length > 0) {
+                    const t = currentP.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+                    const m = currentP.querySelector('img, audio, iframe, input, svg');
+                    if (t || m) frag.appendChild(currentP);
+                }
+
+                if (frag.childNodes.length > 0) {
+                    parent.replaceChild(frag, block);
+                }
+            }
+        });
     },
 
     clearFormatting: () => {
@@ -992,12 +1153,10 @@ Object.assign(Editor, {
         Editor.restoreSelection();
 
         // 1. Controllo selezione multipla celle di TableManager
-        // Se c'è una selezione di testo parziale all'interno di una singola cella, hasCellSelection ritorna false
-        // per permettere alla gomma di agire solo sui caratteri selezionati
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
-                                 (typeof TableManager.Selection.hasCellSelection === 'function'
-                                     ? TableManager.Selection.hasCellSelection()
+                                 (typeof TableManager.Selection.hasCellSelection === 'function' 
+                                     ? TableManager.Selection.hasCellSelection() 
                                      : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
@@ -1040,17 +1199,13 @@ Object.assign(Editor, {
         const simpleTable = container.closest('.simple-table-wrapper') || (container.closest('table') && !container.closest('.adv-widget-shell:not(.simple-table-wrapper), .adv-table-wrapper'));
 
         if (tableCell && simpleTable) {
-            // Se la selezione copre l'intero testo della cella o è collassata, sanifichiamo l'intera cella;
-            // se invece è selezionata solo una porzione parziale, sanifichiamo solo il container della selezione
             const isFullCellSelected = selection.isCollapsed || range.toString().trim() === tableCell.textContent.trim();
             if (isFullCellSelected) {
                 container = tableCell;
             }
         } else if (tableCell && !simpleTable) {
-            // È una cella appartenente a un Database o altro widget complesso: non toccare!
             return;
         } else if (simpleTable) {
-            // Se la selezione abbraccia la tabella semplice, sanifichiamo l'intera tabella
             container = simpleTable.querySelector('table') || simpleTable;
         } else {
             let macroBlock = container.closest('ul, ol, blockquote, .journal-time-node');
@@ -1063,7 +1218,6 @@ Object.assign(Editor, {
                     curr = curr.parentNode;
                 }
                 if (curr && curr.id !== 'noteContent') {
-                    // Se il blocco trovato è un widget protetto di VanillaDesk, non toccarlo!
                     if (typeof WidgetManager !== 'undefined' && WidgetManager.isProtectedBlock(curr) && !curr.closest('.simple-table-wrapper')) {
                         return;
                     }

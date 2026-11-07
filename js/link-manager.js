@@ -13,10 +13,11 @@
  * alla textarea delle note opzionali di espandersi armoniosamente fino al footer.
  * FEAT COPY WEB LINK: Aggiunto pulsante di copia negli appunti dell'indirizzo web dal popover contestuale fluttuante.
  * FIX DOUBLE SUBMIT ON CTRL+ENTER: Eliminati listener locali ridondanti che causavano la doppia esecuzione
- * e il raddoppio del link; gestione unificata affidata al Drawer con lock di idempotenza (_isSubmitting).
+ * e il raddoppio del link; gestione unificata affidata al Drawer.
  * FEAT CARET RESUME POST-EDIT: Riposizionamento automatico e restituzione del focus all'editor subito dopo
  * il link al termine della modifica, con blocco dello scroll { preventScroll: true } per impedire salti a inizio pagina.
  * REFACTOR: Eliminata duplicazione di openLinkDirect delegando a EventsGlobal.openLinkDirectly.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 const LinkManager = {
@@ -24,7 +25,6 @@ const LinkManager = {
     editingLink: null, 
     currentFileLinkElement: null,
     isEditingMode: false,
-    _isSubmitting: false,
 
     _decodeEntities: (htmlStr) => {
         if (!htmlStr) return '';
@@ -173,10 +173,9 @@ const LinkManager = {
             `;
         } else if (!link.classList.contains('internal-link')) {
             // Link web standard: pulsante per copiare l'URL negli appunti
-            const copyTitle = (typeof I18n !== 'undefined' && I18n.t('link_manager.tooltip_copy_link')) || "Copia Indirizzo Web";
             extraHtml = `
                 <div style="width:1px; height:16px; background:var(--border-color); margin: 0 2px;"></div>
-                <button onclick="LinkManager.copyExternalLinkUrl()" title="${copyTitle}">${Icons.clipboard}</button>
+                <button onclick="LinkManager.copyExternalLinkUrl()" title="${I18n.t('link_manager.tooltip_copy_link')}">${Icons.clipboard}</button>
             `;
         }
 
@@ -220,9 +219,8 @@ const LinkManager = {
 
         let cleanUrl = href.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
         navigator.clipboard.writeText(cleanUrl).then(() => {
-            const toastMsg = (typeof I18n !== 'undefined' && I18n.t('link_manager.toast_url_copied')) || "Indirizzo web copiato negli appunti!";
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast(toastMsg, "success");
+                UI.showToast(I18n.t('link_manager.toast_url_copied'), "success");
             }
             LinkManager.hideFloatingMenu();
         }).catch(err => {
@@ -391,70 +389,63 @@ const LinkManager = {
     },
 
     confirmExternalLink: () => {
-        if (LinkManager._isSubmitting) return;
-        LinkManager._isSubmitting = true;
+        let url = document.getElementById('externalLinkUrl')?.value?.trim();
+        const text = document.getElementById('externalLinkText')?.value?.trim();
+        let note = document.getElementById('externalLinkNote')?.value || '';
+        
+        if (!url || url === "https://") { alert(I18n.t('link_manager.alert_valid_url')); return; }
 
-        try {
-            let url = document.getElementById('externalLinkUrl')?.value?.trim();
-            const text = document.getElementById('externalLinkText')?.value?.trim();
-            let note = document.getElementById('externalLinkNote')?.value || '';
+        url = url.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
+
+        const isLocalPath = /^([a-zA-Z]:[\\/]|\\\\)/i.test(url);
+        const hasProtocol = /^[a-zA-Z0-9+-.]+:/i.test(url);
+
+        if (isLocalPath) {
+            url = 'file:///' + url.replace(/\\/g, '/');
+        } else if (!hasProtocol) {
+            url = 'https://' + url;
+        }
+
+        // Limita il testo visualizzato a 60 caratteri se l'utente non ha specificato un titolo o se coincide con l'URL
+        let displayText = text;
+        if (!displayText) {
+            displayText = LinkManager._truncateUrl(url, 60);
+        } else if (displayText === url || displayText.startsWith('http://') || displayText.startsWith('https://')) {
+            displayText = LinkManager._truncateUrl(displayText, 60);
+        }
+
+        note = note.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+
+        UI.closeDrawer();
+        
+        if (LinkManager.isEditingMode && LinkManager.editingLink) {
+            Editor.saveSnapshot();
+            const targetLink = LinkManager.editingLink;
+            targetLink.href = url;
+            targetLink.textContent = displayText;
             
-            if (!url || url === "https://") { alert(I18n.t('link_manager.alert_valid_url')); return; }
+            targetLink.removeAttribute('title'); 
 
-            url = url.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
-
-            const isLocalPath = /^([a-zA-Z]:[\\/]|\\\\)/i.test(url);
-            const hasProtocol = /^[a-zA-Z0-9+-.]+:/i.test(url);
-
-            if (isLocalPath) {
-                url = 'file:///' + url.replace(/\\/g, '/');
-            } else if (!hasProtocol) {
-                url = 'https://' + url;
-            }
-
-            // Limita il testo visualizzato a 60 caratteri se l'utente non ha specificato un titolo o se coincide con l'URL
-            let displayText = text;
-            if (!displayText) {
-                displayText = LinkManager._truncateUrl(url, 60);
-            } else if (displayText === url || displayText.startsWith('http://') || displayText.startsWith('https://')) {
-                displayText = LinkManager._truncateUrl(displayText, 60);
-            }
-
-            note = note.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
-
-            UI.closeDrawer();
-            
-            if (LinkManager.isEditingMode && LinkManager.editingLink) {
-                Editor.saveSnapshot();
-                const targetLink = LinkManager.editingLink;
-                targetLink.href = url;
-                targetLink.textContent = displayText;
-                
-                targetLink.removeAttribute('title'); 
-
-                if (note) {
-                    targetLink.setAttribute('data-link-note', note);
-                } else {
-                    targetLink.removeAttribute('data-link-note');
-                }
-
-                LinkManager.editingLink = null;
-                LinkManager.isEditingMode = false;
-                Store.triggerAutoSave();
-                LinkManager._setCaretAfterLink(targetLink);
+            if (note) {
+                targetLink.setAttribute('data-link-note', note);
             } else {
-                const link = document.createElement('a');
-                link.href = url;
-                link.target = "_blank";
-                
-                if (note) link.setAttribute('data-link-note', note);
-                
-                link.style.cursor = "pointer";
-                link.textContent = displayText;
-                LinkManager.insertNodeAtSelection(link);
+                targetLink.removeAttribute('data-link-note');
             }
-        } finally {
-            setTimeout(() => { LinkManager._isSubmitting = false; }, 200);
+
+            LinkManager.editingLink = null;
+            LinkManager.isEditingMode = false;
+            Store.triggerAutoSave();
+            LinkManager._setCaretAfterLink(targetLink);
+        } else {
+            const link = document.createElement('a');
+            link.href = url;
+            link.target = "_blank";
+            
+            if (note) link.setAttribute('data-link-note', note);
+            
+            link.style.cursor = "pointer";
+            link.textContent = displayText;
+            LinkManager.insertNodeAtSelection(link);
         }
     },
 
@@ -558,7 +549,6 @@ const LinkManager = {
         UI.openDrawer(title, html, footer);
 
         setTimeout(() => {
-            const container = document.getElementById('fileLinkDrawerContainer');
             if (prefilledPath && !LinkManager.isEditingMode) {
                 document.getElementById('fileLinkPath').value = prefilledPath;
                 let filename = prefilledPath.split(/[\\/]/).pop() || I18n.t('link_manager.default_file_name');
@@ -577,51 +567,44 @@ const LinkManager = {
     },
 
     confirmFileLink: () => {
-        if (LinkManager._isSubmitting) return;
-        LinkManager._isSubmitting = true;
+        const name = document.getElementById('fileLinkName')?.value || I18n.t('link_manager.default_file_name');
+        const path = document.getElementById('fileLinkPath')?.value;
+        let note = document.getElementById('fileLinkNote')?.value || '';
 
-        try {
-            const name = document.getElementById('fileLinkName')?.value || I18n.t('link_manager.default_file_name');
-            const path = document.getElementById('fileLinkPath')?.value;
-            let note = document.getElementById('fileLinkNote')?.value || '';
+        if (!path) { alert(I18n.t('link_manager.alert_valid_path')); return; }
 
-            if (!path) { alert(I18n.t('link_manager.alert_valid_path')); return; }
+        note = note.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
-            note = note.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+        UI.closeDrawer();
 
-            UI.closeDrawer();
+        if (LinkManager.isEditingMode && LinkManager.editingLink) {
+            Editor.saveSnapshot();
+            const targetLink = LinkManager.editingLink;
+            targetLink.dataset.filePath = path;
+            
+            targetLink.removeAttribute('title'); 
 
-            if (LinkManager.isEditingMode && LinkManager.editingLink) {
-                Editor.saveSnapshot();
-                const targetLink = LinkManager.editingLink;
-                targetLink.dataset.filePath = path;
-                
-                targetLink.removeAttribute('title'); 
-
-                if (note) {
-                    targetLink.setAttribute('data-link-note', note);
-                } else {
-                    targetLink.removeAttribute('data-link-note');
-                }
-
-                targetLink.innerHTML = `📄 ${name}`;
-                LinkManager.editingLink = null;
-                LinkManager.isEditingMode = false;
-                Store.triggerAutoSave();
-                LinkManager._setCaretAfterLink(targetLink);
+            if (note) {
+                targetLink.setAttribute('data-link-note', note);
             } else {
-                const link = document.createElement('a');
-                link.href = "#";
-                link.className = "file-link";
-                link.dataset.filePath = path;
-                
-                if (note) link.setAttribute('data-link-note', note);
-                
-                link.textContent = `📄 ${name}`;
-                LinkManager.insertNodeAtSelection(link);
+                targetLink.removeAttribute('data-link-note');
             }
-        } finally {
-            setTimeout(() => { LinkManager._isSubmitting = false; }, 200);
+
+            targetLink.innerHTML = `📄 ${name}`;
+            LinkManager.editingLink = null;
+            LinkManager.isEditingMode = false;
+            Store.triggerAutoSave();
+            LinkManager._setCaretAfterLink(targetLink);
+        } else {
+            const link = document.createElement('a');
+            link.href = "#";
+            link.className = "file-link";
+            link.dataset.filePath = path;
+            
+            if (note) link.setAttribute('data-link-note', note);
+            
+            link.textContent = `📄 ${name}`;
+            LinkManager.insertNodeAtSelection(link);
         }
     },
 
@@ -655,88 +638,81 @@ const LinkManager = {
     },
 
     confirmYoutube: () => {
-        if (LinkManager._isSubmitting) return;
-        LinkManager._isSubmitting = true;
+        let url = document.getElementById('youtubeUrlInput')?.value?.trim();
+        if (!url) { alert(I18n.t('link_manager.alert_enter_youtube_url')); return; }
 
-        try {
-            let url = document.getElementById('youtubeUrlInput')?.value?.trim();
-            if (!url) { alert(I18n.t('link_manager.alert_enter_youtube_url')); return; }
+        // Estrazione dell'ID Video
+        const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
+        const match = url.match(ytRegex);
 
-            // Estrazione dell'ID Video
-            const ytRegex = /(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i;
-            const match = url.match(ytRegex);
-
-            if (!match || match[1].length !== 11) {
-                alert(I18n.t('link_manager.alert_invalid_youtube_id'));
-                return;
-            }
-
-            const videoId = match[1];
-            const embedUrl = `https://www.youtube.com/embed/${videoId}`;
-            
-            UI.closeDrawer();
-            Editor.saveSnapshot();
-            Editor.restoreSelection();
-
-            const widgetId = 'adv_vid_' + Store.generateId();
-            const iframeHTML = `<iframe src="${embedUrl}" width="100%" height="400" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="border-radius:6px; display:block;"></iframe>`;
-            
-            const wrapper = WidgetManager.createShell('video', widgetId, iframeHTML);
-            
-            const sel = window.getSelection();
-            let node = sel.rangeCount > 0 ? sel.getRangeAt(0).commonAncestorContainer : null;
-            if(node && node.nodeType === 3) node = node.parentNode;
-
-            if (node && node.closest('.widget-type-columns, .simple-table-wrapper')) {
-                alert("Non è permesso inserire Widget Complessi all'interno delle Colonne o delle Tabelle Semplici per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.");
-                return;
-            }
-
-            let targetBlock = node ? node.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null;
-            const isEmptyBlock = targetBlock && targetBlock.id !== 'noteContent' && targetBlock.textContent.replace(/[\u200B\n\r]/g, '').trim() === '';
-
-            if (isEmptyBlock) {
-                targetBlock.parentNode.replaceChild(wrapper, targetBlock);
-            } else {
-                if (sel.rangeCount) {
-                    const range = sel.getRangeAt(0);
-                    range.deleteContents();
-                    range.insertNode(wrapper);
-                } else {
-                    document.getElementById('noteContent').appendChild(wrapper);
-                }
-            }
-
-            const p = document.createElement('p'); 
-            p.innerHTML = '<br>';
-            wrapper.parentNode.insertBefore(p, wrapper.nextSibling);
-
-            // Disegna l'header del widget
-            WidgetManager.updateShellUI(widgetId, {
-                icon: Icons.youtube,
-                title: I18n.t('link_manager.video_widget_title'),
-                optionsId: `adv-opt-btn-${widgetId}`,
-                onOptionsClick: (e) => {
-                    e.stopPropagation();
-                    UI.Menu.closeAll(true);
-                    UI.Menu.buildContextMenu(`adv-opt-btn-${widgetId}`, [
-                        { icon: Icons.globe, label: I18n.t('link_manager.open_in_browser'), onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
-                        { type: 'divider' },
-                        { icon: Icons.trash, label: I18n.t('link_manager.remove_video'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
-                    ]);
-                },
-                onDragStart: (e) => {
-                    AppState.draggedBlockId = widgetId;
-                    AppState.draggedBlockType = 'video';
-                    e.dataTransfer.effectAllowed = 'move';
-                },
-                onDragEnd: () => { AppState.draggedBlockId = null; AppState.draggedBlockType = null; }
-            });
-
-            Store.triggerAutoSave();
-        } finally {
-            setTimeout(() => { LinkManager._isSubmitting = false; }, 200);
+        if (!match || match[1].length !== 11) {
+            alert(I18n.t('link_manager.alert_invalid_youtube_id'));
+            return;
         }
+
+        const videoId = match[1];
+        const embedUrl = `https://www.youtube.com/embed/${videoId}`;
+        
+        UI.closeDrawer();
+        Editor.saveSnapshot();
+        Editor.restoreSelection();
+
+        const widgetId = 'adv_vid_' + Store.generateId();
+        const iframeHTML = `<iframe src="${embedUrl}" width="100%" height="400" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="border-radius:6px; display:block;"></iframe>`;
+        
+        const wrapper = WidgetManager.createShell('video', widgetId, iframeHTML);
+        
+        const sel = window.getSelection();
+        let node = sel.rangeCount > 0 ? sel.getRangeAt(0).commonAncestorContainer : null;
+        if(node && node.nodeType === 3) node = node.parentNode;
+
+        if (node && node.closest('.widget-type-columns, .simple-table-wrapper')) {
+            alert("Non è permesso inserire Widget Complessi all'interno delle Colonne o delle Tabelle Semplici per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.");
+            return;
+        }
+
+        let targetBlock = node ? node.closest('p, div, li, h1, h2, h3, h4, h5, h6') : null;
+        const isEmptyBlock = targetBlock && targetBlock.id !== 'noteContent' && targetBlock.textContent.replace(/[\u200B\n\r]/g, '').trim() === '';
+
+        if (isEmptyBlock) {
+            targetBlock.parentNode.replaceChild(wrapper, targetBlock);
+        } else {
+            if (sel.rangeCount) {
+                const range = sel.getRangeAt(0);
+                range.deleteContents();
+                range.insertNode(wrapper);
+            } else {
+                document.getElementById('noteContent').appendChild(wrapper);
+            }
+        }
+
+        const p = document.createElement('p'); 
+        p.innerHTML = '<br>';
+        wrapper.parentNode.insertBefore(p, wrapper.nextSibling);
+
+        // Disegna l'header del widget
+        WidgetManager.updateShellUI(widgetId, {
+            icon: Icons.youtube,
+            title: I18n.t('link_manager.video_widget_title'),
+            optionsId: `adv-opt-btn-${widgetId}`,
+            onOptionsClick: (e) => {
+                e.stopPropagation();
+                UI.Menu.closeAll(true);
+                UI.Menu.buildContextMenu(`adv-opt-btn-${widgetId}`, [
+                    { icon: Icons.globe, label: I18n.t('link_manager.open_in_browser'), onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
+                    { type: 'divider' },
+                    { icon: Icons.trash, label: I18n.t('link_manager.remove_video'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
+                ]);
+            },
+            onDragStart: (e) => {
+                AppState.draggedBlockId = widgetId;
+                AppState.draggedBlockType = 'video';
+                e.dataTransfer.effectAllowed = 'move';
+            },
+            onDragEnd: () => { AppState.draggedBlockId = null; AppState.draggedBlockType = null; }
+        });
+
+        Store.triggerAutoSave();
     },
 
     insertNodeAtSelection: (node) => {
@@ -761,12 +737,10 @@ const LinkManager = {
 
         const range = sel.getRangeAt(0);
         range.deleteContents();
-        
         range.insertNode(node);
         
         // Riposiziona il cursore subito dopo il link preservando lo scroll
         LinkManager._setCaretAfterLink(node);
-        
         Store.triggerAutoSave();
     },
 

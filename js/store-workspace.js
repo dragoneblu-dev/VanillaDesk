@@ -13,6 +13,8 @@
  * Preservazione dello stato di visualizzazione locale (expanded, _tocCollapsed, _lastScroll) nel sync multi-scheda e JIT.
  * PERF LAZY ASSETS LOADING: Apertura workspace istantanea (<50ms) con zero blob caricati in RAM all'avvio e revoca pulita ObjectURL.
  * FEAT PHYSICAL DELETION FEEDBACK: Monitoraggio ed emissione del progresso reale su disco durante l'eliminazione fisica dei file.
+ * FEAT INTELLIGENT WORKSPACE RECONNECT: Riconoscimento contestuale tra nuovo workspace da zero e salvataggio/ricollegamento
+ * di sessione esistente su cartella di lavoro, eliminando avvisi allarmistici fuorvianti.
  */
 
 Object.assign(Store, {
@@ -954,9 +956,13 @@ Object.assign(Store, {
             if (!confirm("Attenzione: Stai per cambiare Workspace. Le modifiche non salvate dell'ambiente attuale verranno chiuse. Procedere?")) return;
         }
 
-        // Guida visiva esplicativa al centro dello schermo prima di chiamare il selettore cartella nativo
+        // Riconoscimento intelligente: se l'utente ha già note in memoria (es. sessione ripristinata o modificata),
+        // il modale deve aiutarlo a salvare/ricollegare il suo Workspace, non trattarlo da principiante.
+        const hadExistingNotesInRAM = AppState.notes && AppState.notes.length > 0;
+        const isSavingExistingSession = !forceFresh && hadExistingNotesInRAM && !AppState.workspaceHandle;
+
         if (UI.promptWorkspaceGuide) {
-            const proceed = await UI.promptWorkspaceGuide();
+            const proceed = await UI.promptWorkspaceGuide(isSavingExistingSession);
             if (!proceed) return;
         }
 
@@ -969,15 +975,30 @@ Object.assign(Store, {
             Store._pendingRecoveryData = null;
 
             let isEmpty = true;
-            try { for await (const entry of dirHandle.values()) { isEmpty = false; break; } } catch(e) {}
+            let isExistingVanillaWorkspace = false;
+            try { 
+                for await (const entry of dirHandle.values()) { 
+                    isEmpty = false; 
+                    if (entry.name === 'index.json' || entry.name === 'notes') {
+                        isExistingVanillaWorkspace = true;
+                    }
+                } 
+            } catch(e) {}
 
             if (!isEmpty) {
-                if(!confirm("Attenzione: La cartella selezionata NON è vuota. L'app creerà o aggiornerà i propri file al suo interno. Vuoi procedere?")) return;
+                if (isExistingVanillaWorkspace) {
+                    const msg = I18n.t('workspace_guide.confirm_update_existing_ws') || 
+                        "La cartella selezionata contiene già un Workspace VanillaDesk.\n\nVuoi collegarla e salvare qui le modifiche correnti della sessione?";
+                    if (!confirm(msg)) return;
+                } else {
+                    const msg = I18n.t('workspace_guide.confirm_folder_not_empty') || 
+                        "Attenzione: La cartella selezionata NON è vuota. L'app creerà o aggiornerà i propri file al suo interno. Vuoi procedere?";
+                    if (!confirm(msg)) return;
+                }
             }
 
             // Se l'utente era già in un Workspace aperto o ha richiesto un ambiente pulito, azzera sempre la memoria
             const isSwitchingFromExistingWorkspace = !!AppState.workspaceHandle;
-            const hadExistingNotesInRAM = AppState.notes && AppState.notes.length > 0;
             const shouldReset = forceFresh || isSwitchingFromExistingWorkspace || !hadExistingNotesInRAM;
 
             if (shouldReset) {

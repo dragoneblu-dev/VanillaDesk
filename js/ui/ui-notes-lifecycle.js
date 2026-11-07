@@ -12,6 +12,7 @@
  * FEAT BRANCH TRASH QUANTIFICATION (4A): Calcolo esatto delle sotto-note e dei soli database primari reali (escluse viste/pivot).
  * FIX SUB-NOTE CLONING ROOT-CAUSE: Eliminata assegnazione prematura di currentNoteId in addNote e preservazione
  * della sincronicità contrattuale con bypass di syncWidgetsForNote sulle note bozza.
+ * FEAT PER-NOTE SPELLCHECK APPLICATION: Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
  */
 
 Object.assign(UI, {
@@ -411,9 +412,6 @@ Object.assign(UI, {
             contentEl.innerHTML = note.content || "<p><br></p>";
 
             // CASO C: AUTO-GUARIGIONE SELETTIVA DEI CUSCINETTI ALL'APERTURA DELLA NOTA
-            // Controllo regex ultrarapido a zero overhead (~0.03ms): se la nota contiene ZWS legittimi per widget inline,
-            // il test dà false ed esce immediatamente senza alterare il DOM. Se rileva ZWS duplicati (\u200B{2,})
-            // o ZWS intrappolati tra lettere di parole, avvia la bonifica mirata di ensureInlineWidgetBuffers.
             const rawMarkup = contentEl.innerHTML;
             if (rawMarkup && rawMarkup.includes('\u200B')) {
                 const hasZwsAnomaly = /\u200B{2,}|[a-zA-Z0-9À-ÿ]\u200B+[a-zA-Z0-9À-ÿ]/.test(rawMarkup);
@@ -436,6 +434,11 @@ Object.assign(UI, {
             if (AppState.searchFilter && AppState.searchFilter.length > 0) {
                 if (typeof Editor !== 'undefined') Editor.applyHighlight(contentEl, AppState.searchFilter);
             }
+        }
+
+        // APPLICAZIONE AUTOMATICA DELLO SPELLCHECK PER LA NOTA APERTA
+        if (typeof UI.applyNoteSpellcheck === 'function') {
+            UI.applyNoteSpellcheck(note);
         }
 
         // Aggiornamento interfaccia per note cestinate o attive

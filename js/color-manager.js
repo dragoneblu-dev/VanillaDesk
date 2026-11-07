@@ -30,6 +30,10 @@
  * ricorsivo a tappeto di qualsiasi span rimasto privo di classi (anche con attributi vuoti come class="").
  * FIX TOGGLE OFF CELLA & MULTI-CELLA: Riconoscimento universale della rimozione colore quando una o più celle hanno già una formattazione attiva.
  * FIX RACE CONDITION SELECT COLOR: Esecuzione di applyColor prima della chiusura del menu per prevenire lo svuotamento della selezione celle.
+ * FIX CELL BACKGROUND PRESERVATION: L'applicazione o rimozione dell'evidenziatore di testo all'interno di tabelle semplici
+ * opera esclusivamente sul testo (span interni), preservando integralmente le classi di sfondo e gli stili del tag TD/TH.
+ * FIX ISOLATED TOGGLE DETECTION: Risolto bug di mancata evidenziazione eliminando il falso positivo di querySelector
+ * sul paragrafo genitore comune e introdotto fallback affidabile tra hiliteColor e backColor.
  */
 
 const ColorManager = {
@@ -340,46 +344,88 @@ const ColorManager = {
                                      ? TableManager.Selection.hasCellSelection() 
                                      : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
-        const prefix = type === 'highlight' ? 'hl-' : 'tx-';
-
         if (hasSelectedCells) {
             const cells = TableManager.Selection.selectedCells;
-            // Nel contesto di intere celle, il toggle scatta se tutte le celle hanno già una formattazione di quel tipo
+            // Nel contesto di intere celle di tabella, il toggle scatta ESCLUSIVAMENTE se il testo interno alla cella
+            // è già formattato con quel prefisso (non controlliamo mai cell.classList del tag TD/TH, che definisce lo sfondo della cella)
             return cells.every(cell => {
-                const hasOnCell = Array.from(cell.classList).some(c => c.startsWith(prefix));
-                const hasInside = !!cell.querySelector(`[class*="${prefix}"]`);
-                return hasOnCell || hasInside;
+                if (targetClass) {
+                    return !!cell.querySelector(`.${targetClass}`);
+                }
+                const prefix = type === 'highlight' ? 'hl-' : 'tx-';
+                return !!cell.querySelector(`[class*="${prefix}"]`);
             });
         }
 
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount) return false;
 
-        let node = sel.anchorNode;
-        if (!node) return false;
-        if (node.nodeType === 3) node = node.parentNode;
+        const range = sel.getRangeAt(0);
 
-        // Se c'è una selezione estesa parziale di testo, controlliamo anche il contenitore comune
-        if (!sel.isCollapsed) {
-            const range = sel.getRangeAt(0);
-            const common = range.commonAncestorContainer;
-            const containerEl = common.nodeType === 3 ? common.parentNode : common;
-            if (containerEl && containerEl.classList && Array.from(containerEl.classList).some(c => c.startsWith(prefix))) {
-                return true;
+        // Funzione di verifica se un elemento possiede la classe specifica ricercata
+        const hasMatchingClass = (el) => {
+            if (!el || el.nodeType !== Node.ELEMENT_NODE || !el.classList) return false;
+            if (targetClass) {
+                return el.classList.contains(targetClass);
             }
-            if (containerEl && containerEl.querySelector && containerEl.querySelector(`[class*="${prefix}"]`)) {
-                return true;
+            const prefix = type === 'highlight' ? 'hl-' : 'tx-';
+            return Array.from(el.classList).some(c => c.startsWith(prefix));
+        };
+
+        // Verifica puntuale se un nodo (o uno dei suoi antenati fino al blocco/editor) possiede la classe
+        const isNodeWithinColoredSpan = (n) => {
+            let curr = n.nodeType === Node.TEXT_NODE ? n.parentNode : n;
+            while (curr && curr.id !== 'noteContent' && curr !== document.body && curr.tagName !== 'TD' && curr.tagName !== 'TH') {
+                if (hasMatchingClass(curr)) return true;
+                curr = curr.parentNode;
+            }
+            return false;
+        };
+
+        if (sel.isCollapsed) {
+            return isNodeWithinColoredSpan(sel.anchorNode);
+        }
+
+        // Selezione estesa: verifica se il comune antenato o tutti i nodi di testo intersecati hanno il colore
+        const common = range.commonAncestorContainer;
+        const rootContainer = common.nodeType === Node.TEXT_NODE ? common.parentNode : common;
+
+        if (isNodeWithinColoredSpan(rootContainer)) {
+            return true;
+        }
+
+        // Scansione puntuale dei soli nodi di testo inclusi nel range (senza interrogare querySelector generici su blocchi antenati)
+        const walker = document.createTreeWalker(rootContainer, NodeFilter.SHOW_TEXT, null, false);
+        let textNode;
+        let hasText = false;
+        let allColored = true;
+
+        while ((textNode = walker.nextNode())) {
+            let isIntersecting = false;
+            try {
+                const nodeRange = document.createRange();
+                nodeRange.selectNodeContents(textNode);
+                isIntersecting = (
+                    range.compareBoundaryPoints(Range.END_TO_START, nodeRange) < 0 &&
+                    range.compareBoundaryPoints(Range.START_TO_END, nodeRange) > 0
+                );
+            } catch (_) {
+                isIntersecting = false;
+            }
+
+            if (isIntersecting) {
+                const textVal = textNode.nodeValue.replace(/[\u200B\uFEFF\u00A0\r\n\t]/g, '').trim();
+                if (textVal.length > 0) {
+                    hasText = true;
+                    if (!isNodeWithinColoredSpan(textNode)) {
+                        allColored = false;
+                        break;
+                    }
+                }
             }
         }
 
-        // Risalita del DOM dal nodo di ancoraggio (arrestandosi ai bordi della cella o dell'editor)
-        while (node && node.id !== 'noteContent' && node !== document.body && node.tagName !== 'TD' && node.tagName !== 'TH') {
-            if (node.classList && Array.from(node.classList).some(c => c.startsWith(prefix))) {
-                return true;
-            }
-            node = node.parentNode;
-        }
-        return false;
+        return hasText && allColored;
     },
 
     applyLast: (type) => {
@@ -430,7 +476,7 @@ const ColorManager = {
         if (type === 'highlight') {
             if (colorClass) {
                 ColorManager.lastHighlight = colorClass;
-                try { localStorage.getItem('pronotes_last_hl', colorClass); } catch (_) {}
+                try { localStorage.setItem('pronotes_last_hl', colorClass); } catch (_) {}
             }
             ColorManager.updateToolbarIcon('highlight', colorClass || 'bg-none');
         } else {
@@ -480,7 +526,7 @@ const ColorManager = {
     _isSafeToColor: (el) => {
         if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
         if (el.id === 'noteContent') return false;
-        // Non manipolare direttamente il tag contenitore della cella
+        // Non manipolare direttamente il tag contenitore della cella (TD o TH)
         if (el.tagName === 'TD' || el.tagName === 'TH') return false;
 
         // Se l'elemento è contenuto dentro una cella di tabella semplice, è testo editabile sicuro al 100%
@@ -511,24 +557,21 @@ const ColorManager = {
             const cells = TableManager.Selection.selectedCells;
 
             cells.forEach(cell => {
-                // 1. Rimuove le classi e stili sia dal TD/TH stesso sia da tutti gli elementi interni alla cella
+                // 1. Rimuove le classi e gli stili ESCLUSIVAMENTE dagli elementi testuali interni alla cella.
+                // Il tag TD o TH non viene minimamente toccato, preservando integralmente il colore di sfondo della cella (TableManager).
                 if (type === 'text') {
-                    Array.from(cell.classList).filter(c => c.startsWith('tx-c')).forEach(c => cell.classList.remove(c));
-                    cell.style.color = '';
                     cell.querySelectorAll('[class*="tx-c"]').forEach(el => {
                         Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
                         el.style.color = '';
                     });
                 } else {
-                    Array.from(cell.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => cell.classList.remove(c));
-                    cell.style.backgroundColor = '';
                     cell.querySelectorAll('[class*="hl-c"], [class*="hl-u-c"]').forEach(el => {
                         Array.from(el.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => el.classList.remove(c));
                         el.style.backgroundColor = '';
                     });
                 }
 
-                // 2. Se è stato specificato un colore (non null/rimozione), avvolge tutto il contenuto utile
+                // 2. Se è stato specificato un colore (non null/rimozione), avvolge tutto il contenuto utile in uno span
                 if (colorClass) {
                     const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
                     const span = document.createElement('span');
@@ -640,14 +683,23 @@ const ColorManager = {
             });
 
             // 2. Comanda al browser di tagliare/fondere i nodi nativamente
-            let command = type === 'highlight' ? 'hiliteColor' : 'foreColor';
-            if (type === 'highlight' && !document.queryCommandSupported('hiliteColor')) command = 'backColor';
-
             let targetHex = type === 'highlight' ? ColorManager.removeHl.hex : ColorManager.removeTx.hex;
             if (colorClass && type === 'highlight') targetHex = ColorManager.magicHl[colorClass].hex;
             if (colorClass && type === 'text') targetHex = ColorManager.magicTx[colorClass].hex;
 
-            document.execCommand(command, false, targetHex);
+            if (type === 'highlight') {
+                let success = false;
+                try {
+                    success = document.execCommand('hiliteColor', false, targetHex);
+                } catch (_) {}
+                if (!success) {
+                    try {
+                        document.execCommand('backColor', false, targetHex);
+                    } catch (_) {}
+                }
+            } else {
+                document.execCommand('foreColor', false, targetHex);
+            }
 
         } finally {
             // 3. Riconversione GARANTITA di tutti i colori finti nelle rispettive classi CSS
@@ -662,7 +714,7 @@ const ColorManager = {
                         el.style.backgroundColor = '';
                         // Rimuove tassativamente qualsiasi classe di evidenziazione dal nodo ripulito
                         Array.from(el.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => el.classList.remove(c));
-                    } else {
+                    } else if (bg) {
                         for (let cls in ColorManager.magicHl) {
                             if (bg === cleanStr(ColorManager.magicHl[cls].rgb) || bg === cleanStr(ColorManager.magicHl[cls].hex)) {
                                 el.classList.add(cls); 
@@ -677,7 +729,7 @@ const ColorManager = {
                         el.style.color = ''; 
                         // Rimuove tassativamente qualsiasi classe colore testo dal nodo ripulito
                         Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
-                    } else {
+                    } else if (fg) {
                         for (let cls in ColorManager.magicTx) {
                             if (fg === cleanStr(ColorManager.magicTx[cls].rgb) || fg === cleanStr(ColorManager.magicTx[cls].hex)) {
                                 el.classList.add(cls); 
@@ -701,16 +753,16 @@ const ColorManager = {
                     if (el.getAttribute('color') === '') el.removeAttribute('color');
 
                     if (el.tagName === 'SPAN' || el.tagName === 'FONT') {
-                    const hasNoClass = !el.hasAttribute('class') || el.getAttribute('class').trim() === '';
-                    const hasNoStyle = !el.hasAttribute('style') || el.getAttribute('style').trim() === '';
+                        const hasNoClass = !el.hasAttribute('class') || el.getAttribute('class').trim() === '';
+                        const hasNoStyle = !el.hasAttribute('style') || el.getAttribute('style').trim() === '';
                         const hasNoColorAttr = !el.hasAttribute('color');
 
                         if (el.attributes.length === 0 || (hasNoClass && hasNoStyle && hasNoColorAttr)) {
-                        const parent = el.parentNode;
-                        if (parent) {
-                            while (el.firstChild) parent.insertBefore(el.firstChild, el);
-                            parent.removeChild(el);
-                            changed = true;
+                            const parent = el.parentNode;
+                            if (parent) {
+                                while (el.firstChild) parent.insertBefore(el.firstChild, el);
+                                parent.removeChild(el);
+                                changed = true;
                             }
                         }
                     }

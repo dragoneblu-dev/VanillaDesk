@@ -13,6 +13,7 @@
  * - FEAT SEARCH ZERO-RESULTS FEEDBACK & ACTIONS (4C): Feedback esplicito e pulsanti di reset quando ricerca e filtri tag non producono riscontri.
  * - FIX RECORD NOTE SUBNOTES HIERARCHY: Sbloccata la ricorsione gerarchica sui figli delle record note senza alterare la struttura delle radici.
  * - FIX RECORD BRANCH ICON: Ereditarietà automatica dell'icona verde record per tutti i rami discendenti delle pagine di database.
+ * - FIX WHITESPACE SEARCH PARITY: Parità e normalizzazione tra spazi ASCII e caratteri &nbsp; (\u00A0) in extractSearchableText e matching.
  */
 
 Object.assign(UI, {
@@ -318,6 +319,10 @@ Object.assign(UI, {
             }
         });
 
+        // PARITÀ SPAZI: Normalizza qualsiasi spazio non-breaking (\u00A0 / &nbsp;) in spazio standard ' '
+        // ed estirpa caratteri invisibili di layout per consentire il matching esatto di ricerche con spazi
+        pureText = pureText.replace(/\u00A0/g, ' ').replace(/[\u200B\uFEFF]/g, '');
+
         return pureText;
     },
 
@@ -359,12 +364,12 @@ Object.assign(UI, {
 
             // 4. Array (Multi-select o Relazioni)
             if (Array.isArray(cellVal)) {
-                return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
+                return cellVal.some(v => String(v).toLowerCase().replace(/\u00A0/g, ' ') === String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
             }
 
             // 5. Date Range con oggetto {start, end}
             if (typeof cellVal === 'object' && cellVal !== null) {
-                const searchLower = String(f.realValue).toLowerCase();
+                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
                 const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
                 if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
                 const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
@@ -374,15 +379,15 @@ Object.assign(UI, {
 
             // 6. Note Link con oggetto {noteId, title, anchor}
             if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
-                const searchLower = String(f.realValue).toLowerCase();
-                const titleStr = (cellVal.title || '').toLowerCase();
+                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
+                const titleStr = (cellVal.title || '').toLowerCase().replace(/\u00A0/g, ' ');
                 if (titleStr.includes(searchLower)) return true;
                 if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
                 return false;
             }
 
             // 7. Testo, Numeri e Singoli Valori
-            return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
+            return String(cellVal || '').toLowerCase().replace(/\u00A0/g, ' ').includes(String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
         });
     },
 
@@ -394,7 +399,8 @@ Object.assign(UI, {
             if (!isActivePath) return null;
         }
 
-        const filter = AppState.searchFilter ? AppState.searchFilter.toLowerCase() : null;
+        const rawFilter = AppState.searchFilter ? AppState.searchFilter.toLowerCase() : null;
+        const filter = rawFilter ? rawFilter.replace(/\u00A0/g, ' ') : null;
         const activePropFilters = AppState.activePropertyFilters || [];
         const reqBook = AppState.showBookmarksInTree;
         const reqFav = AppState.showFavoritesInTree;
@@ -414,26 +420,27 @@ Object.assign(UI, {
         }
 
         if (nodeDirectMatch && filter) {
-            let matchTitle = (node.title || "").toLowerCase().includes(filter);
-            let matchContent = UI.extractSearchableText(node.content).toLowerCase().includes(filter);
+            const normTitle = (node.title || "").toLowerCase().replace(/\u00A0/g, ' ');
+            const normContent = UI.extractSearchableText(node.content).toLowerCase();
+            let matchTitle = normTitle.includes(filter);
+            let matchContent = normContent.includes(filter);
             if (!matchTitle && !matchContent) nodeDirectMatch = false;
             
             if (nodeDirectMatch) {
                 if (matchTitle) {
-                    let idx = (node.title || "").toLowerCase().indexOf(filter);
+                    let idx = normTitle.indexOf(filter);
                     while (idx !== -1) { 
                         noteMatchCount++;
                         if (!forceRender) AppState._globalHighlights++; 
-                        idx = (node.title || "").toLowerCase().indexOf(filter, idx + filter.length); 
+                        idx = normTitle.indexOf(filter, idx + filter.length); 
                     }
                 }
                 if (matchContent) {
-                    let text = UI.extractSearchableText(node.content).toLowerCase();
-                    let idx = text.indexOf(filter);
+                    let idx = normContent.indexOf(filter);
                     while (idx !== -1) { 
                         noteMatchCount++;
                         if (!forceRender) AppState._globalHighlights++; 
-                        idx = text.indexOf(filter, idx + filter.length); 
+                        idx = normContent.indexOf(filter, idx + filter.length); 
                     }
                 }
             }

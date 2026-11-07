@@ -17,6 +17,23 @@
  *   incollato all'interno di Snippet Copiabili e celle di Tabelle Semplici, eliminando la selezione persistente del testo.
  * - REFACTOR DRY: Centralizzazione di _formatTextToInlineHTML e _insertInlineHTMLAndCollapse per eliminare
  *   duplicazioni di codice tra snippet, tabelle, liste e mini-editor.
+ * - FEAT PERSISTENT ASSET STORAGE FOR PASTED IMAGES: Salvataggio fisico automatico delle immagini (sia da screenshot
+ *   singolo, sia incorporate nel testo copiato da Word, OneNote o Web) nella cartella assets/ del Workspace tramite Store.saveAsset.
+ * - FIX WORD CLIPBOARD IMAGES EXTRACTION: Risoluzione dell'eliminazione accidentale delle immagini di Word da regex condizionale
+ *   ed estrazione automatica dei dati binari da RTF (\pict) tramite rilevamento magic bytes (FFD8FF per JPEG, 89504E47 per PNG)
+ *   per immagini con percorsi file:/// non accessibili dal browser.
+ * - FIX PRESERVE ADJACENT SPACES ON PASTE: Risolto alla radice l'annientamento dello spazio precedente
+ *   durante la sostituzione di una parola selezionata, sostituendo execCommand('delete') con Range.deleteContents()
+ *   per disinnescare l'euristica "Smart Delete" di Chromium.
+ * - FIX ROOT BR ISOLATION: Ogni <br> a livello root viene convertito direttamente in <p><br></p>,
+ *   impedendo l'inserimento di tag <br> sparsi direttamente come figli di #noteContent o blocchi <p><br><br>...</p>.
+ * - FIX WEB IMAGES CORS FALLBACK: Gestione unificata di download e fallback per immagini web remote senza errori di rete fetch().
+ * - FIX ASYNC PASTE CARET PRESERVATION: Ancoraggio preventivo sincrono nel DOM vivo prima del download asincrono delle immagini,
+ *   prevenendo la perdita del range d'inserimento causata dal rilascio del focus durante operazioni asincrone.
+ * - FIX ANCHORED IMAGES BUFFER PRUNING: Corretto controllo hasRealContent in flushInlineBuffer per rilevare tag <a>
+ *   o contenitori inline che racchiudono immagini (<img>) prive di testo diretto, prevenendone lo scarto accidentale.
+ * - FEAT LINK PRESERVATION & BLOCK INVERSION: Preservazione integrale dei tag <a> attorno alle immagini con corretta
+ *   inversione gerarchica (<p><a href="..."><img></a></p>) per eliminare nesting illegali e tag link orfani a livello root.
  */
 
 Object.assign(Editor, {
@@ -61,6 +78,151 @@ Object.assign(Editor, {
         }
     },
 
+    // Procedura snella per acquisire, comprimere e salvare un'immagine su disco (in assets/)
+    // Supporta file binari, data-URI Base64 e URL web con fallback pulito
+    saveImageSource: async (source) => {
+        if (!source) return null;
+
+        try {
+            let blob = null;
+
+            if (typeof source === 'string') {
+                if (source.startsWith('data:image/')) {
+                    const res = await fetch(source);
+                    if (res.ok) blob = await res.blob();
+                } else if (source.startsWith('http://') || source.startsWith('https://')) {
+                    const res = await fetch(source);
+                    if (res.ok) blob = await res.blob();
+                }
+            } else if (source instanceof Blob) {
+                blob = source;
+            }
+
+            if (!blob || !blob.type || !blob.type.startsWith('image/')) {
+                return null;
+            }
+
+            return await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = async () => {
+                        const MAX_WIDTH = 1600;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height * MAX_WIDTH) / width);
+                            width = MAX_WIDTH;
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        canvas.toBlob(async (compressedBlob) => {
+                            const finalBlob = compressedBlob || blob;
+                            let fileName = null;
+                            let blobUrl = null;
+
+                            // PERSISTENZA SU DISCO: Salva fisicamente il file WebP nella cartella assets/ del Workspace
+                            if (AppState.assetsHandle && typeof Store !== 'undefined' && typeof Store.saveAsset === 'function') {
+                                const file = new File([finalBlob], `img_${Date.now()}.webp`, { type: 'image/webp' });
+                                fileName = await Store.saveAsset(file, 'img');
+                                if (fileName && Editor.imageCache && Editor.imageCache[fileName]) {
+                                    blobUrl = Editor.imageCache[fileName];
+                                }
+                            }
+
+                            // Fallback per sessione temporanea in sola RAM
+                            if (!fileName) {
+                                fileName = 'img_' + (typeof Store !== 'undefined' ? Store.generateId() : Date.now()) + '.webp';
+                                blobUrl = URL.createObjectURL(finalBlob);
+                                if (!Editor.imageCache) Editor.imageCache = {};
+                                Editor.imageCache[fileName] = blobUrl;
+                            }
+
+                            resolve({ fileName, blobUrl });
+                        }, 'image/webp', 0.85);
+                    };
+                    img.onerror = () => resolve(null);
+                    img.src = ev.target.result;
+                };
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+            });
+        } catch (_) {
+            return null;
+        }
+    },
+
+    // Estrae in modo deterministico le immagini binarie memorizzate nel formato RTF di Word tramite scansione dei Magic Bytes
+    _extractImagesFromWordRTF: (rtfText) => {
+        if (!rtfText || typeof rtfText !== 'string' || !rtfText.includes('\\pict')) return [];
+        const extractedBlobs = [];
+
+        let searchIndex = 0;
+        while ((searchIndex = rtfText.indexOf('\\pict', searchIndex)) !== -1) {
+            let depth = 1;
+            let startPos = searchIndex;
+            let endPos = -1;
+
+            let openBracePos = rtfText.lastIndexOf('{', searchIndex);
+            let scanStart = openBracePos !== -1 ? openBracePos + 1 : searchIndex + 5;
+
+            for (let i = scanStart; i < rtfText.length; i++) {
+                const char = rtfText.charAt(i);
+                if (char === '{') depth++;
+                else if (char === '}') {
+                    depth--;
+                    if (depth === 0) {
+                        endPos = i;
+                        break;
+                    }
+                }
+            }
+
+            if (endPos === -1) endPos = Math.min(rtfText.length, searchIndex + 2000000);
+            const pictBlock = rtfText.substring(startPos, endPos);
+            searchIndex = endPos;
+
+            const lowerPict = pictBlock.toLowerCase();
+            let isPng = lowerPict.includes('pngblip') || lowerPict.includes('89504e47');
+            let isJpeg = lowerPict.includes('jpegblip') || lowerPict.includes('jpgblip') || lowerPict.includes('ffd8ff');
+
+            if (!isPng && !isJpeg) continue;
+
+            const mimeType = isPng ? 'image/png' : 'image/jpeg';
+            const magicHeader = isPng ? '89504e47' : 'ffd8ff';
+            let hexStart = lowerPict.indexOf(magicHeader);
+
+            if (hexStart === -1) {
+                const matchFallback = lowerPict.match(/[\r\n\s]([0-9a-f]{32,})/i);
+                if (matchFallback) {
+                    hexStart = lowerPict.indexOf(matchFallback[1]);
+                }
+            }
+
+            if (hexStart === -1) continue;
+
+            const hexRaw = pictBlock.substring(hexStart);
+            const cleanHex = hexRaw.replace(/[^0-9a-fA-F]/g, '');
+
+            if (cleanHex.length >= 64) {
+                try {
+                    const byteLen = Math.floor(cleanHex.length / 2);
+                    const bytes = new Uint8Array(byteLen);
+                    for (let b = 0; b < byteLen; b++) {
+                        bytes[b] = parseInt(cleanHex.substr(b * 2, 2), 16);
+                    }
+                    extractedBlobs.push(new Blob([bytes], { type: mimeType }));
+                } catch (_) {}
+            }
+        }
+
+        return extractedBlobs;
+    },
+
     handlePaste: (e) => {
         const clipboardData = (e.clipboardData || window.clipboardData);
         if (!clipboardData) return;
@@ -82,6 +244,7 @@ Object.assign(Editor, {
 
         const pastedText = clipboardData.getData('text/plain');
         const pastedHTML = clipboardData.getData('text/html');
+        const pastedRTF = clipboardData.getData('text/rtf') || '';
 
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
@@ -107,11 +270,7 @@ Object.assign(Editor, {
                 Editor.saveSnapshot();
 
                 if (sel.rangeCount > 0 && !sel.isCollapsed) {
-                    try {
-                        document.execCommand('delete', false, null);
-                    } catch (_) {
-                        sel.getRangeAt(0).deleteContents();
-                    }
+                    sel.getRangeAt(0).deleteContents();
                 }
 
                 const currentRange = sel.getRangeAt(0);
@@ -130,11 +289,9 @@ Object.assign(Editor, {
                     sel.addRange(currentRange);
                 }
 
-                // Inserimento pulito tramite Range nativo
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = tableHTML;
 
-                // Sanificazione preventiva immediata del frammento prima dell'iniezione nel DOM
                 if (typeof Editor.cleanDOMTree === 'function') {
                     Editor.cleanDOMTree(tempDiv);
                 }
@@ -168,9 +325,6 @@ Object.assign(Editor, {
 
         // =========================================================================
         // RICONOSCIMENTO PAYLOAD EXCEL / OFFICE (Neutralizza immagine raster screenshot)
-        // Quando si copia da Excel, il sistema operativo riceve sempre anche un item 'image/png'.
-        // Se la clipboard contiene marcatori di foglio di calcolo o tabulazioni (\t), il file immagine
-        // è solo un render di compatibilità e non deve assolutamente sostituire il testo.
         // =========================================================================
         const isFromOfficeOrExcel = isSpreadsheetData || (pastedHTML && (
             pastedHTML.includes('excel') || 
@@ -180,64 +334,60 @@ Object.assign(Editor, {
         )) || (pastedText && pastedText.includes('\t'));
 
         const items = Array.from((e.clipboardData || e.originalEvent.clipboardData).items);
-        let isImage = false;
+        let isSinglePureImage = false;
 
-        // 1. GESTIONE IMMAGINI INCOLLATE (File immagine reale o screenshot autentico, MAI da Excel/Office)
-        if (!isSpreadsheetData && !isFromOfficeOrExcel) {
+        // 1. GESTIONE SCREENSHOT O SINGOLO FILE IMMAGINE PURO (Senza testo di contorno)
+        const hasTextContent = (pastedText && pastedText.trim().length > 0) || (pastedHTML && pastedHTML.replace(/<[^>]*>/g, '').trim().length > 0);
+        if (!isSpreadsheetData && !isFromOfficeOrExcel && !hasTextContent) {
             for (let item of items) {
                 if (item.kind === 'file' && item.type.includes('image/')) {
                     e.preventDefault();
-                    Editor.saveSnapshot();
-                    isImage = true;
+                    isSinglePureImage = true;
                     
-                    const blob = item.getAsFile();
+                    const fileOrBlob = item.getAsFile();
+                    if (!fileOrBlob) return;
 
-                    // Controllo peso per tutela prestazioni: Avvisa se > 200KB
-                    if (blob.size > 204800) {
-                        if (typeof UI !== 'undefined' && UI.showToast) {
-                            UI.showToast("Consiglio: L'immagine è pesante. Usa 'Inserisci > Collegamento (link) > Immagine Esterna' o comprimila per non rallentare l'App.", "warning");
-                        }
+                    Editor.saveSnapshot();
+
+                    if (typeof UI !== 'undefined' && UI.showToast) {
+                        UI.showToast(typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('editor_core.toast_saving_image') : "Salvataggio immagine su disco in corso...", "info");
                     }
 
-                    const reader = new FileReader();
-                    reader.onload = (ev) => {
-                        const img = new Image();
-                        img.onload = () => {
-                            const MAX_WIDTH = 1600;
-                            let width = img.width; let height = img.height;
-                            if (width > MAX_WIDTH) { height = Math.round((height * MAX_WIDTH) / width); width = MAX_WIDTH; }
-                            const canvas = document.createElement('canvas');
-                            canvas.width = width; canvas.height = height;
-                            canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+                    Editor.saveImageSource(fileOrBlob).then(saved => {
+                        if (!saved) return;
 
-                            const imgNode = document.createElement('img');
-                            imgNode.src = canvas.toDataURL('image/webp', 0.85);
-                            const pNode = document.createElement('p');
-                            pNode.innerHTML = '<br>';
+                        const imgNode = document.createElement('img');
+                        imgNode.src = saved.blobUrl;
+                        imgNode.setAttribute('data-image-ref', saved.fileName);
+                        imgNode.setAttribute('alt', 'Immagine');
+                        imgNode.setAttribute('onerror', 'Editor.handleImageError(this)');
 
-                            const curRange = sel.getRangeAt(0);
-                            curRange.deleteContents();
-                            curRange.insertNode(pNode);
-                            curRange.insertNode(imgNode);
+                        const pNode = document.createElement('p');
+                        pNode.innerHTML = '<br>';
 
-                            const newRange = document.createRange();
-                            newRange.setStart(pNode, 0);
-                            newRange.collapse(true);
-                            sel.removeAllRanges();
-                            sel.addRange(newRange);
-                        };
-                        img.src = ev.target.result;
-                    };
-                    reader.readAsDataURL(blob);
+                        const curRange = sel.getRangeAt(0);
+                        curRange.deleteContents();
+                        curRange.insertNode(pNode);
+                        curRange.insertNode(imgNode);
+
+                        const newRange = document.createRange();
+                        newRange.setStart(pNode, 0);
+                        newRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+
+                        if (typeof Store !== 'undefined') {
+                            Store.triggerAutoSave();
+                        }
+                    });
                     return;
                 }
             }
         }
 
-        if (isImage) return;
+        if (isSinglePureImage) return;
         
-        // Muro di Sicurezza Anti-Zombie: Se l'utente sta incollando su una selezione multipla,
-        // verifichiamo che non stia distruggendo un intero database visivo.
+        // Muro di Sicurezza Anti-Zombie su selezione multipla
         if (!sel.isCollapsed) {
             if (typeof Editor !== 'undefined' && Editor.handleBulkWidgetDeletion) {
                 if (!Editor.handleBulkWidgetDeletion()) {
@@ -250,16 +400,40 @@ Object.assign(Editor, {
         const isHeavyLoad = pastedText.length > 15000 || (pastedHTML && pastedHTML.length > 30000);
         e.preventDefault();
 
-        const processPaste = () => {
+        // =========================================================================
+        // ANCORAGGIO PREVENTIVO NEL DOM VIVO (Previene perdita del range su await)
+        // =========================================================================
+        const editorRootEl = document.getElementById('noteContent');
+        let preAsyncAnchorMarker = null;
+
+        if (sel.rangeCount > 0 && editorRootEl && editorRootEl.contains(sel.anchorNode)) {
+            const rawRange = sel.getRangeAt(0);
+            if (!rawRange.collapsed) {
+                rawRange.deleteContents();
+            }
+            preAsyncAnchorMarker = document.createElement('span');
+            preAsyncAnchorMarker.id = 'paste-anchor-temp-' + Date.now();
+            preAsyncAnchorMarker.style.display = 'none';
+            rawRange.insertNode(preAsyncAnchorMarker);
+        }
+
+        const processPaste = async () => {
             try {
                 Editor.saveSnapshot();
 
                 const rawPastedText = (pastedText || '').trim();
-                const isSingleWebUrl = /^https?:\/\/[^\s]+$/i.test(rawPastedText);
+                const hasImagesInHTML = pastedHTML && /<img\b/i.test(pastedHTML);
+                // Non trattare come URL web se l'HTML veicola immagini (es. Google Immagini che fornisce l'URL in text/plain)
+                const isSingleWebUrl = !hasImagesInHTML && /^https?:\/\/[^\s]+$/i.test(rawPastedText);
                 const isCodeContext = targetNode.closest && !!targetNode.closest('.code-content, [data-widget-type="code"]');
 
-                // Gestione incolla link web (Smart Link Wrap o inserimento link nativo pulito senza popup)
+                // Gestione incolla link web
                 if (!isInsideWidget && !isCodeContext && !snippetText && isSingleWebUrl) {
+                    if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                        preAsyncAnchorMarker.remove();
+                        preAsyncAnchorMarker = null;
+                    }
+
                     const currentRange = sel.getRangeAt(0);
 
                     // CASO 1: SELEZIONE PRESENTE (Smart Link Wrap)
@@ -311,6 +485,11 @@ Object.assign(Editor, {
                 }
 
                 if (isInsideWidget) {
+                    if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                        preAsyncAnchorMarker.remove();
+                        preAsyncAnchorMarker = null;
+                    }
+
                     const isEditable = WidgetManager.isInsideEditableWidgetArea(targetNode) || !!targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th');
                     
                     if (!isEditable) {
@@ -318,7 +497,6 @@ Object.assign(Editor, {
                         return;
                     }
 
-                    // Snippet copiabile e celle di tabelle semplici: gestione unificata e priva di selezioni persistenti
                     if (snippetText || targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th')) {
                         const inlineHtml = Editor._formatTextToInlineHTML(pastedText);
                         Editor._insertInlineHTMLAndCollapse(inlineHtml, sel.getRangeAt(0), sel);
@@ -359,28 +537,19 @@ Object.assign(Editor, {
                     return;
                 }
 
-                // =========================================================================
-                // ELIMINAZIONE PREVENTIVA SELEZIONE ESTESA MULTI-RIGA / MULTI-BLOCCO
-                // Se c'è testo selezionato su più paragrafi, viene prima eliminato nativamente
-                // lasciando il cursore collassato nel punto esatto per la sostituzione pulita.
-                // =========================================================================
-                if (!isInsideWidget && sel.rangeCount > 0 && !sel.isCollapsed) {
-                    try {
-                        document.execCommand('delete', false, null);
-                    } catch (_) {
-                        sel.getRangeAt(0).deleteContents();
-                    }
-                }
-
-                // Aggiornamento riferimento al nodo sotto il cursore dopo l'eventuale cancellazione
                 const freshSel = window.getSelection();
                 let currentTargetNode = (freshSel && freshSel.rangeCount > 0) ? freshSel.anchorNode : null;
                 if (currentTargetNode && currentTargetNode.nodeType === 3) currentTargetNode = currentTargetNode.parentNode;
 
                 let finalHTML = '';
 
-                // GESTIONE INCOLLA TESTO PIATTO (PLAIN TEXT)
+                // GESTIONE INCOLLA TESTO PIATTO
                 if (!pastedHTML) {
+                    if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                        preAsyncAnchorMarker.remove();
+                        preAsyncAnchorMarker = null;
+                    }
+
                     if (!currentTargetNode || !currentTargetNode.closest('td, th, li, pre')) {
                         if (!pastedText.includes('\n')) {
                             document.execCommand('insertText', false, pastedText);
@@ -400,17 +569,97 @@ Object.assign(Editor, {
                         return;
                     }
                 } else {
-                    // GESTIONE INCOLLA HTML (RICH TEXT: WORD, GOOGLE DOCS, EXCEL, SITI WEB)
-
-                    // PRE-PULIZIA ARTEFATTI WORD: Rimuove commenti condizionali MSO prima del parsing DOM
+                    // GESTIONE INCOLLA HTML (RICH TEXT CON IMMAGINI DA WORD/DOCS/WEB)
                     const cleanRawHTML = pastedHTML
-                        .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '')
-                        .replace(/<!\[if[\s\S]*?<!\[endif\]>/gi, '');
+                        .replace(/<!--\[if\s+gte\s+vml\s+1\][\s\S]*?<!\[endif\]-->/gi, '')
+                        .replace(/<!\[if\s+!vml\]>/gi, '')
+                        .replace(/<!\[endif\]>/gi, '')
+                        .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '');
 
                     const parser = new DOMParser();
                     const doc = parser.parseFromString(cleanRawHTML, 'text/html');
 
-                    // FASE 0: RIMOZIONE CONTENITORI FITTIZI DI GOOGLE DOCS, TAG INTRUSIVI E TAG PROPRIETARI OFFICE
+                    // =========================================================================
+                    // ELABORAZIONE E SALVATAGGIO FISICO DELLE IMMAGINI INCORPORATE NEL TESTO
+                    // =========================================================================
+                    const docImages = Array.from(doc.querySelectorAll('img'));
+
+                    if (docImages.length > 0) {
+                        const clipboardImageFiles = items
+                            .filter(it => it.kind === 'file' && it.type && it.type.startsWith('image/'))
+                            .map(it => it.getAsFile())
+                            .filter(Boolean);
+
+                        const rtfImages = Editor._extractImagesFromWordRTF(pastedRTF);
+
+                        let clipImgIdx = 0;
+                        let rtfImgIdx = 0;
+
+                        for (const imgEl of docImages) {
+                            let src = imgEl.getAttribute('src') || '';
+                            let saved = null;
+
+                            // Caso A: Immagine Base64 incorporata (Word, OneNote, rich text)
+                            if (src.startsWith('data:image/')) {
+                                saved = await Editor.saveImageSource(src);
+                            }
+                            // Caso B: Percorso locale file:/// di Word desktop -> risoluzione via RTF o file clipboard
+                            else if (src.startsWith('file:///') || src.startsWith('file:\\\\\\') || !src) {
+                                if (rtfImgIdx < rtfImages.length) {
+                                    saved = await Editor.saveImageSource(rtfImages[rtfImgIdx++]);
+                                } else if (clipImgIdx < clipboardImageFiles.length) {
+                                    saved = await Editor.saveImageSource(clipboardImageFiles[clipImgIdx++]);
+                                }
+                            }
+                            // Caso C: Immagine web remota (Google Docs, Google Immagini o siti web)
+                            else if (src.startsWith('http://') || src.startsWith('https://')) {
+                                saved = await Editor.saveImageSource(src);
+                            }
+
+                            if (saved) {
+                                imgEl.setAttribute('data-image-ref', saved.fileName);
+                                imgEl.setAttribute('src', saved.blobUrl);
+                                imgEl.setAttribute('onerror', 'Editor.handleImageError(this)');
+                            } else if (src.startsWith('file:///') || src.startsWith('file:\\\\\\')) {
+                                imgEl.remove();
+                            }
+                        }
+                    }
+
+                    // =========================================================================
+                    // INVERSIONE SEMANTICA E RISANAMENTO DEI LINK ANOMALI (<a> ATTORNO A BLOCCHI)
+                    // Garantisce che i link <a> non vengano persi, ma che nessun <p> stia dentro un <a>
+                    // =========================================================================
+                    doc.querySelectorAll('a').forEach(aEl => {
+                        const blocksInside = aEl.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, table, ul, ol, blockquote');
+                        if (blocksInside.length > 0) {
+                            // Se un <a> racchiude dei blocchi, inverte la gerarchia: ciascun blocco interno eredita il link
+                            const href = aEl.getAttribute('href');
+                            const targetAttr = aEl.getAttribute('target');
+                            const parent = aEl.parentNode;
+
+                            if (parent) {
+                                const frag = doc.createDocumentFragment();
+                                while (aEl.firstChild) {
+                                    const child = aEl.firstChild;
+                                    if (child.nodeType === Node.ELEMENT_NODE && ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(child.tagName)) {
+                                        // Avvolge il contenuto del blocco dentro un <a> con lo stesso href originario
+                                        const innerLink = doc.createElement('a');
+                                        if (href) innerLink.setAttribute('href', href);
+                                        if (targetAttr) innerLink.setAttribute('target', targetAttr);
+                                        while (child.firstChild) innerLink.appendChild(child.firstChild);
+                                        child.appendChild(innerLink);
+                                        frag.appendChild(child);
+                                    } else {
+                                        frag.appendChild(child);
+                                    }
+                                }
+                                parent.replaceChild(frag, aEl);
+                            }
+                        }
+                    });
+
+                    // FASE 0: RIMOZIONE TAG INTRUSIVI E PROPRIETARI OFFICE
                     doc.querySelectorAll('script, style, meta, link, iframe, object, embed, noscript, o\\:p, o-p, w\\:sdt').forEach(el => el.remove());
 
                     Array.from(doc.body.querySelectorAll('*')).forEach(el => {
@@ -420,14 +669,14 @@ Object.assign(Editor, {
                         }
                     });
 
-                    // Rimuove i commenti invisibili inseriti da Chrome/Word (es. <!--StartFragment-->)
+                    // Rimuove commenti invisibili
                     const iter = doc.createNodeIterator(doc.body, NodeFilter.SHOW_COMMENT, null, false);
                     let commentNode;
                     const commentsToRemove = [];
                     while ((commentNode = iter.nextNode())) commentsToRemove.push(commentNode);
                     commentsToRemove.forEach(c => c.remove());
 
-                    // Google Docs avvolge sistematicamente il contenuto in b/strong guid
+                    // Normalizzazione b/strong di Google Docs
                     doc.querySelectorAll('b, strong').forEach(bEl => {
                         const styleStr = (bEl.getAttribute('style') || '').toLowerCase();
                         const isNormal = bEl.style.fontWeight === 'normal' || bEl.style.fontWeight === '400' || /font-weight\s*:\s*(normal|[1-4]00)/.test(styleStr);
@@ -441,7 +690,7 @@ Object.assign(Editor, {
                         }
                     });
 
-                    // ZERO-FONT CONVERSION INIZIALE: Trasforma preventivamente qualsiasi tag FONT in SPAN
+                    // Conversione preventiva <font> in <span>
                     doc.querySelectorAll('font').forEach(fontEl => {
                         const span = doc.createElement('span');
                         while (fontEl.attributes.length > 0) {
@@ -452,7 +701,7 @@ Object.assign(Editor, {
                         fontEl.parentNode.replaceChild(span, fontEl);
                     });
 
-                    // FASE 0.5: INCAPSULAMENTO DEI TAG LI ORFANI NEL DOCUMENTO INCOLLATO (Previene <p><li>...</li></p>)
+                    // FASE 0.5: Incapsulamento tag <li> orfani
                     const orphanLis = Array.from(doc.body.children).filter(el => el.tagName === 'LI');
                     if (orphanLis.length > 0) {
                         const wrapUl = doc.createElement('ul');
@@ -460,10 +709,10 @@ Object.assign(Editor, {
                         orphanLis.forEach(li => wrapUl.appendChild(li));
                     }
 
-                    // FASE 0.8: CONVERSIONE DEGLI ELENCHI DI WORD (MsoListParagraph) IN VERI <ol> E <ul>
+                    // FASE 0.8: Conversione elenchi Word in <ol> e <ul>
                     Editor._convertWordListsToHTML(doc.body);
 
-                    // Ricostruisce ID validi per eventuali widget incollati (Copia Note interne)
+                    // Re-idratazione ID widget incollati
                     doc.querySelectorAll(WidgetManager.blockSelector).forEach(wrapper => {
                         const oldId = wrapper.id;
                         const type = wrapper.getAttribute('data-widget-type');
@@ -489,7 +738,7 @@ Object.assign(Editor, {
                         wrapper.innerHTML = ''; 
                     });
 
-                    // FASE 1: CONVERSIONE SEMANTICA PULITA (Bold, Italic, Underline, Strike) CON PRESERVAZIONE CLASSI VANILLADESK
+                    // FASE 1: Conversione semantica stili di testo
                     const allElements = Array.from(doc.body.querySelectorAll('*')).reverse();
 
                     allElements.forEach(el => {
@@ -599,7 +848,7 @@ Object.assign(Editor, {
                         }
                     });
 
-                    // FASE 2: SROTOLAMENTO STRUTTURALE DI <P> DENTRO <LI> (Google Docs clean-up)
+                    // FASE 2: Srotolamento <p> dentro <li>
                     doc.querySelectorAll('li > p').forEach(pInsideLi => {
                         const li = pInsideLi.parentNode;
                         if (li && li.tagName === 'LI' && li.children.length === 1) {
@@ -608,7 +857,7 @@ Object.assign(Editor, {
                         }
                     });
 
-                    // FASE 3: NORMALIZZAZIONE TOTALE CELLE TABELLE
+                    // FASE 3: Normalizzazione celle tabelle
                     doc.querySelectorAll('td, th').forEach(cell => {
                         cell.querySelectorAll('p, div').forEach(b => {
                             const parent = b.parentNode;
@@ -641,7 +890,7 @@ Object.assign(Editor, {
                         }
                     });
 
-                    // FASE 3.2: INCAPSULAMENTO TABELLE WORD/DOCS IN COMPONENTI NATIVI (.simple-table-wrapper)
+                    // FASE 3.2: Incapsulamento tabelle in .simple-table-wrapper
                     doc.querySelectorAll('table').forEach(tbl => {
                         if (tbl.closest('.adv-widget-shell, .simple-table-wrapper')) return;
 
@@ -673,72 +922,48 @@ Object.assign(Editor, {
                         });
                     });
 
-                    // FASE 4: SANIFICAZIONE PROFONDA UNIFICATA TRAMITE LA GOMMA FORMATTAZIONI (Editor.cleanDOMTree)
+                    // FASE 4: SANIFICAZIONE PROFONDA UNIFICATA (Editor.cleanDOMTree normalizza anche i <br> in <p>)
                     if (typeof Editor !== 'undefined' && typeof Editor.cleanDOMTree === 'function') {
                         Editor.cleanDOMTree(doc.body);
                     }
 
-                    // FASE 5: RISOLUZIONE RIGHE VUOTE SPURIE DI WORD 365
+                    // PULIZIA SELETTIVA DEI SOLI LINK FANTASMA VERAMENTE VUOTI:
+                    // Rimuove esclusivamente i tag <a> che non contengono testo e non contengono immagini/media
+                    doc.querySelectorAll('a').forEach(aEl => {
+                        if (aEl.classList.contains('internal-link') || aEl.classList.contains('file-link')) return;
+                        const text = (aEl.textContent || '').replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+                        const hasMedia = !!aEl.querySelector('img, audio, video, svg, iframe');
+                        if (!text && !hasMedia) {
+                            aEl.remove();
+                        }
+                    });
+
+                    // FASE 5: Rimozione nodi di testo vuoti ai margini del body (senza eliminare righe vuote intenzionali)
                     Array.from(doc.body.childNodes).forEach(node => {
                         if (node.nodeType === Node.TEXT_NODE && node.nodeValue.replace(/[\r\n\t\s]/g, '') === '') {
                             node.remove();
                         }
                     });
 
-                    doc.body.querySelectorAll('p, li, h1, h2, h3, h4, h5, h6, td, th').forEach(block => {
-                        while (block.lastChild && block.childNodes.length > 1) {
-                            if (block.lastChild.nodeType === Node.TEXT_NODE && !block.lastChild.nodeValue.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '')) {
-                                block.lastChild.remove();
-                            } else if (block.lastChild.nodeName === 'BR') {
-                                block.lastChild.remove();
-                            } else {
-                                break;
-                            }
-                        }
-                    });
-
-                    let prevWasEmpty = false;
-                    Array.from(doc.body.children).forEach(child => {
-                        const isBlock = ['P', 'DIV'].includes(child.tagName);
-                        if (isBlock) {
-                            const text = child.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
-                            const hasMedia = child.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
-                            const isEmpty = !text && !hasMedia;
-
-                            if (isEmpty) {
-                                if (prevWasEmpty) {
-                                    child.remove();
-                                } else {
-                                    child.innerHTML = '<br>';
-                                    prevWasEmpty = true;
-                                }
-                            } else {
-                                prevWasEmpty = false;
-                            }
-                        } else {
-                            prevWasEmpty = false;
-                        }
-                    });
-
+                    // Rimozione nodi vuoti orfani estremi solo se il documento ha più di un elemento
                     while (doc.body.firstElementChild && ['P', 'DIV'].includes(doc.body.firstElementChild.tagName) && doc.body.children.length > 1) {
                         const first = doc.body.firstElementChild;
                         const text = first.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
                         const hasMedia = first.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
-                        if (!text && !hasMedia) first.remove();
+                        if (!text && !hasMedia && first.querySelectorAll('br').length === 0) first.remove();
                         else break;
                     }
                     while (doc.body.lastElementChild && ['P', 'DIV'].includes(doc.body.lastElementChild.tagName) && doc.body.children.length > 1) {
                         const last = doc.body.lastElementChild;
                         const text = last.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
                         const hasMedia = last.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
-                        if (!text && !hasMedia) last.remove();
+                        if (!text && !hasMedia && last.querySelectorAll('br').length === 0) last.remove();
                         else break;
                     }
 
                     finalHTML = doc.body.innerHTML;
                     finalHTML = finalHTML.replace(/^[\r\n\t]+|[\r\n\t]+$/g, '');
                     finalHTML = finalHTML.replace(/<span[^>]*class="Apple-converted-space"[^>]*>.*?<\/span>/gi, '&nbsp;');
-                    finalHTML = finalHTML.replace(/<a(?![^>]*class=["'][^"']*(internal-link|file-link)[^"']*["'])[^>]*>\s*(<br\s*\/?>)?\s*<\/a>/gi, '');
 
                     // Trattamento spazi iniziale e finale deterministico
                     const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|li|blockquote|pre)>/i.test(finalHTML);
@@ -753,15 +978,16 @@ Object.assign(Editor, {
                 }
 
                 // =========================================================================
-                // MOTORE DI FUSIONE PARAGRAFI NATURALE (BLOCK MERGING - WORD/DOCS PARITY)
-                // - Se il contenuto è INLINE (1 blocco o testo semplice), si fonde nel paragrafo
-                //   corrente tra testo precedente e successivo, senza spezzare la riga.
-                // - Se sono PIÙ BLOCCHI: il primo si fonde con la testa, l'ultimo con la coda,
-                //   ed i blocchi intermedi si inseriscono in mezzo come veri paragrafi.
+                // INSERIMENTO NEL DOM E FUSIONE NATURALE PARAGRAFI
                 // =========================================================================
-                const currentSel = window.getSelection();
-                if (!currentSel.rangeCount) return;
-                const currentRange = currentSel.getRangeAt(0);
+                const tempDiv = document.createElement('div');
+                tempDiv.innerHTML = finalHTML;
+
+                Array.from(tempDiv.childNodes).forEach(node => {
+                    if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
+                        node.remove();
+                    }
+                });
 
                 const isSimpleTextBlock = (el) => {
                     if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
@@ -778,46 +1004,78 @@ Object.assign(Editor, {
                            el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper');
                 };
 
-                let containerNode = currentRange.startContainer;
-                let targetBlock = containerNode.nodeType === 3 ? containerNode.parentNode : containerNode;
-                targetBlock = targetBlock.closest ? targetBlock.closest('p, div, li, h1, h2, h3, h4, h5, h6, blockquote') : null;
-                if (targetBlock && targetBlock.id === 'noteContent') targetBlock = null;
-
-                const tempDiv = document.createElement('div');
-                tempDiv.innerHTML = finalHTML;
-
-                // Rimuove nodi di testo di whitespace vuoti tra blocchi per prevenire paragrafi fantasma
-                Array.from(tempDiv.childNodes).forEach(node => {
-                    if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
-                        node.remove();
-                    }
-                });
-
                 const hasAnyBlocks = Array.from(tempDiv.children).some(isBlockElement);
                 let caretTargetNode = null;
                 let caretTargetOffset = 0;
 
-                // CASO A: Contenuto puramente inline (parole, frasi, formattazioni senza tag di blocco)
+                // Determinazione del blocco contenitore (targetBlock) usando l'ancora o la selezione
+                let targetBlock = null;
+                if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                    targetBlock = preAsyncAnchorMarker.closest('p, div, li, h1, h2, h3, h4, h5, h6, blockquote');
+                    if (targetBlock && targetBlock.id === 'noteContent') targetBlock = null;
+                }
+
+                // CASO A: Contenuto puramente inline (es. immagine singola, frase o link)
                 if (!hasAnyBlocks || !targetBlock) {
                     const frag = document.createDocumentFragment();
-                    while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+
+                    if (!targetBlock && !hasAnyBlocks) {
+                        let curP = document.createElement('p');
+                        while (tempDiv.firstChild) {
+                            const c = tempDiv.firstChild;
+                            if (c.nodeType === Node.ELEMENT_NODE && c.tagName === 'BR') {
+                                c.remove();
+                                if (curP.childNodes.length === 0) curP.innerHTML = '<br>';
+                                frag.appendChild(curP);
+                                curP = document.createElement('p');
+                            } else {
+                                curP.appendChild(c);
+                            }
+                        }
+                        if (curP.childNodes.length > 0) {
+                            frag.appendChild(curP);
+                        } else if (frag.childNodes.length === 0) {
+                            curP.innerHTML = '<br>';
+                            frag.appendChild(curP);
+                        }
+                    } else {
+                        while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+                    }
+
                     const lastNode = frag.lastChild;
-                    currentRange.deleteContents();
-                    currentRange.insertNode(frag);
+
+                    if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                        preAsyncAnchorMarker.parentNode.insertBefore(frag, preAsyncAnchorMarker);
+                        preAsyncAnchorMarker.remove();
+                        preAsyncAnchorMarker = null;
+                    } else if (sel.rangeCount > 0) {
+                        const curRange = sel.getRangeAt(0);
+                        curRange.deleteContents();
+                        curRange.insertNode(frag);
+                    } else if (editorRootEl) {
+                        editorRootEl.appendChild(frag);
+                    }
+
                     if (lastNode) {
                         caretTargetNode = lastNode;
                         caretTargetOffset = lastNode.nodeType === Node.TEXT_NODE ? lastNode.nodeValue.length : 1;
                     }
                 } else {
-                    // CASO B: Il contenuto incollato contiene uno o più blocchi
+                    // CASO B: Contenuto strutturato con blocchi multipli
                     const normalizedBlocks = [];
                     let inlineBuffer = [];
 
                     const flushInlineBuffer = () => {
                         if (inlineBuffer.length > 0) {
+                            // Riconosce nodi con testo reale O elementi multimediali/immagini (anche se racchiusi in tag <a> o <span>)
                             const hasRealContent = inlineBuffer.some(n => 
                                 (n.nodeType === Node.TEXT_NODE && n.nodeValue.replace(/[\r\n\t\s\u200B\uFEFF]/g, '') !== '') ||
-                                (n.nodeType === Node.ELEMENT_NODE && (n.tagName === 'BR' || n.tagName === 'IMG' || n.textContent.trim() !== ''))
+                                (n.nodeType === Node.ELEMENT_NODE && (
+                                    n.tagName === 'BR' || 
+                                    n.tagName === 'IMG' || 
+                                    n.querySelector('img, audio, video, iframe, input, svg') !== null || 
+                                    n.textContent.trim() !== ''
+                                ))
                             );
                             if (hasRealContent) {
                                 const p = document.createElement('p');
@@ -832,6 +1090,11 @@ Object.assign(Editor, {
                         if (isBlockElement(node)) {
                             flushInlineBuffer();
                             normalizedBlocks.push(node);
+                        } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
+                            flushInlineBuffer();
+                            const p = document.createElement('p');
+                            p.innerHTML = '<br>';
+                            normalizedBlocks.push(p);
                         } else {
                             inlineBuffer.push(node);
                         }
@@ -842,7 +1105,6 @@ Object.assign(Editor, {
                                           !targetBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell');
 
                     if (isTargetEmpty) {
-                        // Paragrafo corrente vuoto: viene sostituito integralmente dai blocchi incollati
                         const parent = targetBlock.parentNode;
                         let lastInserted = null;
                         normalizedBlocks.forEach(b => {
@@ -856,122 +1118,54 @@ Object.assign(Editor, {
                             caretTargetOffset = isBlockElement(lastInserted) ? -1 : lastInserted.childNodes.length;
                         }
                     } else {
-                        // Paragrafo corrente non vuoto: estrazione della coda e fusione contestuale
-                        const postRange = currentRange.cloneRange();
-                        postRange.selectNodeContents(targetBlock);
-                        postRange.setStart(currentRange.startContainer, currentRange.startOffset);
-                        const tailFrag = postRange.extractContents();
+                        // Inserimento con preservazione del punto d'ancoraggio nel blocco
+                        const frag = document.createDocumentFragment();
+                        normalizedBlocks.forEach(b => frag.appendChild(b));
+                        const lastNode = frag.lastChild;
 
-                        while (targetBlock.lastChild && targetBlock.lastChild.nodeName === 'BR' && targetBlock.childNodes.length > 1) {
-                            targetBlock.lastChild.remove();
+                        if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                            preAsyncAnchorMarker.parentNode.insertBefore(frag, preAsyncAnchorMarker);
+                            preAsyncAnchorMarker.remove();
+                            preAsyncAnchorMarker = null;
+                        } else {
+                            targetBlock.parentNode.insertBefore(frag, targetBlock.nextSibling);
                         }
 
-                        if (normalizedBlocks.length === 1 && isSimpleTextBlock(normalizedBlocks[0])) {
-                            // SINGOLO BLOCCO: Fonde tutto inline dentro targetBlock senza spezzare la riga
-                            const singleBlock = normalizedBlocks[0];
-                            const caretMarker = document.createTextNode('');
-
-                            while (singleBlock.firstChild) {
-                                targetBlock.appendChild(singleBlock.firstChild);
-                            }
-
-                            targetBlock.appendChild(caretMarker);
-                            targetBlock.appendChild(tailFrag);
-
-                            if (targetBlock.childNodes.length === 0) {
-                                targetBlock.innerHTML = '<br>';
-                            }
-
-                            const newRange = document.createRange();
-                            newRange.setStartAfter(caretMarker);
-                            newRange.collapse(true);
-                            currentSel.removeAllRanges();
-                            currentSel.addRange(newRange);
-                            caretMarker.remove();
-                        } else {
-                            // DUE O PIÙ BLOCCHI: Fusione primo con la testa, ultimo con la coda
-                            const firstBlock = normalizedBlocks[0];
-                            const lastBlock = normalizedBlocks[normalizedBlocks.length - 1];
-                            let middleBlocks = normalizedBlocks.slice(1, -1);
-
-                            // Rispetto semantico delle liste: se ci troviamo dentro un <li>, tutti i blocchi devono essere <li>
-                            const isInsideList = targetBlock.tagName === 'LI';
-                            if (isInsideList) {
-                                middleBlocks = middleBlocks.map(b => {
-                                    if (b.tagName !== 'LI') {
-                                        const li = document.createElement('li');
-                                        if (targetBlock.className) li.className = targetBlock.className;
-                                        while (b.firstChild) li.appendChild(b.firstChild);
-                                        return li;
-                                    }
-                                    return b;
-                                });
-                            }
-
-                            if (isSimpleTextBlock(firstBlock)) {
-                                while (firstBlock.firstChild) {
-                                    targetBlock.appendChild(firstBlock.firstChild);
-                                }
-                            } else {
-                                targetBlock.parentNode.insertBefore(firstBlock, targetBlock.nextSibling);
-                            }
-
-                            let insertRef = targetBlock;
-                            middleBlocks.forEach(b => {
-                                targetBlock.parentNode.insertBefore(b, insertRef.nextSibling);
-                                insertRef = b;
-                            });
-
-                            if (isSimpleTextBlock(lastBlock)) {
-                                let finalBlock = lastBlock;
-                                if (isInsideList && lastBlock.tagName !== 'LI') {
-                                    const li = document.createElement('li');
-                                    if (targetBlock.className) li.className = targetBlock.className;
-                                    while (lastBlock.firstChild) li.appendChild(lastBlock.firstChild);
-                                    finalBlock = li;
-                                }
-
-                                const caretMarker = document.createTextNode('');
-                                finalBlock.appendChild(caretMarker);
-                                finalBlock.appendChild(tailFrag);
-                                targetBlock.parentNode.insertBefore(finalBlock, insertRef.nextSibling);
-
-                                const newRange = document.createRange();
-                                newRange.setStartAfter(caretMarker);
-                                newRange.collapse(true);
-                                currentSel.removeAllRanges();
-                                currentSel.addRange(newRange);
-                                caretMarker.remove();
-                            } else {
-                                targetBlock.parentNode.insertBefore(lastBlock, insertRef.nextSibling);
-                                insertRef = lastBlock;
-
-                                const hasTailContent = tailFrag.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() !== '' ||
-                                                       tailFrag.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
-                                if (hasTailContent) {
-                                    const nextP = document.createElement(targetBlock.tagName || 'p');
-                                    nextP.appendChild(tailFrag);
-                                    targetBlock.parentNode.insertBefore(nextP, insertRef.nextSibling);
-                                    
-                                    const newRange = document.createRange();
-                                    newRange.setStart(nextP, 0);
-                                    newRange.collapse(true);
-                                    currentSel.removeAllRanges();
-                                    currentSel.addRange(newRange);
-                                } else {
-                                    const newRange = document.createRange();
-                                    newRange.setStartAfter(lastBlock);
-                                    newRange.collapse(true);
-                                    currentSel.removeAllRanges();
-                                    currentSel.addRange(newRange);
-                                }
-                            }
+                        if (lastNode) {
+                            caretTargetNode = lastNode;
+                            caretTargetOffset = isBlockElement(lastNode) ? -1 : lastNode.childNodes.length;
                         }
                     }
                 }
 
-                // Posizionamento cursore su sostituzione blocco vuoto
-                if (caretTargetNode && document.body.contains(caretTargetNode)) {
+                // =========================================================================
+                // NORMALIZZAZIONE STRUTTURALE ROOT: QUALSIASI INLINE ORFANO VIENE AVVOLTO IN <p>
+                // Impedisce che tag <a> o <img> restino nudi direttamente sotto #noteContent
+                // =========================================================================
+                if (editorRootEl) {
+                    Array.from(editorRootEl.childNodes).forEach(node => {
+                        if (node.nodeType === Node.ELEMENT_NODE) {
+                            const isBlock = isBlockElement(node);
+                            if (!isBlock) {
+                                const p = document.createElement('p');
+                                editorRootEl.insertBefore(p, node);
+                                p.appendChild(node);
+                            }
+                        } else if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== '') {
+                            const p = document.createElement('p');
+                            editorRootEl.insertBefore(p, node);
+                            p.appendChild(node);
+                        }
+                    });
+                }
+
+                // Ripristino del cursore e del focus
+                if (editorRootEl && document.activeElement !== editorRootEl && !editorRootEl.contains(document.activeElement)) {
+                    editorRootEl.focus({ preventScroll: true });
+                }
+
+                const finalSel = window.getSelection();
+                if (caretTargetNode && document.body.contains(caretTargetNode) && finalSel) {
                     const newRange = document.createRange();
                     if (caretTargetNode.nodeType === Node.TEXT_NODE) {
                         const safeOffset = Math.min(caretTargetOffset, caretTargetNode.nodeValue.length);
@@ -984,13 +1178,26 @@ Object.assign(Editor, {
                         newRange.setStartAfter(caretTargetNode);
                         newRange.collapse(true);
                     }
-                    currentSel.removeAllRanges();
-                    currentSel.addRange(newRange);
+                    finalSel.removeAllRanges();
+                    finalSel.addRange(newRange);
+                    if (typeof Editor !== 'undefined') {
+                        Editor.savedRange = newRange.cloneRange();
+                    }
                 }
 
                 Editor._ensureLastLineBreak(document.getElementById('noteContent'));
                 if (typeof Editor.healFontArtifacts === 'function') {
                     Editor.healFontArtifacts(document.getElementById('noteContent'));
+                }
+
+                // Sincronizzazione immediata della nota in RAM
+                if (AppState.currentNoteId) {
+                    const note = Store.getNote(AppState.currentNoteId);
+                    if (note && typeof Editor.getCleanHTML === 'function') {
+                        note.content = Editor.getCleanHTML();
+                        note._isDirty = true;
+                        note.updatedAt = new Date().toISOString();
+                    }
                 }
 
                 if (typeof WidgetManager !== 'undefined') {
@@ -999,6 +1206,9 @@ Object.assign(Editor, {
                 }
 
             } finally {
+                if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                    preAsyncAnchorMarker.remove();
+                }
             }
         };
 

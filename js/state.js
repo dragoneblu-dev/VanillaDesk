@@ -8,6 +8,7 @@
  * o fixture di test prima del popolamento esplicito dell'array columns.
  * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto a findNext/findPrevious per note senza tag/proprietà valorizzata.
  * FIX DATE RANGE & NOTE LINK MATCHING: Risoluzione simmetrica delle date intervallo e note_link nella navigazione tra riscontri.
+ * FIX WHITESPACE SEARCH MATCHING: Equiparazione trasparente di \u00A0 (&nbsp;) allo spazio standard per findNext e findPrevious.
  */
 
 const AppState = {
@@ -158,7 +159,8 @@ const AppState = {
         let currentIndex = flatNotes.findIndex(n => n.id === AppState.currentNoteId);
         if (currentIndex === -1) currentIndex = 0;
 
-        const term = AppState.searchFilter.toLowerCase();
+        const rawTerm = AppState.searchFilter ? AppState.searchFilter.toLowerCase() : "";
+        const term = rawTerm ? rawTerm.replace(/\u00A0/g, ' ') : "";
         const activePropFilters = AppState.activePropertyFilters || [];
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
@@ -209,12 +211,12 @@ const AppState = {
 
                             // Array (Multi-select)
                             if (Array.isArray(cellVal)) {
-                                return cellVal.some(v => String(v).toLowerCase() === String(f.realValue).toLowerCase());
+                                return cellVal.some(v => String(v).toLowerCase().replace(/\u00A0/g, ' ') === String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
                             }
 
                             // Date Range con oggetto {start, end}
                             if (typeof cellVal === 'object' && cellVal !== null) {
-                                const searchLower = String(f.realValue).toLowerCase();
+                                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
                                 const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
                                 if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
                                 const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
@@ -224,15 +226,15 @@ const AppState = {
 
                             // Note Link con oggetto {noteId, title, anchor}
                             if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
-                                const searchLower = String(f.realValue).toLowerCase();
-                                const titleStr = (cellVal.title || '').toLowerCase();
+                                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
+                                const titleStr = (cellVal.title || '').toLowerCase().replace(/\u00A0/g, ' ');
                                 if (titleStr.includes(searchLower)) return true;
                                 if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
                                 return false;
                             }
 
                             // Testo/Numero semplice
-                            return String(cellVal || '').toLowerCase().includes(String(f.realValue).toLowerCase());
+                            return String(cellVal || '').toLowerCase().replace(/\u00A0/g, ' ').includes(String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
                         });
                         if (!satisfiesAll) isValidMatch = false;
                     }
@@ -247,7 +249,7 @@ const AppState = {
                 let favoriteMatch = false;
 
                 if (term) {
-                    titleMatch = (note.title || "").toLowerCase().includes(term);
+                    titleMatch = (note.title || "").toLowerCase().replace(/\u00A0/g, ' ').includes(term);
                     contentMatch = UI.extractSearchableText(note.content || "").toLowerCase().includes(term);
                 }
                 
@@ -293,7 +295,7 @@ const AppState = {
         if (targetMark) {
             // Delega la formattazione e il contrasto esclusivamente alla classe CSS active-highlight
             targetMark.classList.add('active-highlight');
-            targetMark.style.backgroundColor = '';
+            targetMark.style.backgroundColor = ''; 
             
             let curr = targetMark;
             while (curr && curr.id !== 'noteContent') {

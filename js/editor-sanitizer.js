@@ -6,11 +6,12 @@
  * - Sanificazione centralizzata per testi brevi (sanitizeMiniText).
  * - Auto-riparazione degli span parassiti con font-size inline (healFontArtifacts).
  * - Ripristino ed estirpazione cuscinetti ZWS attorno ai widget inline (ensureInlineWidgetBuffers).
- * - Normalizzazione dei blocchi vuoti (_normalizeEmptyBlocks).
+ * - Normalizzazione dei blocchi vuoti (_normalizeEmptyBlocks), con conversione dei blocchi con <br> multipli in <p><br></p> e bonifica dei <br> orfani a livello root.
  * - Minificazione e serializzazione protetta per il salvataggio (minifyHTMLForStorage, getCleanHTML, sanitizeContent).
  * - Gestione evidenziazioni di ricerca prima e dopo il salvataggio (applyHighlight, cleanHighlightsBeforeSave).
  * - Scansione e supporto per match cross-node di termini multi-parola separati da tag inline (es. "ciao <b>bello</b>").
  * - Pulizia centralizzata cache in RAM (cleanOrphanedCaches).
+ * - FEAT EXACT WHITESPACE HIGHLIGHTING: Preservazione degli spazi e trasparenza regex verso \u00A0 (&nbsp;).
  */
 
 Object.assign(Editor, {
@@ -21,15 +22,15 @@ Object.assign(Editor, {
     sanitizeMiniText: (rawHTML) => {
         if (!rawHTML || typeof rawHTML !== 'string') return '';
 
-        // 1. Pre-conversione dei tag a blocco in ritorni a capo ed elementi di lista con punto elenco
+        // 1. Pre-conversione dei tag a blocco in ritorni a capo ed elementi di lista con punto elenco.
+        // I contenitori strutturali (ul, ol, tbody, thead, tfoot) vengono rimossi per non duplicare le interruzioni di riga;
+        // i tag di apertura generano un singolo <br>, mentre i tag di chiusura vengono rimossi senza inserire ritorni doppi.
         let html = rawHTML
-            .replace(/<div[^>]*>/gi, '<br>')
-            .replace(/<\/div>/gi, '')
-            .replace(/<p[^>]*>/gi, '<br>')
-            .replace(/<\/p>/gi, '')
             .replace(/<li[^>]*>/gi, '<br>• ')
-            .replace(/<\/li>/gi, '')
-            .replace(/<\/?(ul|ol|h[1-6]|blockquote|tr|table|tbody|thead|tfoot|header|footer|section|article|aside)[^>]*>/gi, '<br>');
+            .replace(/<\/li\s*>/gi, '')
+            .replace(/<\/?(ul|ol|tbody|thead|tfoot)[^>]*>/gi, '')
+            .replace(/<(p|div|h[1-6]|blockquote|table|tr|header|footer|section|article|aside)[^>]*>/gi, '<br>')
+            .replace(/<\/(p|div|h[1-6]|blockquote|table|tr|header|footer|section|article|aside)\s*>/gi, '');
 
         const doc = new DOMParser().parseFromString(`<div>${html}</div>`, 'text/html');
         const container = doc.body.firstElementChild;
@@ -336,6 +337,19 @@ Object.assign(Editor, {
     },
 
     _normalizeEmptyBlocks: (rootNode) => {
+        if (!rootNode) return;
+
+        // 1. BONIFICA DEI <br> ORFANI DIRETTI A LIVELLO ROOT (#noteContent > br)
+        // Trasforma ogni <br> orfano a livello radice in un proprio paragrafo standard <p><br></p>
+        Array.from(rootNode.children).forEach(child => {
+            if (child.tagName === 'BR') {
+                const p = document.createElement('p');
+                p.innerHTML = '<br>';
+                rootNode.replaceChild(p, child);
+            }
+        });
+
+        // 2. NORMALIZZAZIONE DEI BLOCCHI DI TESTO
         const blockTags = ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'];
         const elements = Array.from(rootNode.querySelectorAll(blockTags.join(',')));
 
@@ -347,6 +361,28 @@ Object.assign(Editor, {
             const tag = el.tagName;
             const innerHTML = el.innerHTML;
             const cleanText = el.innerText.replace(/\u200B/g, '').trim();
+
+            // Normalizzazione dei blocchi con <br> multipli (es. <p><br><br><br><br></p>) in singoli <p><br></p>
+            if ((tag === 'P' || tag === 'DIV') && !el.closest('table, td, th, ul, ol, li, pre, code, .adv-widget-shell, .adv-inline-shell, .inline-note-wrapper')) {
+                const textOnly = el.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+                const hasMedia = el.querySelector('img, audio, iframe, input, svg, hr, table, .adv-widget-shell');
+                const brCount = el.querySelectorAll('br').length;
+
+                if (!textOnly && !hasMedia && brCount > 1) {
+                    const parent = el.parentNode;
+                    if (parent) {
+                        const frag = document.createDocumentFragment();
+                        for (let i = 0; i < brCount; i++) {
+                            const p = document.createElement('p');
+                            p.innerHTML = '<br>';
+                            if (el.hasAttribute('class')) p.className = el.className;
+                            frag.appendChild(p);
+                        }
+                        parent.replaceChild(frag, el);
+                        return;
+                    }
+                }
+            }
 
             // Rimuove tag P parassiti completamente vuoti (<p></p>) lasciati da mutazioni o split di Blink
             if (tag === 'P' && innerHTML === '' && cleanText === '' && rootNode.children.length > 1) {
@@ -479,18 +515,22 @@ Object.assign(Editor, {
     },
 
     applyHighlight: (elementOrHtml, term) => {
-        if (!term) return elementOrHtml;
+        if (!term || typeof term !== 'string') return elementOrHtml;
         const isString = typeof elementOrHtml === 'string';
         const root = isString ? document.createElement('div') : elementOrHtml;
         if (isString) root.innerHTML = elementOrHtml;
 
-        const cleanTerm = term.trim();
-        if (!cleanTerm) return elementOrHtml;
+        // Se la stringa contiene solo spazi vuoti, non applicare evidenziazioni globali a vuoto
+        if (term.trim() === '') return elementOrHtml;
 
-        const safeTerm = cleanTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Preserva gli spazi iniziali e finali intenzionali digitati dall'utente
+        // E rende la regex trasparente rispetto a spazi normali (\u0020) e non-breaking spaces (\u00A0 / &nbsp;)
+        const cleanTerm = term;
+        const escapedTerm = cleanTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        const safeTerm = escapedTerm.replace(/[ \u00A0]/g, '[ \\u00A0]');
         const regex = new RegExp(`(${safeTerm})`, 'gi');
 
-        // FASE 1: Fast-Path standard su singoli nodi di testo (copre termini monoriga e parole singole)
+        // FASE 1: Fast-Path standard su singoli nodi di testo (copre termini monoriga e parole singole con spazi)
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
         const nodesToReplace = [];
 
@@ -507,7 +547,9 @@ Object.assign(Editor, {
             const fragment = document.createDocumentFragment();
             const parts = textNode.nodeValue.split(regex);
             parts.forEach(part => {
-                if (part.toLowerCase() === cleanTerm.toLowerCase()) {
+                const normPart = part.replace(/\u00A0/g, ' ').toLowerCase();
+                const normTerm = cleanTerm.replace(/\u00A0/g, ' ').toLowerCase();
+                if (normPart === normTerm) {
                     const mark = document.createElement('mark');
                     mark.className = 'search-highlight';
                     mark.textContent = part;
@@ -520,21 +562,19 @@ Object.assign(Editor, {
         });
 
         // FASE 2: Cross-Node Boundary Matching (per ricerche multi-parola separate da tag come "ciao <b>bello</b>")
-        // Se il termine contiene spazi, verifichiamo se esistono blocchi contenitori il cui textContent matcha il termine
-        // ma i cui singoli TextNode non hanno potuto essere intercettati dalla FASE 1 a causa di tag inline intermedi.
-        if (cleanTerm.includes(' ')) {
+        if (cleanTerm.includes(' ') || cleanTerm.includes('\u00A0')) {
             const blockSelector = 'p, div, li, h1, h2, h3, h4, h5, h6, blockquote, td, th';
             const blocks = Array.from(root.querySelectorAll(blockSelector)).filter(b => {
                 return !b.querySelector(blockSelector) && !WidgetManager.isTotallyProtected(b);
             });
 
-            const lowerSearchTerm = cleanTerm.toLowerCase();
+            const normSearchTerm = cleanTerm.replace(/\u00A0/g, ' ').toLowerCase();
 
             blocks.forEach(block => {
-                const fullText = block.textContent || '';
+                const fullText = (block.textContent || '').replace(/\u00A0/g, ' ');
                 const lowerFullText = fullText.toLowerCase();
 
-                let searchIdx = lowerFullText.indexOf(lowerSearchTerm);
+                let searchIdx = lowerFullText.indexOf(normSearchTerm);
                 if (searchIdx === -1) return;
 
                 // Raccoglie tutti i nodi di testo del blocco ignorando quelli già dentro un <mark>
@@ -560,7 +600,7 @@ Object.assign(Editor, {
                 // Per ogni occorrenza trovata nel blocco
                 while (searchIdx !== -1) {
                     const matchStart = searchIdx;
-                    const matchEnd = searchIdx + cleanTerm.length;
+                    const matchEnd = searchIdx + normSearchTerm.length;
 
                     // Trova i nodi di testo che intersecano l'intervallo [matchStart, matchEnd]
                     const intersecting = textNodesInfo.filter(info => {
@@ -599,7 +639,7 @@ Object.assign(Editor, {
                         });
                     }
 
-                    searchIdx = lowerFullText.indexOf(lowerSearchTerm, matchEnd);
+                    searchIdx = lowerFullText.indexOf(normSearchTerm, matchEnd);
                 }
             });
         }

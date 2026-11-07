@@ -6,6 +6,7 @@
  * Riquadro informativo e statistiche globali del Workspace in fondo alla Home Dashboard (in stile chip/proprietà).
  * FIX SYNC IMMEDIATO: confirmCitation sincronizza istantaneamente curNote.content in RAM per prevenire
  * sovrascritture stantie prima del debounce dell'autosave.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 const CitationManager = {
@@ -376,7 +377,7 @@ const CitationManager = {
 
         // 1. Note attive
         chipsHtml += buildChip(
-            I18n.t('home_dashboard.stat_active_notes') || "Note Attive",
+            I18n.t('home_dashboard.stat_active_notes'),
             activeNotesCount.toLocaleString(),
             `<span style="color:var(--accent-color);">${typeof Icons !== 'undefined' ? Icons.file : '📄'}</span>`
         );
@@ -384,7 +385,7 @@ const CitationManager = {
         // 2. Note nel cestino (evidenziate se presenti)
         if (trashedNotesCount > 0) {
             chipsHtml += buildChip(
-                I18n.t('home_dashboard.stat_trash') || "Nel Cestino",
+                I18n.t('home_dashboard.stat_trash'),
                 `<span style="color:var(--danger-color); cursor:pointer;" onclick="UI.Trash.open()">${trashedNotesCount.toLocaleString()}</span>`,
                 `<span style="color:var(--danger-color);">${typeof Icons !== 'undefined' ? Icons.trash : '🗑️'}</span>`
             );
@@ -393,7 +394,7 @@ const CitationManager = {
         // 3. Database Relazionali
         if (relationalDbCount > 0) {
             chipsHtml += buildChip(
-                I18n.t('home_dashboard.stat_databases') || "Database Relazionali",
+                I18n.t('home_dashboard.stat_databases'),
                 relationalDbCount.toLocaleString(),
                 `<span style="color:var(--accent-color);">${typeof Icons !== 'undefined' ? Icons.tableDatabase : '📊'}</span>`
             );
@@ -402,7 +403,7 @@ const CitationManager = {
         // 4. Viste / Dashboard / Pivot
         if (viewsCount > 0) {
             chipsHtml += buildChip(
-                I18n.t('home_dashboard.stat_views') || "Viste / Dashboard",
+                I18n.t('home_dashboard.stat_views'),
                 viewsCount.toLocaleString(),
                 `<span style="color:var(--tx-c4);">${typeof Icons !== 'undefined' ? Icons.tablePivot : '📈'}</span>`
             );
@@ -411,7 +412,7 @@ const CitationManager = {
         // 5. Template salvati
         if (templatesCount > 0) {
             chipsHtml += buildChip(
-                I18n.t('home_dashboard.stat_templates') || "Template",
+                I18n.t('home_dashboard.stat_templates'),
                 `<span style="cursor:pointer;" onclick="TemplateManager.openManager()">${templatesCount.toLocaleString()}</span>`,
                 `<span style="color:var(--tx-c7);">${typeof Icons !== 'undefined' ? Icons.tableSimple : '📑'}</span>`
             );
@@ -419,16 +420,16 @@ const CitationManager = {
 
         // 6. Sicurezza & Crittografia
         const securityValHtml = isEncrypted
-            ? `<span style="color:var(--accent-color);">${I18n.t('home_dashboard.stat_encrypted') || 'Protetto AES-GCM 256-bit'}</span>`
-            : `<span style="color:var(--text-secondary); opacity:0.8;">${I18n.t('home_dashboard.stat_plain') || 'In Chiaro'}</span>`;
+            ? `<span style="color:var(--accent-color);">${I18n.t('home_dashboard.stat_encrypted')}</span>`
+            : `<span style="color:var(--text-secondary); opacity:0.8;">${I18n.t('home_dashboard.stat_plain')}</span>`;
 
         chipsHtml += buildChip(
-            I18n.t('home_dashboard.stat_security') || "Sicurezza Disco",
+            I18n.t('home_dashboard.stat_security'),
             securityValHtml,
             `<span style="color:${isEncrypted ? 'var(--accent-color)' : 'var(--text-secondary)'};">${typeof Icons !== 'undefined' ? Icons.lock : '🔒'}</span>`
         );
 
-        const bannerTitle = I18n.t('home_dashboard.ws_stats_title') || "PANORAMICA E STATISTICHE WORKSPACE";
+        const bannerTitle = I18n.t('home_dashboard.ws_stats_title');
 
         statsContainer.innerHTML = `
             <div style="background:var(--box-bg); border:1px dashed var(--border-color); border-radius:6px; padding:12px 16px; width:100%; box-sizing:border-box;">

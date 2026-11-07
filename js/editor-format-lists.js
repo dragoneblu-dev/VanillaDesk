@@ -10,6 +10,8 @@
  * titoli o elenchi ordinati/puntati esistenti in To-Do List senza perdita di testo.
  * FIX REVERSIBLE CONVERSION: Riconversione pulita e bidirezionale da To-Do List (adv-checklist) verso elenchi standard (UL/OL)
  * ed elenchi di testo senza frammentazioni o stili parassiti inline.
+ * FIX CARET POSITION ON LIST INSERT: Inserimento atomico dell'elenco su blocco vuoto e posizionamento immediato del cursore
+ * all'interno del <li> a offset 0, eliminando salti del cursore o srotolamenti anomali.
  */
 
 Object.assign(Editor, {
@@ -250,7 +252,7 @@ Object.assign(Editor, {
         const items = [
             { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">•</span>', label: I18n.t('format_lists.bullet_list'), shortcut: '- ', onClick: () => executeInsert('ul') },
             { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">1.</span>', label: I18n.t('format_lists.numbered_list'), shortcut: '1. ', onClick: () => executeInsert('ol', '1') },
-            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">A.</span>', label: I18n.t('format_lists.alpha_list'), onClick: () => executeInsert('ol', 'A') },
+            { icon: '<span style="display:inline-block; width:20px; text-align:center; font-weight:bold;">A.</span>', label: I18n.t('format_lists.alpha_list'), shortcut: 'a. ', onClick: () => executeInsert('ol', 'A') },
             { type: 'divider' },
             { icon: Icons.checkSquare, label: I18n.t('format_lists.todo_list'), shortcut: '[] ', onClick: () => { Editor.restoreSelection(); Editor.insertChecklist(); } },
             { icon: Icons.journal, label: I18n.t('format_lists.journal_log'), onClick: () => JournalManager.insert(true) }
@@ -366,7 +368,12 @@ Object.assign(Editor, {
 
         let block = node.closest('p, div');
 
-        if (block && block.nextElementSibling && WidgetManager.isProtectedBlock(block.nextElementSibling) && block.innerText.replace(/\u200B/g, '').trim() === '') {
+        // INSERIMENTO ATOMICO SU BLOCCO VUOTO (Sia da Toolbar che da scorciatoia)
+        const isEmptyBlock = block && block.id !== 'noteContent' &&
+                             block.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' &&
+                             !block.querySelector('img, audio, iframe, table, .adv-widget-shell');
+
+        if (isEmptyBlock && block.parentNode) {
             const list = document.createElement(type);
             if (style && type === 'ol') list.setAttribute('type', style);
             
@@ -387,6 +394,7 @@ Object.assign(Editor, {
             return;
         }
 
+        // CONVERSIONE TESTO ESISTENTE
         if (type === 'ul') {
             document.execCommand('insertUnorderedList');
         } else if (type === 'ol') {
