@@ -6,6 +6,7 @@
  * - Esegue l'idratazione ricorsiva delle citazioni (_hydrateCitationsForExport) con protezione anti-loop.
  * - Sostituisce i riferimenti agli asset multimediali con percorsi relativi conformi ('assets/').
  * - Converte i widget complessi (Database, Tabelle Pivot, Diari, Codice, Bottoni Macro) in markup tabellare statico pulito.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(ExportManager, {
@@ -22,7 +23,7 @@ Object.assign(ExportManager, {
             if (!noteId || !body) return;
 
             if (visited.has(noteId)) {
-                body.innerHTML = `<p style="color:red; font-weight:bold;">[Riferimento Circolare bloccato]</p>`;
+                body.innerHTML = `<p style="color:red; font-weight:bold;">[${I18n.t('export_doc.circular_ref_blocked')}]</p>`;
                 return;
             }
 
@@ -39,7 +40,7 @@ Object.assign(ExportManager, {
 
                 body.innerHTML = tempDiv.innerHTML;
             } else {
-                body.innerHTML = `<p style="color:red; font-style:italic;">[Nota di origine eliminata]</p>`;
+                body.innerHTML = `<p style="color:red; font-style:italic;">[${I18n.t('export_doc.source_note_deleted')}]</p>`;
             }
         });
     },
@@ -153,11 +154,11 @@ Object.assign(ExportManager, {
         <body>
             <div style="text-align:center; margin-bottom:50px;">
                 <h1 style="font-size:32pt; margin-bottom:10px;">${title}</h1>
-                <p>Generato il: ${new Date().toLocaleString('it-IT')}</p>
+                <p>${I18n.t('export_doc.generated_on', { date: new Date().toLocaleString('it-IT') })}</p>
             </div>
 
             <div class="toc">
-                <div class="toc-title">Indice</div>
+                <div class="toc-title">${I18n.t('export_doc.toc_title')}</div>
         `;
 
         if (flatList.length > 1) {
@@ -219,12 +220,12 @@ Object.assign(ExportManager, {
                         try {
                             const state = AppState.databases[trueId] || {};
                             if (state && state.buttons) {
-                                const labels = state.buttons.map(b => `[${b.label || 'Pulsante'}]`).join(' ');
-                                wrapper.outerHTML = `<p style="font-style:italic; color:#666;">(Barra Pulsanti: ${labels})</p>`;
+                                const labels = state.buttons.map(b => `[${b.label || I18n.t('template_preview.button')}]`).join(' ');
+                                wrapper.outerHTML = `<p style="font-style:italic; color:#666;">(${I18n.t('export_doc.button_bar_prefix')}: ${labels})</p>`;
                             } else {
-                                wrapper.outerHTML = `<p style="font-style:italic; color:#666;">(Barra Pulsanti vuota)</p>`;
+                                wrapper.outerHTML = `<p style="font-style:italic; color:#666;">(${I18n.t('export_doc.button_bar_empty')})</p>`;
                             }
-                        } catch(e) { wrapper.outerHTML = '<p>[Barra Pulsanti rimossa]</p>'; }
+                        } catch(e) { wrapper.outerHTML = `<p>[${I18n.t('export_doc.button_bar_removed')}]</p>`; }
                     } else if (type === 'database' || type === 'pivot') {
                         try {
                             const state = AppState.databases[trueId];
@@ -234,7 +235,7 @@ Object.assign(ExportManager, {
                             const originalTitle = originalDbState ? originalDbState.title : state.title;
 
                             if (state.isPivot && state.chartConfig && state.chartConfig.visible) {
-                                wrapper.outerHTML = `<p style="font-style:italic; color:#666;">[Grafico relativo al database: "${originalTitle || 'Sconosciuto'}"]</p>`;
+                                wrapper.outerHTML = `<p style="font-style:italic; color:#666;">[${I18n.t('export_doc.chart_db_reference', { title: originalTitle || I18n.t('common.empty') })}]</p>`;
                                 return;
                             }
                             
@@ -244,7 +245,7 @@ Object.assign(ExportManager, {
                             viewRows = AdvancedTable.filterRows(viewRows, state);
                             viewRows = AdvancedTable.sortRows(viewRows, state);
                             
-                            let tableHTML = `<h4 style="margin-bottom:5px;">📊 ${state.title || 'Database'}</h4>`;
+                            let tableHTML = `<h4 style="margin-bottom:5px;">📊 ${state.title || I18n.t('editor.database')}</h4>`;
                             tableHTML += '<table style="width:100%; border-collapse:collapse; margin-bottom:15px; font-size:0.9em;">';
                             tableHTML += '<thead><tr>';
 
@@ -309,12 +310,12 @@ Object.assign(ExportManager, {
                             tableHTML += '</tbody></table>';
                             wrapper.outerHTML = tableHTML;
                         } catch (e) {
-                            wrapper.innerHTML = '<p>[Database non esportabile o rimosso]</p>';
+                            wrapper.innerHTML = `<p>[${I18n.t('export_doc.db_not_exportable')}]</p>`;
                         }
                     } else if (type === 'journal') {
                         try {
                             const state = AppState.databases[trueId] || {};
-                            const title = state.title || 'Diario / Log';
+                            const title = state.title || I18n.t('journal.default_title');
                             let jHTML = `<h4 style="margin-bottom:5px;">📔 ${title}</h4><ul>`;
                             
                             const sorted = [...(state.entries || [])].sort((a,b) => a.timestamp - b.timestamp);
@@ -333,23 +334,23 @@ Object.assign(ExportManager, {
                             jHTML += `</ul>`;
                             wrapper.outerHTML = jHTML;
                         } catch (e) {
-                            wrapper.innerHTML = '<p>[Diario non esportabile o rimosso]</p>';
+                            wrapper.innerHTML = `<p>[${I18n.t('export_doc.journal_not_exportable')}]</p>`;
                         }
                     } else if (type === 'code' || wrapper.classList.contains('code-wrapper')) {
                         try {
                             const state = AppState.databases[trueId] || {};
-                            const title = state.title || 'Codice';
+                            const title = state.title || I18n.t('code_widget.default_title');
                             let codeText = state.content || '';
                             codeText = codeText.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, '<br>');
                             wrapper.outerHTML = `<h4 style="margin-bottom:5px;">&lt;/&gt; ${title}</h4><pre>${codeText}</pre>`;
                         } catch(e) {
-                            wrapper.innerHTML = '<p>[Codice non esportabile]</p>';
+                            wrapper.innerHTML = `<p>[${I18n.t('export_doc.code_not_exportable')}]</p>`;
                         }
                     } else if (type === 'citation') {
                         const titleNode = wrapper.querySelector('.adv-table-title');
-                        const citTitle = titleNode ? titleNode.innerText : 'Citazione';
+                        const citTitle = titleNode ? titleNode.innerText : I18n.t('citation.reference');
                         const body = wrapper.querySelector('.citation-body');
-                        const innerContent = body ? body.innerHTML : '<p style="color:red;">Contenuto mancante</p>';
+                        const innerContent = body ? body.innerHTML : `<p style="color:red;">${I18n.t('citation.missing_ref')}</p>`;
                         
                         wrapper.outerHTML = `
                             <div class="citation-export">
@@ -382,7 +383,7 @@ Object.assign(ExportManager, {
                 
                 const sup = document.createElement('sup');
                 sup.className = 'exported-footnote';
-                sup.innerHTML = `[Nota: ${text}]`;
+                sup.innerHTML = `[${I18n.t('export_doc.footnote_prefix')}: ${text}]`;
                 wrapper.parentNode.replaceChild(sup, wrapper);
             });
             
@@ -390,7 +391,7 @@ Object.assign(ExportManager, {
                 const text = marker.getAttribute('data-tooltip') || '';
                 const sup = document.createElement('sup');
                 sup.className = 'exported-footnote';
-                sup.innerHTML = ` [Nota: ${text}]`;
+                sup.innerHTML = ` [${I18n.t('export_doc.footnote_prefix')}: ${text}]`;
                 marker.parentNode.replaceChild(sup, marker);
             });
 
@@ -400,7 +401,7 @@ Object.assign(ExportManager, {
                 <div id="note-${index}">
                     <h1 class="${headerClass}">${item.note.title}</h1>
                     <div class="note-content">
-                        ${cleanContent || '<p style="color:#999; font-style:italic;">(Nessun contenuto)</p>'}
+                        ${cleanContent || `<p style="color:#999; font-style:italic;">(${I18n.t('export_doc.no_content')})</p>`}
                     </div>
                 </div>
             `;

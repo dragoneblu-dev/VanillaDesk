@@ -9,7 +9,8 @@
  *   * Esportazione fedele dell'allineamento colonne nelle tabelle (:---, :---:, ---:).
  * - Esporta la singola nota o il documento cumulativo (generateMarkdownDocument).
  * - Esporta l'intero Workspace come Vault fisico nativo su disco tramite File System Access API (exportObsidianVault),
- *   omettendo la creazione di file .md ridondanti per le note utilizzate unicamente come cartelle.
+ *   omettendo la creazione di file .md ridondanti per le note utilizzate unicamente come cartelle e supportando l'estrazione asset da FSAA e IndexedDB.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(ExportManager, {
@@ -184,10 +185,10 @@ Object.assign(ExportManager, {
             md += ExportManager.buildNoteFrontmatter(singleNote.id, false);
             md += ExportManager.htmlToMarkdown(singleNote.content || '', includeImages, true) + `\n`;
         } else {
-            md += `# ${title}\n\n*Generato il: ${new Date().toLocaleString('it-IT')}*\n\n---\n\n`;
+            md += `# ${title}\n\n*${I18n.t('export_doc.generated_on', { date: new Date().toLocaleString('it-IT') })}*\n\n---\n\n`;
 
             if (flatList.length > 1) {
-                md += `## Indice\n`;
+                md += `## ${I18n.t('export_doc.toc_title')}\n`;
                 flatList.forEach((item) => {
                     const indent = "  ".repeat(item.level);
                     const anchor = item.note.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
@@ -231,12 +232,12 @@ Object.assign(ExportManager, {
 
     // =========================================================================
     // MOTORE DI ESPORTAZIONE VAULT OBSIDIAN FISICO
-    // Ricrea l'albero delle directory, i file .md con Frontmatter e copia gli asset
+    // Ricrea l'albero delle directory, i file .md con Frontmatter e copia gli asset (da FSAA o IDB)
     // =========================================================================
     exportObsidianVault: async () => {
         try {
             if (!window.showDirectoryPicker) {
-                alert("Il tuo browser non supporta la scrittura su cartella fisica per il Vault. Usa un browser Chromium (Chrome, Edge, Brave, Opera).");
+                alert(I18n.t('export_doc.alert_fsaa_vault_unsupported'));
                 return;
             }
 
@@ -244,17 +245,17 @@ Object.assign(ExportManager, {
             if (!targetDirHandle) return;
 
             const sanitizeFolderName = (name) => {
-                return (name || '').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Senza Titolo';
+                return (name || '').replace(/[\\/:*?"<>|]/g, '_').trim() || I18n.t('editor.untitled');
             };
 
             const aliveNotes = AppState.notes.filter(n => !n.deletedAt);
             if (aliveNotes.length === 0) {
-                alert("Il Workspace corrente non contiene note da esportare.");
+                alert(I18n.t('export_doc.alert_no_notes_to_export'));
                 return;
             }
 
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Inizializzazione esportazione Vault Obsidian...", "info");
+                UI.showToast(I18n.t('export_doc.toast_vault_export_init'), "info");
             }
 
             // 1. Mappa Note ID -> Directory Handle
@@ -323,8 +324,10 @@ Object.assign(ExportManager, {
                 exportedNotesCount++;
             }
 
-            // 3. Copia fisica degli Asset locali nella cartella assets/ del Vault
+            // 3. Copia fisica degli Asset locali nella cartella assets/ del Vault (Supporto FSAA e IndexedDB)
             let copiedAssetsCount = 0;
+            
+            // Caso A: Cartella fisica di origine (FSAA)
             if (AppState.assetsHandle) {
                 try {
                     const vaultAssetsDir = await targetDirHandle.getDirectoryHandle('assets', { create: true });
@@ -341,9 +344,42 @@ Object.assign(ExportManager, {
                 } catch (assetErr) {
                     console.warn("[OBSIDIAN EXPORT] Copia asset non riuscita o cartella vuota:", assetErr);
                 }
+            } 
+            // Caso B: Origine da Memoria del Browser (IndexedDB store: idb_assets)
+            else if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.initDB === 'function') {
+                try {
+                    const vaultAssetsDir = await targetDirHandle.getDirectoryHandle('assets', { create: true });
+                    const db = await Store.initDB();
+                    const tx = db.transaction('idb_assets', 'readonly');
+                    const store = tx.objectStore('idb_assets');
+                    const index = store.index('by_workspace');
+                    const req = index.getAll(AppState.workspaceId);
+
+                    const assetRecords = await new Promise((res) => {
+                        req.onsuccess = () => res(req.result || []);
+                        req.onerror = () => res([]);
+                    });
+
+                    for (const asset of assetRecords) {
+                        if (asset.name && asset.blob) {
+                            const targetFileHandle = await vaultAssetsDir.getFileHandle(asset.name, { create: true });
+                            const writable = await targetFileHandle.createWritable();
+                            await writable.write(asset.blob);
+                            await writable.close();
+                            copiedAssetsCount++;
+                        }
+                    }
+                } catch (assetErr) {
+                    console.warn("[OBSIDIAN EXPORT] Errore copia asset da IDB:", assetErr);
+                }
             }
 
-            const successMsg = `Vault Obsidian esportato con successo!\nScritte ${exportedNotesCount} note e copiati ${copiedAssetsCount} allegati in "${targetDirHandle.name}".`;
+            const successMsg = I18n.t('export_doc.vault_export_success', {
+                notes: exportedNotesCount,
+                assets: copiedAssetsCount,
+                folder: targetDirHandle.name
+            });
+
             if (typeof UI !== 'undefined' && UI.showToast) {
                 UI.showToast(successMsg, "success");
             } else {
@@ -353,7 +389,7 @@ Object.assign(ExportManager, {
         } catch (err) {
             if (err.name !== 'AbortError') {
                 console.error("Errore esportazione Vault Obsidian:", err);
-                alert("Errore durante l'esportazione del Vault: " + err.message);
+                alert(I18n.t('export_doc.alert_vault_export_error', { error: err.message }));
             }
         }
     },
@@ -453,12 +489,12 @@ Object.assign(ExportManager, {
                     try {
                         const state = AppState.databases[trueId] || {};
                         if (state && state.buttons) {
-                            const labels = state.buttons.map(b => `[${b.label || 'Pulsante'}]`).join(' ');
-                            wrapper.outerHTML = `\n*[Barra Pulsanti: ${labels}]*\n\n`;
+                            const labels = state.buttons.map(b => `[${b.label || I18n.t('template_preview.button')}]`).join(' ');
+                            wrapper.outerHTML = `\n*[${I18n.t('export_doc.button_bar_prefix')}: ${labels}]*\n\n`;
                         } else {
-                            wrapper.outerHTML = `\n*[Barra Pulsanti vuota]*\n\n`;
+                            wrapper.outerHTML = `\n*[${I18n.t('export_doc.button_bar_empty')}]*\n\n`;
                         }
-                    } catch(e) { wrapper.outerHTML = "\n*[Barra Pulsanti rimossa]*\n"; }
+                    } catch(e) { wrapper.outerHTML = `\n*[${I18n.t('export_doc.button_bar_removed')}]*\n`; }
                 } else if (type === 'database' || type === 'pivot') {
                     try {
                         const state = AppState.databases[trueId];
@@ -468,7 +504,7 @@ Object.assign(ExportManager, {
                         const originalTitle = originalDbState ? originalDbState.title : state.title;
 
                         if (state.isPivot && state.chartConfig && state.chartConfig.visible) {
-                            wrapper.outerHTML = `\n*[Grafico relativo al database: "${originalTitle || 'Sconosciuto'}"]*\n\n`;
+                            wrapper.outerHTML = `\n*[${I18n.t('export_doc.chart_db_reference', { title: originalTitle || I18n.t('common.empty') })}]*\n\n`;
                             return;
                         }
                         
@@ -478,7 +514,7 @@ Object.assign(ExportManager, {
                         viewRows = AdvancedTable.filterRows(viewRows, state);
                         viewRows = AdvancedTable.sortRows(viewRows, state);
                         
-                        let mdTable = `\n**${state.title || 'Database'}**\n\n`;
+                        let mdTable = `\n**${state.title || I18n.t('editor.database')}**\n\n`;
                         const visibleCols = state.columns.filter(c => !c.hidden);
 
                         mdTable += `| ${visibleCols.map(c => c.name.replace(/\|/g, '\\|')).join(' | ')} |\n`;
@@ -501,11 +537,11 @@ Object.assign(ExportManager, {
                             mdTable += `| ${rowData.join(' | ')} |\n`;
                         });
                         wrapper.outerHTML = mdTable + '\n';
-                    } catch(e) { wrapper.outerHTML = "\n*[Database non esportabile]*\n"; }
+                    } catch(e) { wrapper.outerHTML = `\n*[${I18n.t('export_doc.db_not_exportable')}]*\n`; }
                 } else if (type === 'journal') {
                     try {
                         const state = AppState.databases[trueId] || {};
-                        const title = state.title || 'Diario / Log';
+                        const title = state.title || I18n.t('journal.default_title');
                         let mdJournal = `\n**${title}**\n\n`;
 
                         const sorted = [...(state.entries || [])].sort((a,b) => a.timestamp - b.timestamp);
@@ -520,7 +556,7 @@ Object.assign(ExportManager, {
                             mdJournal += `- ${check} \`${entry.timeStr}\` ${text}\n`;
                         });
                         wrapper.outerHTML = mdJournal + '\n';
-                    } catch(e) { wrapper.outerHTML = "\n*[Diario non esportabile]*\n"; }
+                    } catch(e) { wrapper.outerHTML = `\n*[${I18n.t('export_doc.journal_not_exportable')}]*\n`; }
                 } else if (type === 'code') {
                     try {
                         const state = AppState.databases[trueId] || {};
@@ -529,23 +565,23 @@ Object.assign(ExportManager, {
                         const title = state.title || '';
 
                         let codeBlockMd = `\`\`\`${lang === 'none' ? '' : lang}\n${codeText}\n\`\`\`\n`;
-                        if (title && title !== 'Codice') {
+                        if (title && title !== I18n.t('code_widget.default_title')) {
                             codeBlockMd = `**${title}**\n` + codeBlockMd;
                         }
 
                         const tokenKey = `%%VD_PROTECTED_CODE_${codeTokenCounter++}%%`;
                         protectedCodeTokens.set(tokenKey, codeBlockMd);
                         wrapper.outerHTML = `\n\n${tokenKey}\n\n`;
-                    } catch(e) { wrapper.outerHTML = "\n*[Codice rimosso]*\n"; }
+                    } catch(e) { wrapper.outerHTML = `\n*[${I18n.t('export_doc.code_removed')}]*\n`; }
                 } else if (type === 'citation') {
                     const body = wrapper.querySelector('.citation-body');
                     const titleNode = wrapper.querySelector('.adv-table-title');
-                    const citTitle = titleNode ? titleNode.innerText : 'Citazione';
+                    const citTitle = titleNode ? titleNode.innerText : I18n.t('citation.reference');
                     
                     if (body) {
-                        wrapper.outerHTML = `<blockquote><b>Riferimento: ${citTitle}</b><br>${body.innerHTML}</blockquote>`;
+                        wrapper.outerHTML = `<blockquote><b>${I18n.t('citation.reference')}: ${citTitle}</b><br>${body.innerHTML}</blockquote>`;
                     } else {
-                        wrapper.outerHTML = `<blockquote><b>Riferimento: ${citTitle}</b><br>[Contenuto mancante]</blockquote>`;
+                        wrapper.outerHTML = `<blockquote><b>${I18n.t('citation.reference')}: ${citTitle}</b><br>[${I18n.t('citation.missing_ref')}]</blockquote>`;
                     }
                 }
             });
@@ -662,7 +698,7 @@ Object.assign(ExportManager, {
             clone.querySelectorAll('img').forEach(img => {
                 const ref = img.getAttribute('data-image-ref');
                 const src = ref ? ('assets/' + ref) : (img.getAttribute('src') || '');
-                img.outerHTML = `![${img.getAttribute('alt') || 'Immagine'}](${src})`;
+                img.outerHTML = `![${img.getAttribute('alt') || I18n.t('editor_core.image_label')}](${src})`;
             });
 
             // Risolvi paragrafi e a capo
@@ -738,10 +774,10 @@ Object.assign(ExportManager, {
         htmlStr = htmlStr.replace(/<a[^>]*href="([^"]+)"[^>]*>(.*?)<\/a>/gi, '[$2]($1)');
 
         if (includeImages) {
-            htmlStr = htmlStr.replace(/<img[^>]*data-image-ref=["']([^"']+)["'][^>]*>/gi, '![Immagine](assets/$1)');
+            htmlStr = htmlStr.replace(/<img[^>]*data-image-ref=["']([^"']+)["'][^>]*>/gi, `![${I18n.t('editor_core.image_label')}](assets/$1)`);
             htmlStr = htmlStr.replace(/<img[^>]*src=["']([^"']+)["'][^>]*>/gi, (match, src) => {
                 if(match.includes('data-image-ref')) return match; 
-                return `![Immagine](${src})`;
+                return `![${I18n.t('editor_core.image_label')}](${src})`;
             });
         } else {
             htmlStr = htmlStr.replace(/<img[^>]*>/gi, '');

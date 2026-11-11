@@ -5,12 +5,16 @@
  * transizione verso la Dashboard (goHome) e risoluzione salti verso i widget (jumpToWidget).
  * Sincronizzazione automatica del titolo nell'header su due righe al ritorno alla Dashboard.
  * FEAT FEEDFORWARD TOOLTIPS: Mostra nel tooltip delle frecce Indietro/Avanti il titolo esatto della nota di destinazione.
+ * FEAT RETURNING RECORD ANCHOR: Evidenziazione visiva e centratura temporanea (pulse di 1.2s)
+ * confinata esclusivamente alle celle della riga di partenza, con soppressione totale dell'alone sul database contenitore.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(UI, {
     // Cronologia di Navigazione Note e Dashboard (History Stack)
     _navHistory: [],
     _navHistoryIndex: -1,
+    _lastLeavingRecord: null,
 
     // Helper leggero per identificare la nota valida di destinazione senza mutare la cronologia
     _peekNavHistoryTarget: (direction) => {
@@ -125,6 +129,24 @@ Object.assign(UI, {
         UI.updateNavHistoryUI();
     },
 
+    goUpOneLevel: () => {
+        if (!AppState.currentNoteId) return;
+        const note = Store.getNote(AppState.currentNoteId);
+        if (!note) return;
+
+        if (note.isRecordNote && note.linkedTableId) {
+            UI.jumpToWidget(note.linkedTableId, note.linkedRowId);
+            return;
+        }
+
+        if (note.parentId) {
+            UI.selectNote(note.parentId);
+            return;
+        }
+
+        UI.goHome();
+    },
+
     goHome: (isHistoryNavigation = false) => {
         AppState.isSwitchingNote = true;
         if (typeof UI.updateCurrentNoteTimer !== 'undefined') clearTimeout(UI.updateCurrentNoteTimer);
@@ -202,8 +224,106 @@ Object.assign(UI, {
         }, 150);
     },
 
-    jumpToWidget: (widgetId) => {
+    // MOTORE DI ANCORAGGIO VISIVO SUL RECORD DI PROVENIENZA
+    highlightReturningRecord: (tableId, rowId) => {
+        if (!tableId || !rowId) return;
+
+        // Iniezione automatica dello stile: animazione confinata alle sole celle td della riga per non sporcare il perimetro del database
+        if (!document.getElementById('adv-returning-row-style')) {
+            const st = document.createElement('style');
+            st.id = 'adv-returning-row-style';
+            st.innerHTML = `
+                @keyframes advRowCellPulse {
+                    0% {
+                        background-color: var(--item-active) !important;
+                        box-shadow: inset 0 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color);
+                    }
+                    60% {
+                        background-color: var(--item-active) !important;
+                        box-shadow: inset 0 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color);
+                    }
+                    100% {
+                        background-color: transparent;
+                        box-shadow: none;
+                    }
+                }
+                .adv-row-returning-pulse td {
+                    animation: advRowCellPulse 1.2s ease-out forwards !important;
+                }
+                .adv-row-returning-pulse td:first-child {
+                    box-shadow: inset 2px 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color) !important;
+                }
+                .adv-row-returning-pulse td:last-child {
+                    box-shadow: inset -2px 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color) !important;
+                }
+                @keyframes advCardPulse {
+                    0% { box-shadow: 0 0 0 3px var(--accent-color) !important; }
+                    60% { box-shadow: 0 0 0 3px var(--accent-color) !important; }
+                    100% { box-shadow: none !important; }
+                }
+                .adv-board-card.adv-row-returning-pulse,
+                .adv-timeline-bar.adv-row-returning-pulse {
+                    animation: advCardPulse 1.2s ease-out forwards !important;
+                }
+            `;
+            document.head.appendChild(st);
+        }
+
+        const realTableId = (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable._resolveSourceId === 'function')
+            ? AdvancedTable._resolveSourceId(tableId)
+            : tableId.split('_cited_')[0];
+
+        // 1. Allineamento automatico paginazione se il record risiede in un'altra pagina
+        const dbState = typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+        if (dbState && Array.isArray(dbState.rows) && dbState.pageSize) {
+            const rowIdx = dbState.rows.findIndex(r => r.id === rowId);
+            if (rowIdx !== -1) {
+                const targetPage = Math.floor(rowIdx / dbState.pageSize) + 1;
+                if (dbState.currentPage !== targetPage) {
+                    dbState.currentPage = targetPage;
+                    AdvancedTable.setState(tableId, dbState);
+                    AdvancedTable.renderTable(tableId);
+                }
+            }
+        }
+
+        // 2. Ricerca dell'elemento visivo nella vista corrente (tabella, bacheca kanban, timeline)
+        const applyHighlight = () => {
+            const tableWrap = document.getElementById(tableId) || document.querySelector(`[id^="${tableId}_cited_"]`);
+            if (!tableWrap) return;
+
+            const targetEl = tableWrap.querySelector(`tr[data-row-id="${rowId}"], .adv-board-card[data-row-id="${rowId}"], #bar-${rowId}, [data-row-id="${rowId}"]`);
+            if (!targetEl) return;
+
+            targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            targetEl.classList.remove('adv-row-returning-pulse');
+            void targetEl.offsetWidth; // Trigger reflow per riavviare l'animazione
+            targetEl.classList.add('adv-row-returning-pulse');
+
+            setTimeout(() => {
+                if (document.body.contains(targetEl)) {
+                    targetEl.classList.remove('adv-row-returning-pulse');
+                }
+            }, 1300);
+        };
+
+        setTimeout(applyHighlight, 80);
+    },
+
+    jumpToWidget: (widgetId, targetRowId = null) => {
         if (!AppState.notes) return;
+
+        // Auto-rilevamento difensivo: se targetRowId non è stato passato esplicitamente ma stiamo lasciando una record-note di questo DB
+        if (!targetRowId && AppState.currentNoteId) {
+            const currentNote = Store.getNote(AppState.currentNoteId);
+            if (currentNote && currentNote.isRecordNote && currentNote.linkedRowId) {
+                const cleanCurrentDb = (currentNote.linkedTableId || '').split('_cited_')[0];
+                const cleanTargetDb = widgetId.split('_cited_')[0];
+                if (cleanCurrentDb === cleanTargetDb) {
+                    targetRowId = currentNote.linkedRowId;
+                }
+            }
+        }
 
         let targetNoteId = null;
         let targetNoteInstance = null;
@@ -229,7 +349,18 @@ Object.assign(UI, {
         const handleResolution = () => {
             const trueId = widgetId.split('_cited_')[0];
             if (trueId === 'SYS_PROPERTIES_DB') {
-                alert("Questa è la struttura di base delle Proprietà e Tag delle Note.\nNon è un database visibile, ma agisce dietro le quinte.\n\nPer modificare i Tag di una nota, apri le proprietà direttamente dalla barra degli strumenti in cima all'editor.");
+                alert(I18n.t('notes_nav.alert_system_properties_info'));
+                return;
+            }
+
+            // Se è specificato un record target (es. ritorno da una record note), focalizza esclusivamente la riga esatta
+            if (targetRowId) {
+                if (UI._lastHighlightedWidget && document.body.contains(UI._lastHighlightedWidget)) {
+                    UI._lastHighlightedWidget.style.boxShadow = '';
+                    UI._lastHighlightedWidget.style.transition = '';
+                    UI._lastHighlightedWidget = null;
+                }
+                UI.highlightReturningRecord(widgetId, targetRowId);
                 return;
             }
 
@@ -264,7 +395,7 @@ Object.assign(UI, {
             if (orphanState) {
                 const targetInjectionNoteId = targetNoteId || AppState.currentNoteId;
                 if (!targetInjectionNoteId) {
-                    if (typeof UI.showToast !== 'undefined') UI.showToast("Crea una nota vuota, poi clicca di nuovo per poter recuperare l'elemento.", "warning");
+                    if (typeof UI.showToast !== 'undefined') UI.showToast(I18n.t('notes_nav.toast_create_empty_note_first'), "warning");
                     return;
                 }
 
@@ -308,7 +439,7 @@ Object.assign(UI, {
                 }
 
                 Store.triggerAutoSave();
-                if (typeof UI.showToast !== 'undefined') UI.showToast(`Elemento corrotto "${orphanState.title || type}" recuperato in fondo alla nota.`, "success");
+                if (typeof UI.showToast !== 'undefined') UI.showToast(I18n.t('notes_nav.toast_orphan_recovered', { title: orphanState.title || type }), "success");
                 
             } else {
                 if (targetNoteInstance) {
@@ -320,10 +451,10 @@ Object.assign(UI, {
                     
                     Store.triggerAutoSave();
                     
-                    if (typeof UI.showToast !== 'undefined') UI.showToast("L'elemento selezionato non esiste più ed è stato eliminato in modo definitivo dal file.", "info");
+                    if (typeof UI.showToast !== 'undefined') UI.showToast(I18n.t('notes_nav.toast_element_purged'), "info");
                     UI.renderTree(); 
                 } else {
-                    if (typeof UI.showToast !== 'undefined') UI.showToast("L'elemento selezionato non esiste più.", "error");
+                    if (typeof UI.showToast !== 'undefined') UI.showToast(I18n.t('notes_nav.toast_element_not_found'), "error");
                 }
             }
         };
@@ -334,8 +465,8 @@ Object.assign(UI, {
         }
 
         if (targetNoteId && AppState.currentNoteId !== targetNoteId) {
-            // Trasmette widgetId come refId: selectNote atterra direttamente sull'elemento senza resettare lo scroll su _lastScroll
-            UI.selectNote(targetNoteId, null, widgetId);
+            // Se targetRowId è presente, non trasmettiamo widgetId a selectNote per non attivare l'alone dell'intero database
+            UI.selectNote(targetNoteId, null, targetRowId ? null : widgetId);
             setTimeout(handleResolution, 250); 
         } else if (targetNoteId) {
             handleResolution();

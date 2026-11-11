@@ -174,7 +174,6 @@ Object.assign(UI, {
                 unpopulatedCols.forEach(c => {
                     chipsHtml += `<span class="adv-select-pill default-color" style="opacity:0.75; font-size:0.72rem; padding:2px 7px; border:1px dashed var(--border-color); background:transparent;">🏷️ ${c.name.replace(/</g, '&lt;')}</span>`;
                 });
-
             }
 
             return `
@@ -294,30 +293,30 @@ Object.assign(UI, {
 
                                 // Risoluzione dinamica dell'icona specifica e della denominazione di layout
                                 let iconSvg = Icons.tableDatabase;
-                                let typeName = I18n.t('table.view_table') || 'Tabella';
+                                let typeName = I18n.t('table.view_table');
 
                                 if (isChart) {
                                     // Utilizzo diretto dell'icona Icons.tablePivot (istogramma a barre verticali)
                                     iconSvg = Icons.tablePivot;
                                     const chartType = targetDbState.chartConfig?.type;
                                     typeName = chartType 
-                                        ? `Grafico (${chartType.toUpperCase()})` 
-                                        : 'Grafico Analitico';
+                                        ? I18n.t('tree_db.view_chart', { type: chartType.toUpperCase() })
+                                        : I18n.t('notes_info.chart_view');
                                 } else if (isPivot) {
                                     iconSvg = Icons.tablePivot;
-                                    typeName = 'Tabella Pivot';
+                                    typeName = I18n.t('tree_db.view_pivot');
                                 } else if (viewType === 'board') {
                                     iconSvg = Icons.viewBoard;
-                                    typeName = I18n.t('table.view_board') || 'Bacheca Kanban';
+                                    typeName = I18n.t('table.view_board');
                                 } else if (viewType === 'calendar') {
                                     iconSvg = Icons.viewCalendar;
-                                    typeName = I18n.t('table.view_calendar') || 'Calendario';
+                                    typeName = I18n.t('table.view_calendar');
                                 } else if (viewType === 'timeline') {
                                     iconSvg = Icons.viewTimeline;
-                                    typeName = I18n.t('table.view_timeline') || 'Timeline';
+                                    typeName = I18n.t('table.view_timeline');
                                 } else if (viewType === 'tree') {
                                     iconSvg = Icons.treeNode;
-                                    typeName = I18n.t('table.view_tree') || 'Gerarchia WBS';
+                                    typeName = I18n.t('table.view_tree');
                                 }
 
                                 pagesWithShadowViews.push({
@@ -336,7 +335,7 @@ Object.assign(UI, {
         }
 
         let shadowViewsHtml = '';
-        const sectionTitle = I18n.t('notes_info.sys_db_section_title') || "Gestione Globale Tag & Proprietà";
+        const sectionTitle = I18n.t('notes_info.sys_db_section_title');
 
         if (pagesWithShadowViews.length > 0) {
             let linksHtml = '';
@@ -364,7 +363,7 @@ Object.assign(UI, {
                 `;
             });
 
-            const foundDesc = I18n.t('notes_info.sys_db_pages_found_desc') || "Per filtrare, analizzare o modificare in massa tutte le proprietà delle note del Workspace, puoi consultare le seguenti pagine dedicate:";
+            const foundDesc = I18n.t('notes_info.sys_db_pages_found_desc');
             shadowViewsHtml = `
                 <div>
                     <h4 style="margin:0 0 10px 0; color:var(--text-primary); font-size:0.95rem; border-bottom:1px solid var(--border-color); padding-bottom:5px; display:flex; align-items:center; gap:6px;">
@@ -377,8 +376,8 @@ Object.assign(UI, {
                 </div>
             `;
         } else {
-            const hintTitle = I18n.t('notes_info.sys_db_empty_hint_title') || "Vuoi un'analisi approfondita o modifiche massive?";
-            const hintDesc = I18n.t('notes_info.sys_db_empty_hint_desc') || "Puoi inserire in qualsiasi nota una tabella o vista analitica di tutte le note: clicca su <b>Blocchi ➔ Vista / Pivot / Grafico</b> e scegli <b>Tag e Proprietà Pagina</b> come origine dati.";
+            const hintTitle = I18n.t('notes_info.sys_db_empty_hint_title');
+            const hintDesc = I18n.t('notes_info.sys_db_empty_hint_desc');
 
             shadowViewsHtml = `
                 <div style="background:rgba(37, 99, 235, 0.04); border:1px dashed rgba(37, 99, 235, 0.3); border-radius:8px; padding:12px 14px;">

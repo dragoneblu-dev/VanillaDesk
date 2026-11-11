@@ -6,15 +6,18 @@
  * 2. Scritture Atomiche Protette: Stream di swap sicuri con gestione abort() automatico (_safeWriteFile).
  * 3. 3-Way Field-Level Merge: Fusione concorrente non distruttiva a livello di singola cella per RDBMS e Diari (_mergeDatabaseStates).
  * 4. Concorrenza Ottimistica Note: Verifica dei Revision Token (revId) e rilevamento conflitti concorrenti (handleNoteConflict).
- * 5. JIT Component Sync: Riconciliazione in lettura al volo per database e frammenti prima dell'apertura nota (syncWidgetsForNote, syncNoteFromDisk).
+ * 5. JIT Component Sync: Riconciliazione in lettura al volo per database e frammenti da disco o IndexedDB (syncWidgetsForNote, syncNoteFromDisk, readDatabaseFromDisk).
  * 6. Gestione Asset Fisici & GC su Richiesta: Streaming di immagini/audio e potatura directory (_loadAssetsIntoRAM, executePhysicalGarbageCollection).
- * 7. BroadcastChannel Multi-Scheda: Sincronizzazione in tempo reale isolata per workspaceId.
+ * 7. BroadcastChannel Multi-Scheda: Sincronizzazione in tempo reale isolata per workspaceId operante sia su disco che su IndexedDB.
  * Scrittura concorrente controllata in batch con notifica di progresso in tempo reale.
  * Preservazione dello stato di visualizzazione locale (expanded, _tocCollapsed, _lastScroll) nel sync multi-scheda e JIT.
  * PERF LAZY ASSETS LOADING: Apertura workspace istantanea (<50ms) con zero blob caricati in RAM all'avvio e revoca pulita ObjectURL.
  * FEAT PHYSICAL DELETION FEEDBACK: Monitoraggio ed emissione del progresso reale su disco durante l'eliminazione fisica dei file.
  * FEAT INTELLIGENT WORKSPACE RECONNECT: Riconoscimento contestuale tra nuovo workspace da zero e salvataggio/ricollegamento
  * di sessione esistente su cartella di lavoro, eliminando avvisi allarmistici fuorvianti.
+ * FEAT DUAL STORAGE ENGINE (IDB & FSAA): Supporto trasparente per il salvataggio di asset e note sia su disco sia in IndexedDB.
+ * ZERO OVERHEAD: Nessun accesso o scrittura su IndexedDB durante il lavoro su Hard Disk.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(Store, {
@@ -38,8 +41,28 @@ Object.assign(Store, {
     },
 
     saveAsset: async (file, typePrefix) => {
+        // 1. MODALITÀ BROWSER (IndexedDB)
+        if (AppState.storageMode === 'idb' && AppState.workspaceId) {
+            try {
+                const ext = file.name.split('.').pop();
+                const fileName = `${typePrefix}_${Store.generateId()}.${ext}`;
+                await Store.idbSaveAsset(AppState.workspaceId, fileName, file, file.type);
+
+                const url = URL.createObjectURL(file);
+                if (typePrefix === 'img') Editor.imageCache[fileName] = url;
+                if (typePrefix === 'aud') Editor.audioCache[fileName] = url;
+
+                return fileName;
+            } catch (e) {
+                console.error("Errore salvataggio asset in IndexedDB:", e);
+                alert(I18n.t('store_workspace.alert_error_saving_browser_asset'));
+                return null;
+            }
+        }
+
+        // 2. MODALITÀ CARTELLA PC (FSAA) - Nessun tocco ad IndexedDB
         if (!AppState.assetsHandle) {
-            alert("Devi creare o aprire un Workspace (Cartella) prima di inserire allegati.");
+            alert(I18n.t('store_workspace.alert_need_workspace_assets'));
             return null;
         }
         try {
@@ -56,8 +79,8 @@ Object.assign(Store, {
             
             return fileName;
         } catch (e) {
-            console.error("Errore salvataggio asset:", e);
-            alert("Errore nel salvare il file nella cartella assets.");
+            console.error("Errore salvataggio asset su disco:", e);
+            alert(I18n.t('store_workspace.alert_error_saving_disk_asset'));
             return null;
         }
     },
@@ -79,7 +102,13 @@ Object.assign(Store, {
     },
 
     executePhysicalGarbageCollection: async (onProgress = null) => {
-        // Reset del flag di richiesta GC fisica: viene sempre consumato alla chiamata
+        // In modalità IDB, delega al salvataggio differenziale su IndexedDB
+        if (AppState.storageMode === 'idb') {
+            await Store.saveToIndexedDB();
+            return;
+        }
+
+        // Reset del flag di richiesta GC fisica per storage su disco
         Store._needsPhysicalGC = false;
 
         if (!AppState.workspaceHandle) return;
@@ -140,7 +169,7 @@ Object.assign(Store, {
                             current: currentNoteDeleted,
                             total: totalNotesToDelete,
                             pct: Math.round((currentNoteDeleted / (totalNotesToDelete || 1)) * 100)
-                        }) || `Eliminazione file dal disco: ${currentNoteDeleted} di ${totalNotesToDelete}`
+                        })
                     });
                 }
             }
@@ -158,7 +187,7 @@ Object.assign(Store, {
                 }
             }
         } catch (e) {
-            console.warn("[GC] Eccezione durante la potatura fisica:", e);
+            console.warn("[GC] Eccezione durante la potatura fisica su disco:", e);
         }
     },
 
@@ -185,6 +214,21 @@ Object.assign(Store, {
     },
 
     readDatabaseFromDisk: async (dbId) => {
+        // 1. MODALITÀ BROWSER (IndexedDB)
+        if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbGetDatabase === 'function') {
+            try {
+                const fresh = await Store.idbGetDatabase(AppState.workspaceId, dbId);
+                if (fresh) {
+                    Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(fresh));
+                    return fresh;
+                }
+            } catch(e) {
+                console.warn(`[STORE] Impossibile ricaricare il database ${dbId} da IndexedDB:`, e);
+            }
+            return null;
+        }
+
+        // 2. MODALITÀ CARTELLA SU DISCO (FSAA)
         if (!AppState.workspaceHandle) return null;
         try {
             const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: false });
@@ -201,9 +245,33 @@ Object.assign(Store, {
     },
 
     syncNoteFromDisk: async (noteId) => {
-        if (!AppState.workspaceHandle) return { status: 'skipped' };
         const localNote = Store.getNote(noteId);
         if (localNote && (localNote._isDraft || !Store._diskHashes.notes[noteId])) return { status: 'draft' };
+
+        // 1. MODALITÀ BROWSER (IndexedDB)
+        if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbGetNote === 'function') {
+            try {
+                const diskNote = await Store.idbGetNote(AppState.workspaceId, noteId);
+
+                if (!diskNote) {
+                    return { status: 'deleted' };
+                }
+
+                if (diskNote.deletedAt) return { status: 'deleted' };
+                if (!diskNote.revId) diskNote.revId = Store.generateId();
+                const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
+                const cleanDisk = { ...diskNote };
+                Object.keys(cleanDisk).forEach(k => { if (k.startsWith('_')) delete cleanDisk[k]; });
+                Store._diskHashes.notes[noteId] = Store._hashObj(cleanDisk, cryptoPrefix);
+                return { status: 'success', note: diskNote };
+            } catch (e) {
+                console.warn(`[SYNC] Impossibile verificare nota ${noteId} in IndexedDB:`, e);
+                return { status: 'error', error: e };
+            }
+        }
+
+        // 2. MODALITÀ CARTELLA SU DISCO (FSAA)
+        if (!AppState.workspaceHandle) return { status: 'skipped' };
 
         try {
             const notesDir = await AppState.workspaceHandle.getDirectoryHandle('notes', { create: false });
@@ -237,7 +305,8 @@ Object.assign(Store, {
 
     // Sincronizzazione JIT in lettura per tutti i componenti/widget richiamati all'interno di una nota
     syncWidgetsForNote: async (contentHtml) => {
-        if (!AppState.workspaceHandle || !contentHtml || typeof contentHtml !== 'string') return;
+        if (!contentHtml || typeof contentHtml !== 'string') return;
+        if (!AppState.workspaceHandle && AppState.storageMode !== 'idb') return;
 
         const widgetIdRegex = /\bid=["'](adv_[a-zA-Z0-9_]+?)["']/g;
         const widgetIds = new Set();
@@ -259,22 +328,25 @@ Object.assign(Store, {
 
         if (widgetIds.size === 0) return;
 
-        let dbDir;
-        try {
-            dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: false });
-        } catch (e) {
-            return;
-        }
-
         const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
         const updatedWidgetIds = [];
 
+        // Riconciliazione
         for (const widgetId of widgetIds) {
             try {
-                const diskResult = await Store._readFragmentFromDisk(dbDir, `${widgetId}.json`);
-                if (diskResult.status !== 'success') continue;
+                let diskData = null;
+                if (AppState.storageMode === 'idb') {
+                    diskData = await Store.readDatabaseFromDisk(widgetId);
+                } else if (AppState.workspaceHandle) {
+                    const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: false });
+                    const diskResult = await Store._readFragmentFromDisk(dbDir, `${widgetId}.json`);
+                    if (diskResult.status === 'success') {
+                        diskData = JSON.parse(diskResult.data);
+                    }
+                }
 
-                const diskData = JSON.parse(diskResult.data);
+                if (!diskData) continue;
+
                 const diskHash = Store._hashObj(diskData, cryptoPrefix);
                 const storedHash = Store._diskHashes.databases[widgetId];
 
@@ -314,7 +386,7 @@ Object.assign(Store, {
                     }
                 }
             } catch (err) {
-                console.warn(`[STORE] Impossibile riconciliare JIT il widget ${widgetId} da disco:`, err);
+                console.warn(`[STORE] Impossibile riconciliare JIT il widget ${widgetId}:`, err);
             }
         }
 
@@ -535,6 +607,12 @@ Object.assign(Store, {
     },
 
     saveToFile: async (onProgress = null) => {
+        // Se siamo in modalità IndexedDB Browser, dirotta la persistenza sullo store nativo IDB
+        if (AppState.storageMode === 'idb') {
+            await Store.saveToIndexedDB(onProgress);
+            return;
+        }
+
         // Se un salvataggio è già in corso o se stiamo aspettando la scelta sul pop-up di conflitto, non procedere
         if (Store._isSavingFile || Store._isConflictResolving) { 
             Store._saveQueuePending = true; 
@@ -564,9 +642,7 @@ Object.assign(Store, {
                 }
             }
 
-            // Sincronizza lo stato in IndexedDB per la recovery (dopo il debounce di saveToFile)
-            Store.saveLocalBackup(); 
-
+            // ZERO DOPPIA SCRITTURA: Nessuna chiamata a IndexedDB durante il salvataggio su Hard Disk.
             const notesDir = await AppState.workspaceHandle.getDirectoryHandle('notes', { create: true });
             const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: true });
 
@@ -623,7 +699,7 @@ Object.assign(Store, {
                         phase: 'databases',
                         current: currentDbWritten,
                         total: totalDbsToWrite,
-                        message: `Scrittura componenti/database (${currentDbWritten}/${totalDbsToWrite})...`
+                        message: I18n.t('store_workspace.writing_databases_progress', { current: currentDbWritten, total: totalDbsToWrite })
                     });
                 }
 
@@ -764,7 +840,7 @@ Object.assign(Store, {
                             current: writtenNotesCount,
                             total: totalNotesToWrite,
                             pct: Math.round((writtenNotesCount / (totalNotesToWrite || 1)) * 100)
-                        }) || `Sincronizzazione file su disco: ${writtenNotesCount} di ${totalNotesToWrite}...`
+                        })
                     });
                 }
             }
@@ -782,19 +858,23 @@ Object.assign(Store, {
                 Store.isDirty = false;
                 UI.showStatus("saved");
 
+                // Pulizia deterministica della memoria di recupero dopo salvataggio consolidato su disco
+                if (typeof Store.clearLocalBackup === 'function') {
+                    Store.clearLocalBackup();
+                }
+
                 if (onProgress) {
                     onProgress({
                         phase: 'complete',
                         current: totalNotesToWrite,
                         total: totalNotesToWrite,
-                        message: I18n.t('progress.completed') || "Completato!"
+                        message: I18n.t('progress.completed')
                     });
                 }
             }
 
         } catch (err) {
             Store.isDirty = true; 
-            Store.saveLocalBackup();
             UI.showStatus("error");
             console.error("I/O Write Error:", err);
         } finally {
@@ -833,11 +913,10 @@ Object.assign(Store, {
     openWorkspace: async () => {
         try {
             const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-            
-            // Azzeramento pulsante e cache sessione di recupero
-            const btnRec = document.getElementById('btnRecoverSession');
-            if (btnRec) btnRec.style.display = 'none';
-            Store._pendingRecoveryData = null;
+
+            AppState.storageMode = 'fsaa';
+            localStorage.setItem('vanilladesk_storage_mode', 'fsaa');
+            localStorage.removeItem('vanilladesk_active_idb_ws');
 
             AppState.workspaceHandle = dirHandle;
             AppState.fileName = dirHandle.name;
@@ -853,7 +932,12 @@ Object.assign(Store, {
             Store._baseDatabases = {};
             CryptoUtils.clearCache();
 
-            // Rilevamento Architettura
+            // All'apertura di un Workspace fisico su disco, rimuove qualsiasi vecchio residuo di crash recovery da IndexedDB
+            if (typeof Store.clearLocalBackup === 'function') {
+                await Store.clearLocalBackup();
+            }
+
+            // Rilevamento Architettura: verifica della retrocompatibilità verso workspace legacy monolitici (data.json)
             let isLegacyMonolith = false;
             try {
                 const dataFileHandle = await dirHandle.getFileHandle('data.json');
@@ -880,7 +964,7 @@ Object.assign(Store, {
                     for await (const entry of notesDir.values()) {
                         if (entry.kind === 'file' && entry.name.endsWith('.json')) {
                             const noteId = entry.name.replace('.json', '');
-                            // AUTORITÀ DELL'INDICE (INDEX.JSON): Importa solo le note censite in noteOrder
+                            // Autorità dell'indice: importa solo le note censite in noteOrder
                             if (AppState._noteOrderCache && Array.isArray(AppState._noteOrderCache)) {
                                 if (!AppState._noteOrderCache.includes(noteId)) {
                                     continue;
@@ -919,10 +1003,10 @@ Object.assign(Store, {
                 } catch (e) {
                     console.error(e);
                     if (e.message === "DECRYPT_FAIL") {
-                        alert("Password errata. Impossibile leggere i file protetti.");
+                        alert(I18n.t('store_workspace.alert_wrong_password'));
                         AppState.documentPassword = null;
                     } else {
-                        alert("Cartella non riconosciuta o Workspace corrotto.");
+                        alert(I18n.t('store_workspace.alert_invalid_workspace_folder'));
                     }
                     UI.showStatus("error");
                     return;
@@ -932,6 +1016,7 @@ Object.assign(Store, {
             if (typeof AdvancedTable !== 'undefined') AdvancedTable.ensureSystemPropertiesDB();
             Store._finalizeUIAfterLoad();
 
+            // Migrazione automatica da data.json legacy verso la moderna architettura a frammenti
             if (isLegacyMonolith) {
                 Store.isDirty = true;
                 await Store.saveToFile();
@@ -947,17 +1032,16 @@ Object.assign(Store, {
             }
 
         } catch (err) {
-            if (err.name !== 'AbortError') alert("Errore apertura Workspace: " + err.message);
+            if (err.name !== 'AbortError') alert(I18n.t('store_workspace.alert_workspace_open_error', { error: err.message }));
         }
     },
 
     createWorkspace: async (forceFresh = false) => {
         if (AppState.workspaceHandle && Store.isDirty) {
-            if (!confirm("Attenzione: Stai per cambiare Workspace. Le modifiche non salvate dell'ambiente attuale verranno chiuse. Procedere?")) return;
+            if (!confirm(I18n.t('store_workspace.confirm_switch_workspace_loss'))) return;
         }
 
-        // Riconoscimento intelligente: se l'utente ha già note in memoria (es. sessione ripristinata o modificata),
-        // il modale deve aiutarlo a salvare/ricollegare il suo Workspace, non trattarlo da principiante.
+        // Riconoscimento contestuale tra nuovo workspace da zero e salvataggio/ricollegamento di sessione esistente
         const hadExistingNotesInRAM = AppState.notes && AppState.notes.length > 0;
         const isSavingExistingSession = !forceFresh && hadExistingNotesInRAM && !AppState.workspaceHandle;
 
@@ -968,11 +1052,6 @@ Object.assign(Store, {
 
         try {
             const dirHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
-            
-            // Azzeramento pulsante e cache sessione di recupero
-            const btnRec = document.getElementById('btnRecoverSession');
-            if (btnRec) btnRec.style.display = 'none';
-            Store._pendingRecoveryData = null;
 
             let isEmpty = true;
             let isExistingVanillaWorkspace = false;
@@ -987,12 +1066,10 @@ Object.assign(Store, {
 
             if (!isEmpty) {
                 if (isExistingVanillaWorkspace) {
-                    const msg = I18n.t('workspace_guide.confirm_update_existing_ws') || 
-                        "La cartella selezionata contiene già un Workspace VanillaDesk.\n\nVuoi collegarla e salvare qui le modifiche correnti della sessione?";
+                    const msg = I18n.t('workspace_guide.confirm_update_existing_ws');
                     if (!confirm(msg)) return;
                 } else {
-                    const msg = I18n.t('workspace_guide.confirm_folder_not_empty') || 
-                        "Attenzione: La cartella selezionata NON è vuota. L'app creerà o aggiornerà i propri file al suo interno. Vuoi procedere?";
+                    const msg = I18n.t('workspace_guide.confirm_folder_not_empty');
                     if (!confirm(msg)) return;
                 }
             }
@@ -1013,6 +1090,10 @@ Object.assign(Store, {
                 AppState.searchFilter = "";
             }
 
+            AppState.storageMode = 'fsaa';
+            localStorage.setItem('vanilladesk_storage_mode', 'fsaa');
+            localStorage.removeItem('vanilladesk_active_idb_ws');
+
             AppState.workspaceHandle = dirHandle;
             AppState.workspaceId = 'ws_' + Store.generateId();
             AppState.fileName = dirHandle.name;
@@ -1030,11 +1111,11 @@ Object.assign(Store, {
                 const now = new Date().toISOString();
                 const initialRevId = Store.generateId();
 
-                // Creazione della prima nota informativa, formattata e accattivante
+                // Creazione della prima nota informativa di benvenuto
                 AppState.notes.push({
                     id: newNoteId,
                     parentId: null,
-                    title: "Benvenuto in VanillaDesk",
+                    title: I18n.t('store_workspace.welcome_note_title'),
                     content: `
                         <blockquote>
                             <b>👋 Benvenuto nel tuo nuovo Workspace!</b><br>
@@ -1132,16 +1213,20 @@ Object.assign(Store, {
             Store.isDirty = true;
             await Store.saveToFile();
 
-            Store.saveLocalBackup();
+            // Pulisce qualsiasi vecchio residuo di recovery presente in IndexedDB
+            if (typeof Store.clearLocalBackup === 'function') {
+                await Store.clearLocalBackup();
+            }
+
             Store._finalizeUIAfterLoad();
 
             if (AppState.notes.length > 0) {
                 UI.selectNote(AppState.notes[0].id);
             }
-            UI.showToast("Workspace collegato e salvato su disco.", "success");
+            UI.showToast(I18n.t('store_workspace.toast_workspace_connected_saved'), "success");
 
         } catch (err) {
-            if (err.name !== 'AbortError') alert("Errore creazione/collegamento Workspace: " + err.message);
+            if (err.name !== 'AbortError') alert(I18n.t('store_workspace.alert_workspace_creation_error', { error: err.message }));
         }
     },
 
@@ -1155,13 +1240,13 @@ Object.assign(Store, {
                     AppState.documentPassword = password; 
                     Store._processLoadedMonolith(JSON.parse(decryptedJson));
                     return true;
-                } catch (err) { alert("Password errata o file corrotto."); return false; }
+                } catch (err) { alert(I18n.t('store_workspace.alert_wrong_password_or_corrupted')); return false; }
             } else {
                 AppState.documentPassword = null;
                 Store._processLoadedMonolith(JSON.parse(text));
                 return true;
             }
-        } catch (e) { alert("Impossibile leggere il file. Formato non valido."); return false; }
+        } catch (e) { alert(I18n.t('store_workspace.alert_invalid_file_format')); return false; }
     },
 
     _decryptAndProcessFragment: async (text, type, entityId = null) => {
@@ -1202,13 +1287,9 @@ Object.assign(Store, {
             Object.keys(cleanData).forEach(k => { if (k.startsWith('_')) delete cleanData[k]; });
             Store._diskHashes.notes[data.id] = Store._hashObj(cleanData, cryptoPrefix);
         } else if (type === 'database') {
-            // Assegnazione con supporto retrocompatibile a entityId, data.id e data._id_hack
-            const dbId = entityId || data.id || data._id_hack; 
-            if (data._id_hack) delete data._id_hack;
-            
+            const dbId = entityId || data.id;
             AppState.databases[dbId] = data;
             
-            // HASH CANONICO
             const realHash = Store._hashObj(data, cryptoPrefix);
             Store._diskHashes.databases[dbId] = realHash;
             Store._baseDatabases[dbId] = JSON.parse(JSON.stringify(data));
@@ -1224,6 +1305,18 @@ Object.assign(Store, {
         AppState.databases = parsedData.databases || {};
         AppState.homeCitations = parsedData.homeCitations || [];
         AppState.templates = parsedData.templates || []; 
+
+        // Recupero e memorizzazione provvisoria degli asset serializzati nel backup JSON
+        if (parsedData.assets && typeof parsedData.assets === 'object') {
+            Store._lastImportedAssets = parsedData.assets;
+            for (const [filename, dataUrl] of Object.entries(parsedData.assets)) {
+                if (filename.startsWith('img_')) {
+                    Editor.imageCache[filename] = dataUrl;
+                } else if (filename.startsWith('aud_')) {
+                    Editor.audioCache[filename] = dataUrl;
+                }
+            }
+        }
 
         let rawNotes = Array.isArray(parsedData) ? parsedData : (parsedData.notes || []);
         const parser = new DOMParser();
@@ -1281,13 +1374,13 @@ if (typeof BroadcastChannel !== 'undefined') {
             const data = event.data;
             if (!data) return;
 
-            // ISOLAMENTO RIGOROSO WORKSPACE: Se la scheda non ha un workspace aperto o il messaggio proviene da un workspace diverso, scarta subito
-            if (!AppState.workspaceHandle || !AppState.workspaceId || !data.workspaceId) return;
+            // Isolamento rigoroso: se la scheda non ha un workspace aperto o il messaggio proviene da un workspace diverso, scarta subito
+            if ((!AppState.workspaceHandle && AppState.storageMode !== 'idb') || !AppState.workspaceId || !data.workspaceId) return;
             if (data.workspaceId !== AppState.workspaceId) return;
 
             if (data.type === 'db_saved' && data.tableId) {
                 if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.forceRecalculate === 'function') {
-                    // Sincronizzazione automatica silenziosa (nessun toast di disturbo se scatta da un'altra scheda)
+                    // Sincronizzazione automatica silenziosa senza toast di disturbo
                     AdvancedTable.forceRecalculate(data.tableId, true);
                 }
             } 
@@ -1371,7 +1464,7 @@ if (typeof BroadcastChannel !== 'undefined') {
                                 UI.renderTree();
                             }
                             if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-                                UI.showToast("La nota non è più disponibile sul disco.", "warning");
+                                UI.showToast(I18n.t('store_workspace.toast_note_not_available'), "warning");
                             }
                             UI.goHome();
                         }

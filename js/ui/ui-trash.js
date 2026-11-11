@@ -6,7 +6,7 @@
  * FEAT PHYSICAL DELETION PROGRESS: Notifica all'utente della cancellazione fisica da disco tramite UI.ProgressModal.
  * FEAT HARD DELETE BRANCH WARNING (4A): Quantificazione esatta delle sotto-note rimosse definitivamente.
  * FEAT ORPHAN ATTACHMENTS AUDITING & PURGE: Rilevamento trasparente degli allegati orfani (immagini/audio rimossi dalle note)
- * con calcolo dimensione risparmiabile e pulsante dedicato per la pulizia selettiva dal disco.
+ * con calcolo dimensione risparmiabile e pulsante dedicato per la pulizia selettiva dal disco o da IndexedDB (idb_assets).
  * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
@@ -15,9 +15,9 @@ Object.assign(UI, {
         open: async () => {
             const deletedNotes = AppState.notes.filter(n => n.deletedAt).sort((a, b) => b.deletedAt - a.deletedAt);
 
-            // Audit degli allegati orfani su disco (immagini e tracce audio rimosse dai testi)
+            // Audit degli allegati orfani su disco (assets/) o in IndexedDB (idb_assets)
             let orphanStats = { count: 0, formattedSize: '0 Bytes', files: [] };
-            if (AppState.workspaceHandle && typeof Store.getOrphanedAssets === 'function') {
+            if ((AppState.workspaceHandle || AppState.storageMode === 'idb') && typeof Store.getOrphanedAssets === 'function') {
                 orphanStats = await Store.getOrphanedAssets();
             }
 
@@ -27,7 +27,7 @@ Object.assign(UI, {
                 </div>
             `;
 
-            // Sezione dedicata agli allegati orfani presenti nella cartella assets/
+            // Sezione dedicata agli allegati orfani presenti nella cartella assets/ o in idb_assets
             if (orphanStats.count > 0) {
                 const titleOrphans = I18n.t('trash.orphans_title', { count: orphanStats.count });
                 const descOrphans = I18n.t('trash.orphans_desc', { size: orphanStats.formattedSize });
@@ -158,7 +158,7 @@ Object.assign(UI, {
                 Editor.cleanOrphanedCaches();
             }
 
-            // Segnalazione atomica per Garbage Collection fisica coordinata da saveToFile
+            // Segnalazione atomica per Garbage Collection fisica coordinata da saveToFile o saveToIndexedDB
             if (typeof Store !== 'undefined') {
                 Store.markNeedsPhysicalGC();
                 
@@ -214,12 +214,12 @@ Object.assign(UI, {
                 Editor.cleanOrphanedCaches();
             }
 
-            // 5. Eliminazione fisica contestuale di tutti gli allegati orfani su disco
+            // 5. Eliminazione fisica contestuale di tutti gli allegati orfani su disco o in idb_assets
             if (typeof Store !== 'undefined' && typeof Store.deleteOrphanedAssets === 'function') {
                 await Store.deleteOrphanedAssets();
             }
 
-            // 6. Esecuzione coordinata della rimozione fisica dei file su disco con feedback visivo reale
+            // 6. Esecuzione coordinata della rimozione fisica dei file su disco o in IndexedDB
             if (typeof Store !== 'undefined') {
                 Store.markNeedsPhysicalGC();
                 

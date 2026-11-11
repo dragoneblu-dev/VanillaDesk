@@ -787,7 +787,7 @@ Object.assign(AdvancedTable, {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         if (!realTableId) return;
 
-        if (AppState.workspaceHandle && typeof Store.readDatabaseFromDisk === 'function') {
+        if ((AppState.workspaceHandle || AppState.storageMode === 'idb') && typeof Store.readDatabaseFromDisk === 'function') {
             const freshState = await Store.readDatabaseFromDisk(realTableId);
             if (freshState) {
                 AppState.databases[realTableId] = freshState;

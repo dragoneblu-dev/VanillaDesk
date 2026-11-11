@@ -5,6 +5,7 @@
  * Tracciamento del dirty state volatile (_isDirty, _isDraft) all'importazione di una nuova nota da modpack.
  * FEAT GUIDE: Presentazione della finestra modale informativa (UI.promptModpackGuide) prima della selezione file.
  * Localizzazione dinamica con supporto multilingua I18n.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 const PackageManager = {
@@ -74,7 +75,7 @@ const PackageManager = {
             <div style="display:flex; flex-direction:column; gap:15px;">
                 <div>
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('pkg_manager.pack_name_label')}</label>
-                    <input type="text" id="exportMpName" class="modern-input" value="${(note.title || 'Nuovo Modulo').replace(/"/g, '&quot;')}">
+                    <input type="text" id="exportMpName" class="modern-input" value="${(note.title || I18n.t('pkg_manager.default_module_title')).replace(/"/g, '&quot;')}">
                 </div>
                 <div>
                     <label style="font-size:0.8rem; color:var(--text-secondary); font-weight:bold;">${I18n.t('pkg_manager.version_label')}</label>
@@ -97,7 +98,7 @@ const PackageManager = {
     },
 
     _finalizeExport: (noteId) => {
-        const name = document.getElementById('exportMpName').value.trim() || 'Modpack';
+        const name = document.getElementById('exportMpName').value.trim() || I18n.t('pkg_manager.default_pack_name');
         const version = document.getElementById('exportMpVersion').value.trim() || '1.0';
         const desc = document.getElementById('exportMpDesc').value.trim() || '';
 

@@ -10,6 +10,8 @@
  * FIX AUTOCOMPLETE DATES: Allineamento parsing delle date con estrazione sicura di intervalli {start, end}
  * e timestamp di sistema in buildFilteredRows; rimozione automatica di stringhe "Invalid Date" dai suggerimenti unici.
  * FEAT DATE RANGE FILTERING: buildFilteredRows allineato all'algebra degli intervalli di advanced-table-data.js.
+ * FEAT RIGHT-ALIGNED EXPANDABLE AUTOCOMPLETE: Ancoraggio al bordo destro dell'input con espansione fluida verso sinistra (fino a 2x) senza troncamenti forzati.
+ * FEAT DYNAMIC TOOLTIP ON OVERFLOW: Tooltip mostrato solo quando il testo della voce è effettivamente troncato (scrollWidth > clientWidth).
  */
 
 Object.assign(AdvancedTable, {
@@ -299,8 +301,14 @@ Object.assign(AdvancedTable, {
             }
             const rect = inputEl.getBoundingClientRect();
             popup.style.top = rect.bottom + 'px';
-            popup.style.left = rect.left + 'px';
-            popup.style.width = rect.width + 'px';
+            popup.style.left = 'auto';
+            popup.style.right = (window.innerWidth - rect.right) + 'px';
+
+            const maxAllowedWidth = Math.min(rect.width * 2, rect.right - 10);
+            popup.style.minWidth = rect.width + 'px';
+            popup.style.maxWidth = maxAllowedWidth + 'px';
+            popup.style.width = 'max-content';
+            popup.style.boxSizing = 'border-box';
 
             const optYes = I18n.t('adv_filter.cb_checked');
             const optNo = I18n.t('adv_filter.cb_unchecked');
@@ -625,14 +633,21 @@ Object.assign(AdvancedTable, {
 
         const rect = inputEl.getBoundingClientRect();
         popup.style.top = rect.bottom + 'px';
-        popup.style.left = rect.left + 'px';
-        popup.style.width = rect.width + 'px';
+        popup.style.left = 'auto';
+        popup.style.right = (window.innerWidth - rect.right) + 'px';
+
+        // LARGHEZZA ELASTICA: Ancorato a destra dell'input, si espande verso sinistra fino a 2x senza uscire dal viewport
+        const maxAllowedWidth = Math.min(rect.width * 2, rect.right - 10);
+        popup.style.minWidth = rect.width + 'px';
+        popup.style.maxWidth = maxAllowedWidth + 'px';
+        popup.style.width = 'max-content';
+        popup.style.boxSizing = 'border-box';
 
         let html = '';
         valArray.forEach(v => {
             let displayVal = v;
-            if (displayVal.length > 45) displayVal = displayVal.substring(0, 45) + '...';
-            html += `<div class="adv-filter-autocomplete-item" title="${v.replace(/"/g, '&quot;')}" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', '${v.replace(/'/g, "\\'")}')">${displayVal.replace(/</g, '&lt;')}</div>`;
+            const safeVal = v.replace(/"/g, '&quot;');
+            html += `<div class="adv-filter-autocomplete-item" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" data-full-title="${safeVal}" onmouseenter="if (this.scrollWidth > this.clientWidth) { this.title = this.getAttribute('data-full-title'); } else { this.removeAttribute('title'); }" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', '${v.replace(/'/g, "\\'")}')">${displayVal.replace(/</g, '&lt;')}</div>`;
         });
 
         popup.innerHTML = html;

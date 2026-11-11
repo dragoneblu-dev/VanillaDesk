@@ -12,6 +12,7 @@
  * FIX SEARCH NAVIGATION IN DB NOTES: Inclusione completa e ordinata delle note di database (isRecordNote)
  * e relative sotto-note in _findNextNoteWithMatches per consentire alle frecce di scorrere tutti i risultati.
  * FIX EXCLUDE CITED DB FROM SEQUENCE: Riconoscimento esatto con \sid= per non catturare i data-ref-id delle citazioni.
+ * FEAT STORAGE MODE: Aggiunto tracciamento esplicito di storageMode ('fsaa' | 'idb' | 'ram') e idbWorkspaceId.
  */
 
 const AppState = {
@@ -23,6 +24,10 @@ const AppState = {
     
     workspaceHandle: null, 
     assetsHandle: null,
+
+    // Modalità di archiviazione attiva: 'fsaa' (Cartella PC) | 'idb' (Memoria Browser) | 'ram' (Transitorio)
+    storageMode: 'ram',
+    idbWorkspaceId: null,
     
     draggedNoteId: null,
     searchFilter: "",

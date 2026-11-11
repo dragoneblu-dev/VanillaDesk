@@ -5,7 +5,7 @@
  * - Zero latenza, zero duplicazioni e zero problemi di permessi del File System o cross-origin popup.
  * - Gestione dinamica del Drawer: aggancia temporaneamente #advGlobalDrawer all'overlay massimizzato
  *   all'apertura e lo ripristina dentro .layout alla chiusura per garantire visibilità e funzionamento perfetto dei filtri.
- * - Invocazione affidabile di loadGraphConfig() all'apertura del grafo per ripristinare le forze fisiche configurate.
+ * - Invocazione affidabile di loadGraphConfig() con persistenza su disco (FSAA) o IndexedDB (Modalità Browser).
  * - Apertura e Inquadratura Panoramica (fitToView): mostra sempre l'intera costellazione adattata a pieno schermo,
  *   selezionando visivamente il targetNoteId (se specificato) senza alterare la telecamera globale.
  * - Navigazione reattiva: al doppio click su nota o tag (#), chiude il grafo e attiva istantaneamente la pagina in VanillaDesk.
@@ -79,8 +79,7 @@ window.GraphApp = {
             GraphUI.syncHeaderModeControls();
         }
 
-        // 8. Sincronizzazione geometrica a doppio frame (Double rAF):
-        // Esegue SEMPRE fitToView per riempire confortevolmente lo schermo senza rimpicciolire il grafo
+        // 8. Sincronizzazione geometrica a doppio frame (Double rAF)
         requestAnimationFrame(() => {
             requestAnimationFrame(() => {
                 GraphCanvas.resize();
@@ -124,6 +123,7 @@ window.GraphApp = {
     loadGraphConfig: async () => {
         let loaded = false;
 
+        // 1. CARTELLA SU DISCO (File System Access API)
         if (AppState.workspaceHandle) {
             try {
                 const assetsDir = await AppState.workspaceHandle.getDirectoryHandle('assets', { create: false });
@@ -140,10 +140,27 @@ window.GraphApp = {
                 }
             } catch (_) {}
         }
+        // 2. MEMORIA DEL BROWSER (IndexedDB store: idb_assets)
+        else if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbGetAsset === 'function') {
+            try {
+                const record = await Store.idbGetAsset(AppState.workspaceId, 'graph_config.json');
+                if (record && record.blob) {
+                    const text = await record.blob.text();
+                    const config = JSON.parse(text);
+                    if (config) {
+                        if (config.physics) Object.assign(GraphCanvas.physics, config.physics);
+                        if (config.options) Object.assign(GraphData.options, config.options);
+                        loaded = true;
+                    }
+                }
+            } catch (_) {}
+        }
 
+        // 3. FALLBACK LOCALSTORAGE (CON ISOLAMENTO PER WORKSPACE SE ATTIVO)
         if (!loaded) {
             try {
-                const saved = localStorage.getItem('vanilladesk_graph_config');
+                const storageKey = AppState.workspaceId ? `vanilladesk_graph_config_${AppState.workspaceId}` : 'vanilladesk_graph_config';
+                const saved = localStorage.getItem(storageKey) || localStorage.getItem('vanilladesk_graph_config');
                 if (saved) {
                     const config = JSON.parse(saved);
                     if (config.physics) Object.assign(GraphCanvas.physics, config.physics);
@@ -166,18 +183,30 @@ window.GraphApp = {
             options: { ...GraphData.options }
         };
 
+        const configJson = JSON.stringify(config, null, 2);
+
+        // Salvataggio con isolamento workspace in localStorage
         try {
-            localStorage.setItem('vanilladesk_graph_config', JSON.stringify(config));
+            const storageKey = AppState.workspaceId ? `vanilladesk_graph_config_${AppState.workspaceId}` : 'vanilladesk_graph_config';
+            localStorage.setItem(storageKey, configJson);
         } catch (_) {}
 
+        // 1. CARTELLA SU DISCO (File System Access API)
         if (AppState.workspaceHandle) {
             try {
                 const assetsDir = await AppState.workspaceHandle.getDirectoryHandle('assets', { create: true });
                 const graphDir = await assetsDir.getDirectoryHandle('graph', { create: true });
                 const fileHandle = await graphDir.getFileHandle('config.json', { create: true });
                 const writable = await fileHandle.createWritable();
-                await writable.write(JSON.stringify(config, null, 2));
+                await writable.write(configJson);
                 await writable.close();
+            } catch (_) {}
+        }
+        // 2. MEMORIA DEL BROWSER (IndexedDB store: idb_assets)
+        else if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbSaveAsset === 'function') {
+            try {
+                const blob = new Blob([configJson], { type: 'application/json' });
+                await Store.idbSaveAsset(AppState.workspaceId, 'graph_config.json', blob, 'application/json');
             } catch (_) {}
         }
     },

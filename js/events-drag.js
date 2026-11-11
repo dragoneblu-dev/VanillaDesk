@@ -512,7 +512,7 @@ Object.assign(EventsGlobal, {
                 }
 
                 if (protectedParent && AppState.draggedBlockType === 'image') {
-                    UI.showToast("Le immagini non possono essere inserite all'interno di un componente avanzato.", "warning");
+                    UI.showToast(I18n.t('events_drag.toast_image_in_widget_blocked'), "warning");
                     AppState.draggedBlockId = null;
                     AppState.draggedBlockType = null;
                     return;

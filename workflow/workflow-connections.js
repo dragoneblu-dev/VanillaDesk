@@ -13,6 +13,7 @@
  *   e tangenti Bézier proiettate per impedire sovrapposizioni e sbandate su nodi intermedi.
  * - Ereditarietà automatica del verso della relazione tramite getEffectiveDirection().
  * - Filtraggio preventivo degli archi per verificare l'esistenza fisica di entrambi i nodi in db.rows.
+ * - Persistenza atomica delle relazioni sia in IndexedDB (Modalità Browser) sia su disco (FSAA).
  */
 
 WorkflowApp._portRoles = WorkflowApp._portRoles || {};
@@ -412,6 +413,62 @@ Object.assign(WorkflowApp, {
     },
 
     persistDatabaseToDisk: async () => {
+        // 1. MODALITÀ BROWSER (IndexedDB)
+        if (AppState.storageMode === 'idb' && AppState.workspaceId) {
+            try {
+                const db = await Store.initDB();
+                const sanitizedState = JSON.parse(JSON.stringify(WorkflowApp.currentDbState));
+                delete sanitizedState._renderCache;
+                const serialized = JSON.stringify(sanitizedState);
+                WorkflowApp._lastDbContentHash = serialized;
+
+                const workspaceSalt = AppState.documentPassword ? Store._getWorkspaceSalt() : null;
+                let dbRecord = null;
+
+                if (AppState.documentPassword) {
+                    const encPayload = await CryptoUtils.encrypt(serialized, AppState.documentPassword, workspaceSalt);
+                    dbRecord = {
+                        workspaceId: AppState.workspaceId,
+                        id: WorkflowApp.currentDbId,
+                        isEncrypted: true,
+                        payload: encPayload
+                    };
+                } else {
+                    dbRecord = { ...sanitizedState, workspaceId: AppState.workspaceId, id: WorkflowApp.currentDbId, isEncrypted: false };
+                }
+
+                await new Promise((resolve, reject) => {
+                    const tx = db.transaction('idb_databases', 'readwrite');
+                    tx.objectStore('idb_databases').put(dbRecord);
+                    tx.oncomplete = () => resolve();
+                    tx.onerror = () => reject(tx.error);
+                });
+
+                // Sincronizza anche la finestra principale opener se attiva
+                if (window.opener && !window.opener.closed && window.opener.AppState && window.opener.AppState.databases) {
+                    window.opener.AppState.databases[WorkflowApp.currentDbId] = JSON.parse(JSON.stringify(sanitizedState));
+                    if (window.opener.Store) window.opener.Store.isDirty = false;
+                    if (window.opener.AdvancedTable && typeof window.opener.AdvancedTable.updateDependentViews === 'function') {
+                        window.opener.AdvancedTable.updateDependentViews(WorkflowApp.currentDbId);
+                    }
+                }
+
+                if (WorkflowApp.syncChannel) {
+                    WorkflowApp.syncChannel.postMessage({ 
+                        workspaceId: AppState.workspaceId,
+                        type: 'db_saved', 
+                        tableId: WorkflowApp.currentDbId 
+                    });
+                }
+                return;
+            } catch (e) {
+                console.error("Errore salvataggio relazione in IndexedDB:", e);
+                UI.showToast("Impossibile salvare la relazione nel browser.", "error");
+                return;
+            }
+        }
+
+        // 2. MODALITÀ CARTELLA SU DISCO (File System Access API)
         if (!AppState.workspaceHandle) return;
         try {
             const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases', { create: false });
@@ -422,8 +479,21 @@ Object.assign(WorkflowApp, {
             await writable.close();
             WorkflowApp._lastDbContentHash = serialized;
 
+            // Sincronizza anche la finestra principale opener se attiva
+            if (window.opener && !window.opener.closed && window.opener.AppState && window.opener.AppState.databases) {
+                window.opener.AppState.databases[WorkflowApp.currentDbId] = JSON.parse(serialized);
+                if (window.opener.Store) window.opener.Store.isDirty = false;
+                if (window.opener.AdvancedTable && typeof window.opener.AdvancedTable.updateDependentViews === 'function') {
+                    window.opener.AdvancedTable.updateDependentViews(WorkflowApp.currentDbId);
+                }
+            }
+
             if (WorkflowApp.syncChannel) {
-                WorkflowApp.syncChannel.postMessage({ type: 'db_saved', tableId: WorkflowApp.currentDbId });
+                WorkflowApp.syncChannel.postMessage({ 
+                    workspaceId: AppState.workspaceId,
+                    type: 'db_saved', 
+                    tableId: WorkflowApp.currentDbId 
+                });
             }
         } catch (e) {
             console.error("Errore salvataggio relazione:", e);
@@ -840,7 +910,7 @@ Object.assign(WorkflowApp, {
 
         const titleColId = WorkflowApp.layout.titleColId || (db.columns && db.columns[0]?.id);
 
-        // Rendering effettivo degli archi SVG (lo spessore è governato dal CSS con --wf-line-width)
+        // Rendering effettivo degli archi SVG
         resolvedEdges.forEach(edge => {
             let d = '';
 

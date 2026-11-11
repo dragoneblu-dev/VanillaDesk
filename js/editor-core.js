@@ -7,8 +7,8 @@
  * - Modalità avanzata Raw HTML Source Editor a tutto schermo (openRawHtmlEditor, applyRawHtml, copyRawHtmlToClipboard).
  * - Boundary enforcement, selezione widget e smart escape dai blocchi (enforceBoundaries, handleSmartClickEscape).
  * - Ispezione del contesto di selezione per la toolbar (checkContext, editContextElement, toggleAdvancedToolbar).
- * - FEAT RASSICURAZIONE SESSIONE RIPRISTINATA (Soluzione A): Segnaposto rassicurante in attesa di ricollegamento
- *   quando !AppState.assetsHandle, prevenendo il panico dell'utente con grafica e testi chiari.
+ * - FIX RACE CONDITION ONERROR: Disattivazione del marcatore rotto se l'immagine possiede data-image-ref ed è in corso il recupero da IDB/disco.
+ * - FEAT IDB ASSET HYDRATION CON LOG DIAGNOSTICI: Supporto alla lettura asincrona di Blob fisici da IndexedDB in modalità Browser.
  */
 
 const Editor = {
@@ -19,9 +19,7 @@ const Editor = {
     imageCache: {},
     _pendingAssetPromises: new Map(),
 
-    // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine:
-    // Se il Workspace non è collegato (!AppState.assetsHandle), mostra un segnaposto rassicurante di attesa (Soluzione A);
-    // altrimenti mostra il segnaposto di immagine eliminata dal disco.
+    // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine
     getBrokenImagePlaceholder: (ref = '') => {
         const cleanRef = (ref || I18n.t('editor_core.missing_image'))
             .replace(/&/g, '&amp;')
@@ -29,8 +27,7 @@ const Editor = {
             .replace(/>/g, '&gt;')
             .replace(/"/g, '&quot;');
 
-        // SOLUZIONE A: Se siamo in sessione ripristinata o senza cartella Workspace aperta
-        const isWorkspaceDisconnected = !AppState.assetsHandle;
+        const isWorkspaceDisconnected = !AppState.assetsHandle && AppState.storageMode !== 'idb';
 
         if (isWorkspaceDisconnected) {
             const titleText = I18n.t('editor_core.waiting_workspace_title');
@@ -74,7 +71,8 @@ const Editor = {
         img.setAttribute('data-broken', 'true');
         img.src = Editor.getBrokenImagePlaceholder(ref);
         
-        const tooltip = !AppState.assetsHandle 
+        const isDisconnected = !AppState.assetsHandle && AppState.storageMode !== 'idb';
+        const tooltip = isDisconnected 
             ? I18n.t('editor_core.waiting_workspace_tooltip')
             : I18n.t('editor_core.broken_image_tooltip', { ref });
         img.setAttribute('title', tooltip);
@@ -82,18 +80,22 @@ const Editor = {
 
     handleImageError: (img) => {
         if (!img || img.getAttribute('data-broken') === 'true') return;
-        const ref = img.getAttribute('data-image-ref') || img.getAttribute('alt') || I18n.t('editor_core.image_label');
-        Editor.markImageBroken(img, ref);
+        const ref = img.getAttribute('data-image-ref');
+
+        // Se l'immagine possiede un riferimento fisico valido ed è in corso o in attesa di caricamento asincrono, non bloccarla subito
+        if (ref && (!img.hasAttribute('src') || img.getAttribute('src') === '')) {
+            return;
+        }
+
+        const fallbackRef = ref || img.getAttribute('alt') || I18n.t('editor_core.image_label');
+        Editor.markImageBroken(img, fallbackRef);
     },
 
-    // Caricamento asincrono on-demand (JIT) di singoli asset da disco senza precaricamento preventivo del Workspace
-    // e con deduplicazione delle Promise per evitare memory leak di ObjectURL concorrenti
+    // Caricamento asincrono on-demand (JIT) di singoli asset da disco (FSAA) o IndexedDB
     loadAssetOnDemand: async (ref, type) => {
         if (!ref) return null;
         if (type === 'img' && Editor.imageCache[ref]) return Editor.imageCache[ref];
         if (type === 'aud' && Editor.audioCache[ref]) return Editor.audioCache[ref];
-
-        if (!AppState.assetsHandle) return null;
 
         const cacheKey = `${type}:${ref}`;
         if (Editor._pendingAssetPromises.has(cacheKey)) {
@@ -102,16 +104,37 @@ const Editor = {
 
         const promise = (async () => {
             try {
-                const fileHandle = await AppState.assetsHandle.getFileHandle(ref, { create: false });
-                const file = await fileHandle.getFile();
-                const url = URL.createObjectURL(file);
+                // 1. CARICAMENTO DA INDEXEDDB (Modalità Browser)
+                if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbGetAsset === 'function') {
+                    console.log(`[Asset Loader] Richiesta asset "${ref}" (${type}) per workspace IDB: ${AppState.workspaceId}...`);
+                    const record = await Store.idbGetAsset(AppState.workspaceId, ref);
+                    if (record && record.blob) {
+                        const url = URL.createObjectURL(record.blob);
+                        if (type === 'img') Editor.imageCache[ref] = url;
+                        if (type === 'aud') Editor.audioCache[ref] = url;
+                        console.log(`[Asset Loader] Asset "${ref}" caricato con successo da IndexedDB (${record.blob.size} bytes).`);
+                        return url;
+                    } else {
+                        console.warn(`[Asset Loader] Record per asset "${ref}" non trovato in idb_assets.`);
+                        return null;
+                    }
+                }
 
-                if (type === 'img') Editor.imageCache[ref] = url;
-                if (type === 'aud') Editor.audioCache[ref] = url;
+                // 2. CARICAMENTO DA FILE SYSTEM ACCESS API (Cartella PC)
+                if (AppState.assetsHandle) {
+                    const fileHandle = await AppState.assetsHandle.getFileHandle(ref, { create: false });
+                    const file = await fileHandle.getFile();
+                    const url = URL.createObjectURL(file);
 
-                return url;
+                    if (type === 'img') Editor.imageCache[ref] = url;
+                    if (type === 'aud') Editor.audioCache[ref] = url;
+
+                    return url;
+                }
+
+                return null;
             } catch (err) {
-                console.warn(`[LAZY ASSET] Asset ${ref} non trovato su disco:`, err);
+                console.warn(`[LAZY ASSET] Asset "${ref}" non reperibile:`, err);
                 return null;
             } finally {
                 Editor._pendingAssetPromises.delete(cacheKey);
@@ -196,7 +219,7 @@ const Editor = {
     handleImageUpload: async (input) => {
         if (!input.files || !input.files[0]) return;
         
-        if (!AppState.assetsHandle) {
+        if (!AppState.assetsHandle && AppState.storageMode !== 'idb') {
             alert(I18n.t('editor_core.alert_no_workspace_upload'));
             input.value = '';
             return;

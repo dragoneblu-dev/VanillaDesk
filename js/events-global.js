@@ -31,6 +31,9 @@
  * REFACTOR: Rimosso listener fallback middle-click da click (gestito nativamente da auxclick).
  * FEAT VERTICAL SHIFT SELECTION HOOK: Intercettazione di Shift+ArrowUp/Down prima del table handler.
  * FIX IDEMPOTENT INIT: Guardia _initialized per prevenire l'accumulo di listener multipli su riesecuzione dei test.
+ * FIX BEFOREUNLOAD IDB DISPATCH: Persistenza immediata su saveToIndexedDB() alla chiusura della scheda se in modalità Browser.
+ * FIX READ-MODE CHECKBOX SAVE (1.1): Applicazione di minifyHTMLForStorage al cambio checkbox in lettura con guardia
+ * sui database autonomi, impedendo il salvataggio su disco del markup espanso dei widget a video.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -73,13 +76,12 @@ Object.assign(EventsGlobal, {
             let href = link.getAttribute('href');
             if (!href || href === '#' || href.startsWith('javascript:')) return;
 
-            // GESTIONE ANCORE INTERNE (In-page Anchors es. #sec-1, #sec-2-media, #manualTopIndex)
+            // Gestione ancore interne (#sec-1, #manualTopIndex, ecc.)
             if (href.startsWith('#')) {
                 const targetId = href.substring(1);
                 if (targetId) {
                     let targetEl = document.getElementById(targetId);
                     
-                    // Fallback intelligente: se l'ancora specifica non esiste, prova a risalire alla macro-sezione (es. sec-2)
                     if (!targetEl && targetId.startsWith('sec-')) {
                         const parts = targetId.split('-');
                         if (parts.length >= 2) {
@@ -123,7 +125,7 @@ Object.assign(EventsGlobal, {
             EventsGlobal.initDragAndDrop(editorEl, scrollArea);
         }
 
-        // 3. CHIUSURA AUTOMATICA TOOLBAR LINK QUANDO IL CURSORE SI SPOSTA ALL'ESTERNO DEL LINK
+        // 3. Chiusura automatica toolbar link quando il cursore esce dall'elemento
         document.addEventListener('selectionchange', () => {
             if (typeof LinkManager !== 'undefined' && LinkManager.activeLink) {
                 const sel = window.getSelection();
@@ -219,7 +221,7 @@ Object.assign(EventsGlobal, {
             document.body.style.cursor = '';
         });
 
-        // 6. GESTIONE REATTIVA DEL FOCUS TRA TITOLO NOTA E CORPO TESTO PER LA TOOLBAR
+        // 6. Gestione reattiva del focus tra titolo e corpo
         document.addEventListener('focusin', (e) => {
             if (!AppState.isEditMode) return;
             const target = e.target;
@@ -236,11 +238,13 @@ Object.assign(EventsGlobal, {
             }
         });
 
-        // BLINDO SALVATAGGIO IN USCITA: Blocco chiusura accidentale della scheda se una scrittura massiva è in corso
+        // Blocco chiusura accidentale della scheda se modifiche sono in sospeso
         window.addEventListener('beforeunload', (e) => {
             if (Store.isDirty || Store._isSavingFile) {
                 if (AppState.workspaceHandle) {
                     Store.saveToFile();
+                } else if (AppState.storageMode === 'idb') {
+                    Store.saveToIndexedDB();
                 } else {
                     Store.saveLocalBackup();
                 }
@@ -262,7 +266,7 @@ Object.assign(EventsGlobal, {
             const key = e.key ? e.key.toLowerCase() : '';
             const isKeyH = key === 'h' || e.code === 'KeyH';
 
-            // SCORCIATOIE NAVIGAZIONE CRONOLOGICA LINEARE: Alt+Left (Indietro) e Alt+Right (Avanti)
+            // Scorciatoie navigazione cronologica lineare: Alt+Left / Alt+Right
             if (e.altKey && !isCtrlOrCmd && !e.shiftKey) {
                 if (e.key === 'ArrowLeft') {
                     e.preventDefault();
@@ -278,7 +282,7 @@ Object.assign(EventsGlobal, {
                 }
             }
 
-            // SCORCIATOIA VELOCE: CTRL+P APRE LA SIDEBAR E FOCALIZZA LA RICERCA GLOBALE
+            // Ctrl+P: apre sidebar e focalizza ricerca globale
             if (isCtrlOrCmd && key === 'p') {
                 e.preventDefault();
                 e.stopPropagation();
@@ -300,7 +304,7 @@ Object.assign(EventsGlobal, {
                 return;
             }
 
-            // GESTIONE VISUALE RIGA HOME ED END (Con e Senza Shift per soft-wrap)
+            // Gestione visuale riga Home ed End
             if (e.key === 'Home' || e.key === 'End') {
                 if (AppState.isEditMode && typeof Editor.handleHomeEndNavigation === 'function') {
                     if (Editor.handleHomeEndNavigation(e)) {
@@ -312,7 +316,7 @@ Object.assign(EventsGlobal, {
             if (!AppState.isEditMode) return;
             if (!e.key && !e.code) return; 
 
-            // ISOLAMENTO RIGOROSO INPUT NATIVI: Gestione mirata di Ctrl+A su input e textarea
+            // Isolamento input nativi: Ctrl+A
             const isNativeInput = e.target && (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT');
             if (isNativeInput) {
                 if (isCtrlOrCmd && key === 'a') {
@@ -326,7 +330,7 @@ Object.assign(EventsGlobal, {
                 return;
             }
 
-            // ISOLAMENTO SELECT-ALL (Ctrl+A): Copre anche campi di testo del database (.adv-cell-text), tabelle e titoli dei widget
+            // Isolamento Select-All (Ctrl+A)
             if (isCtrlOrCmd && key === 'a' && AppState.isEditMode) {
                 const sel = window.getSelection();
                 if (sel.rangeCount > 0) {
@@ -369,7 +373,7 @@ Object.assign(EventsGlobal, {
                 }
             }
 
-            // SCORCIATOIE RAPIDE PER TITOLI H1, H2, H3 E PARAGRAFO CORPO
+            // Scorciatoie per titoli H1, H2, H3 e paragrafo
             if (isCtrlOrCmd && (e.altKey || e.shiftKey) && AppState.isEditMode) {
                 const isDigit1 = e.code === 'Digit1' || e.code === 'Numpad1' || e.key === '1' || e.key === '!';
                 const isDigit2 = e.code === 'Digit2' || e.code === 'Numpad2' || e.key === '2';
@@ -407,7 +411,7 @@ Object.assign(EventsGlobal, {
                         }
                     }
 
-                    // Navigazione completa su griglie e widget per tutte e 4 le direzioni
+                    // Navigazione su griglie e tabelle
                     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
                         if (typeof Editor.handleTableNavigation === 'function') {
                             if (Editor.handleTableNavigation(e)) return;
@@ -434,13 +438,13 @@ Object.assign(EventsGlobal, {
             }
 
             if (isCtrlOrCmd && AppState.isEditMode) {
-                // FORMATTAZIONI STANDARD DI TESTO
+                // Formattazioni standard di testo
                 if (!e.shiftKey && !e.altKey && key === 'b') { e.preventDefault(); Editor.exec('bold'); return; }
                 if (!e.shiftKey && !e.altKey && key === 'i') { e.preventDefault(); Editor.exec('italic'); return; }
                 if (!e.shiftKey && !e.altKey && key === 'u') { e.preventDefault(); Editor.exec('underline'); return; }
                 if (!e.shiftKey && !e.altKey && key === 'k') { e.preventDefault(); Editor.toggleCase(); return; }
 
-                // SCORCIATOIE RAPIDE COLORAZIONE: Evidenziatore (Ctrl+Shift+H) e Testo (Ctrl+Alt+H)
+                // Evidenziatore (Ctrl+Shift+H) e Colore Testo (Ctrl+Alt+H)
                 if (e.shiftKey && !e.altKey && isKeyH) {
                     e.preventDefault();
                     e.stopPropagation();
@@ -454,7 +458,7 @@ Object.assign(EventsGlobal, {
                     return;
                 }
                 
-                // MULTI-CURSORE
+                // Multi-cursore
                 if (!e.shiftKey && !e.altKey && key === 'd') { 
                     e.preventDefault(); 
                     Editor.triggerMultiCursor(); 
@@ -544,7 +548,7 @@ Object.assign(EventsGlobal, {
             }
         });
 
-        // Correzione automatica del cursore se un click atterra nella zona morta del cuscinetto \u200B
+        // Correzione automatica del cursore dalla zona morta dello ZWS
         editorEl.addEventListener('mouseup', () => {
             if (typeof Editor !== 'undefined' && typeof Editor.adjustCaretAwayFromZwsDeadZone === 'function') {
                 Editor.adjustCaretAwayFromZwsDeadZone();
@@ -575,7 +579,7 @@ Object.assign(EventsGlobal, {
             }
         }, true);
 
-        // AUXCLICK (MIDDLE CLICK SUI LINK)
+        // AUXCLICK (Middle Click sui Link)
         document.addEventListener('auxclick', (e) => {
             if (e.button === 1 || e.which === 2) {
                 let target = e.target;
@@ -648,9 +652,14 @@ Object.assign(EventsGlobal, {
             if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) checkSelectionAll(e);
         });
 
-        // 8. Modifica Checkbox
+        // Modifica Checkbox: deidratazione rigorosa con esclusione dei database autonomi
         editorEl.addEventListener('change', (e) => {
             if (e.target.tagName === 'INPUT' && e.target.type === 'checkbox') {
+                // Non toccare il markup della nota se il checkbox appartiene a un database o widget autonomo
+                if (e.target.closest && e.target.closest('.adv-table-wrapper, .adv-journal-wrapper, .code-wrapper, .adv-action-button-wrapper, .widget-type-database, .widget-type-pivot, .widget-type-journal, .widget-type-buttonbar')) {
+                    return;
+                }
+
                 const now = new Date().toLocaleString();
                 if (e.target.checked) e.target.setAttribute('checked', 'true');
                 else e.target.removeAttribute('checked');
@@ -658,17 +667,26 @@ Object.assign(EventsGlobal, {
 
                 if (AppState.currentNoteId && !AppState.isSwitchingNote) {
                     const note = Store.getNote(AppState.currentNoteId);
-                    note.content = editorEl.innerHTML;
-                    if (typeof Store !== 'undefined') Store.triggerAutoSave();
+                    if (note) {
+                        const newContent = typeof Editor !== 'undefined' && typeof Editor.minifyHTMLForStorage === 'function'
+                            ? Editor.minifyHTMLForStorage(editorEl.innerHTML)
+                            : editorEl.innerHTML;
+                        if (note.content !== newContent) {
+                            note.content = newContent;
+                            note._isDirty = true;
+                            note.updatedAt = new Date().toISOString();
+                        }
+                        if (typeof Store !== 'undefined') Store.triggerAutoSave();
+                    }
                 }
             }
         });
 
-        // 9. Dispatcher Click Globale
+        // 8. Dispatcher Click Globale
         document.addEventListener('click', (e) => {
             let target = e.target;
 
-            // CHIUSURA AUTOCOMPLETE: Se clicchi fuori dal popup o dalla barra, si chiude.
+            // Chiusura Autocomplete se click all'esterno
             if (!target.closest('#searchInput') && !target.closest('.adv-filter-autocomplete')) {
                 if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
                     SidebarManager.SearchAutocomplete.hide();
@@ -680,10 +698,9 @@ Object.assign(EventsGlobal, {
 
             const isCtrlOrCmd = e.ctrlKey || e.metaKey;
 
-            // NAVIGAZIONE RAPIDA DA CLICK SU HASHTAG
+            // Navigazione rapida da click su Hashtag
             // - In Read Mode: singolo click sinistro lancia direttamente la ricerca
             // - In Edit Mode: Ctrl + Click sinistro lancia la ricerca senza bloccare l'editing
-            // =========================================================================
             const editorContainer = target.closest('#noteContent');
             if (editorContainer) {
                 const shouldTriggerTagSearch = (!AppState.isEditMode) || (AppState.isEditMode && isCtrlOrCmd);
@@ -710,7 +727,7 @@ Object.assign(EventsGlobal, {
                 }
             }
 
-            // COPIA SNIPPET (INCLUSI QUELLI MASCHERATI)
+            // Copia Snippet
             if (target.closest('.snippet-copy-btn')) {
                 e.preventDefault();
                 e.stopPropagation();
@@ -724,7 +741,7 @@ Object.assign(EventsGlobal, {
                         navigator.clipboard.writeText(textToCopy).then(() => {
                             btn.classList.add('copied');
                             btn.innerHTML = typeof Icons !== 'undefined' ? Icons.checkCircle : '✓';
-                            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Testo copiato!", "success");
+                            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('events_global.toast_text_copied'), "success");
                             
                             setTimeout(() => {
                                 btn.classList.remove('copied');
@@ -857,7 +874,7 @@ Object.assign(EventsGlobal, {
                     navigator.clipboard.writeText(textToCopy).then(() => {
                         target.style.color = "var(--accent-color)";
                         if (typeof UI !== 'undefined' && UI.showToast) {
-                            UI.showToast("Copiato negli appunti!", "success");
+                            UI.showToast(I18n.t('events_global.toast_copied_to_clipboard'), "success");
                         }
                         setTimeout(() => { target.style.color = ""; }, 1500);
                     }).catch(err => {

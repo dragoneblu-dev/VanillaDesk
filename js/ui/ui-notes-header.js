@@ -291,7 +291,7 @@ Object.assign(UI, {
                 banner.innerHTML = `
                     <div style="display: flex; align-items: center; gap: 8px; color: var(--danger-color); font-weight: bold; font-size: 0.85rem;">
                         <span style="display: inline-flex;">${typeof Icons !== 'undefined' ? Icons.trash : '🗑️'}</span>
-                        <span>Questa nota si trova nel Cestino (Sola Lettura). I database al suo interno continuano a funzionare per i collegamenti esterni.</span>
+                        <span>${I18n.t('trash.note_in_trash_banner_desc')}</span>
                     </div>
                     <button class="btn" style="background: var(--danger-color); color: white; border: none; padding: 4px 10px; font-weight: bold; cursor: pointer; flex-shrink: 0;" onclick="UI.restoreNoteFromBanner('${note.id}')">
                         <span style="display: inline-flex; align-items: center; gap: 4px;">${typeof Icons !== 'undefined' ? Icons.restore : '↺'} ${I18n.t('trash.restore_btn')}</span>

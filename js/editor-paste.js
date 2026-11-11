@@ -8,32 +8,17 @@
  * - Intercettore diretto in fase di cattura su #inlineNoteInput e #bookmarkCommentInput.
  * - FIX MULTI-PARAGRAPH SELECTION REPLACEMENT: Eliminazione atomica preventiva della selezione estesa
  *   prima dell'inserimento, garantendo la sostituzione esatta del testo selezionato su più paragrafi.
- * - FIX SEAMLESS PARAGRAPH MERGE: Fusione naturale dei blocchi incollati nello stile di Word e Google Docs
- *   (il primo blocco si fonde con il testo precedente, l'ultimo con il testo successivo, senza spezzare
- *   la frase in paragrafi vuoti o isolati).
- * - FIX EXCEL RASTER IMAGE OVERRIDE: Neutralizzazione del file image/png accessorio generato da Microsoft Excel
- *   quando si copiano celle, garantendo l'incollamento del testo o della tabella ed evitando lo screenshot raster.
+ * - FIX SEAMLESS PARAGRAPH MERGE: Fusione naturale dei blocchi incollati nello stile di Word e Google Docs.
+ * - FIX EXCEL RASTER IMAGE OVERRIDE: Neutralizzazione del file image/png accessorio generato da Microsoft Excel.
  * - FIX CARET UNCOLLAPSED ON WIDGET PASTE: Riposizionamento e collasso esatto del cursore alla fine del testo
- *   incollato all'interno di Snippet Copiabili e celle di Tabelle Semplici, eliminando la selezione persistente del testo.
- * - REFACTOR DRY: Centralizzazione di _formatTextToInlineHTML e _insertInlineHTMLAndCollapse per eliminare
- *   duplicazioni di codice tra snippet, tabelle, liste e mini-editor.
- * - FEAT PERSISTENT ASSET STORAGE FOR PASTED IMAGES: Salvataggio fisico automatico delle immagini (sia da screenshot
- *   singolo, sia incorporate nel testo copiato da Word, OneNote o Web) nella cartella assets/ del Workspace tramite Store.saveAsset.
- * - FIX WORD CLIPBOARD IMAGES EXTRACTION: Risoluzione dell'eliminazione accidentale delle immagini di Word da regex condizionale
- *   ed estrazione automatica dei dati binari da RTF (\pict) tramite rilevamento magic bytes (FFD8FF per JPEG, 89504E47 per PNG)
- *   per immagini con percorsi file:/// non accessibili dal browser.
- * - FIX PRESERVE ADJACENT SPACES ON PASTE: Risolto alla radice l'annientamento dello spazio precedente
- *   durante la sostituzione di una parola selezionata, sostituendo execCommand('delete') con Range.deleteContents()
- *   per disinnescare l'euristica "Smart Delete" di Chromium.
- * - FIX ROOT BR ISOLATION: Ogni <br> a livello root viene convertito direttamente in <p><br></p>,
- *   impedendo l'inserimento di tag <br> sparsi direttamente come figli di #noteContent o blocchi <p><br><br>...</p>.
- * - FIX WEB IMAGES CORS FALLBACK: Gestione unificata di download e fallback per immagini web remote senza errori di rete fetch().
- * - FIX ASYNC PASTE CARET PRESERVATION: Ancoraggio preventivo sincrono nel DOM vivo prima del download asincrono delle immagini,
- *   prevenendo la perdita del range d'inserimento causata dal rilascio del focus durante operazioni asincrone.
- * - FIX ANCHORED IMAGES BUFFER PRUNING: Corretto controllo hasRealContent in flushInlineBuffer per rilevare tag <a>
- *   o contenitori inline che racchiudono immagini (<img>) prive di testo diretto, prevenendone lo scarto accidentale.
- * - FEAT LINK PRESERVATION & BLOCK INVERSION: Preservazione integrale dei tag <a> attorno alle immagini con corretta
- *   inversione gerarchica (<p><a href="..."><img></a></p>) per eliminare nesting illegali e tag link orfani a livello root.
+ *   incollato all'interno di Snippet Copiabili e celle di Tabelle Semplici.
+ * - REFACTOR DRY: Centralizzazione di _formatTextToInlineHTML e _insertInlineHTMLAndCollapse.
+ * - FEAT PERSISTENZA TOTALE ASSET IN IDB & FSAA: Salvataggio fisico automatico delle immagini sia su disco
+ *   (cartella assets/) sia in IndexedDB (store idb_assets in modalità Browser) con log diagnostici.
+ * - FIX PRESERVE ADJACENT SPACES ON PASTE: Risolto l'annientamento dello spazio precedente su incolla.
+ * - FIX ROOT BR ISOLATION: Ogni <br> a livello root viene convertito direttamente in <p><br></p>.
+ * - FIX WEB IMAGES CORS FALLBACK: Gestione unificata di download e fallback per immagini web remote.
+ * - FIX ASYNC PASTE CARET PRESERVATION: Ancoraggio preventivo sincrono nel DOM vivo prima del download asincrono.
  */
 
 Object.assign(Editor, {
@@ -78,8 +63,7 @@ Object.assign(Editor, {
         }
     },
 
-    // Procedura snella per acquisire, comprimere e salvare un'immagine su disco (in assets/)
-    // Supporta file binari, data-URI Base64 e URL web con fallback pulito
+    // Procedura snella per acquisire, comprimere e salvare un'immagine su disco (assets/) o in IndexedDB (idb_assets)
     saveImageSource: async (source) => {
         if (!source) return null;
 
@@ -125,13 +109,18 @@ Object.assign(Editor, {
                             let fileName = null;
                             let blobUrl = null;
 
-                            // PERSISTENZA SU DISCO: Salva fisicamente il file WebP nella cartella assets/ del Workspace
-                            if (AppState.assetsHandle && typeof Store !== 'undefined' && typeof Store.saveAsset === 'function') {
-                                const file = new File([finalBlob], `img_${Date.now()}.webp`, { type: 'image/webp' });
+                            // SALVATAGGIO PERSISTENTE: Sia su cartella disco (FSAA) che in IndexedDB (Browser Mode)
+                            const isFSAA = AppState.assetsHandle && typeof Store !== 'undefined' && typeof Store.saveAsset === 'function';
+                            const isIDB = AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store !== 'undefined' && typeof Store.saveAsset === 'function';
+
+                            if (isFSAA || isIDB) {
+                                const ext = finalBlob.type === 'image/webp' ? 'webp' : 'png';
+                                const file = new File([finalBlob], `img_${Date.now()}.${ext}`, { type: finalBlob.type });
                                 fileName = await Store.saveAsset(file, 'img');
                                 if (fileName && Editor.imageCache && Editor.imageCache[fileName]) {
                                     blobUrl = Editor.imageCache[fileName];
                                 }
+                                console.log(`[Image Persistence] Salvata immagine ${fileName} via ${isIDB ? 'IndexedDB' : 'Cartella Disco'}.`);
                             }
 
                             // Fallback per sessione temporanea in sola RAM
@@ -151,12 +140,12 @@ Object.assign(Editor, {
                 reader.onerror = () => resolve(null);
                 reader.readAsDataURL(blob);
             });
-        } catch (_) {
+        } catch (e) {
+            console.warn("[saveImageSource] Errore elaborazione:", e);
             return null;
         }
     },
 
-    // Estrae in modo deterministico le immagini binarie memorizzate nel formato RTF di Word tramite scansione dei Magic Bytes
     _extractImagesFromWordRTF: (rtfText) => {
         if (!rtfText || typeof rtfText !== 'string' || !rtfText.includes('\\pict')) return [];
         const extractedBlobs = [];
@@ -350,7 +339,7 @@ Object.assign(Editor, {
                     Editor.saveSnapshot();
 
                     if (typeof UI !== 'undefined' && UI.showToast) {
-                        UI.showToast(typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('editor_core.toast_saving_image') : "Salvataggio immagine su disco in corso...", "info");
+                        UI.showToast(typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('editor_core.toast_saving_image') : "Salvataggio immagine in corso...", "info");
                     }
 
                     Editor.saveImageSource(fileOrBlob).then(saved => {
@@ -455,9 +444,7 @@ Object.assign(Editor, {
 
                         Store.triggerAutoSave();
                         return;
-                    } 
-                    // CASO 2: NESSUNA SELEZIONE (Autolink su cursore libero)
-                    else {
+                    } else {
                         const link = document.createElement('a');
                         link.href = rawPastedText;
                         link.target = "_blank";
@@ -580,7 +567,7 @@ Object.assign(Editor, {
                     const doc = parser.parseFromString(cleanRawHTML, 'text/html');
 
                     // =========================================================================
-                    // ELABORAZIONE E SALVATAGGIO FISICO DELLE IMMAGINI INCORPORATE NEL TESTO
+                    // ELABORAZIONE E SALVATAGGIO FISICO DELLE IMMAGINI (FSAA o IndexedDB)
                     // =========================================================================
                     const docImages = Array.from(doc.querySelectorAll('img'));
 
@@ -940,12 +927,11 @@ Object.assign(Editor, {
 
                     // FASE 5: Rimozione nodi di testo vuoti ai margini del body (senza eliminare righe vuote intenzionali)
                     Array.from(doc.body.childNodes).forEach(node => {
-                        if (node.nodeType === Node.TEXT_NODE && node.nodeValue.replace(/[\r\n\t\s]/g, '') === '') {
+                        if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
                             node.remove();
                         }
                     });
 
-                    // Rimozione nodi vuoti orfani estremi solo se il documento ha più di un elemento
                     while (doc.body.firstElementChild && ['P', 'DIV'].includes(doc.body.firstElementChild.tagName) && doc.body.children.length > 1) {
                         const first = doc.body.firstElementChild;
                         const text = first.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
@@ -988,14 +974,6 @@ Object.assign(Editor, {
                         node.remove();
                     }
                 });
-
-                const isSimpleTextBlock = (el) => {
-                    if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-                    const tag = el.tagName.toUpperCase();
-                    if (el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper')) return false;
-                    if (!['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE'].includes(tag)) return false;
-                    return !el.querySelector('table, ul, ol, hr, .adv-widget-shell');
-                };
 
                 const isBlockElement = (el) => {
                     if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
@@ -1221,7 +1199,7 @@ Object.assign(Editor, {
     }
 });
 
-// INTERCETTORE DIRETTO E ISTANTANEO INCOLLA PER NOTE INLINE E SEGNALIBRI
+// INTERCETTORE DIRETTO INCOLLA PER NOTE INLINE E SEGNALIBRI
 document.addEventListener('paste', (e) => {
     let target = e.target;
     if (target && target.nodeType === 3) target = target.parentNode;

@@ -7,7 +7,11 @@
  * distinguendo chiaramente tra ricollegamento del workspace esistente e creazione da zero.
  * FEAT GRAPH VIEW DISPATCH: Apertura nativa a schermo intero (In-App Fullscreen) con zero latenza,
  * focalizzazione automatica del nodo corrente e chiusura istantanea su selezione.
- * FEAT DUAL TITLE HEADER: Metodo updateHeaderTitles per visualizzare Workspace (riga 1) e Documento attivo (riga 2).
+ * FEAT DUAL TITLE HEADER & AZURE BADGE: Metodo updateHeaderTitles per visualizzare Workspace (riga 1)
+ * con badge azzurro e icona vettoriale Icons.globe quando attivo in memoria browser, e Documento attivo (riga 2).
+ * FEAT BROWSER WORKSPACE MANAGER: Gestione e Drawer per i Workspace memorizzati nel Browser (IndexedDB)
+ * con rendering condizionale rigoroso del workspace attivo, data ultimo backup fisico, pulsante aggiorna
+ * e rimozione della card fittizia "Nessun Workspace".
  * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
@@ -27,9 +31,9 @@ window.UI = {
     },
 
     openGraphView: (targetNoteId = null) => {
-        // Se vi sono modifiche non salvate nel workspace su disco, salva preventivamente
-        if (typeof Store !== 'undefined' && Store.isDirty && AppState.workspaceHandle) {
-            Store.saveToFile();
+        if (typeof Store !== 'undefined' && Store.isDirty) {
+            if (AppState.workspaceHandle) Store.saveToFile();
+            else if (AppState.storageMode === 'idb') Store.saveToIndexedDB();
         }
 
         const noteParam = targetNoteId || AppState.currentNoteId;
@@ -63,9 +67,8 @@ window.UI = {
         const el = document.getElementById('saveStatus');
         const headerEl = document.querySelector('header');
 
-        // Colorazione dell'intera prima riga (Header) in caso di sessione temporanea in RAM
         if (headerEl) {
-            if (state === 'unsaved') {
+            if (state === 'unsaved' && AppState.storageMode !== 'idb') {
                 headerEl.classList.add('header-unsaved');
             } else {
                 headerEl.classList.remove('header-unsaved');
@@ -95,15 +98,20 @@ window.UI = {
             el.textContent = I18n.t('common.error');
             el.classList.add('status-error');
         } else if (state === 'unsaved') {
-            el.textContent = I18n.t('preferences.status_unsaved');
-            el.classList.add('status-error');
-            el.style.cursor = 'pointer';
-            el.title = I18n.t('preferences.status_unsaved_title');
-            el.onclick = () => {
-                if (typeof Store !== 'undefined' && Store.createWorkspace) {
-                    Store.createWorkspace(false);
-                }
-            };
+            if (AppState.storageMode === 'idb') {
+                el.textContent = I18n.t('common.saved');
+                el.classList.add('status-saved');
+            } else {
+                el.textContent = I18n.t('preferences.status_unsaved');
+                el.classList.add('status-error');
+                el.style.cursor = 'pointer';
+                el.title = I18n.t('preferences.status_unsaved_title');
+                el.onclick = () => {
+                    if (typeof Store !== 'undefined' && Store.createWorkspace) {
+                        Store.createWorkspace(false);
+                    }
+                };
+            }
         }
     },
 
@@ -126,24 +134,157 @@ window.UI = {
             noteText = I18n.t('home_dashboard.title');
         }
 
-        const wsSpan = container.querySelector('.header-workspace-name');
-        const noteSpan = container.querySelector('.header-note-name');
+        // Se in modalità browser con workspace attivo, applica l'evidenziazione in azzurro e l'icona SVG vettoriale Icons.globe
+        const isIdbActive = AppState.storageMode === 'idb' && AppState.workspaceId && ws !== defaultNoWs;
+        const wsContentHtml = isIdbActive
+            ? `<span class="header-workspace-idb-badge" title="${I18n.t('idb_storage.active_badge_tooltip')}">
+                    <span style="display:inline-flex; align-items:center;">${Icons.globe}</span>
+                    <span>${UI.escapeHTML(ws)}</span>
+               </span>`
+            : UI.escapeHTML(ws);
 
-        if (wsSpan && noteSpan) {
-            wsSpan.textContent = ws;
-            noteSpan.textContent = noteText;
-        } else {
-            container.innerHTML = `
-                <span class="header-workspace-name">${UI.escapeHTML(ws)}</span>
-                <span class="header-note-name">${UI.escapeHTML(noteText)}</span>
-            `;
-        }
+        container.innerHTML = `
+            <span class="header-workspace-name">${wsContentHtml}</span>
+            <span class="header-note-name">${UI.escapeHTML(noteText)}</span>
+        `;
 
         container.title = I18n.t('toolbar.breadcrumb_home');
     },
 
     updateFileName: (name) => { 
         UI.updateHeaderTitles(name, null);
+    },
+
+    // DRAWER DI GESTIONE DEI WORKSPACE NEL BROWSER (INDEXEDDB)
+    openBrowserWorkspaceManager: async () => {
+        UI.closeDrawer();
+
+        const workspaces = await Store.idbListWorkspaces();
+        const isCurrentIdbActive = AppState.storageMode === 'idb' && !!AppState.workspaceId;
+        const activeWs = isCurrentIdbActive ? workspaces.find(w => w.id === AppState.workspaceId) : null;
+
+        let activeWorkspaceSectionHtml = '';
+
+        // Mostra la card azzurra del Workspace Attivo ESCLUSIVAMENTE se c'è un workspace reale aperto
+        if (activeWs) {
+            const activeNotesCount = AppState.notes ? AppState.notes.filter(n => !n.deletedAt).length : 0;
+            const activeDbsCount = AppState.databases ? Object.keys(AppState.databases).filter(id => id !== 'SYS_PROPERTIES_DB').length : 0;
+            
+            const backupDateStr = activeWs.lastBackupAt || AppState.lastBackupAt;
+            const backupBadgeHtml = backupDateStr
+                ? `<span style="color:#059669; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;">
+                        <span style="display:inline-flex;">${Icons.save || Icons.file}</span> ${I18n.t('idb_storage.backup_recent', { date: UI.formatDate(backupDateStr) })}
+                   </span>`
+                : `<span style="color:#d97706; font-size:0.75rem; font-weight:600; display:inline-flex; align-items:center; gap:4px;" title="${I18n.t('idb_storage.backup_none_title')}">
+                        <span style="display:inline-flex;">${Icons.alertTriangle}</span> ${I18n.t('idb_storage.no_backup_warning')}
+                   </span>`;
+
+            activeWorkspaceSectionHtml = `
+                <div style="background:rgba(2, 132, 199, 0.08); border:1px solid var(--col_memBro); border-radius:8px; padding:14px; box-sizing:border-box;">
+                    <div style="font-size:0.72rem; font-weight:bold; color:var(--col_memBro); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:6px; display:flex; align-items:center; gap:5px;">
+                        <span style="display:inline-flex; color:var(--col_memBro);">${Icons.globe}</span>
+                        <span>${I18n.t('idb_storage.active_workspace')}</span>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <span style="font-size:1.15rem; font-weight:bold; color:var(--text-primary); text-overflow:ellipsis; overflow:hidden; white-space:nowrap;">${UI.escapeHTML(activeWs.name)}</span>
+                        <button class="btn" style="padding:3px 8px; font-size:0.75rem; flex-shrink:0;" onclick="
+                            const newN = prompt('${I18n.t('idb_storage.rename_ws_prompt')}', '${UI.escapeHTML(activeWs.name)}');
+                            if(newN) { Store.renameBrowserWorkspace('${activeWs.id}', newN); UI.openBrowserWorkspaceManager(); }
+                        "><span style="display:inline-flex; align-items:center; gap:4px;">${Icons.edit} ${I18n.t('idb_storage.rename')}</span></button>
+                    </div>
+                    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; margin-bottom:10px;">
+                        <div style="display:flex; gap:12px; font-size:0.8rem; color:var(--text-secondary);">
+                            <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.file} <b>${I18n.t('idb_storage.notes_count', { count: activeNotesCount })}</b></span>
+                            <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.tableDatabase} <b>${I18n.t('idb_storage.dbs_count', { count: activeDbsCount })}</b></span>
+                        </div>
+                        <div style="display:flex; gap:6px;">
+                            <button class="btn" style="padding:4px 10px; font-size:0.75rem;" onclick="Store.loadSnapshot(); UI.closeDrawer();" title="${I18n.t('idb_storage.btn_update_backup_title')}">
+                                <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.import} ${I18n.t('idb_storage.btn_update_backup')}</span>
+                            </button>
+                            <button class="btn btn-primary" style="padding:4px 10px; font-size:0.75rem;" onclick="Store.downloadSnapshot();" title="${I18n.t('idb_storage.btn_download_backup')}">
+                                <span style="display:inline-flex; align-items:center; gap:4px;">${Icons.download} ${I18n.t('idb_storage.btn_download_backup')}</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div style="border-top:1px dashed rgba(2, 132, 199, 0.3); padding-top:6px;">
+                        ${backupBadgeHtml}
+                    </div>
+                </div>
+            `;
+        }
+
+        // Elenco dei workspace memorizzati nel browser
+        let otherWorkspacesHtml = '';
+        const otherList = activeWs ? workspaces.filter(w => w.id !== activeWs.id) : workspaces;
+
+        if (otherList.length > 0) {
+            otherList.forEach(w => {
+                const safeName = UI.escapeHTML(w.name || "Workspace");
+                const dateStr = w.updatedAt ? UI.formatDate(new Date(w.updatedAt).toISOString()) : "";
+                const backupInfo = w.lastBackupAt 
+                    ? `<span style="color:#059669; font-size:0.7rem; display:inline-flex; align-items:center; gap:3px;">${Icons.save || Icons.file} ${I18n.t('idb_storage.last_backup_label')}: ${UI.formatDate(w.lastBackupAt)}</span>` 
+                    : `<span style="color:#d97706; font-size:0.7rem; display:inline-flex; align-items:center; gap:3px;">${Icons.alertTriangle} ${I18n.t('idb_storage.no_backup_warning')}</span>`;
+
+                otherWorkspacesHtml += `
+                    <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:var(--bg-color); border:1px solid var(--border-color); border-radius:6px; margin-bottom:8px;">
+                        <div style="overflow:hidden; padding-right:10px;">
+                            <div style="font-weight:bold; font-size:0.9rem; color:var(--text-primary); text-overflow:ellipsis; overflow:hidden; white-space:nowrap; display:flex; align-items:center; gap:6px;">
+                                <span style="color:var(--col_memBro); display:inline-flex;">${Icons.globe}</span>
+                                <span>${safeName}</span>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center; margin-top:3px; flex-wrap:wrap;">
+                                <span style="font-size:0.75rem; color:var(--text-secondary);">${I18n.t('idb_storage.modified_at', { date: dateStr })}</span>
+                                <span style="font-size:0.75rem; opacity:0.3;">•</span>
+                                ${backupInfo}
+                            </div>
+                        </div>
+                        <div style="display:flex; gap:6px; flex-shrink:0;">
+                            <button class="btn btn-primary" style="padding:4px 12px; font-size:0.8rem;" onclick="Store.openBrowserWorkspace('${w.id}'); UI.closeDrawer();">${I18n.t('idb_storage.btn_open')}</button>
+                            <button class="adv-icon-btn danger" style="padding:4px 8px;" onclick="if(confirm('${I18n.t('idb_storage.confirm_delete')}')) { Store.deleteBrowserWorkspace('${w.id}'); UI.openBrowserWorkspaceManager(); }">${Icons.trash}</button>
+                        </div>
+                    </div>
+                `;
+            });
+        } else {
+            const emptyNotice = activeWs 
+                ? I18n.t('idb_storage.empty_other_list')
+                : I18n.t('idb_storage.empty_all_list');
+            otherWorkspacesHtml = `<div style="font-size:0.82rem; color:var(--text-secondary); font-style:italic; padding:14px; text-align:center; background:rgba(0,0,0,0.02); border:1px dashed var(--border-color); border-radius:6px;">${emptyNotice}</div>`;
+        }
+
+        const sectionListTitle = activeWs ? I18n.t('idb_storage.other_workspaces_title') : I18n.t('idb_storage.saved_workspaces_title');
+
+        const bodyHTML = `
+            <div style="display:flex; flex-direction:column; gap:18px; padding-bottom:15px;">
+                
+                ${activeWorkspaceSectionHtml}
+
+                <!-- AZIONI RAPIDE: CREA O IMPORTA NUOVO -->
+                <div style="display:flex; flex-direction:column; gap:8px;">
+                    <button class="btn" style="justify-content:center; padding:10px; font-weight:600; border-color:var(--accent-color); color:var(--accent-color);" onclick="Store.createBrowserWorkspace(); UI.closeDrawer();">
+                        <span style="display:inline-flex; align-items:center; gap:6px;">+ ${I18n.t('idb_storage.btn_new_workspace')}</span>
+                    </button>
+                </div>
+
+                <!-- LISTA DEI WORKSPACE SALVATI -->
+                <div>
+                    <div style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px; border-bottom:1px solid var(--border-color); padding-bottom:4px;">
+                        ${sectionListTitle}
+                    </div>
+                    ${otherWorkspacesHtml}
+                </div>
+            </div>
+        `;
+
+        const footerHTML = `
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.close')}</button>
+        `;
+
+        UI.openDrawer(
+            `<span style="display:inline-flex; align-items:center; gap:6px; color:var(--col_memBro);">${Icons.globe} ${I18n.t('idb_storage.drawer_title')}</span>`,
+            bodyHTML,
+            footerHTML
+        );
     },
 
     promptWorkspaceGuide: (isSavingSession = false) => {

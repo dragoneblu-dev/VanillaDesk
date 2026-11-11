@@ -34,6 +34,8 @@
  * opera esclusivamente sul testo (span interni), preservando integralmente le classi di sfondo e gli stili del tag TD/TH.
  * FIX ISOLATED TOGGLE DETECTION: Risolto bug di mancata evidenziazione eliminando il falso positivo di querySelector
  * sul paragrafo genitore comune e introdotto fallback affidabile tra hiliteColor e backColor.
+ * FEAT SELECTION RANGE TRIMMING: Esclusione automatica degli spazi bianchi esterni (\u0020, \u00A0, tab, a capo, ZWS)
+ * prima di applicare colore o evidenziatore, garantendo che lo stile si applichi solo al testo effettivo come un trim programmatico.
  */
 
 const ColorManager = {
@@ -51,7 +53,7 @@ const ColorManager = {
         // Mappatura per Sottolineatura Colorata (hl-u-c1 .. hl-u-c10)
         'hl-u-c1': {rgb: 'rgb(251, 11, 11)', hex: '#fb0b0b'}, 'hl-u-c2': {rgb: 'rgb(251, 12, 12)', hex: '#fb0c0c'},
         'hl-u-c3': {rgb: 'rgb(251, 13, 13)', hex: '#fb0d0d'}, 'hl-u-c4': {rgb: 'rgb(251, 14, 14)', hex: '#fb0e0e'},
-        'hl-u-c5': {rgb: 'rgb(251, 15, 15)', hex: '#fb0f0f'}, 'hl-u-c6': {rgb: 'rgb(251, 16, 16)', hex: '#fb0f10'},
+        'hl-u-c5': {rgb: 'rgb(251, 15, 15)', hex: '#fb0f0f'}, 'hl-u-c6': {rgb: 'rgb(251, 16, 16)', hex: '#fb1010'},
         'hl-u-c7': {rgb: 'rgb(251, 17, 17)', hex: '#fb1111'}, 'hl-u-c8': {rgb: 'rgb(251, 18, 18)', hex: '#fb1212'},
         'hl-u-c9': {rgb: 'rgb(251, 19, 19)', hex: '#fb1313'}, 'hl-u-c10':{rgb: 'rgb(251, 20, 20)', hex: '#fb1414'}
     },
@@ -78,6 +80,65 @@ const ColorManager = {
         document.querySelectorAll('.btn-color-main, .btn-color-arrow').forEach(el => el.addEventListener('mousedown', preventFocusLoss));
         ColorManager.updateToolbarIcon('highlight', ColorManager.lastHighlight);
         ColorManager.updateToolbarIcon('text', ColorManager.lastText);
+    },
+
+    /**
+     * Trim programmatico della selezione: esclude gli spazi esterni (\u0020, \u00A0, tab, a capo, ZWS)
+     * restringendo direttamente gli estremi di testo del Range attivo nel DOM.
+     */
+    trimSelection: () => {
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || sel.isCollapsed) return;
+
+        const range = sel.getRangeAt(0);
+
+        // Risoluzione difensiva dei nodi di testo estremi se il range punta a contenitori element
+        let startNode = range.startContainer;
+        let startOffset = range.startOffset;
+        if (startNode.nodeType === Node.ELEMENT_NODE && startNode.childNodes && startNode.childNodes[startOffset]) {
+            const candidate = startNode.childNodes[startOffset];
+            if (candidate.nodeType === Node.TEXT_NODE) {
+                startNode = candidate;
+                startOffset = 0;
+            }
+        }
+
+        let endNode = range.endContainer;
+        let endOffset = range.endOffset;
+        if (endNode.nodeType === Node.ELEMENT_NODE && endOffset > 0 && endNode.childNodes && endNode.childNodes[endOffset - 1]) {
+            const candidate = endNode.childNodes[endOffset - 1];
+            if (candidate.nodeType === Node.TEXT_NODE) {
+                endNode = candidate;
+                endOffset = candidate.nodeValue.length;
+            }
+        }
+
+        // 1. Trim all'inizio (start) se comincia su spazi
+        if (startNode.nodeType === Node.TEXT_NODE) {
+            const textAfter = startNode.nodeValue.substring(startOffset);
+            const leadMatch = textAfter.match(/^[ \t\u00A0\r\n\u200B\uFEFF]+/);
+            if (leadMatch) {
+                range.setStart(startNode, startOffset + leadMatch[0].length);
+            }
+        }
+
+        // 2. Trim alla fine (end) se termina su spazi
+        if (endNode.nodeType === Node.TEXT_NODE) {
+            const textBefore = endNode.nodeValue.substring(0, endOffset);
+            const trailMatch = textBefore.match(/[ \t\u00A0\r\n\u200B\uFEFF]+$/);
+            if (trailMatch) {
+                range.setEnd(endNode, endOffset - trailMatch[0].length);
+            }
+        }
+
+        // Se dopo il trim la selezione si è collassata (erano presenti unicamente spazi vuoti), esci
+        if (range.collapsed) return;
+
+        sel.removeAllRanges();
+        sel.addRange(range);
+        if (typeof Editor !== 'undefined') {
+            Editor.savedRange = range.cloneRange();
+        }
     },
 
     // Espansione automatica intelligente sulla parola sotto cursore (Word-Snap)
@@ -360,6 +421,11 @@ const ColorManager = {
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount) return false;
 
+        if (!sel.isCollapsed) {
+            ColorManager.trimSelection();
+            if (sel.isCollapsed) return false;
+        }
+
         const range = sel.getRangeAt(0);
 
         // Funzione di verifica se un elemento possiede la classe specifica ricercata
@@ -452,6 +518,12 @@ const ColorManager = {
                 Editor.updateToolbarFormatting();
                 return;
             }
+        }
+
+        // TRIM RANGE: Se la selezione è estesa, esclude gli spazi esterni
+        if (!hasSelectedCells && sel && sel.rangeCount > 0 && !sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            ColorManager.trimSelection();
+            if (sel.isCollapsed) return;
         }
 
         const targetColor = type === 'highlight' ? ColorManager.lastHighlight : ColorManager.lastText;
@@ -654,6 +726,11 @@ const ColorManager = {
             }
         }
 
+        // TRIM RANGE: Esclusione automatica degli spazi esterni prima della colorazione
+        if (sel && sel.rangeCount > 0 && !sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            ColorManager.trimSelection();
+        }
+
         if (!sel || !sel.rangeCount || sel.isCollapsed) return;
 
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
@@ -710,31 +787,61 @@ const ColorManager = {
 
                 if (type === 'highlight') {
                     const bg = cleanStr(el.style.backgroundColor);
-                    if (bg === cleanStr(ColorManager.removeHl.rgb) || bg === cleanStr(ColorManager.removeHl.hex)) {
+                    if (!bg) return;
+
+                    if (bg === 'rgb(253,0,0)' || bg === '#fd0000') {
                         el.style.backgroundColor = '';
                         // Rimuove tassativamente qualsiasi classe di evidenziazione dal nodo ripulito
                         Array.from(el.classList).filter(c => c.startsWith('hl-c') || c.startsWith('hl-u-c')).forEach(c => el.classList.remove(c));
-                    } else if (bg) {
-                        for (let cls in ColorManager.magicHl) {
-                            if (bg === cleanStr(ColorManager.magicHl[cls].rgb) || bg === cleanStr(ColorManager.magicHl[cls].hex)) {
-                                el.classList.add(cls); 
-                                el.style.backgroundColor = ''; 
-                                break;
+                    } else {
+                        // Riconoscimento immediato O(1) del canale magico 251 (evidenziatori e sottolineature)
+                        const m = bg.match(/rgba?\(251,\s*(\d+),\s*(\d+)/);
+                        if (m) {
+                            const g = parseInt(m[1], 10);
+                            const b = parseInt(m[2], 10);
+                            el.style.backgroundColor = '';
+                            // Auto-guarigione mirata per il disallineamento storico (15, 16)
+                            if (g === 15 && b === 16) {
+                                el.classList.add('hl-u-c6');
+                            } else if (g >= 1 && g <= 10) {
+                                el.classList.add(`hl-c${g}`);
+                            } else if (g >= 11 && g <= 20) {
+                                el.classList.add(`hl-u-c${g - 10}`);
+                            }
+                        } else {
+                            // Fallback per confronto diretto con la mappa registrata
+                            for (let cls in ColorManager.magicHl) {
+                                if (bg === cleanStr(ColorManager.magicHl[cls].rgb) || bg === cleanStr(ColorManager.magicHl[cls].hex)) {
+                                    el.classList.add(cls); 
+                                    el.style.backgroundColor = ''; 
+                                    break;
+                                }
                             }
                         }
                     }
                 } else {
                     const fg = cleanStr(el.style.color);
-                    if (fg === cleanStr(ColorManager.removeTx.rgb) || fg === cleanStr(ColorManager.removeTx.hex)) { 
+                    if (!fg) return;
+
+                    if (fg === 'rgb(254,0,0)' || fg === '#fe0000') { 
                         el.style.color = ''; 
                         // Rimuove tassativamente qualsiasi classe colore testo dal nodo ripulito
                         Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
-                    } else if (fg) {
-                        for (let cls in ColorManager.magicTx) {
-                            if (fg === cleanStr(ColorManager.magicTx[cls].rgb) || fg === cleanStr(ColorManager.magicTx[cls].hex)) {
-                                el.classList.add(cls); 
-                                el.style.color = ''; 
-                                break;
+                    } else {
+                        // Riconoscimento immediato O(1) del canale magico 252 (colori del testo)
+                        const m = fg.match(/rgba?\(252,\s*(\d+),\s*(\d+)/);
+                        if (m) {
+                            const val = parseInt(m[1], 10);
+                            el.style.color = '';
+                            if (val >= 1 && val <= 10) el.classList.add(`tx-c${val}`);
+                        } else {
+                            // Fallback per confronto diretto con la mappa registrata
+                            for (let cls in ColorManager.magicTx) {
+                                if (fg === cleanStr(ColorManager.magicTx[cls].rgb) || fg === cleanStr(ColorManager.magicTx[cls].hex)) {
+                                    el.classList.add(cls); 
+                                    el.style.color = ''; 
+                                    break;
+                                }
                             }
                         }
                     }

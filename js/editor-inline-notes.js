@@ -10,6 +10,7 @@
  * di testo di occupare l'intero spazio verticale disponibile nel Drawer laterale.
  * FEAT CARET RESUME: Al salvataggio della nota inline, il cursore viene riposizionato istantaneamente
  * subito dopo il widget per riprendere la scrittura rapida.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(Editor, {
@@ -96,15 +97,15 @@ Object.assign(Editor, {
             <div style="display:flex; flex-direction:column; height:100%; gap:10px;">
                 <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display:flex; flex-direction:column; flex:1; min-height:0;">
                     <div class="toolbar" style="margin-bottom: 10px; padding: 0; border: none; background: transparent; flex-shrink:0;">
-                        <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="Grassetto"><b>B</b></button>
-                        <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="Corsivo"><i>I</i></button>
-                        <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="Sottolineato"><u>U</u></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="${I18n.t('toolbar.bold')}"><b>B</b></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="${I18n.t('toolbar.italic')}"><i>I</i></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="${I18n.t('toolbar.underline')}"><u>U</u></button>
                         <div style="width:1px; height:15px; background:var(--border-color); margin:0 5px;"></div>
-                        <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista Puntata"><b>•</b></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="${I18n.t('format_lists.bullet_list')}"><b>•</b></button>
                     </div>
                     <div id="inlineNoteInput" class="editor-content adv-scroll-container" contenteditable="true" style="outline: none; flex:1; min-height:0; background:var(--bg-color); border:1px solid var(--border-color); padding:12px; border-radius:4px; overflow-y:auto; line-height:1.5;">${currentHTML}</div>
                 </div>
-                <p style="font-size:0.75rem; color:var(--text-secondary); margin:0; flex-shrink:0;">L'appunto resterà nascosto nel testo sotto forma di icona, e comparirà passandoci il mouse sopra. Utile per glossari o promemoria.</p>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin:0; flex-shrink:0;">${I18n.t('inline_notes.drawer_hint')}</p>
             </div>
         `;
         

@@ -2,7 +2,7 @@
  * js/obsidian-importer.js
  * Modulo di importazione nativa per Vault di Obsidian in VanillaDesk.
  * - Scansione ricorsiva cartelle e file (.md, immagini, audio).
- * - Copia fisica degli asset nella cartella assets/ del Workspace.
+ * - Copia fisica degli asset nella cartella assets/ del Workspace o in IndexedDB.
  * - Two-Pass Resolver per wikilinks ([[Nota]], [[Nota|Alias]], [[Nota#Capitolo]]).
  * - Estrazione completa delle proprietà Frontmatter YAML (type, role, location, status, faction, ecc.)
  *   con mappatura relazionale diretta nelle colonne di SYS_PROPERTIES_DB.
@@ -12,14 +12,15 @@
  * - Ottimizzazione salvataggio tag riciclando la procedura nativa senza verifiche ridondanti.
  * - Conversione marker Obsidian %%commento%% negli appunti nascosti inline di VanillaDesk.
  * - Conversione evidenziatore ==testo== e tag <mark> negli span con classe highlighter (.hl-c5).
- * - Feedback visivo dinamico e calcolato durante la scrittura fisica dei file JSON su disco.
+ * - Feedback visivo dinamico e calcolato durante la scrittura fisica dei file JSON su disco o in IDB.
  * - Normalizzazione canonica preventiva dei contenuti HTML con Editor.minifyHTMLForStorage e inizializzazione expanded: true.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza stringhe di fallback duplicate o testi hardcoded.
  */
 
 const ObsidianImporter = {
 
     openModal: () => {
-        if (!AppState.workspaceHandle) {
+        if (!AppState.workspaceHandle && AppState.storageMode !== 'idb') {
             alert(I18n.t('obsidian_importer.alert_no_workspace'));
             return;
         }
@@ -45,7 +46,7 @@ const ObsidianImporter = {
                 
                 <div id="obsidianProgressArea" style="display: none; background: var(--bg-color); border: 1px solid var(--border-color); border-radius: 6px; padding: 15px;">
                     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 8px;">
-                        <span id="obsidianProgressStatus" style="font-weight: bold; font-size: 0.85rem; color: var(--accent-color);">Inizializzazione...</span>
+                        <span id="obsidianProgressStatus" style="font-weight: bold; font-size: 0.85rem; color: var(--accent-color);">${I18n.t('obsidian_importer.initializing')}</span>
                         <span id="obsidianProgressPercent" style="font-family: monospace; font-size: 0.85rem; color: var(--text-secondary);">0%</span>
                     </div>
                     <div style="width: 100%; height: 8px; background: rgba(0,0,0,0.06); border-radius: 4px; overflow: hidden;">
@@ -97,7 +98,7 @@ const ObsidianImporter = {
                 if (progressBar) progressBar.style.width = `${pct}%`;
             };
 
-            updateProgress("Scansione file e cartelle del Vault...", 0, 100);
+            updateProgress(I18n.t('obsidian_importer.scanning'), 0, 100);
 
             // 2. Mappature di stato per risoluzione e asset
             const fileEntries = []; // Tutti i file .md trovati
@@ -141,8 +142,8 @@ const ObsidianImporter = {
                 AppState.notes.push({
                     id: vaultRootNoteId,
                     parentId: null,
-                    title: `[Vault] ${vaultDirHandle.name}`,
-                    content: `<p>Vault importato da Obsidian (${fileEntries.length} note, ${assetEntries.length} allegati).</p>`,
+                    title: I18n.t('obsidian_importer.vault_root_title', { name: vaultDirHandle.name }),
+                    content: `<p>${I18n.t('obsidian_importer.vault_root_desc', { notes: fileEntries.length, assets: assetEntries.length })}</p>`,
                     isMarked: false,
                     expanded: true,
                     createdAt: now,
@@ -154,7 +155,7 @@ const ObsidianImporter = {
                 });
             }
 
-            // 4. Copia fisica degli Asset nella cartella assets/ di VanillaDesk (0% - 20%)
+            // 4. Copia fisica degli Asset nella cartella assets/ o in IndexedDB (0% - 20%)
             const totalAssets = assetEntries.length;
             let processedAssets = 0;
 
@@ -174,7 +175,7 @@ const ObsidianImporter = {
                 }
                 processedAssets++;
                 const assetPct = Math.round((processedAssets / (totalAssets || 1)) * 20);
-                updateProgress(`Copia allegati: ${processedAssets}/${totalAssets}`, assetPct, 100);
+                updateProgress(I18n.t('obsidian_importer.copying_assets', { current: processedAssets, total: totalAssets }), assetPct, 100);
             }
 
             // 5. Creazione nodi cartella come note genitore in VanillaDesk
@@ -235,7 +236,7 @@ const ObsidianImporter = {
                 });
 
                 const indexPct = 20 + Math.round(((i + 1) / totalFiles) * 15);
-                updateProgress(`Censimento note: ${i + 1}/${totalFiles}`, indexPct, 100);
+                updateProgress(I18n.t('obsidian_importer.indexing_notes', { current: i + 1, total: totalFiles }), indexPct, 100);
             }
 
             // 7. PASSAGGIO 2: Parsing del contenuto, risoluzione Wikilinks ed estrazione Proprietà/Tag (35% - 60%)
@@ -271,7 +272,7 @@ const ObsidianImporter = {
                             return `<audio controls data-audio-ref="${assetRef}" src="assets/${assetRef}"></audio>`;
                         }
                     }
-                    return `*[Allegato non trovato: ${target}]*`;
+                    return I18n.t('obsidian_importer.asset_not_found', { target });
                 });
 
                 md = md.replace(/\[\[\s*([^\]|#]+?)(?:#([^\]|]+?))?(?:\|([^\]]+?))?\s*\]\]/g, (match, target, heading, label) => {
@@ -283,7 +284,7 @@ const ObsidianImporter = {
                         const anchorAttr = heading ? ` data-anchor="${UI.escapeHTML(heading.trim())}"` : '';
                         return `<a href="#" class="internal-link" data-note-id="${targetNoteId}"${anchorAttr}>${UI.escapeHTML(displayLabel)}</a>`;
                     }
-                    return `*[Link non risolto: ${displayLabel}]*`;
+                    return I18n.t('obsidian_importer.link_unresolved', { label: displayLabel });
                 });
 
                 md = md.replace(/^>\s*\[!([a-zA-Z]+)\]\s*(.*)$/gm, (match, type, title) => {
@@ -314,7 +315,7 @@ const ObsidianImporter = {
                 });
 
                 const parsePct = 35 + Math.round(((i + 1) / totalFiles) * 25);
-                updateProgress(`Conversione contenuti: ${i + 1}/${totalFiles}`, parsePct, 100);
+                updateProgress(I18n.t('obsidian_importer.converting_notes', { current: i + 1, total: totalFiles }), parsePct, 100);
             }
 
             // 8. Sincronizzazione atomica di tutte le Proprietà Frontmatter e Tag in SYS_PROPERTIES_DB
@@ -334,7 +335,7 @@ const ObsidianImporter = {
                 });
             }
 
-            // 9. Scrittura fisica su disco con indicatore di progresso in tempo reale (60% - 100%)
+            // 9. Scrittura fisica su disco o IndexedDB con indicatore di progresso in tempo reale (60% - 100%)
             if (typeof UI !== 'undefined' && typeof UI.renderTree === 'function') {
                 UI.renderTree();
             }
@@ -358,7 +359,7 @@ const ObsidianImporter = {
                 notes: totalFiles, 
                 folders: dirEntries.length, 
                 assets: totalAssets 
-            }) || `Vault importato: ${totalFiles} note, ${dirEntries.length} cartelle e ${totalAssets} allegati!`;
+            });
 
             if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
                 UI.showToast(toastMsg, "success");
@@ -371,7 +372,7 @@ const ObsidianImporter = {
         } catch (err) {
             if (err.name !== 'AbortError') {
                 console.error("Errore importazione Vault Obsidian:", err);
-                alert("Errore durante l'importazione del Vault: " + err.message);
+                alert(I18n.t('obsidian_importer.import_error_prefix') + err.message);
             }
             const btnStart = document.getElementById('btnStartObsidianImport');
             const btnCancel = document.getElementById('btnCancelObsidianImport');

@@ -65,23 +65,23 @@ document.addEventListener('DOMContentLoaded', () => {
                         <div class="selection-card export-scope-card active" data-scope="current" onclick="ExportManager.selectScopeCard('current')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:rgba(37,99,235,0.06); transition:all 0.2s;">
                             <span style="display:inline-flex; color:var(--accent-color);">${Icons.file}</span>
                             <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">${I18n.t('export_dialog.scope_current')}</div>
-                            <div style="font-size:0.7rem; color:var(--text-secondary);">La nota aperta</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary);">${I18n.t('export_dialog.scope_current_desc')}</div>
                         </div>
 
                         <div class="selection-card export-scope-card" data-scope="branch" onclick="ExportManager.selectScopeCard('branch')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
                             <span style="display:inline-flex; color:var(--text-primary);">${Icons.treeNode}</span>
                             <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">${I18n.t('export_dialog.scope_branch')}</div>
-                            <div style="font-size:0.7rem; color:var(--text-secondary);">Nota e figlie</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary);">${I18n.t('export_dialog.scope_branch_desc')}</div>
                         </div>
 
                         <div class="selection-card export-scope-card" data-scope="all" onclick="ExportManager.selectScopeCard('all')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:1px solid var(--border-color); border-radius:8px; cursor:pointer; background:var(--bg-color); transition:all 0.2s;">
                             <span style="display:inline-flex; color:var(--text-primary);">${Icons.book}</span>
-                            <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">Tutto il Workspace</div>
-                            <div style="font-size:0.7rem; color:var(--text-secondary);">Tutte le note</div>
+                            <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">${I18n.t('export_dialog.scope_all_title')}</div>
+                            <div style="font-size:0.7rem; color:var(--text-secondary);">${I18n.t('export_dialog.scope_all_desc')}</div>
                         </div>
                     </div>
                     <div id="exportScopeNotice" style="font-size:0.75rem; color:var(--text-secondary); margin-top:6px; display:none; font-style:italic;">
-                        ℹ️ L'esportazione come Vault Obsidian o Backup JSON include l'intero Workspace.
+                        ${I18n.t('export_dialog.scope_global_notice')}
                     </div>
                 </div>
 
@@ -116,10 +116,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 </div>
             </div>
             <div style="padding: 10px 15px; background:var(--item-hover); border-bottom:1px solid var(--border-color); display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-                <button class="btn btn-primary" onclick="LinkManager.loadFileContent()"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.folderOpen} 1. Apri File...</span></button>
+                <button class="btn btn-primary" onclick="LinkManager.loadFileContent()"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.folderOpen} ${I18n.t('link_manager.viewer_step1_open')}</span></button>
                 <div class="separator" style="height:20px; background:var(--border-color); width:1px;"></div>
                 <div style="display:flex; align-items:center; gap:6px; border: 1px solid var(--border-color); padding: 4px 10px; border-radius: 6px; background: var(--bg-color);">
-                    <span style="font-size:0.85rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('link_manager.viewer_step2_replace')}</span><input type="text" id="viewerFindInput" class="link-modal-search modern-input" style="width:100px; padding:4px; font-size:0.8rem;"><span style="font-size:0.85rem; color:var(--text-secondary);">${I18n.t('link_manager.viewer_step2_with')}</span><input type="text" id="viewerReplaceInput" class="link-modal-search modern-input" style="width:100px; padding:4px; font-size:0.8rem;"><button class="btn" id="btnReplaceContent" onclick="LinkManager.replaceContent()" disabled style="opacity:0.6; padding: 4px 8px;">Cambia</button>
+                    <span style="font-size:0.85rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('link_manager.viewer_step2_replace')}</span><input type="text" id="viewerFindInput" class="link-modal-search modern-input" style="width:100px; padding:4px; font-size:0.8rem;"><span style="font-size:0.85rem; color:var(--text-secondary);">${I18n.t('link_manager.viewer_step2_with')}</span><input type="text" id="viewerReplaceInput" class="link-modal-search modern-input" style="width:100px; padding:4px; font-size:0.8rem;"><button class="btn" id="btnReplaceContent" onclick="LinkManager.replaceContent()" disabled style="opacity:0.6; padding: 4px 8px;">${I18n.t('link_manager.viewer_replace_btn')}</button>
                 </div>
                 <div class="separator" style="height:20px; background:var(--border-color); width:1px;"></div><button class="btn" onclick="LinkManager.copyViewerContent()" id="btnCopyContent" disabled style="opacity:0.6;"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${I18n.t('link_manager.viewer_step3_copy')}</span></button>
             </div>
@@ -127,7 +127,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 <pre id="viewerContent" style="margin:0; padding:15px; width:100%; height:100%; overflow:auto; color:#d4d4d4; font-family: 'Menlo', 'Monaco', 'Courier New', monospace; font-size:0.9rem; line-height:1.5; white-space:pre-wrap; border:none;"></pre>
                 <div id="viewerEmptyState" style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); text-align:center; color:#666;">
                     <div style="margin-bottom:10px; display:inline-flex; align-items:center; justify-content:center; color:var(--text-secondary); opacity:0.5;">${Icons.lock}</div>
-                    <div>Per motivi di sicurezza browser,<br>clicca su <b>"Apri/Ricarica File"</b> in alto per visualizzare il contenuto.</div>
+                    <div>${I18n.t('link_manager.viewer_security_notice')}</div>
                 </div>
             </div>
         </div>

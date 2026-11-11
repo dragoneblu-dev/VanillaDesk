@@ -12,6 +12,8 @@
  * - Scansione e supporto per match cross-node di termini multi-parola separati da tag inline (es. "ciao <b>bello</b>").
  * - Pulizia centralizzata cache in RAM (cleanOrphanedCaches).
  * - FEAT EXACT WHITESPACE HIGHLIGHTING: Preservazione degli spazi e trasparenza regex verso \u00A0 (&nbsp;).
+ * - FIX SEARCH HIGHLIGHT PERSISTENCE (1.2): Srotolamento automatico di mark.search-highlight in minifyHTMLForStorage,
+ *   garantendo che le evidenziazioni di ricerca non vengano mai salvate permanentemente nel file JSON della nota.
  */
 
 Object.assign(Editor, {
@@ -331,6 +333,16 @@ Object.assign(Editor, {
             const parent = g.parentNode;
             while (g.firstChild) parent.insertBefore(g.firstChild, g);
             parent.removeChild(g);
+        });
+
+        // DISINNESTO E RIMOZIONE DEGLI EVIDENZIATORI DI RICERCA TEMPORANEI (<mark class="search-highlight">)
+        // Impedisce che ricerche attive vengano scritte permanentemente nel JSON della nota su autosave
+        temp.querySelectorAll('mark.search-highlight').forEach(m => {
+            const parent = m.parentNode;
+            if (parent) {
+                while (m.firstChild) parent.insertBefore(m.firstChild, m);
+                parent.removeChild(m);
+            }
         });
 
         return temp.innerHTML;

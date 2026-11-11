@@ -29,6 +29,14 @@
  * insieme al testo normale, preservando l'integrità strutturale della lista all'interno del tag blockquote.
  * FIX BR NORMALIZATION (SNELLO E LINEARE): Conversione di ogni <br> che rappresenta una riga in singoli paragrafi <p><br></p>,
  * preservando tutte le righe vuote consecutive senza comprimerle né lasciare <br> nudi a livello root.
+ * FIX HEADING BOLD FALSE POSITIVE: Disattivazione automatica dell'indicatore 'B' all'interno delle intestazioni H1..H6
+ * a meno che non sia presente un elemento semantico <b> o <strong> esplicito.
+ * FEAT ZERO-SHIFT DYNAMIC SUBHEADING SLOT: Adattamento contestuale in-situ del secondo pulsante di titolo della toolbar
+ * sui livelli profondi (H3..H6) con toggle-off naturale a paragrafo e zero layout shift orizzontale.
+ * FIX CITAZIONI LIVE CHAPTER ID: Preservazione degli attributi ID con prefisso 'blk_' in cleanDOMTree
+ * per impedire che la sanificazione cancelli gli ID delle intestazioni e dei blocchi citati.
+ * FIX HEADING LEVEL TOGGLE ID PERSISTENCE (1.3): Cattura preventiva e riassegnazione automatica dell'ID blk_*
+ * sul nuovo tag di intestazione durante toggleHeader, impedendo la distruzione dell'ancora citata.
  */
 
 Object.assign(Editor, {
@@ -152,33 +160,57 @@ Object.assign(Editor, {
             }
         };
 
-        toggleBtn('btnFormatB', document.queryCommandState('bold'));
+        const sel = window.getSelection();
+        let anchorEl = null;
+        if (sel && sel.rangeCount > 0) {
+            let n = sel.anchorNode;
+            anchorEl = (n && n.nodeType === 3) ? n.parentNode : n;
+        }
+
+        const headingBlock = anchorEl ? anchorEl.closest('h1, h2, h3, h4, h5, h6') : null;
+
+        // BOLD: queryCommandState('bold') restituisce true di default su tag di intestazione
+        // a causa dello User-Agent Stylesheet del browser. L'icona "B" deve attivarsi solo se
+        // l'utente ha inserito o selezionato un elemento semantico esplicito (b o strong).
+        let isBold = document.queryCommandState('bold');
+        if (headingBlock) {
+            isBold = !!(anchorEl && anchorEl.closest('b, strong'));
+        }
+
+        toggleBtn('btnFormatB', isBold);
         toggleBtn('btnFormatI', document.queryCommandState('italic'));
         toggleBtn('btnFormatU', document.queryCommandState('underline'));
         toggleBtn('btnFormatS', document.queryCommandState('strikeThrough'));
 
-        let isH1 = false, isH2 = false, isQuote = false, isCustomFont = false;
+        let isH1 = false;
+        let isH2OrSub = false;
+        let subHeadingTag = null; // 'h2', 'h3', 'h4', 'h5', 'h6'
+        let isQuote = false;
+        let isCustomFont = false;
         let activeListType = null;
 
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0) {
+        if (sel && sel.rangeCount > 0) {
             let node = sel.anchorNode;
-            if (node.nodeType === 3) node = node.parentNode;
+            if (node && node.nodeType === 3) node = node.parentNode;
 
-            const block = node.closest('h1, h2, h3, h4, h5, h6, ul, ol');
+            const block = node ? node.closest('h1, h2, h3, h4, h5, h6, ul, ol') : null;
             if (block) {
                 const tag = block.tagName.toLowerCase();
-                if (tag === 'h1') isH1 = true;
-                if (tag === 'h2') isH2 = true;
+                if (tag === 'h1') {
+                    isH1 = true;
+                } else if (['h2', 'h3', 'h4', 'h5', 'h6'].includes(tag)) {
+                    isH2OrSub = true;
+                    subHeadingTag = tag;
+                }
             }
 
             // Verifica se il cursore si trova dentro un blockquote di formattazione testuale
-            const quoteBlock = node.closest('blockquote:not(.adv-widget-shell)');
+            const quoteBlock = node ? node.closest('blockquote:not(.adv-widget-shell)') : null;
             if (quoteBlock) {
                 isQuote = true;
             }
 
-            const span = node.closest('span[class*="ff-"], span[class*="fs-"]');
+            const span = node ? node.closest('span[class*="ff-"], span[class*="fs-"]') : null;
             if (span) isCustomFont = true;
 
             // Rilevamento contestuale del tipo di elenco attivo
@@ -192,7 +224,36 @@ Object.assign(Editor, {
         }
 
         toggleBtn('btnFormatH1', isH1);
-        toggleBtn('btnFormatH2', isH2);
+
+        // SLOT DINAMICO PER SOTTOTITOLI (H2..H6): adatta l'icona e l'indicatore in-situ senza causare layout shift
+        const btnH2 = document.getElementById('btnFormatH2');
+        if (btnH2) {
+            if (isH2OrSub) {
+                btnH2.classList.add('active-format');
+                if (subHeadingTag === 'h2') {
+                    if (btnH2.dataset.currentHeading !== 'h2') {
+                        btnH2.innerHTML = (typeof Icons !== 'undefined' && Icons.h2) ? Icons.h2 : 'H2';
+                        btnH2.title = (typeof I18n !== 'undefined' ? I18n.t('toolbar.h2') : "Titolo Secondario (Ctrl+Shift+2 / Ctrl+Alt+2)");
+                        btnH2.dataset.currentHeading = 'h2';
+                    }
+                } else {
+                    const levelLabel = subHeadingTag.toUpperCase();
+                    if (btnH2.dataset.currentHeading !== subHeadingTag) {
+                        btnH2.innerHTML = `<span style="font-weight:bold; font-size:0.75rem; font-family:sans-serif; line-height:1;">${levelLabel}</span>`;
+                        btnH2.title = `${levelLabel} (${typeof I18n !== 'undefined' ? I18n.t('toolbar.h2') : 'Intestazione'})`;
+                        btnH2.dataset.currentHeading = subHeadingTag;
+                    }
+                }
+            } else {
+                btnH2.classList.remove('active-format');
+                if (btnH2.dataset.currentHeading && btnH2.dataset.currentHeading !== 'h2') {
+                    btnH2.innerHTML = (typeof Icons !== 'undefined' && Icons.h2) ? Icons.h2 : 'H2';
+                    btnH2.title = (typeof I18n !== 'undefined' ? I18n.t('toolbar.h2') : "Titolo Secondario (Ctrl+Shift+2 / Ctrl+Alt+2)");
+                    btnH2.dataset.currentHeading = 'h2';
+                }
+            }
+        }
+
         toggleBtn('btnFormatQuote', isQuote);
         toggleBtn('btnFormatTMenu', isCustomFont);
 
@@ -237,8 +298,31 @@ Object.assign(Editor, {
         Editor.saveSnapshot();
         const currentTag = blockElement.nodeName.toLowerCase();
         const targetTag = tag.toLowerCase();
-        if (currentTag === targetTag) document.execCommand('formatBlock', false, 'p');
-        else document.execCommand('formatBlock', false, targetTag);
+
+        // Se siamo su H2..H6 e viene invocato il pulsante secondario attivo, esegue il toggle-off naturale a paragrafo 'p'
+        const isSubHeadingToggle = targetTag === 'h2' && ['h2', 'h3', 'h4', 'h5', 'h6'].includes(currentTag);
+
+        // PRESERVAZIONE ID CAPITOLO (blk_*): se il blocco ha un ID capitolo citato, lo salviamo prima di formatBlock
+        const savedBlkId = (blockElement.id && blockElement.id.startsWith('blk_')) ? blockElement.id : null;
+
+        if (currentTag === targetTag || isSubHeadingToggle) {
+            document.execCommand('formatBlock', false, 'p');
+        } else {
+            document.execCommand('formatBlock', false, targetTag);
+        }
+
+        // RIPRISTINO ID CAPITOLO: riassegna l'ID blk_* al nuovo blocco solo se è ancora un'intestazione
+        if (savedBlkId) {
+            const currentSel = window.getSelection();
+            if (currentSel.rangeCount > 0) {
+                let n = currentSel.getRangeAt(0).commonAncestorContainer;
+                if (n.nodeType === 3) n = n.parentNode;
+                const newBlock = n.closest('h1, h2, h3, h4, h5, h6');
+                if (newBlock) {
+                    newBlock.id = savedBlkId;
+                }
+            }
+        }
         
         Editor.healWidgetWrappers();
         Editor.updateToolbarFormatting();
@@ -994,7 +1078,15 @@ Object.assign(Editor, {
                 // Preserva i modificatori di fusione celle per th e td
                 if ((attr.name === 'colspan' || attr.name === 'rowspan') && (tag === 'TD' || tag === 'TH')) return;
                 if (attr.name === 'contenteditable') return;
-                if (attr.name === 'id' && (isProtectedWidget || currentEl.classList.contains('simple-table-wrapper') || currentEl.closest('.simple-table-wrapper') || currentEl.classList.contains('adv-bookmark-marker'))) return;
+                
+                // PRESERVAZIONE ID: Protegge widget, tabelle, segnalibri E ANCHE gli ID dei blocchi/capitoli citati (blk_*)
+                if (attr.name === 'id' && (
+                    (currentEl.id && currentEl.id.startsWith('blk_')) ||
+                    isProtectedWidget || 
+                    currentEl.classList.contains('simple-table-wrapper') || 
+                    currentEl.closest('.simple-table-wrapper') || 
+                    currentEl.classList.contains('adv-bookmark-marker')
+                )) return;
 
                 if (attr.name === 'class') {
                     const classes = attr.value.split(/\s+/).filter(cls => allowedClasses.includes(cls) || allowedPrefixes.some(p => cls.startsWith(p)));

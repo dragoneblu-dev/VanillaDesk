@@ -306,7 +306,7 @@ const ImageManager = {
         const imgEl = ImageManager.activeImage;
         const imgId = imgEl.getAttribute('data-image-ref');
 
-        if (!imgId || !AppState.assetsHandle) {
+        if (!imgId || (!AppState.assetsHandle && AppState.storageMode !== 'idb')) {
             alert(I18n.t('image_manager.compress_no_workspace'));
             return;
         }
@@ -318,9 +318,12 @@ const ImageManager = {
         ImageManager.hideResizerOverlay();
 
         try {
-            const fileHandle = await AppState.assetsHandle.getFileHandle(imgId);
-            const file = await fileHandle.getFile();
-            const blobUrl = URL.createObjectURL(file);
+            let blobUrl = imgEl.src;
+
+            // Se l'immagine non è già in memoria o è un placeholder, la carica tramite loadAssetOnDemand
+            if (!blobUrl || !blobUrl.startsWith('blob:')) {
+                blobUrl = await Editor.loadAssetOnDemand(imgId, 'img');
+            }
 
             const img = new Image();
             img.onload = () => {
@@ -341,10 +344,17 @@ const ImageManager = {
                 ctx.drawImage(img, 0, 0, width, height);
 
                 canvas.toBlob(async (blob) => {
-                    // Sovrascrittura fisica del file originale nel File System
-                    const writable = await fileHandle.createWritable();
-                    await writable.write(blob);
-                    await writable.close();
+                    // 1. CASO MEMORIA BROWSER (IndexedDB)
+                    if (AppState.storageMode === 'idb' && AppState.workspaceId) {
+                        await Store.idbSaveAsset(AppState.workspaceId, imgId, blob, 'image/webp');
+                    }
+                    // 2. CASO CARTELLA SU DISCO (File System Access API)
+                    else if (AppState.assetsHandle) {
+                        const fileHandle = await AppState.assetsHandle.getFileHandle(imgId);
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                    }
 
                     // Sostituzione dei puntatori in RAM per aggiornamento in diretta senza F5
                     if (Editor.imageCache[imgId]) URL.revokeObjectURL(Editor.imageCache[imgId]);

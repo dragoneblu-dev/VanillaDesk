@@ -1,7 +1,7 @@
 /**
  * ui-notes-lifecycle.js
  * Sottomodulo di UI.
- * Gestione essenziale del ciclo di vita della nota: Creazione, Selezione JIT su disco,
+ * Gestione essenziale del ciclo di vita della nota: Creazione, Selezione JIT su disco o IndexedDB,
  * Aggiornamento Real-time del contenuto/titolo e Cancellazione sicura nel Cestino.
  * Sincronizzazione atomica del titolo nell'header superiore su due righe (Workspace + Nota attiva).
  * FAST-PATH STESSA NOTA: Quando selectNote viene chiamata per la nota già aperta (es. tasto Apri su citazione
@@ -13,6 +13,8 @@
  * FIX SUB-NOTE CLONING ROOT-CAUSE: Eliminata assegnazione prematura di currentNoteId in addNote e preservazione
  * della sincronicità contrattuale con bypass di syncWidgetsForNote sulle note bozza.
  * FEAT PER-NOTE SPELLCHECK APPLICATION: Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
+ * FEAT RETURNING RECORD DISPATCH: Memorizzazione e innesco dell'evidenziazione temporanea sulla riga quando si torna indietro da una record note.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(UI, {
@@ -185,6 +187,16 @@ Object.assign(UI, {
             
             if (currentNote) {
                 if (scrollArea) currentNote._lastScroll = scrollArea.scrollTop;
+
+                // TRACCIAMENTO RITORNO RECORD NOTE: se lasciamo una record-note, salviamo il riferimento
+                if (currentNote.isRecordNote && currentNote.linkedTableId && currentNote.linkedRowId) {
+                    UI._lastLeavingRecord = {
+                        tableId: currentNote.linkedTableId,
+                        rowId: currentNote.linkedRowId
+                    };
+                } else {
+                    UI._lastLeavingRecord = null;
+                }
                 
                 // Salva il contenuto della nota precedente SOLO se siamo in modalità modifica e vi è stata reale mutazione
                 const editorEl = document.getElementById('noteContent');
@@ -196,6 +208,8 @@ Object.assign(UI, {
                         currentNote.updatedAt = new Date().toISOString();
                     }
                 }
+            } else {
+                UI._lastLeavingRecord = null;
             }
             
             // Salvataggio della nota precedente SOLO SE vi sono modifiche reali in sospeso
@@ -204,6 +218,8 @@ Object.assign(UI, {
                 Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(false);
             }
+        } else {
+            UI._lastLeavingRecord = null;
         }
 
         if (typeof TableManager !== 'undefined') {
@@ -258,8 +274,8 @@ Object.assign(UI, {
             note._lastScroll = 0;
         }
 
-        // 1. VERIFICA JIT DELLA NOTA SU DISCO (Esclusa per bozze nuove per garantire totale sincronicità e zero overhead)
-        if (AppState.workspaceHandle !== null && !note._isDraft) {
+        // 1. VERIFICA JIT DELLA NOTA SU DISCO O INDEXEDDB
+        if ((AppState.workspaceHandle !== null || AppState.storageMode === 'idb') && !note._isDraft) {
             const syncRes = await Store.syncNoteFromDisk(id);
             if (syncRes.status === 'deleted') {
                 const idx = AppState.notes.findIndex(n => n.id === id);
@@ -269,7 +285,7 @@ Object.assign(UI, {
                 }
                 if (typeof UI.renderTree !== 'undefined') UI.renderTree();
                 if (typeof UI.showToast !== 'undefined') {
-                    UI.showToast("La nota non è più disponibile sul disco.", "warning");
+                    UI.showToast(I18n.t('ui_lifecycle.toast_note_not_available_storage'), "warning");
                 }
                 if (AppState.currentNoteId === id) {
                     UI.goHome();
@@ -357,7 +373,7 @@ Object.assign(UI, {
         if (dateEl) {
             if (note.updatedAt) {
                 dateEl.textContent = UI.formatDate(note.updatedAt);
-                dateEl.setAttribute('title', "Modificato il: " + UI.formatDate(note.updatedAt));
+                dateEl.setAttribute('title', I18n.t('ui_lifecycle.modified_on', { date: UI.formatDate(note.updatedAt) }));
                 dateEl.style.cursor = 'help';
             } else {
                 dateEl.textContent = "";
@@ -381,7 +397,7 @@ Object.assign(UI, {
         if (openRecordBtn) {
             if (note.isRecordNote && note.linkedTableId && note.linkedRowId) {
                 openRecordBtn.style.display = 'flex';
-                openRecordBtn.title = "Visualizza questo Record nel Database";
+                openRecordBtn.title = I18n.t('notes_utils.view_record_in_db');
                 openRecordBtn.onclick = () => {
                     if (typeof AdvancedTable !== 'undefined') {
                         AdvancedTable.openRecordView(note.linkedTableId, note.linkedRowId);
@@ -540,6 +556,17 @@ Object.assign(UI, {
             }, 150);
         }
 
+        // EVIDENZIAZIONE VISIVA DI RITORNO SUL RECORD SPECIFICO
+        if (UI._lastLeavingRecord) {
+            const { tableId: retTableId, rowId: retRowId } = UI._lastLeavingRecord;
+            UI._lastLeavingRecord = null;
+            setTimeout(() => {
+                if (typeof UI.highlightReturningRecord === 'function') {
+                    UI.highlightReturningRecord(retTableId, retRowId);
+                }
+            }, 180);
+        }
+
         setTimeout(() => {
             if (AppState.showMinimap && typeof UI.Minimap !== 'undefined') UI.Minimap.sync();
         }, 150);
@@ -618,7 +645,7 @@ Object.assign(UI, {
             const dateEl = document.getElementById('noteLastUpdate');
             if (dateEl) {
                 dateEl.textContent = UI.formatDate(note.updatedAt);
-                dateEl.setAttribute('title', "Modificato il: " + UI.formatDate(note.updatedAt));
+                dateEl.setAttribute('title', I18n.t('ui_lifecycle.modified_on', { date: UI.formatDate(note.updatedAt) }));
             }
 
             if (note.isRecordNote && note.linkedTableId && note.linkedRowId) {
@@ -770,8 +797,8 @@ Object.assign(UI, {
         const showBatchModal = affectedNotes.length > 3 && AppState.workspaceHandle;
         if (showBatchModal) {
             UI.ProgressModal.show(
-                I18n.t('progress.moving_to_trash') || "Spostamento nel Cestino in corso...",
-                I18n.t('progress.do_not_close') || "Scrittura modifiche su disco. Non chiudere l'applicazione...",
+                I18n.t('progress.moving_to_trash'),
+                I18n.t('progress.do_not_close'),
                 0,
                 affectedNotes.length
             );
@@ -819,7 +846,7 @@ Object.assign(UI, {
         const dateEl = document.getElementById('noteLastUpdate');
         if (dateEl) {
             dateEl.textContent = UI.formatDate(note.updatedAt);
-            dateEl.setAttribute('title', "Modificato il: " + UI.formatDate(note.updatedAt));
+            dateEl.setAttribute('title', I18n.t('ui_lifecycle.modified_on', { date: UI.formatDate(note.updatedAt) }));
         }
 
         if (typeof TemplateManager !== 'undefined') TemplateManager.toggleEmptyOverlay();

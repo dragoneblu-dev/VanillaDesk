@@ -7,6 +7,7 @@
  * FEAT BADGE CONTATORI HEADER: Calcolo e rendering pillole [N] per Proprietà (🏷️) e Backlinks (ℹ️).
  * FEAT HEADER PROPERTIES TOGGLE: Voci di menu contestuali per mostrare/nascondere le proprietà in cima alla pagina.
  * FEAT PER-NOTE SPELLCHECK TOGGLE: Gestione e sincronizzazione del controllo ortografico (spellcheck) attivabile/disattivabile per singola nota.
+ * FIX GO-UP RETURNING RECORD: goUpOneLevel passa esplicitamente note.linkedRowId a jumpToWidget per evidenziare solo la riga.
  */
 
 Object.assign(UI, {
@@ -106,7 +107,7 @@ Object.assign(UI, {
         if (!note) return;
 
         if (note.isRecordNote && note.linkedTableId) {
-            UI.jumpToWidget(note.linkedTableId);
+            UI.jumpToWidget(note.linkedTableId, note.linkedRowId);
             return;
         }
 

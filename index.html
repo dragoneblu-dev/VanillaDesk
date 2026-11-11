@@ -25,6 +25,114 @@
     
     <link rel="stylesheet" href="css/custom.css">
 
+    <style>
+        /* Evidenziazione azzurra del titolo Workspace in memoria del browser */
+        .header-workspace-idb-badge {
+            color: var(--col_memBro) !important;
+            background: rgba(2, 132, 199, 0.12);
+            border-radius: 6px;
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        /* Segmented Switcher a schede per Onboarding */
+        .onboarding-segmented-control {
+            display: flex;
+            background: var(--sidebar-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 4px;
+            gap: 4px;
+            width: 100%;
+            max-width: 580px;
+            margin: 0 auto 16px auto;
+            box-sizing: border-box;
+        }
+
+        .onboarding-segment-btn {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 10px 14px;
+            border: 1px solid transparent;
+            border-radius: 8px;
+            background: transparent;
+            color: var(--text-secondary);
+            font-size: 0.88rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            user-select: none;
+        }
+
+        .onboarding-segment-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .onboarding-segment-btn.active {
+            background: var(--bg-color);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+            box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+        }
+
+        .onboarding-segment-btn.active.segment-folder {
+            border-left: 3px solid var(--accent-color);
+            border-right: 3px solid var(--accent-color);
+        }
+
+        .onboarding-segment-btn.active.segment-browser {
+            border-left: 3px solid var(--col_memBro);
+            border-right: 3px solid var(--col_memBro);
+        }
+
+        /* Card Unificata Centrale */
+        .onboarding-single-container {
+            width: 100%;
+            max-width: 580px;
+            margin: 0 auto 25px auto;
+        }
+
+        .onboarding-storage-card {
+            background: var(--bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            text-align: left;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.04);
+            box-sizing: border-box;
+            transition: border-color 0.2s ease;
+        }
+
+        .onboarding-storage-card-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 1.15rem;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .onboarding-storage-card-desc {
+            font-size: 0.88rem;
+            color: var(--text-secondary);
+            line-height: 1.55;
+        }
+
+        .onboarding-storage-card-actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            margin-top: 6px;
+        }
+    </style>
+
     <script src="js/icons.js"></script>
     <script src="js/i18n.js"></script>
 </head>
@@ -64,7 +172,7 @@
                 </button>
 
                 <!-- Pulsante Vista Grafo delle Connessioni -->
-                <button class="icon-btn" id="graphViewBtn" onclick="UI.openGraphView()" title="Mappa delle Connessioni (Graph View)">
+                <button class="icon-btn" id="graphViewBtn" onclick="UI.openGraphView()">
                     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="6" cy="6" r="3"></circle>
                         <circle cx="18" cy="6" r="3"></circle>
@@ -73,6 +181,7 @@
                         <line x1="7.5" y1="8.5" x2="10.5" y2="15.5"></line>
                         <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"></line>
                     </svg>
+                    <script>document.getElementById('graphViewBtn').title = I18n.t('toolbar.graph_view');</script>
                 </button>
                 <div class="separator"></div>
             </div>
@@ -80,10 +189,10 @@
             <!-- Controlli di Navigazione Cronologica e Gerarchica -->
             <div id="navHistoryControls" class="controls-group" style="gap:4px;">
                 <button class="icon-btn" onclick="UI.navHistoryBack()" id="navBackBtn">
-                    <script>document.write(Icons.navBack || Icons.arrowLeft); document.getElementById('navBackBtn').title = I18n.t('toolbar.nav_back') || 'Torna indietro (Alt+←)';</script>
+                    <script>document.write(Icons.navBack || Icons.arrowLeft); document.getElementById('navBackBtn').title = I18n.t('toolbar.nav_back');</script>
                 </button>
                 <button class="icon-btn" onclick="UI.navHistoryForward()" id="navForwardBtn">
-                    <script>document.write(Icons.navForward || Icons.arrowRight); document.getElementById('navForwardBtn').title = I18n.t('toolbar.nav_forward') || 'Vai avanti (Alt+→)';</script>
+                    <script>document.write(Icons.navForward || Icons.arrowRight); document.getElementById('navForwardBtn').title = I18n.t('toolbar.nav_forward');</script>
                 </button>
                 <button class="icon-btn" onclick="UI.goUpOneLevel()" id="goUpBtn">
                     <script>document.write(Icons.goUp || Icons.cornerUpLeft); document.getElementById('goUpBtn').title = I18n.t('toolbar.go_up');</script>
@@ -171,32 +280,95 @@
 
         <main id="mainArea">
             <div id="emptyState" class="empty-state">
-                <div id="onboardingView" class="hidden" style="display:flex; flex-direction:column; align-items:center; max-width:700px; margin: 0 auto; text-align:center; padding-top: 40px;">
-                    <div style="margin-bottom: 25px; color:var(--accent-color); transform: scale(1.8);">
+                <div id="onboardingView" class="hidden" style="display:flex; flex-direction:column; align-items:center; max-width:820px; margin: 0 auto; text-align:center; padding: 30px 15px 40px 15px; box-sizing:border-box;">
+                    <div style="margin-bottom: 20px; color:var(--accent-color); transform: scale(1.6);">
                         <script>document.write(Icons.lightning || Icons.book)</script>
                     </div>
-                    <h1 style="margin-bottom: 10px; font-size: 2.2rem; color: var(--text-primary);"><script>document.write(I18n.t('onboarding.title'))</script></h1>
-                    <div style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;">
-                        Realizzato da dragoneblu@gmail.com
+                    <h1 style="margin-bottom: 8px; font-size: 2.1rem; color: var(--text-primary);"><script>document.write(I18n.t('onboarding.title'))</script></h1>
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;">
+                        <script>document.write(I18n.t('onboarding.author'));</script>
                     </div>
-                    <p style="font-size:1.1rem; line-height:1.7; color:var(--text-secondary); margin-bottom: 35px;">
+                    <p style="font-size:1.05rem; line-height:1.65; color:var(--text-secondary); margin-bottom: 25px; max-width: 720px;">
                         <script>document.write(I18n.t('onboarding.desc'))</script>
                     </p>
-                    <div style="display:flex; gap:15px; justify-content:center; flex-wrap:wrap;">
-                        <button class="btn" style="padding: 10px 20px; font-size: 1rem; border-color: var(--accent-color); color: var(--accent-color); font-weight: bold;" onclick="Store.createWorkspace(true)">
-                            <span style="display:inline-block; margin-right:5px;">
-                                <script>document.write(Icons.folderOpen)</script>
-                            </span> <script>document.write(I18n.t('menu.new_workspace'))</script>
+
+                    <!-- SELECTOR SEGMENTED A SCHEDE: Scelta pulita tra Cartella Locale e Memoria Browser -->
+                    <div class="onboarding-segmented-control" id="onboardingSegmentedControl">
+                        <button class="onboarding-segment-btn active segment-folder" id="btnTabFolder" onclick="switchOnboardingMode('folder')">
+                            <span style="color:var(--accent-color); display:inline-flex;"><script>document.write(Icons.folderOpen)</script></span>
+                            <span><script>document.write(I18n.t('onboarding.folder_mode_title'))</script></span>
                         </button>
-                        <button class="btn btn-primary" style="padding: 10px 20px; font-size: 1rem;" onclick="Store.openWorkspace()">
-                            <span style="display:inline-block; margin-right:5px;">
-                                <script>document.write(Icons.folder)</script>
-                            </span> <script>document.write(I18n.t('menu.open_workspace'))</script>
+                        <button class="onboarding-segment-btn segment-browser" id="btnTabBrowser" onclick="switchOnboardingMode('browser')">
+                            <span style="color:var(--col_memBro); display:inline-flex;"><script>document.write(Icons.globe)</script></span>
+                            <span><script>document.write(I18n.t('onboarding.browser_mode_title'))</script></span>
                         </button>
-                        <button id="btnRecoverSession" class="btn" style="padding: 10px 20px; font-size: 1rem; display:none;" onclick="Store.restoreRecoveredSession()">
+                    </div>
+
+                    <!-- CARD UNIFICATA CENTRALE (DIMEZZA IL CARICO COGNITIVO) -->
+                    <div class="onboarding-single-container">
+                        
+                        <!-- PANNELLO 1: CARTELLA FISICA SU DISCO -->
+                        <div class="onboarding-storage-card" id="cardFolderStorage">
+                            <div>
+                                <div class="onboarding-storage-card-header">
+                                    <span style="color:var(--accent-color); display:inline-flex;">
+                                        <script>document.write(Icons.folderOpen)</script>
+                                    </span>
+                                    <span><script>document.write(I18n.t('onboarding.folder_mode_title'))</script></span>
+                                </div>
+                                <div class="onboarding-storage-card-desc" style="margin-top:8px;">
+                                    <script>document.write(I18n.t('onboarding.folder_mode_desc'));</script>
+                                </div>
+                            </div>
+                            <div class="onboarding-storage-card-actions">
+                                <button class="btn" id="btnFolderCreateWs" style="flex:1; justify-content:center; padding:10px 14px; font-size:0.88rem; font-weight:600;" onclick="Store.createWorkspace(true)">
+                                    <span><script>document.write(I18n.t('menu.new_workspace')); document.getElementById('btnFolderCreateWs').title = I18n.t('onboarding.folder_btn_create_title');</script></span>
+                                </button>
+                                <button class="btn btn-primary" id="btnFolderOpenWs" style="flex:1; justify-content:center; padding:10px 14px; font-size:0.88rem; font-weight:600;" onclick="Store.openWorkspace()">
+                                    <span><script>document.write(I18n.t('menu.open_workspace')); document.getElementById('btnFolderOpenWs').title = I18n.t('onboarding.folder_btn_open_title');</script></span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <!-- PANNELLO 2: MEMORIA DEL BROWSER (INDEXEDDB) -->
+                        <div class="onboarding-storage-card" id="cardBrowserStorage" style="display:none;">
+                            <div>
+                                <div class="onboarding-storage-card-header">
+                                    <span style="color:var(--col_memBro); display:inline-flex;">
+                                        <script>document.write(Icons.globe)</script>
+                                    </span>
+                                    <span><script>document.write(I18n.t('onboarding.browser_mode_title'))</script></span>
+                                </div>
+                                <div class="onboarding-storage-card-desc" style="margin-top:8px;">
+                                    <script>document.write(I18n.t('onboarding.browser_mode_desc'));</script>
+                                </div>
+                            </div>
+                            <div class="onboarding-storage-card-actions">
+                                <button class="btn" id="btnBrowserCreateWs" style="flex:1; justify-content:center; padding:10px 14px; font-size:0.88rem; font-weight:600; color:var(--col_memBro); border-color:var(--col_memBro);" onclick="Store.createBrowserWorkspace()">
+                                    <span><script>document.write(I18n.t('onboarding.btn_new_browser_ws')); document.getElementById('btnBrowserCreateWs').title = I18n.t('onboarding.browser_btn_create_title');</script></span>
+                                </button>
+                                <button class="btn btn-primary" id="btnBrowserOpenWs" style="flex:1; justify-content:center; padding:10px 14px; font-size:0.88rem; font-weight:600; background:var(--col_memBro); border-color:var(--col_memBro);" onclick="UI.openBrowserWorkspaceManager()">
+                                    <span><script>document.write(I18n.t('onboarding.btn_open_browser_ws')); document.getElementById('btnBrowserOpenWs').title = I18n.t('onboarding.browser_btn_open_title');</script></span>
+                                </button>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- STRUMENTI SECONDARI DI BACKUP OFFLINE & RECUPERO SESSIONE DISCRETO -->
+                    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; border-top: 1px dashed var(--border-color); padding-top: 20px; width: 100%;">
+                        <!-- Pulsante discreto di recupero sessione precedente (mostrato SOLO se presenti dati salvati prima della chiusura) -->
+                        <button class="btn" id="btnRecoverSession" style="display:none;" onclick="Store.restoreRecoveredSession()">
+                            <span style="display:inline-flex; align-items:center; gap:5px;">
+                                <script>document.write(Icons.restore);</script>
+                                <script>document.write(I18n.t('onboarding.recovery_btn')); document.getElementById('btnRecoverSession').title = I18n.t('onboarding.recovery_desc');</script>
+                            </span>
+                        </button>
+
+                        <button class="btn" style="padding: 7px 14px; font-size: 0.82rem;" onclick="Store.loadSnapshot()">
                             <span style="display:inline-block; margin-right:5px;">
-                                <script>document.write(Icons.restore)</script>
-                            </span> <script>document.write(I18n.t('onboarding.btn_recover'))</script>
+                                <script>document.write(Icons.import || '📥')</script>
+                            </span> <script>document.write(I18n.t('menu.load_json'))</script>
                         </button>
                     </div>
                 </div>
@@ -402,16 +574,16 @@
                         <line x1="16.5" y1="8.5" x2="13.5" y2="15.5"></line>
                     </svg>
                 </span>
-                <span id="graphWorkspaceLabel" class="graph-workspace-name">Mappa delle Connessioni</span>
-                <span id="graphStatsBadge" class="graph-badge">0 nodi &bull; 0 collegamenti</span>
+                <span id="graphWorkspaceLabel" class="graph-workspace-name"><script>document.write(I18n.t('graph_view.title'));</script></span>
+                <span id="graphStatsBadge" class="graph-badge"><script>document.write(I18n.t('graph_view.stats_empty'));</script></span>
 
                 <!-- CONTROLLI RAPIDI MODALITÀ GRAFO A DUE STATI: GLOBALE VS LOCALE (3X) -->
                 <div class="graph-mode-pill" style="margin-left: 6px;">
-                    <button id="btnGraphModeGlobal" class="graph-mode-btn active" onclick="GraphUI.setGraphMode('global')" title="Visualizza l'intero Workspace">
-                        Globale
+                    <button id="btnGraphModeGlobal" class="graph-mode-btn active" onclick="GraphUI.setGraphMode('global')">
+                        <script>document.write(I18n.t('graph_view.mode_global')); document.getElementById('btnGraphModeGlobal').title = I18n.t('graph_view.mode_global_title');</script>
                     </button>
-                    <button id="btnGraphModeLocal" class="graph-mode-btn" onclick="GraphUI.setGraphMode('local')" title="Visualizza la rete contestuale della nota focale (3x)">
-                        Locale
+                    <button id="btnGraphModeLocal" class="graph-mode-btn" onclick="GraphUI.setGraphMode('local')">
+                        <script>document.write(I18n.t('graph_view.mode_local')); document.getElementById('btnGraphModeLocal').title = I18n.t('graph_view.mode_local_title');</script>
                     </button>
                 </div>
             </div>
@@ -424,41 +596,43 @@
                             <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
                         </svg>
                     </span>
-                    <input type="text" id="graphSearchInput" placeholder="Cerca nota o #tag nel grafo (Invio per centrare)..." autocomplete="off">
+                    <input type="text" id="graphSearchInput" autocomplete="off">
+                    <script>document.getElementById('graphSearchInput').placeholder = I18n.t('graph_view.search_placeholder');</script>
                     <button id="graphSearchClear" class="graph-clear-btn" style="display:none;">✕</button>
                 </div>
             </div>
 
             <div class="header-right">
-                <button class="btn" id="btnFitGraph" onclick="event.stopPropagation(); GraphCanvas.fitToView()" title="Centra ed adatta l'intero grafo allo schermo">
+                <button class="btn" id="btnFitGraph" onclick="event.stopPropagation(); GraphCanvas.fitToView()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"></path>
                     </svg>
-                    <span>Centra</span>
+                    <span><script>document.write(I18n.t('graph_view.fit_btn')); document.getElementById('btnFitGraph').title = I18n.t('graph_view.fit_title');</script></span>
                 </button>
 
-                <button class="btn" id="btnRestartPhysics" onclick="event.stopPropagation(); GraphCanvas.restartSimulation()" title="Compatta verso il centro e riavvia simulazione">
+                <button class="btn" id="btnRestartPhysics" onclick="event.stopPropagation(); GraphCanvas.restartSimulation()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"></path>
                     </svg>
+                    <script>document.getElementById('btnRestartPhysics').title = I18n.t('graph_view.restart_physics_title');</script>
                 </button>
 
                 <div class="separator"></div>
 
                 <!-- Pulsante Filtri & Forze con stopPropagation esplicito -->
-                <button class="btn" id="btnGraphSettings" onclick="event.stopPropagation(); GraphUI.openFilterDrawer()" title="Filtri, colorazione e parametri fisici del grafo">
+                <button class="btn" id="btnGraphSettings" onclick="event.stopPropagation(); GraphUI.openFilterDrawer()">
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                         <circle cx="12" cy="12" r="3"></circle>
                         <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
                     </svg>
-                    <span>Filtri & Forze</span>
+                    <span><script>document.write(I18n.t('graph_view.filters_forces_btn')); document.getElementById('btnGraphSettings').title = I18n.t('graph_view.filters_forces_title');</script></span>
                 </button>
 
                 <div class="separator"></div>
 
                 <!-- Tasto Chiudi Vista Grafo -->
-                <button class="btn btn-primary" id="btnCloseGraph" onclick="event.stopPropagation(); GraphApp.close()" title="Chiudi Mappa del Grafo (Esc)">
-                    <span>✕ Chiudi (Esc)</span>
+                <button class="btn btn-primary" id="btnCloseGraph" onclick="event.stopPropagation(); GraphApp.close()">
+                    <span><script>document.write(I18n.t('graph_view.close_btn')); document.getElementById('btnCloseGraph').title = I18n.t('graph_view.close_title');</script></span>
                 </button>
             </div>
         </header>
@@ -474,6 +648,7 @@
     <script src="js/state.js"></script>
     <script src="js/crypto-utils.js"></script>
     <script src="js/store.js"></script>
+    <script src="js/store-idb.js"></script>
     <script src="js/store-workspace.js"></script>
     <script src="js/color-manager.js"></script>
     <script src="js/link-manager.js"></script>
@@ -618,5 +793,41 @@
     <script src="js/package-manager.js"></script>
     <script src="js/____ai-bridge.js"></script>
     <script src="js/app.js"></script>
+
+    <!-- Logica di commutazione Onboarding: Segmented Switcher a schede con gestione automatica del supporto browser -->
+    <script>
+        function switchOnboardingMode(mode) {
+            const btnFolder = document.getElementById('btnTabFolder');
+            const btnBrowser = document.getElementById('btnTabBrowser');
+            const cardFolder = document.getElementById('cardFolderStorage');
+            const cardBrowser = document.getElementById('cardBrowserStorage');
+
+            if (mode === 'folder') {
+                if (btnFolder) btnFolder.classList.add('active');
+                if (btnBrowser) btnBrowser.classList.remove('active');
+                if (cardFolder) cardFolder.style.display = 'flex';
+                if (cardBrowser) cardBrowser.style.display = 'none';
+            } else {
+                if (btnBrowser) btnBrowser.classList.add('active');
+                if (btnFolder) btnFolder.classList.remove('active');
+                if (cardBrowser) cardBrowser.style.display = 'flex';
+                if (cardFolder) cardFolder.style.display = 'none';
+            }
+        }
+
+        (function() {
+            // Rilevamento supporto File System Access API (es. Chrome/Edge vs Firefox/Safari)
+            const hasFsaa = typeof window.showDirectoryPicker === 'function';
+            const btnFolder = document.getElementById('btnTabFolder');
+            const cardFolder = document.getElementById('cardFolderStorage');
+
+            if (!hasFsaa) {
+                // Su browser privi di FSAA disattiva la scheda cartella fisica e posiziona direttamente su Browser Storage
+                if (btnFolder) btnFolder.style.display = 'none';
+                if (cardFolder) cardFolder.style.display = 'none';
+                switchOnboardingMode('browser');
+            }
+        })();
+    </script>
 </body>
 </html>

@@ -5,6 +5,9 @@
  * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
  * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
  * FEAT UNIFIED IMPORT/EXPORT: Spostamento di "Carica Backup JSON..." nel sottomenu "Importa..." ed eliminazione del blocco ridondante File JSON.
+ * FEAT BROWSER WORKSPACES MENU ENTRY: Integrazione nativa dell'opzione "Workspace nel Browser (IDB)..." nel Menu Principale con icona vettoriale Icons.globe.
+ * FEAT FSAA GRACEFUL DEGRADATION: Se il browser non supporta showDirectoryPicker (Firefox, Safari), le voci di cartella
+ * fisica rimangono visibili nel menu ma disattivate con tooltip esplicativo per non disorientare l'utente.
  * FEAT CONTINUOUS EDIT: Attivazione di default (true) al primo avvio o su nuovi Workspace.
  * FIX READ-MODE CHECKLIST: Le checkbox delle To-Do list (.adv-checklist) restano attive e cliccabili
  * anche in modalità lettura (a meno che la nota non sia nel Cestino), consentendo la spunta rapida.
@@ -24,23 +27,41 @@ Object.assign(UI, {
         if (existing && e) return;
 
         const currentTheme = localStorage.getItem('theme') || 'light';
-        const currentLang = I18n.currentLang || 'it';
+        const currentLang = I18n.lang || I18n.currentLang || 'it';
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
         
         const trashCount = AppState.notes ? AppState.notes.filter(n => n.deletedAt).length : 0;
         const currentWidth = document.documentElement.style.getPropertyValue('--page-max-width');
         const isFullWidth = currentWidth === '100%';
 
+        // Rilevamento supporto File System Access API (Chromium vs Firefox/Safari)
+        const hasFsaa = typeof window.showDirectoryPicker === 'function';
+        const fsaaUnsupportedTooltip = I18n.t('menu.fsaa_unsupported_tooltip') || 
+            "Non supportato su questo browser. Richiede Google Chrome, Microsoft Edge, Brave o Opera.";
+
         const items = [
             {
                 icon: Icons.folderOpen,
                 label: I18n.t('menu.new_workspace'),
-                onClick: () => Store.createWorkspace(true)
+                disabled: !hasFsaa,
+                title: !hasFsaa ? fsaaUnsupportedTooltip : undefined,
+                onClick: () => {
+                    if (hasFsaa) Store.createWorkspace(true);
+                }
             },
             {
                 icon: Icons.folder,
                 label: I18n.t('menu.open_workspace'),
-                onClick: () => Store.openWorkspace()
+                disabled: !hasFsaa,
+                title: !hasFsaa ? fsaaUnsupportedTooltip : undefined,
+                onClick: () => {
+                    if (hasFsaa) Store.openWorkspace();
+                }
+            },
+            {
+                icon: Icons.globe,
+                label: I18n.t('menu.browser_workspaces'),
+                onClick: () => UI.openBrowserWorkspaceManager()
             },
             {
                 icon: Icons.trash,
@@ -52,12 +73,12 @@ Object.assign(UI, {
             { type: 'divider' },
             {
                 icon: Icons.import || '📥',
-                label: I18n.t('menu.import') || "Importa...",
+                label: I18n.t('menu.import'),
                 type: 'submenu',
                 items: [
                     {
                         icon: Icons.file,
-                        label: I18n.t('menu.load_json') || "Carica Backup JSON...",
+                        label: I18n.t('menu.load_json'),
                         onClick: () => Store.loadSnapshot()
                     },
                     { type: 'divider' },
@@ -68,9 +89,11 @@ Object.assign(UI, {
                     },
                     {
                         icon: Icons.import || '📥',
-                        label: I18n.t('menu.import_obsidian') || "Importa Vault Obsidian...",
+                        label: I18n.t('menu.import_obsidian'),
+                        disabled: !hasFsaa,
+                        title: !hasFsaa ? fsaaUnsupportedTooltip : undefined,
                         onClick: () => {
-                            if (typeof ObsidianImporter !== 'undefined') {
+                            if (typeof ObsidianImporter !== 'undefined' && hasFsaa) {
                                 ObsidianImporter.openModal();
                             }
                         }
@@ -96,7 +119,7 @@ Object.assign(UI, {
             {
                 icon: AppState.continuousEditMode ? Icons.checkSquare : Icons.square,
                 label: I18n.t('menu.continuous_edit'),
-                onClick: () => UI.toggleContinuousEdit()
+                onClick: () => UI.setContinuousEdit(!AppState.continuousEditMode)
             },
             {
                 icon: Icons.lock,

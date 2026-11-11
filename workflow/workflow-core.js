@@ -2,12 +2,13 @@
  * workflow-core.js
  * Modulo Core di Workflow Studio: Stato, Inizializzazione, Sincronizzazione,
  * Gestione Schermate, Persistenza automatica e Navigazione Canvas non distruttiva.
- * EREDITARIETÀ STATO: Risoluzione immediata di workspaceHandle, assetsHandle, databases,
- * notes e documentPassword da window.opener (accesso alle proprietà o scope lessicale).
+ * EREDITARIETÀ STATO: Risoluzione immediata di storageMode, workspaceId, workspaceHandle,
+ * assetsHandle, databases, notes e documentPassword da window.opener.
+ * PERSISTENZA DUAL ENGINE: Supporto trasparente al salvataggio layout sia in assets/workflow/{dbId}.json (FSAA)
+ * sia nello store IndexedDB idb_assets (Modalità Browser).
  * PERSISTENZA IDB: Memorizzazione e recupero del FileSystemHandle in IndexedDB per supportare il ricaricamento (F5).
  * MULTI-RELATION WORKFLOW: Supporto a workflow indipendenti per database con auto-relazioni multiple.
  * EREDITARIETÀ SEMANTICA WBS: relationDirection calcolata da col.treeDirection o col.singleRecord.
- * PERSISTENZA AUTONOMA: Salvataggio automatico delle coordinate su assets/workflow/{dbId}.json.
  * TITLE COLUMN DINAMICO: Selezione della colonna usata come titolo primario dei nodi (titleColId).
  * UNDO/REDO CANVAS: Stack di cronologia completo (Ctrl+Z / Ctrl+Y) per posizioni nodi e collegamenti.
  * REACTIVE GRAPH UPDATE: Metodo onDatabaseModified per aggiornare il canvas a seguito di mutazioni dal Drawer.
@@ -536,16 +537,19 @@ window.WorkflowApp = {
                         AppState.notes = [...(openerState.notes || [])];
                     }
 
+                    // EREDITARIETÀ COMPLETA: Sia per FSAA sia per IndexedDB
+                    AppState.storageMode = openerState.storageMode || 'ram';
+                    AppState.workspaceId = openerState.workspaceId || null;
+                    AppState.documentPassword = openerState.documentPassword || null;
+                    AppState.fileName = openerState.fileName || (openerState.workspaceHandle ? openerState.workspaceHandle.name : "Workspace nel Browser");
+
+                    const wsLabel = document.getElementById('wsBtnLabel');
+                    if (wsLabel) wsLabel.innerText = AppState.fileName;
+
                     if (openerState.workspaceHandle) {
                         const handle = openerState.workspaceHandle;
                         AppState.workspaceHandle = handle;
                         AppState.assetsHandle = openerState.assetsHandle || null;
-                        AppState.documentPassword = openerState.documentPassword || null;
-                        AppState.workspaceId = openerState.workspaceId || null;
-                        AppState.fileName = openerState.fileName || handle.name;
-
-                        const wsLabel = document.getElementById('wsBtnLabel');
-                        if (wsLabel) wsLabel.innerText = handle.name;
 
                         await WorkflowApp.verifyWorkspacePermission(false);
                         await WorkflowApp.saveWorkspaceHandleToIDB(handle);
@@ -835,6 +839,9 @@ window.WorkflowApp = {
             WorkflowApp.syncChannel.onmessage = (event) => {
                 const data = event.data;
                 if (!data) return;
+                // Isolamento per workspaceId se presente
+                if (data.workspaceId && AppState.workspaceId && data.workspaceId !== AppState.workspaceId) return;
+
                 if (data.type === 'db_saved' || data.type === 'workspace_saved' || data.tableId === WorkflowApp.currentDbId) {
                     WorkflowApp.reloadCurrentDatabase(true);
                 }
@@ -855,7 +862,7 @@ window.WorkflowApp = {
 
         if (WorkflowApp._syncPollTimer) clearInterval(WorkflowApp._syncPollTimer);
         WorkflowApp._syncPollTimer = setInterval(() => {
-            if (document.visibilityState === 'visible' && WorkflowApp.currentDbId && AppState.workspaceHandle) {
+            if (document.visibilityState === 'visible' && WorkflowApp.currentDbId && (AppState.workspaceHandle || AppState.storageMode === 'idb')) {
                 WorkflowApp.reloadCurrentDatabase(true);
             }
         }, 3000);
@@ -877,6 +884,7 @@ window.WorkflowApp = {
             }
 
             AppState.workspaceHandle = dirHandle;
+            AppState.storageMode = 'fsaa';
             const wsBtn = document.getElementById('wsBtnLabel');
             if (wsBtn) wsBtn.innerText = dirHandle.name;
             await WorkflowApp.saveWorkspaceHandleToIDB(dirHandle);
@@ -1036,19 +1044,34 @@ window.WorkflowApp = {
     },
 
     reloadCurrentDatabase: async (silent = false) => {
-        if (!WorkflowApp.currentDbId || !AppState.workspaceHandle) return;
+        if (!WorkflowApp.currentDbId) return;
 
         try {
-            const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases');
-            const fileHandle = await dbDir.getFileHandle(`${WorkflowApp.currentDbId}.json`);
-            const file = await fileHandle.getFile();
-            const text = await file.text();
+            let text = '';
+            let freshDbState = null;
+
+            // 1. MODALITÀ BROWSER (IndexedDB)
+            if (AppState.storageMode === 'idb') {
+                freshDbState = await Store.readDatabaseFromDisk(WorkflowApp.currentDbId);
+                if (freshDbState) {
+                    text = JSON.stringify(freshDbState);
+                }
+            } 
+            // 2. MODALITÀ CARTELLA SU DISCO (File System Access API)
+            else if (AppState.workspaceHandle) {
+                const dbDir = await AppState.workspaceHandle.getDirectoryHandle('databases');
+                const fileHandle = await dbDir.getFileHandle(`${WorkflowApp.currentDbId}.json`);
+                const file = await fileHandle.getFile();
+                text = await file.text();
+                freshDbState = JSON.parse(text);
+            }
+
+            if (!freshDbState) return;
 
             if (silent && text === WorkflowApp._lastDbContentHash) {
                 return;
             }
 
-            const freshDbState = JSON.parse(text);
             WorkflowApp._lastDbContentHash = text;
             AppState.databases[WorkflowApp.currentDbId] = freshDbState;
             WorkflowApp.currentDbState = freshDbState;
@@ -1091,7 +1114,7 @@ window.WorkflowApp = {
     },
 
     // =========================================================================
-    // I/O AUTOMATICO SU assets/workflow/{tableId}.json (CON MULTI-RELATION SUPPORT)
+    // I/O AUTOMATICO SU assets/workflow/{tableId}.json O INDEXEDDB (MULTI-RELATION SUPPORT)
     // =========================================================================
     getWorkflowFolderHandle: async () => {
         if (!AppState.workspaceHandle) return null;
@@ -1106,42 +1129,74 @@ window.WorkflowApp = {
     },
 
     saveWorkflowAuto: async () => {
-        if (!WorkflowApp.currentDbId || !AppState.workspaceHandle) return;
+        if (!WorkflowApp.currentDbId) return;
+
+        WorkflowApp.saveCurrentRelationLayout();
+
+        const exportObj = {
+            type: "vanilladesk_workflow_layout",
+            version: "3.2",
+            databaseId: WorkflowApp.currentDbId,
+            databaseTitle: WorkflowApp.currentDbState ? WorkflowApp.currentDbState.title : 'database',
+            activeRelationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
+            relationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
+            layout: WorkflowApp.layout,
+            layoutsByRelation: WorkflowApp.layoutsByRelation || {}
+        };
+
+        const jsonStr = JSON.stringify(exportObj, null, 2);
+
+        // 1. MODALITÀ BROWSER (IndexedDB store idb_assets)
+        if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbSaveAsset === 'function') {
+            try {
+                const assetName = `workflow_${WorkflowApp.currentDbId}.json`;
+                const blob = new Blob([jsonStr], { type: 'application/json' });
+                await Store.idbSaveAsset(AppState.workspaceId, assetName, blob, 'application/json');
+                return;
+            } catch (e) {
+                console.error("Errore salvataggio automatico workflow in IndexedDB:", e);
+                return;
+            }
+        }
+
+        // 2. MODALITÀ CARTELLA SU DISCO (File System Access API)
+        if (!AppState.workspaceHandle) return;
         try {
             const wfDir = await WorkflowApp.getWorkflowFolderHandle();
             if (!wfDir) return;
 
-            WorkflowApp.saveCurrentRelationLayout();
-
             const fileHandle = await wfDir.getFileHandle(`${WorkflowApp.currentDbId}.json`, { create: true });
             const writable = await fileHandle.createWritable();
-            
-            const exportObj = {
-                type: "vanilladesk_workflow_layout",
-                version: "3.2",
-                databaseId: WorkflowApp.currentDbId,
-                databaseTitle: WorkflowApp.currentDbState ? WorkflowApp.currentDbState.title : 'database',
-                activeRelationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
-                relationColId: WorkflowApp.selfRelCol ? WorkflowApp.selfRelCol.id : null,
-                layout: WorkflowApp.layout,
-                layoutsByRelation: WorkflowApp.layoutsByRelation || {}
-            };
-
-            await writable.write(JSON.stringify(exportObj, null, 2));
+            await writable.write(jsonStr);
             await writable.close();
         } catch (e) {
-            console.error("Errore salvataggio automatico workflow:", e);
+            console.error("Errore salvataggio automatico workflow su disco:", e);
         }
     },
 
     loadWorkflowFromFile: async (dbId) => {
         try {
-            const wfDir = await WorkflowApp.getWorkflowFolderHandle();
-            if (!wfDir) return false;
+            let text = '';
 
-            const fileHandle = await wfDir.getFileHandle(`${dbId}.json`, { create: false });
-            const file = await fileHandle.getFile();
-            const text = await file.text();
+            // 1. MODALITÀ BROWSER (IndexedDB store idb_assets)
+            if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbGetAsset === 'function') {
+                const assetName = `workflow_${dbId}.json`;
+                const assetRecord = await Store.idbGetAsset(AppState.workspaceId, assetName);
+                if (assetRecord && assetRecord.blob) {
+                    text = await assetRecord.blob.text();
+                }
+            } 
+            // 2. MODALITÀ CARTELLA SU DISCO (File System Access API)
+            else if (AppState.workspaceHandle) {
+                const wfDir = await WorkflowApp.getWorkflowFolderHandle();
+                if (!wfDir) return false;
+
+                const fileHandle = await wfDir.getFileHandle(`${dbId}.json`, { create: false });
+                const file = await fileHandle.getFile();
+                text = await file.text();
+            }
+
+            if (!text) return false;
             const parsed = JSON.parse(text);
 
             if (parsed) {

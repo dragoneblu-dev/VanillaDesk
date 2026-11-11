@@ -6,24 +6,33 @@
  * 2. Hashing e Rilevamento Modifiche: Calcolo hash canonici (_hashObj) e ispezione DOM/RAM (hasUnsavedChanges).
  * 3. Scanner Centralizzato Risorse: Scansione transitiva dipendenze e pulizia RAM (scanActiveEntities, cleanOrphanedRAMCaches).
  * 4. Orchestrazione Autosave: Gestione timer di debounce e segnalazione modifiche fisiche (triggerAutoSave, markNeedsPhysicalGC).
- * 5. Crash Recovery & Snapshot Standalone: Persistenza di emergenza su IndexedDB e import/export di file JSON monolitici.
- * 6. Audit Allegati Orfani: Censimento degli asset non referenziati su disco con calcolo peso (getOrphanedAssets, deleteOrphanedAssets).
+ * 5. Crash Recovery Isolato: Persistenza di emergenza su IndexedDB ATTIVA ESCLUSIVAMENTE per la sessione volatile in RAM (senza workspace).
+ *    Blocco tassativo di scrittura su IDB se è presente un Workspace su disco o in IDB.
+ * 6. Audit Allegati Orfani: Censimento degli asset non referenziati su disco o IDB con calcolo peso (getOrphanedAssets, deleteOrphanedAssets).
+ * 7. Tracciamento data e ora dell'ultimo Backup JSON esportato (lastBackupAt).
+ * 8. ZERO FORCED AUTO-OPEN: All'avvio l'applicazione non carica forzatamente l'ultimo workspace IDB,
+ *    presentando sempre la schermata iniziale per lasciare all'utente la piena libertà di scelta.
+ * 9. FIX AGGIORNAMENTO BACKUP IDB & DIFFING OVERRIDE: Ripristino forzato di tutte le note del backup
+ *    tramite marcatura _isDirty su tutte le entità e reset degli hash per prevenire il salto di note esistenti.
+ * 10. RECOVERY SELETTIVO: Il pulsante "Ripristina Sessione" si mostra unicamente se era aperta una sessione volatile in sola RAM.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  * Ottimizzazione O(1) di hasUnsavedChanges per prevenire blocchi computazionali su collezioni con 1000+ note.
+ * REFACTOR: La logica specifica per IndexedDB è delegata a js/store-idb.js.
  */
-
-const DB_NAME = 'ProNotesDB';
-const STORE_NAME = 'backupStore';
 
 const Store = {
     isDirty: false,
     debounceTimer: null,
     dbPromise: null,
+    _activeDB: null,
+    _openingPromise: null,
     _isSavingFile: false,
     _saveQueuePending: false,
     _isConflictResolving: false,
     _pendingRecoveryData: null,
     _syncChannel: null,
     _needsPhysicalGC: false,
+    _lastImportedAssets: null,
     
     _diskHashes: { notes: {}, databases: {}, index: "" },
     _baseDatabases: {},
@@ -86,13 +95,13 @@ const Store = {
 
         const cryptoPrefix = AppState.documentPassword ? "ENC_" : "RAW_";
         
-        // 2. Verifica rapida O(1) note con modifiche non salvate (o nuove note non ancora su disco)
+        // 2. Verifica rapida O(1) note con modifiche non salvate (o nuove note non ancora su disco/IDB)
         for (const note of (AppState.notes || [])) {
             if (note._isDirty || note._isDraft) return true;
             if (!Store._diskHashes.notes[note.id]) return true;
         }
 
-        // 3. Verifica database e blocchi codice con modifiche non salvate (o nuovi componenti non ancora su disco)
+        // 3. Verifica database e blocchi codice con modifiche non salvate (o nuovi componenti non ancora su disco/IDB)
         for (const [dbId, ramState] of Object.entries(AppState.databases || {})) {
             if (!Store._diskHashes.databases[dbId]) return true;
             const currentRamHash = Store._hashObj(ramState, cryptoPrefix);
@@ -102,24 +111,6 @@ const Store = {
         }
 
         return false;
-    },
-
-    initDB: () => {
-        if (!window.showDirectoryPicker) {
-            alert("Il tuo browser non supporta il File System Nativo (Usa Chrome, Edge o Opera su PC).");
-        }
-        if (!Store.dbPromise) {
-            Store.dbPromise = new Promise((resolve, reject) => {
-                const request = indexedDB.open(DB_NAME, 1);
-                request.onupgradeneeded = (e) => {
-                    const db = e.target.result;
-                    if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME);
-                };
-                request.onsuccess = () => resolve(request.result);
-                request.onerror = () => reject(request.error);
-            });
-        }
-        return Store.dbPromise;
     },
 
     generateId: () => {
@@ -132,7 +123,7 @@ const Store = {
     getChildren: (parentId, includeDeleted = false) => AppState.notes.filter(n => n.parentId === parentId && (includeDeleted || !n.deletedAt)),
 
     // =========================================================================
-    // SCANNER UNIFICATO IDENTIFICATORI ATTIVI & TRANSIZIONE (RAM & DISK)
+    // SCANNER UNIFICATO IDENTIFICATORI ATTIVI & TRANSIZIONE (RAM & DISK/IDB)
     // =========================================================================
     scanActiveEntities: (includeUndoStack = true) => {
         const activeDbIds = new Set(['SYS_PROPERTIES_DB']);
@@ -299,9 +290,9 @@ const Store = {
         }
     },
 
-    // Scansiona fisicamente la cartella assets/ del Workspace rilevando file orfani e spazio occupato
+    // Scansiona fisicamente la cartella assets/ o l'archivio IDB rilevando file orfani e spazio occupato
     getOrphanedAssets: async () => {
-        if (!AppState.assetsHandle) {
+        if (!AppState.assetsHandle && AppState.storageMode !== 'idb') {
             return { count: 0, totalSize: 0, formattedSize: '0 Bytes', files: [] };
         }
 
@@ -309,30 +300,54 @@ const Store = {
         const orphanFiles = [];
         let totalBytes = 0;
 
-        try {
-            for await (const entry of AppState.assetsHandle.values()) {
-                if (entry.kind === 'file') {
-                    const isImg = entry.name.startsWith('img_');
-                    const isAud = entry.name.startsWith('aud_');
+        if (AppState.storageMode === 'idb') {
+            try {
+                const assetRecords = typeof Store.idbListAssets === 'function'
+                    ? await Store.idbListAssets(AppState.workspaceId)
+                    : [];
 
-                    if ((isImg && !activeImageIds.has(entry.name)) || (isAud && !activeAudioIds.has(entry.name))) {
-                        let size = 0;
-                        try {
-                            const file = await entry.getFile();
-                            size = file.size || 0;
-                        } catch (_) {}
-
+                for (const asset of assetRecords) {
+                    const isImg = asset.name.startsWith('img_');
+                    const isAud = asset.name.startsWith('aud_');
+                    if ((isImg && !activeImageIds.has(asset.name)) || (isAud && !activeAudioIds.has(asset.name))) {
+                        const size = asset.size || (asset.blob ? asset.blob.size : 0);
                         totalBytes += size;
                         orphanFiles.push({
-                            name: entry.name,
+                            name: asset.name,
                             size: size,
                             type: isImg ? 'img' : 'aud'
                         });
                     }
                 }
+            } catch (e) {
+                console.warn("[STORE] Errore scansione allegati orfani in IDB:", e);
             }
-        } catch (e) {
-            console.warn("[STORE] Errore scansione allegati orfani:", e);
+        } else if (AppState.assetsHandle) {
+            try {
+                for await (const entry of AppState.assetsHandle.values()) {
+                    if (entry.kind === 'file') {
+                        const isImg = entry.name.startsWith('img_');
+                        const isAud = entry.name.startsWith('aud_');
+
+                        if ((isImg && !activeImageIds.has(entry.name)) || (isAud && !activeAudioIds.has(entry.name))) {
+                            let size = 0;
+                            try {
+                                const file = await entry.getFile();
+                                size = file.size || 0;
+                            } catch (_) {}
+
+                            totalBytes += size;
+                            orphanFiles.push({
+                                name: entry.name,
+                                size: size,
+                                type: isImg ? 'img' : 'aud'
+                            });
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn("[STORE] Errore scansione allegati orfani su disco:", e);
+            }
         }
 
         const formattedSize = typeof UI._formatBytes === 'function' 
@@ -347,16 +362,20 @@ const Store = {
         };
     },
 
-    // Elimina fisicamente dalla cartella assets/ su disco solo i file orfani non utilizzati
+    // Elimina fisicamente dalla cartella assets/ o da idb_assets solo i file orfani non utilizzati
     deleteOrphanedAssets: async (orphansList = null) => {
-        if (!AppState.assetsHandle) return 0;
+        if (!AppState.assetsHandle && AppState.storageMode !== 'idb') return 0;
 
         const orphans = orphansList || (await Store.getOrphanedAssets()).files;
         let deletedCount = 0;
 
         for (const fileInfo of orphans) {
             try {
-                await AppState.assetsHandle.removeEntry(fileInfo.name);
+                if (AppState.storageMode === 'idb') {
+                    await Store.idbDeleteAsset(AppState.workspaceId, fileInfo.name);
+                } else if (AppState.assetsHandle) {
+                    await AppState.assetsHandle.removeEntry(fileInfo.name);
+                }
                 deletedCount++;
 
                 if (fileInfo.type === 'img' && Editor.imageCache && Editor.imageCache[fileInfo.name]) {
@@ -379,6 +398,7 @@ const Store = {
         return {
             workspaceId: AppState.workspaceId || null,
             vaultSalt: AppState.vaultSaltHex || null,
+            lastBackupAt: AppState.lastBackupAt || null,
             notes: AppState.notes.map(note => {
                 const cleanNote = { ...note };
                 Object.keys(cleanNote).forEach(key => { if (key.startsWith('_')) delete cleanNote[key]; });
@@ -391,17 +411,32 @@ const Store = {
     },
 
     triggerAutoSave: (forceImmediate = false, isManualAction = false) => {
-        // Se l'utente sta interagendo con il modale di conflitto, nessun salvataggio automatico deve partire
         if (Store._isConflictResolving) return;
 
-        // Se non vi è alcuna modifica reale pendente e non è richiesta azione manuale, non sporcare lo stato
         if (!forceImmediate && !isManualAction && !Store.isDirty && !Store.hasUnsavedChanges()) {
             return;
         }
 
         Store.isDirty = true;
 
-        // Sessione solo in RAM (senza cartella Workspace collegata su disco)
+        // 1. MODALITÀ BROWSER (IndexedDB)
+        if (AppState.storageMode === 'idb') {
+            UI.showStatus("pending");
+            if (forceImmediate) {
+                clearTimeout(Store.debounceTimer);
+                Store.saveToIndexedDB();
+                return;
+            }
+            clearTimeout(Store.debounceTimer);
+            Store.debounceTimer = setTimeout(() => {
+                if (Store.isDirty && AppState.storageMode === 'idb' && !Store._isConflictResolving) {
+                    Store.saveToIndexedDB();
+                }
+            }, 1500);
+            return;
+        }
+
+        // 2. MODALITÀ TRANSITORIA (Sola RAM / File JSON standalone: nessun Workspace permanente collegato)
         if (!AppState.workspaceHandle) {
             UI.showStatus("unsaved");
             if (isManualAction) {
@@ -416,14 +451,14 @@ const Store = {
 
             clearTimeout(Store.debounceTimer);
             Store.debounceTimer = setTimeout(() => {
-                if (Store.isDirty && !AppState.workspaceHandle && !Store._isConflictResolving) {
+                if (Store.isDirty && !AppState.workspaceHandle && AppState.storageMode !== 'idb' && !Store._isConflictResolving) {
                     Store.saveLocalBackup();
                 }
             }, 1500);
             return;
         }
 
-        // Workspace su disco attivo: salvataggio immediato o debouciato a 1500ms
+        // 3. MODALITÀ CARTELLA PC (File System Access API) - Solo file su Hard Disk
         if (forceImmediate) {
             clearTimeout(Store.debounceTimer);
             Store.saveToFile();
@@ -449,16 +484,23 @@ const Store = {
                 const writable = await handle.createWritable();
                 await writable.write(dataToWrite);
                 await writable.close();
-                UI.showToast("Backup JSON Monolitico salvato.", "success");
+                UI.showToast(I18n.t('store.toast_monolithic_backup_saved'), "success");
             } else Store.downloadSnapshot();
         } catch (err) {}
     },
 
+    // Salva lo snapshot di emergenza in IndexedDB SOLO per la sessione volatile in RAM (senza workspace)
     saveLocalBackup: async () => {
+        // REGOLA AUREA: Se è attivo un Workspace su Hard Disk o nel Browser, NON toccare MAI IndexedDB!
+        if (AppState.workspaceHandle || AppState.storageMode === 'idb') {
+            return;
+        }
+
         try {
             const db = await Store.initDB();
-            const tx = db.transaction(STORE_NAME, 'readwrite');
-            const store = tx.objectStore(STORE_NAME);
+            const storeName = Store.STORE_BACKUP || 'backupStore';
+            const tx = db.transaction(storeName, 'readwrite');
+            const store = tx.objectStore(storeName);
             
             const payloadObj = Store.prepareForSave();
             let dataToStore = payloadObj;
@@ -466,19 +508,43 @@ const Store = {
             if (AppState.documentPassword) {
                 const jsonStr = JSON.stringify(payloadObj);
                 const encryptedStr = await CryptoUtils.encrypt(jsonStr, AppState.documentPassword);
-                dataToStore = { _isEncryptedBackup: true, payload: encryptedStr };
+                dataToStore = { 
+                    _isEncryptedBackup: true, 
+                    payload: encryptedStr,
+                    _isDirty: Store.isDirty,
+                    _storageMode: 'ram',
+                    _hasWorkspace: false,
+                    _savedAt: Date.now()
+                };
+            } else {
+                dataToStore._isDirty = Store.isDirty;
+                dataToStore._storageMode = 'ram';
+                dataToStore._hasWorkspace = false;
+                dataToStore._savedAt = Date.now();
             }
             
-            dataToStore._isDirty = Store.isDirty; 
             store.put(dataToStore, 'crash_recovery');
         } catch (e) {}
+    },
+
+    // Elimina fisicamente lo snapshot di crash recovery
+    clearLocalBackup: async () => {
+        try {
+            const db = await Store.initDB();
+            const storeName = Store.STORE_BACKUP || 'backupStore';
+            const tx = db.transaction(storeName, 'readwrite');
+            tx.objectStore(storeName).delete('crash_recovery');
+        } catch (_) {}
     },
 
     checkRecoverableSession: async () => {
         try {
             const db = await Store.initDB();
-            const tx = db.transaction(STORE_NAME, 'readonly');
-            const store = tx.objectStore(STORE_NAME);
+            const storeName = Store.STORE_BACKUP || 'backupStore';
+            if (!db.objectStoreNames.contains(storeName)) return;
+
+            const tx = db.transaction(storeName, 'readonly');
+            const store = tx.objectStore(storeName);
             const request = store.get('crash_recovery');
             request.onsuccess = () => {
                 const result = request.result;
@@ -487,12 +553,15 @@ const Store = {
                 const hasNotes = result.notes && result.notes.length > 0;
                 const hasEncrypted = result._isEncryptedBackup && result.payload;
 
-                if (hasNotes || hasEncrypted) {
+                if (!hasNotes && !hasEncrypted) return;
+
+                // Mostra il pulsante ESCLUSIVAMENTE se la sessione era in sola RAM (nessun workspace cartella/IDB collegato)
+                const isStandaloneSession = !result._hasWorkspace || result._storageMode === 'ram';
+
+                if (isStandaloneSession) {
                     Store._pendingRecoveryData = result;
                     const btn = document.getElementById('btnRecoverSession');
-                    if (btn) {
-                        btn.style.display = 'inline-flex';
-                    }
+                    if (btn) btn.style.display = 'inline-flex';
                 }
             };
         } catch (e) {
@@ -500,8 +569,10 @@ const Store = {
         }
     },
 
+    // All'avvio dell'applicazione non carica forzatamente un workspace IDB precedente:
+    // presenta la schermata iniziale pulita verificando solo la presenza di dati da crash recovery.
     recoverFromCrash: async () => {
-        // Verifica in background la presenza di una sessione e aggiorna il pulsante dell'onboarding
+        console.log("[Store] Verifica sessione all'avvio...");
         await Store.checkRecoverableSession();
     },
 
@@ -511,7 +582,7 @@ const Store = {
 
         try {
             if (result._isEncryptedBackup && result.payload) {
-                const password = await UI.PasswordManager.promptForOpen("Sessione Interrotta Protetta");
+                const password = await UI.PasswordManager.promptForOpen(I18n.t('store.prompt_interrupted_session_password'));
                 if (!password) return; 
 
                 try {
@@ -519,7 +590,7 @@ const Store = {
                     AppState.documentPassword = password;
                     Store._processLoadedMonolith(JSON.parse(decryptedJson));
                 } catch (e) { 
-                    alert("Password errata."); 
+                    alert(I18n.t('store.alert_wrong_password')); 
                     return;
                 }
             } else if (result.notes && result.notes.length > 0) {
@@ -527,6 +598,10 @@ const Store = {
             }
 
             AppState.fileName = I18n.t('common.session_recovered');
+            AppState.storageMode = 'ram';
+            AppState.workspaceHandle = null;
+            AppState.assetsHandle = null;
+
             if (typeof AdvancedTable !== 'undefined') {
                 AdvancedTable.ensureSystemPropertiesDB();
             }
@@ -535,37 +610,75 @@ const Store = {
             Store.isDirty = true;
             UI.showStatus("unsaved");
 
+            // Spegne il pulsante discreto dopo il ripristino e consuma il backup per non duplicarlo
             const btn = document.getElementById('btnRecoverSession');
             if (btn) btn.style.display = 'none';
 
+            Store.clearLocalBackup();
             Store._pendingRecoveryData = null;
 
-            UI.showToast("Sessione precedente caricata in memoria. Salva in un Workspace per renderla permanente.", "info");
+            UI.showToast(I18n.t('store.toast_previous_session_loaded'), "info");
         } catch(err) {
             console.error("Errore nel ripristino della sessione:", err);
-            alert("Impossibile ripristinare la sessione: " + err.message);
+            alert(I18n.t('store.alert_restore_session_error', { error: err.message }));
         }
     },
 
     downloadSnapshot: async () => {
-        let dataToWrite = JSON.stringify(Store.prepareForSave(), null, 2);
+        let payloadObj = Store.prepareForSave();
+
+        // In modalità IDB, estrae e serializza gli allegati multimediali memorizzati in idb_assets
+        if (AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store.idbListAssets === 'function') {
+            try {
+                const assetsList = await Store.idbListAssets(AppState.workspaceId);
+
+                if (assetsList.length > 0) {
+                    payloadObj.assets = {};
+                    for (const asset of assetsList) {
+                        if (asset.name && asset.blob) {
+                            const dataUrl = await new Promise(r => {
+                                const reader = new FileReader();
+                                reader.onload = () => r(reader.result);
+                                reader.onerror = () => r(null);
+                                reader.readAsDataURL(asset.blob);
+                            });
+                            if (dataUrl) {
+                                payloadObj.assets[asset.name] = dataUrl;
+                            }
+                        }
+                    }
+                }
+            } catch (assetErr) {
+                console.warn("[STORE] Errore serializzazione allegati per backup JSON:", assetErr);
+            }
+        }
+
+        let dataToWrite = JSON.stringify(payloadObj, null, 2);
         if (AppState.documentPassword) dataToWrite = await CryptoUtils.encrypt(dataToWrite, AppState.documentPassword);
 
         const dataStr = "data:text/plain;charset=utf-8," + encodeURIComponent(dataToWrite);
         const downloadAnchorNode = document.createElement('a');
         downloadAnchorNode.setAttribute("href", dataStr);
-        let cleanFileName = AppState.fileName.replace(/\.json$/i, '');
+        let cleanFileName = (AppState.fileName || "Workspace").replace(/\.json$/i, '');
         const date = new Date().toISOString().slice(0, 19).replace(/:/g, "-");
         downloadAnchorNode.setAttribute("download", `${cleanFileName}_Backup_${date}.json`);
         document.body.appendChild(downloadAnchorNode);
         downloadAnchorNode.click();
         downloadAnchorNode.remove();
+
+        // Registrazione data e ora ultimo backup per workspace nel browser
+        if (AppState.storageMode === 'idb' && AppState.workspaceId) {
+            AppState.lastBackupAt = new Date().toISOString();
+            if (typeof Store.saveToIndexedDB === 'function') {
+                Store.saveToIndexedDB();
+            }
+        }
     },
 
     loadSnapshot: async () => {
         try {
             let text = "";
-            let fileName = "Backup";
+            let fileName = I18n.t('store.default_backup_filename');
 
             if (window.showOpenFilePicker) {
                 const [fileHandle] = await window.showOpenFilePicker({
@@ -594,19 +707,30 @@ const Store = {
 
             if (!text) return;
 
-            if (AppState.workspaceHandle && Store.isDirty) {
-                if (!confirm("Attenzione: Il caricamento di un file di backup sostituirà la sessione corrente in memoria. Le modifiche non salvate andranno perse. Vuoi continuare?")) {
+            // Decisione preventiva esplicita dell'utente sul tipo di caricamento
+            let isOverwritingCurrentIdbWs = false;
+            let targetWsId = null;
+            let targetWsName = null;
+
+            if (AppState.storageMode === 'idb' && AppState.workspaceId) {
+                const choice = confirm(I18n.t('store.confirm_overwrite_or_new_idb_ws', { name: AppState.fileName }));
+                if (choice) {
+                    isOverwritingCurrentIdbWs = true;
+                    targetWsId = AppState.workspaceId;
+                    targetWsName = AppState.fileName;
+                }
+            } else if ((AppState.workspaceHandle || AppState.storageMode === 'idb') && Store.isDirty) {
+                if (!confirm(I18n.t('store.confirm_replace_unsaved_session'))) {
                     return;
                 }
             } else if (AppState.notes && AppState.notes.length > 0) {
-                if (!confirm("Attenzione: Il caricamento di un file di backup sostituirà i dati correnti in memoria. Vuoi procedere?")) {
+                if (!confirm(I18n.t('store.confirm_replace_current_data'))) {
                     return;
                 }
             }
 
             Editor.clearHistory();
 
-            // Azzeramento pulsante e cache sessione di recupero
             const btnRec = document.getElementById('btnRecoverSession');
             if (btnRec) btnRec.style.display = 'none';
             Store._pendingRecoveryData = null;
@@ -620,19 +744,96 @@ const Store = {
             const success = await Store._decryptAndProcess(text);
             if (!success) return;
 
-            AppState.fileName = `${fileName} (Backup)`;
+            const wsName = `${fileName}`;
+            if (AppState.storageMode === 'idb') {
+                if (isOverwritingCurrentIdbWs && targetWsId) {
+                    console.log(`[Store] Aggiornamento del workspace IDB esistente "${targetWsName}" (${targetWsId})...`);
+                    
+                    AppState.workspaceId = targetWsId;
+                    AppState.idbWorkspaceId = targetWsId;
+                    AppState.fileName = targetWsName;
+                    AppState.lastBackupAt = new Date().toISOString();
+
+                    // Pulisce preventivamente i vecchi record in IDB per quel workspaceId prima di scrivere i nuovi dati
+                    if (typeof Store.idbClearWorkspaceData === 'function') {
+                        await Store.idbClearWorkspaceData(targetWsId, false);
+                    }
+
+                    // Scrive gli asset importati in idb_assets
+                    if (Store._lastImportedAssets && typeof Store.idbSaveAsset === 'function') {
+                        for (const [name, dataUrl] of Object.entries(Store._lastImportedAssets)) {
+                            try {
+                                const res = await fetch(dataUrl);
+                                const blob = await res.blob();
+                                await Store.idbSaveAsset(targetWsId, name, blob, blob.type);
+                                const blobUrl = URL.createObjectURL(blob);
+                                if (name.startsWith('img_')) Editor.imageCache[name] = blobUrl;
+                                if (name.startsWith('aud_')) Editor.audioCache[name] = blobUrl;
+                            } catch (_) {}
+                        }
+                        Store._lastImportedAssets = null;
+                    }
+
+                    // Diffing override: marca _isDirty = true su tutte le note e DB affinché nulla venga saltato
+                    AppState.notes.forEach(n => { n._isDirty = true; });
+                    Store.isDirty = true;
+                    Store._diskHashes = { notes: {}, databases: {}, index: "" };
+                    
+                    await Store.saveToIndexedDB();
+                    localStorage.setItem('vanilladesk_active_idb_ws', targetWsId);
+                    localStorage.setItem('vanilladesk_storage_mode', 'idb');
+                    UI.showToast(I18n.t('store.toast_idb_ws_updated_from_backup', { name: targetWsName }), "success");
+                } else {
+                    // Creazione di un nuovo workspace distinto nel browser
+                    const newWsId = 'ws_' + Store.generateId();
+                    console.log(`[Store] Importazione backup come NUOVO workspace IDB: "${wsName}" (${newWsId})...`);
+                    AppState.workspaceId = newWsId;
+                    AppState.idbWorkspaceId = newWsId;
+                    AppState.fileName = wsName;
+                    AppState.lastBackupAt = new Date().toISOString();
+
+                    // Scrive gli asset importati in idb_assets per il nuovo workspace
+                    if (Store._lastImportedAssets && typeof Store.idbSaveAsset === 'function') {
+                        for (const [name, dataUrl] of Object.entries(Store._lastImportedAssets)) {
+                            try {
+                                const res = await fetch(dataUrl);
+                                const blob = await res.blob();
+                                await Store.idbSaveAsset(newWsId, name, blob, blob.type);
+                                const blobUrl = URL.createObjectURL(blob);
+                                if (name.startsWith('img_')) Editor.imageCache[name] = blobUrl;
+                                if (name.startsWith('aud_')) Editor.audioCache[name] = blobUrl;
+                            } catch (_) {}
+                        }
+                        Store._lastImportedAssets = null;
+                    }
+
+                    AppState.notes.forEach(n => { n._isDirty = true; });
+                    Store.isDirty = true;
+                    Store._diskHashes = { notes: {}, databases: {}, index: "" };
+
+                    await Store.saveToIndexedDB();
+                    localStorage.setItem('vanilladesk_active_idb_ws', newWsId);
+                    localStorage.setItem('vanilladesk_storage_mode', 'idb');
+                    UI.showToast(I18n.t('store.toast_backup_imported_as_new_ws', { name: wsName }), "success");
+                }
+            } else {
+                AppState.storageMode = 'ram';
+                AppState.fileName = `${fileName} (${I18n.t('store.default_backup_filename')})`;
+                AppState.notes.forEach(n => { n._isDirty = true; });
+                Store.isDirty = true;
+                Store._diskHashes = { notes: {}, databases: {}, index: "" };
+                Store.saveLocalBackup();
+                UI.showStatus("unsaved");
+                UI.showToast(I18n.t('store.toast_json_backup_loaded_ram'), "success");
+            }
+
             if (typeof AdvancedTable !== 'undefined') AdvancedTable.ensureSystemPropertiesDB();
-
             Store._finalizeUIAfterLoad();
-            Store.isDirty = true;
-            Store.saveLocalBackup();
-            UI.showStatus("unsaved");
 
-            UI.showToast("File JSON di backup caricato con successo.", "success");
         } catch (err) {
             if (err.name !== 'AbortError') {
                 console.error("Errore caricamento backup JSON:", err);
-                alert("Errore durante il caricamento del file JSON: " + err.message);
+                alert(I18n.t('store.alert_load_json_error', { error: err.message }));
             }
         }
     }

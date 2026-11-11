@@ -12,6 +12,8 @@
  * ed elenchi di testo senza frammentazioni o stili parassiti inline.
  * FIX CARET POSITION ON LIST INSERT: Inserimento atomico dell'elenco su blocco vuoto e posizionamento immediato del cursore
  * all'interno del <li> a offset 0, eliminando salti del cursore o srotolamenti anomali.
+ * FIX CHECKLIST CARET CONTAINMENT (2.2): Assegnazione di contenteditable="false" alla casella checkbox
+ * per impedire al cursore di collocarsi a sinistra di essa e prevenire la distruzione del blocco su Backspace.
  */
 
 Object.assign(Editor, {
@@ -449,6 +451,7 @@ Object.assign(Editor, {
         const cb = document.createElement('input');
         cb.type = 'checkbox';
         cb.className = 'adv-checklist-cb';
+        cb.setAttribute('contenteditable', 'false'); // Protezione atomica confini checkbox
         if (isChecked) cb.checked = true;
 
         const span = document.createElement('span');

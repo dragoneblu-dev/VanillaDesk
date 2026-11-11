@@ -17,6 +17,9 @@
  * FEAT SEAMLESS SEARCH HIGHLIGHTING: Evidenziazione cromatica protetta incapsulata in span inline unico
  * per prevenire l'applicazione del flex gap di .node-title tra i frammenti delle parole.
  * REFACTOR I18N: Tutte le stringhe per l'utente sono internazionalizzate dinamicamente tramite I18n.
+ * FIX PERSISTENZA ID CAPITOLI: Quando populate() genera un id 'blk_', imposta esplicitamente
+ * note._isDirty = true, invalida l'hash disco e assegna l'ID direttamente sui nodi del DOM vivo
+ * senza rimpiazzare innerHTML, preservando il Range di selezione e garantendo il salvataggio fisico su disco.
  */
 
 UI.DocumentBrowser = {
@@ -252,6 +255,15 @@ UI.DocumentBrowser = {
         const processedNotes = new Set();
         let domModifiedGlobal = false;
 
+        // Se una nota è attiva a schermo ed è in modifica, allinea preventivamente note.content col DOM vivo
+        if (AppState.currentNoteId && AppState.isEditMode && typeof Editor !== 'undefined') {
+            const curNote = Store.getNote(AppState.currentNoteId);
+            const liveEditor = document.getElementById('noteContent');
+            if (curNote && liveEditor) {
+                curNote.content = Editor.getCleanHTML();
+            }
+        }
+
         const processNoteTree = (note, parentItemId) => {
             if (processedNotes.has(note.id)) return;
             processedNotes.add(note.id);
@@ -277,9 +289,13 @@ UI.DocumentBrowser = {
                 const widgetSel = typeof WidgetManager !== 'undefined' ? WidgetManager.blockSelector : '.adv-widget-shell';
                 const elements = temp.querySelectorAll(`h1, h2, h3, ul, ol, blockquote, pre, .simple-table-wrapper, ${widgetSel}`);
 
+                const isCurrentLiveNote = (note.id === AppState.currentNoteId);
+                const liveEditor = isCurrentLiveNote ? document.getElementById('noteContent') : null;
+                const liveElements = liveEditor ? liveEditor.querySelectorAll(`h1, h2, h3, ul, ol, blockquote, pre, .simple-table-wrapper, ${widgetSel}`) : null;
+
                 let h1Id = null, h2Id = null, h3Id = null;
 
-                elements.forEach(el => {
+                elements.forEach((el, elIdx) => {
                     const isWidgetShell = el.matches(widgetSel) || el.classList.contains('simple-table-wrapper');
                     if (!isWidgetShell) {
                         const parentWidget = el.closest(widgetSel);
@@ -288,7 +304,16 @@ UI.DocumentBrowser = {
 
                     let tag = el.tagName.toLowerCase();
                     let elId = el.id;
-                    if (!elId) { elId = 'blk_' + Store.generateId(); el.id = elId; domModifiedLocally = true; }
+                    if (!elId) { 
+                        elId = 'blk_' + Store.generateId(); 
+                        el.id = elId; 
+                        domModifiedLocally = true; 
+                    }
+
+                    // Sincronizza l'ID direttamente sull'attributo del nodo vivo, senza toccare innerHTML e preservando la selezione
+                    if (liveElements && liveElements[elIdx] && liveElements[elIdx].tagName.toLowerCase() === tag) {
+                        liveElements[elIdx].id = elId;
+                    }
 
                     let pId = noteItemId;
                     if (tag === 'h1') { h1Id = elId; h2Id = null; h3Id = null; pId = noteItemId; }
@@ -363,6 +388,11 @@ UI.DocumentBrowser = {
 
                 if (domModifiedLocally) {
                     note.content = temp.innerHTML;
+                    // FONDAMENTALE: Marca la nota come dirty e invalida l'hash disco per forzare la persistenza fisica dell'ID
+                    note._isDirty = true;
+                    if (typeof Store !== 'undefined' && Store._diskHashes && Store._diskHashes.notes) {
+                        delete Store._diskHashes.notes[note.id];
+                    }
                     domModifiedGlobal = true;
                 }
             }

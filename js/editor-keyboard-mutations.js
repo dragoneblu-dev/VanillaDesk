@@ -23,6 +23,8 @@
  * impedendo che Canc a fine di un tag inline (es. <b>) scavalchi caratteri successivi dello stesso paragrafo.
  * PREVENT LINK SPLIT ON ENTER: Riposizionamento del cursore subito dopo il tag <a> prima che l'Invio nativo
  * possa clonare il link sulla nuova riga, eliminando sdoppiamenti alla radice senza pezze a posteriori.
+ * FIX CHECKLIST BACKSPACE CRASH & CARET BOUNDARY (2.2): Calcolo protetto di isAtChecklistStart con span.contains()
+ * per prevenire eccezioni IndexSizeError e garantire la conversione pulita del primo elemento to-do in paragrafo.
  */
 
 Object.assign(Editor, {
@@ -457,6 +459,7 @@ Object.assign(Editor, {
                 const cb = document.createElement('input');
                 cb.type = 'checkbox';
                 cb.className = 'adv-checklist-cb';
+                cb.setAttribute('contenteditable', 'false');
 
                 const span = document.createElement('span');
                 span.className = 'checklist-text';
@@ -584,13 +587,26 @@ Object.assign(Editor, {
         const closestLi = container.nodeType === 3 ? container.parentNode.closest('li') : (container.closest ? container.closest('li') : null);
         const closestList = closestLi ? closestLi.parentElement : null;
 
+        // GESTIONE CHECKLIST ROBUSTA (2.2): calcolo protetto di isAtChecklistStart per prevenire IndexSizeError
         if (closestList && closestList.classList.contains('adv-checklist')) {
             const span = closestLi.querySelector('span.checklist-text');
-            const preCaretRange = range.cloneRange();
-            if (span) preCaretRange.selectNodeContents(span);
-            preCaretRange.setEnd(range.startContainer, range.startOffset);
+            let isAtChecklistStart = false;
 
-            if (preCaretRange.toString().length === 0) {
+            if (span && span.contains(range.startContainer)) {
+                try {
+                    const preCaretRange = range.cloneRange();
+                    preCaretRange.selectNodeContents(span);
+                    preCaretRange.setEnd(range.startContainer, range.startOffset);
+                    isAtChecklistStart = (preCaretRange.toString().length === 0);
+                } catch (_) {
+                    isAtChecklistStart = false;
+                }
+            } else if (span) {
+                // Il cursore si trova nell'LI a monte dello span: consideralo all'inizio ed evita crash DOM
+                isAtChecklistStart = true;
+            }
+
+            if (isAtChecklistStart) {
                 e.preventDefault();
                 Editor.saveSnapshot();
                 const isEmpty = !span || span.innerText.replace(/\u200B/g, '').trim() === '';
@@ -630,8 +646,23 @@ Object.assign(Editor, {
                             selection.removeAllRanges();
                             selection.addRange(newRange);
                         }
+                    } else {
+                        // Prima voce della checklist: Backspace a inizio riga la converte in paragrafo standard
+                        const parentUl = closestLi.parentNode;
+                        const p = document.createElement('p');
+                        p.innerHTML = span.innerHTML || '<br>';
+                        parentUl.parentNode.insertBefore(p, parentUl);
+                        closestLi.remove();
+                        if (parentUl.children.length === 0) parentUl.remove();
+
+                        const newRange = document.createRange();
+                        newRange.setStart(p, 0);
+                        newRange.collapse(true);
+                        selection.removeAllRanges();
+                        selection.addRange(newRange);
                     }
                 }
+                Store.triggerAutoSave();
                 return;
             }
         }

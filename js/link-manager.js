@@ -667,7 +667,7 @@ const LinkManager = {
         if(node && node.nodeType === 3) node = node.parentNode;
 
         if (node && node.closest('.widget-type-columns, .simple-table-wrapper')) {
-            alert("Non è permesso inserire Widget Complessi all'interno delle Colonne o delle Tabelle Semplici per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.");
+            alert(I18n.t('link_manager.alert_widget_in_columns_barrier'));
             return;
         }
 
@@ -810,7 +810,7 @@ const LinkManager = {
                 
                 // Verifichiamo se è un file testuale ragionevole prima di bloccare la RAM
                 if (file.size > 5 * 1024 * 1024) { 
-                    throw new Error("Il file supera le dimensioni massime supportate per la lettura diretta (5MB).");
+                    throw new Error(I18n.t('link_manager.error_file_too_large_5mb'));
                 }
                 
                 const text = await file.text();

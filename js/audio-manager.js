@@ -2,7 +2,7 @@
  * AudioManager.js
  * Modulo per l'importazione, la gestione e il rendering di file Audio locali.
  * REFACTOR WORKSPACE: I file non vengono più codificati in Base64 ma passati 
- * a Store.js per il salvataggio diretto come Blob nativi su disco fisso.
+ * a Store.js per il salvataggio diretto come Blob nativi su disco fisso o IndexedDB.
  * FEAT LAZY LOADING: Idratazione su richiesta da disco in mountAll tramite Editor.loadAssetOnDemand.
  */
 
@@ -11,7 +11,8 @@ const AudioManager = {
     handleUpload: async (input) => {
         if (!input.files || !input.files[0]) return;
         
-        if (!AppState.assetsHandle) {
+        // MODALITÀ BROWSER & DISCO: Verifica che sia presente una cartella disco O un workspace in memoria del browser
+        if (!AppState.assetsHandle && AppState.storageMode !== 'idb') {
             alert(I18n.t('audio.alert_no_workspace'));
             input.value = '';
             return;
@@ -32,7 +33,7 @@ const AudioManager = {
             UI.showToast(I18n.t('audio.toast_saving'), "info");
         }
         
-        // REFACTOR: Salva su cartella locale e ottiene il filename
+        // REFACTOR: Salva su cartella locale o IndexedDB e ottiene il filename
         const fileName = await Store.saveAsset(file, 'aud');
         
         if (fileName) {

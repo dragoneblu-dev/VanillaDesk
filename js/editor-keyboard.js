@@ -533,11 +533,11 @@ document.addEventListener('DOMContentLoaded', () => {
                         const node = sel.anchorNode;
                         if (node && node.nodeType === 3) {
                             if (node.parentNode.closest('.code-content')) {
-                                if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Impossibile inserire un segnalibro dentro un blocco di codice.", "warning");
+                                if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('editor_alerts.bookmark_code_blocked'), "warning");
                                 return;
                             }
                         } else if (node && node.closest('.code-content')) {
-                            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast("Impossibile inserire un segnalibro dentro un blocco di codice.", "warning");
+                            if (typeof UI !== 'undefined' && UI.showToast) UI.showToast(I18n.t('editor_alerts.bookmark_code_blocked'), "warning");
                             return;
                         }
                     }

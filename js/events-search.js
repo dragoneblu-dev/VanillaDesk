@@ -9,6 +9,7 @@
  * FIX LIVE IN-PLACE HIGHLIGHTING: Evidenziazione diretta in-place sull'editor attivo senza distruggere la pagina con selectNote.
  * FEAT PRESERVE WHITESPACE ON TEXT SEARCH: Mantenimento rigoroso degli spazi iniziali e finali digitati per consentire la ricerca mirata di parole esatte.
  * FIX NBSP NORMALIZATION: Normalizzazione trasparente tra spazi normali e non-breaking spaces (\u00A0 / &nbsp;).
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -142,7 +143,7 @@ Object.assign(EventsGlobal, {
             SidebarManager.SearchAutocomplete.select(match.colId, match.realValue, match.colName, match.displayValue);
 
             if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-                UI.showToast(`Filtro applicato: ${match.colName} = "${match.displayValue}"`, "info");
+                UI.showToast(I18n.t('events_search.toast_filter_applied', { colName: match.colName, value: match.displayValue }), "info");
             }
         } 
         else if (matchingProperties.length > 1) {
@@ -158,7 +159,7 @@ Object.assign(EventsGlobal, {
             }, 60);
 
             if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-                UI.showToast(`Seleziona la proprietà per: "${cleanTag}"`, "info");
+                UI.showToast(I18n.t('events_search.toast_select_property_for', { tag: cleanTag }), "info");
             }
         } 
         else {
@@ -168,7 +169,7 @@ Object.assign(EventsGlobal, {
             searchInputEl.focus();
 
             if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-                UI.showToast(`Ricerca tag nel testo: "#${cleanTag}"`, "info");
+                UI.showToast(I18n.t('events_search.toast_searching_tag_in_text', { tag: cleanTag }), "info");
             }
         }
     },

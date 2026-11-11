@@ -11,6 +11,7 @@
  * di testo di occupare l'intero spazio verticale disponibile nel Drawer laterale.
  * FEAT CARET RESUME: Al salvataggio dell'appunto sul segnalibro, il cursore viene riposizionato istantaneamente
  * subito dopo il marker per riprendere la scrittura rapida nell'editor.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(Editor, {
@@ -344,15 +345,15 @@ Object.assign(Editor, {
             <div style="display:flex; flex-direction:column; height:100%; gap:10px;">
                 <div style="background: rgba(0,0,0,0.02); border: 1px solid var(--border-color); border-radius: 6px; padding: 10px; display:flex; flex-direction:column; flex:1; min-height:0;">
                     <div class="toolbar" style="margin-bottom: 10px; padding: 0; border: none; background: transparent; flex-shrink:0;">
-                        <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="Grassetto"><b>B</b></button>
-                        <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="Corsivo"><i>I</i></button>
-                        <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="Sottolineato"><u>U</u></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('bold', false, null)" title="${I18n.t('toolbar.bold')}"><b>B</b></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('italic', false, null)" title="${I18n.t('toolbar.italic')}"><i>I</i></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('underline', false, null)" title="${I18n.t('toolbar.underline')}"><u>U</u></button>
                         <div style="width:1px; height:15px; background:var(--border-color); margin:0 5px;"></div>
-                        <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="Lista Puntata"><b>•</b></button>
+                        <button class="adv-icon-btn" onclick="document.execCommand('insertUnorderedList', false, null)" title="${I18n.t('format_lists.bullet_list')}"><b>•</b></button>
                     </div>
                     <div id="bookmarkCommentInput" class="editor-content adv-scroll-container" contenteditable="true" style="outline: none; flex:1; min-height:0; background:var(--bg-color); border:1px solid var(--border-color); padding:12px; border-radius:4px; overflow-y:auto; line-height:1.5;">${currentHTML}</div>
                 </div>
-                <p style="font-size:0.75rem; color:var(--text-secondary); margin:0; flex-shrink:0;">L'appunto resterà salvato all'interno del segnalibro. Apparirà come suggerimento al passaggio del mouse e nell'indice dei segnalibri.</p>
+                <p style="font-size:0.75rem; color:var(--text-secondary); margin:0; flex-shrink:0;">${I18n.t('bookmarks.drawer_comment_hint')}</p>
             </div>
         `;
 
@@ -487,7 +488,7 @@ Object.assign(Editor, {
                         needsSave = true;
 
                         if (typeof UI !== 'undefined' && UI.Alarm) {
-                            UI.Alarm.trigger("⏱️ Timer Scaduto! (Nota attuale)", {
+                            UI.Alarm.trigger(I18n.t('bookmarks.timer_expired_current'), {
                                 noteId: AppState.currentNoteId,
                                 bookmarkId: bkmId
                             });
@@ -534,11 +535,11 @@ Object.assign(Editor, {
                                     const actionHtml = `
                                         <div style="margin-top: 5px;">
                                             <button class="btn" style="padding: 4px 8px; font-size: 0.8rem; border-color: var(--border-color); color: var(--text-primary);" onclick="UI.Alarm.stop(this.closest('.toast-msg').id); UI.selectNote('${note.id}')">
-                                                <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.arrowRightUp} Apri Nota: ${safeTitle}</span>
+                                                <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.arrowRightUp} ${I18n.t('bookmarks.open_note_action', { title: safeTitle })}</span>
                                             </button>
                                         </div>
                                     `;
-                                    UI.Alarm.trigger(`⏱️ Timer Scaduto in background!<br>${actionHtml}`, {
+                                    UI.Alarm.trigger(I18n.t('bookmarks.timer_expired_background', { actionHtml }), {
                                         noteId: note.id,
                                         bookmarkId: bkmId
                                     });

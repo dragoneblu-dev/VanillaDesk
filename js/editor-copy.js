@@ -7,6 +7,8 @@
  * - Serializzazione tabulare TSV pulita per fogli di calcolo.
  * - Riconoscimento blocchi di codice per esportazione pulita senza tag parassiti.
  * - Pulizia elementi di servizio e maniglie UI nel frammento clonato.
+ * - FIX CUT PARAGRAPH MERGE (2.1): Sostituzione di range.deleteContents() con comando di cancellazione controllata
+ *   per fondere regolarmente i blocchi intersecati durante il taglio (Ctrl+X) senza lasciare tag <p></p> orfani.
  */
 
 Object.assign(Editor, {
@@ -49,7 +51,7 @@ Object.assign(Editor, {
                 // Rimuoviamo fisicamente se stiamo "Tagliando" (Cut)
                 if (e.type === 'cut') {
                     Editor.saveSnapshot();
-                    range.deleteContents();
+                    document.execCommand('delete', false, null);
                     if (typeof CodeManager !== 'undefined') CodeManager.highlightBlock(codeBlock, true);
                     Store.triggerAutoSave();
                 }
@@ -238,9 +240,23 @@ Object.assign(Editor, {
             e.clipboardData.setData('text/html', clipboardHTML);
             e.clipboardData.setData('text/plain', plainText);
 
+            // GESTIONE TAGLIO (CUT): Cancellazione controllata con preservazione unione paragrafi
             if (e.type === 'cut') {
+                if (typeof Editor !== 'undefined' && typeof Editor.handleBulkWidgetDeletion === 'function') {
+                    if (!Editor.handleBulkWidgetDeletion()) return;
+                }
+
                 Editor.saveSnapshot();
-                range.deleteContents();
+
+                if (typeof TableManager !== 'undefined' && TableManager.Selection && TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 1) {
+                    TableManager.Selection.clearSelectedCellsContent();
+                } else {
+                    document.execCommand('delete', false, null);
+                    if (typeof Editor !== 'undefined' && typeof Editor.healWidgetWrappers === 'function') {
+                        Editor.healWidgetWrappers();
+                    }
+                }
+
                 Store.triggerAutoSave();
             }
         };

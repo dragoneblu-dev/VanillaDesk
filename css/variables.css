@@ -1,7 +1,7 @@
 :root {
     /* Layout Colors (Tema Default - Crema) */
     --bg-color: #f3f4f6;
-    --sidebar-bg: #f9f8f3;
+    --sidebar-bg: #f1f0ea;
     --box-bg: #00000006;
     --editor-bg: #f9f8f3;
     --text-primary: #000000;
@@ -59,6 +59,8 @@
     --tx-c8: #853bc7;
     --tx-c9: #c52779;
     --tx-c10: #db0000;
+    
+    --col_memBro: #52a9ff;
 
     /* --- PALETTE COLORI PER I GRAFICI (CHART.JS) --- */
     /*--chart-pastel-1: #FFB3BA; --chart-pastel-2: #FFDFBA; --chart-pastel-3: #FFFFBA; --chart-pastel-4: #BAFFC9; --chart-pastel-5: #BAE1FF; --chart-pastel-6: #E6B3FF;
@@ -69,7 +71,7 @@
 
 [data-theme="white"] {
     --bg-color: #f9fafb;
-    --sidebar-bg: #ffffff;
+    --sidebar-bg: #fafafa;
     --box-bg: #00000005;
     --editor-bg: #ffffff;
     --text-primary: #000000;
@@ -140,6 +142,8 @@
     --tx-c8: #d797ff;
     --tx-c9: #ff8ad8;
     --tx-c10: #ff5144;
+
+    --col_memBro: #52a9ff;
 }
 
 [data-theme="notion-dark"] {
@@ -198,6 +202,8 @@
     --tx-c8: #d797ff;
     --tx-c9: #ff8ad8;
     --tx-c10: #ff5144;
+
+    --col_memBro: #52a9ff;
 }
 
 [data-theme="pastel"] {
@@ -242,4 +248,6 @@
     --tx-c8: #853bc7;
     --tx-c9: #c52779;
     --tx-c10: #ce1711;
+    
+    --col_memBro: #52a9ff;
 }

@@ -8,6 +8,7 @@
  * - Interfaccia di apertura file e pipeline transazionale di creazione nota (importMarkdown, processMarkdownImport).
  * - Parser completo da Markdown a HTML (parseMarkdownToHTML, _parseMarkdownCellText) con tokenizzazione
  *   isolata per blocchi di codice, tabelle pipe con allineamento colonne, inline code e blockquote/callout continui.
+ * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
 Object.assign(ExportManager, {
@@ -364,7 +365,7 @@ Object.assign(ExportManager, {
                 input.click();
             }
         } catch (err) {
-            if (err.name !== 'AbortError') alert("Errore apertura file Markdown: " + err.message);
+            if (err.name !== 'AbortError') alert(I18n.t('export_import.alert_open_md_error', { error: err.message }));
         }
     },
 
@@ -389,7 +390,7 @@ Object.assign(ExportManager, {
         const newNote = {
             id: noteId,
             parentId: AppState.currentNoteId || null, 
-            title: title || "Nota Importata",
+            title: title || I18n.t('export_import.default_imported_note_title'),
             content: htmlContent,
             isMarked: false,
             expanded: true,
@@ -421,7 +422,7 @@ Object.assign(ExportManager, {
         if (typeof UI !== 'undefined') {
             if (typeof UI.renderTree === 'function') UI.renderTree();
             if (typeof UI.selectNote === 'function') UI.selectNote(noteId);
-            if (typeof UI.showToast === 'function') UI.showToast(`File Markdown importato come nuova nota: "${title}"`, 'success');
+            if (typeof UI.showToast === 'function') UI.showToast(I18n.t('export_import.toast_md_imported', { title }), 'success');
         }
         
         if (typeof Store !== 'undefined' && typeof Store.triggerAutoSave === 'function') {
@@ -456,7 +457,7 @@ Object.assign(ExportManager, {
             const cleanLang = lang || 'none';
             
             if (!AppState.databases) AppState.databases = {};
-            AppState.databases[blockId] = { title: 'Codice Importato', language: cleanLang, content: code };
+            AppState.databases[blockId] = { title: I18n.t('export_import.default_imported_code_title'), language: cleanLang, content: code };
 
             const shell = `<div id="${blockId}" class="adv-widget-shell widget-type-code code-wrapper" data-widget-type="code" contenteditable="false"></div>`;
             
