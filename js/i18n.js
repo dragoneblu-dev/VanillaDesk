@@ -412,6 +412,7 @@ editor: {
     database: "Database Relazionale"
 },
 table: {
+    duplicate_complex_note_warning: "Attenzione: La pagina collegata a questo record [{names}] contiene elementi complessi (database, diari, codice o sotto-note) che non possono essere duplicati automaticamente.\n\nSe prosegui, il record verrà duplicato ma il collegamento alla pagina complessa non verrà clonato nel nuovo record (il campo rimarrà vuoto, preservando la pagina originale).\n\nVuoi procedere con la duplicazione?",
     new_row: "Nuova riga",
     delete_rows_singular: "Elimina 1 riga",
     delete_rows_plural: "Elimina {count} righe",
@@ -431,7 +432,14 @@ table: {
     view_calendar: "Calendario",
     view_timeline: "Timeline (Gantt)",
     view_tree: "Gerarchia WBS",
-    sys_db_mutation_blocked: "⚠️ Operazione non consentita:\nQuesto database rappresenta la struttura di sistema delle Proprietà e Tag delle Note.\nI record corrispondono alle pagine del Workspace e non possono essere aggiunti o rimossi manualmente da questa vista."
+    sys_db_mutation_blocked: "⚠️ Operazione non consentita:\nQuesto database rappresenta la struttura di sistema delle Proprietà e Tag delle Note.\nI record corrispondono alle pagine del Workspace e non possono essere aggiunti o rimossi manualmente da questa vista.",
+    select_all_visible: "Seleziona tutti",
+    select_all_visible_tooltip: "Seleziona tutti i record visibili nella schermata corrente",
+    delete_selected_btn: "Elimina ({count})",
+    delete_selected_tooltip_single: "Elimina definitivamente il record selezionato dal database",
+    delete_selected_tooltip_plural: "Elimina definitivamente i {count} record selezionati dal database",
+    cancel_selection_btn: "Annulla",
+    cancel_selection_tooltip: "Deseleziona tutti i record selezionati"
 },
 conflict: {
     title: "Conflitto di Modifica Rilevato",
@@ -738,7 +746,12 @@ adv_col_menu: {
     type_record_note: "Pagina Dedicata",
     type_button: "Pulsante (Macro)",
     type_created_time: "Data Creazione",
-    type_last_edited_time: "Ultima Modifica"
+    type_last_edited_time: "Ultima Modifica",
+    type_autoincrement: "ID Auto-Incrementale", 
+    autoincrement_prefix_label: "Prefisso ID (es: INC-, @)",
+    autoincrement_prefix_prompt: "Imposta il prefisso per l'ID Auto-Incrementale (es. INC-, TASK-, #):",
+    autoincrement_digits_label: "Cifre minime (Zero-padding)",
+    autoincrement_digits_prompt: "Numero minimo di cifre per l'ID (0 per nessuna formattazione, 3 per 001, 4 per 0001):"
 },
 adv_board: {
     select_view_title: "Seleziona Vista",
@@ -2200,6 +2213,7 @@ editor: {
     database: "Relational Database"
 },
 table: {
+    duplicate_complex_note_warning: "Warning: The page attached to this record [{names}] contains complex elements (databases, journals, code or sub-notes) that cannot be duplicated automatically.\n\nIf you continue, the record will be duplicated but the link to the complex page will not be cloned into the new record (the field will remain empty, keeping the original page intact).\n\nDo you want to proceed with duplication?",
     new_row: "New row",
     delete_rows_singular: "Delete 1 row",
     delete_rows_plural: "Delete {count} rows",
@@ -2219,7 +2233,14 @@ table: {
     view_calendar: "Calendar",
     view_timeline: "Timeline (Gantt)",
     view_tree: "WBS Hierarchy",
-    sys_db_mutation_blocked: "⚠️ Operation not allowed:\nThis database represents the system structure for Note Properties & Tags.\nRecords correspond to Workspace pages and cannot be added or deleted manually from this view."
+    sys_db_mutation_blocked: "⚠️ Operation not allowed:\nThis database represents the system structure for Note Properties & Tags.\nRecords correspond to Workspace pages and cannot be added or deleted manually from this view.",
+    select_all_visible: "Select all",
+    select_all_visible_tooltip: "Select all records visible on the current screen",
+    delete_selected_btn: "Delete ({count})",
+    delete_selected_tooltip_single: "Permanently delete the selected record from the database",
+    delete_selected_tooltip_plural: "Permanently delete the {count} selected records from the database",
+    cancel_selection_btn: "Cancel",
+    cancel_selection_tooltip: "Deselect all selected records"
 },
 conflict: {
     title: "Edit Conflict Detected",
@@ -2526,7 +2547,12 @@ adv_col_menu: {
     type_record_note: "Record Page",
     type_button: "Action Button (Macro)",
     type_created_time: "Created Time",
-    type_last_edited_time: "Last Edited Time"
+    type_last_edited_time: "Last Edited Time",
+    type_autoincrement: "Auto-Increment ID",
+    autoincrement_prefix_label: "ID Prefix (e.g. INC-, @)",
+    autoincrement_prefix_prompt: "Set the prefix for the Auto-Increment ID (e.g. INC-, TASK-, @):",
+    autoincrement_digits_label: "Minimum Digits (Zero-padding)",
+    autoincrement_digits_prompt: "Minimum number of digits for the ID (0 for no padding, 3 for 001, 4 for 0001):"
 },
 adv_board: {
     select_view_title: "Select View",
@@ -3986,6 +4012,7 @@ editor: {
     database: "Base de Datos Relacional"
 },
 table: {
+    duplicate_complex_note_warning: "Atención: La página vinculada a este registro [{names}] contiene elementos complejos (bases de datos, diarios, código o subnotas) que no se pueden duplicar automáticamente.\n\nSi continúas, el registro se duplicará pero el enlace a la página compleja no se clonará en el nuevo registro (el campo quedará vacío, preservando la página original).\n\n¿Deseas continuar con la duplicación?",
     new_row: "Nueva fila",
     delete_rows_singular: "Eliminar 1 fila",
     delete_rows_plural: "Eliminar {count} filas",
@@ -4005,7 +4032,14 @@ table: {
     view_calendar: "Calendario",
     view_timeline: "Cronograma (Gantt)",
     view_tree: "Jerarquía WBS",
-    sys_db_mutation_blocked: "⚠️ Operación no permitida:\nEsta base de datos representa la estructura del sistema de Propiedades y Etiquetas de las Notas.\nLos registros corresponden a las páginas del Espacio de Trabajo y no se pueden agregar ni eliminar manualmente desde esta vista."
+    sys_db_mutation_blocked: "⚠️ Operación no permitida:\nEsta base de datos representa la estructura del sistema de Propiedades y Etiquetas de las Notas.\nLos registros corresponden a las páginas del Espacio de Trabajo y no se pueden agregar ni eliminar manualmente desde esta vista.",
+    select_all_visible: "Seleccionar todos",
+    select_all_visible_tooltip: "Seleccionar todos los registros visibles en la pantalla actual",
+    delete_selected_btn: "Eliminar ({count})",
+    delete_selected_tooltip_single: "Eliminar definitivamente el registro seleccionado de la base de datos",
+    delete_selected_tooltip_plural: "Eliminar definitivamente los {count} registros seleccionados de la base de datos",
+    cancel_selection_btn: "Cancelar",
+    cancel_selection_tooltip: "Deseleccionar todos los registros seleccionados"
 },
 conflict: {
     title: "Conflicto de Edición Detectado",
@@ -4312,7 +4346,12 @@ adv_col_menu: {
     type_record_note: "Página Dedicada",
     type_button: "Botón (Macro)",
     type_created_time: "Fecha de Creación",
-    type_last_edited_time: "Última Modificación"
+    type_last_edited_time: "Última Modificación",
+    type_autoincrement: "ID Autoincremental",
+    autoincrement_prefix_label: "Prefijo del ID (ej. INC-, @)",
+    autoincrement_prefix_prompt: "Establece el prefijo para el ID Autoincremental (ej. INC-, TASK-, @):",
+    autoincrement_digits_label: "Dígitos mínimos (Relleno con ceros)",
+    autoincrement_digits_prompt: "Número mínimo de dígitos para el ID (0 sin relleno, 3 para 001, 4 para 0001):"
 },
 adv_board: {
     select_view_title: "Seleccionar Vista",
@@ -5772,6 +5811,7 @@ editor: {
     database: "Relationale Datenbank"
 },
 table: {
+    duplicate_complex_note_warning: "Achtung: Die mit diesem Datensatz verknüpfte Seite [{names}] enthält komplexe Elemente (Datenbanken, Journale, Code oder Unter-Notizen), die nicht automatisch dupliziert werden können.\n\nWenn Sie fortfahren, wird der Datensatz dupliziert, aber die Verknüpfung zur komplexen Seite wird nicht in den neuen Datensatz geklont (das Feld bleibt leer, die Originalseite bleibt erhalten).\n\nMöchten Sie mit der Duplizierung fortfahren?",
     new_row: "Neue Zeile",
     delete_rows_singular: "1 Zeile löschen",
     delete_rows_plural: "{count} Zeilen löschen",
@@ -5791,7 +5831,14 @@ table: {
     view_calendar: "Kalender",
     view_timeline: "Zeitachse (Gantt)",
     view_tree: "WBS-Hierarchie",
-    sys_db_mutation_blocked: "⚠️ Vorgang nicht zulässig:\nDiese Datenbank stellt die Systemstruktur der Notizeigenschaften & Tags dar.\nDie Datensätze entsprechen den Workspace-Seiten und können in dieser Ansicht nicht manuell hinzugefügt oder gelöscht werden."
+    sys_db_mutation_blocked: "⚠️ Vorgang nicht zulässig:\nDiese Datenbank stellt die Systemstruktur der Notizeigenschaften & Tags dar.\nDie Datensätze entsprechen den Workspace-Seiten und können in dieser Ansicht nicht manuell hinzugefügt oder gelöscht werden.",
+    select_all_visible: "Alle auswählen",
+    select_all_visible_tooltip: "Alle auf dem aktuellen Bildschirm sichtbaren Datensätze auswählen",
+    delete_selected_btn: "Löschen ({count})",
+    delete_selected_tooltip_single: "Den ausgewählten Datensatz dauerhaft aus der Datenbank löschen",
+    delete_selected_tooltip_plural: "Die {count} ausgewählten Datensätze dauerhaft aus der Datenbank löschen",
+    cancel_selection_btn: "Abbrechen",
+    cancel_selection_tooltip: "Alle ausgewählten Datensätze abwählen"
 },
 conflict: {
     title: "Bearbeitungskonflikt erkannt",
@@ -6098,7 +6145,12 @@ adv_col_menu: {
     type_record_note: "Datensatz-Seite",
     type_button: "Aktionsschaltfläche (Makro)",
     type_created_time: "Erstellungszeit",
-    type_last_edited_time: "Änderungszeit"
+    type_last_edited_time: "Änderungszeit",
+    type_autoincrement: "Auto-Inkrement-ID",
+    autoincrement_prefix_label: "ID-Präfix (z. B. INC-, @)",
+    autoincrement_prefix_prompt: "Legen Sie das Präfix für die Auto-Inkrement-ID fest (z. B. INC-, TASK-, @):",
+    autoincrement_digits_label: "Mindeststellenanzahl (Führende Nullen)",
+    autoincrement_digits_prompt: "Mindestanzahl an Ziffern für die ID (0 für keine Formatierung, 3 für 001, 4 für 0001):"
 },
 adv_board: {
     select_view_title: "Ansicht auswählen",

@@ -10,7 +10,7 @@
  * - Differenziazione cromatica per livelli di profondità (Livello 0..4) applicata a freccia, pallino e badge.
  * - FIX HEADER TOOLTIPS & COMMENTS: Mostra i tooltip informativi dei campi, i commenti colonna e l'icona informativa nell'intestazione <th>.
  * - LIVE REFRESH: Pulsante refresh per ricaricare fedelmente i dati dal disco.
- * - FEAT CANCEL SELECTION: Pulsante per annullare la selezione attiva delle righe.
+ * - FEAT CANCEL SELECTION: Pulsante compatto per annullare la selezione attiva delle righe.
  * - Inizializzazione garantita di createdAt e updatedAt per prevenire anomalie di formattazione date.
  * - PERF REUSE VIRTUALCELLS & DOM SEARCH PRESERVATION: Riuso delle virtualCells già calcolate in memoria su 10.000 righe.
  * - PRESERVAZIONE LINEARE STRUTTURA: Mantenuta la riga canonica html += renderQuickSearchBar senza over-engineering.
@@ -21,6 +21,9 @@
  * - FIX UX FOOTER AUTO-NAVIGATION: Sincronizzazione automatica del footer in modalità navigazione quando hideFooterControls è attivo
  *   ma i record radice superano la pagina (totalPages > 1).
  * - FEAT ZERO-RESULTS FILTER FEEDBACK (1B): Feedback descrittivo con opzione di azzeramento filtri e ricerca con un click.
+ * - FEAT AUTOINCREMENT: Generazione ID auto-incrementale per sotto-attività (addSubtask).
+ * - FEAT SELECT ALL VISIBLE IN TREE FOOTER: Pulsante per selezionare tutti i nodi visibili nella schermata,
+ *   rimozione del tasto ridondante "Apri Record" e ottimizzazione tooltip compatti per display ridotti.
  */
 
 const AdvancedTree = {
@@ -129,10 +132,17 @@ const AdvancedTree = {
 
         // Inizializza tutte le colonne del nuovo record
         state.columns.forEach(c => {
-            if (c.type === 'checkbox') newRow.cells[c.id] = false;
-            else if (['multi-select', 'relation'].includes(c.type)) newRow.cells[c.id] = [];
-            else if (['date', 'datetime'].includes(c.type)) newRow.cells[c.id] = c.hasEndDate ? { start: '', end: '' } : '';
-            else newRow.cells[c.id] = '';
+            if (c.type === 'autoincrement') {
+                newRow.cells[c.id] = AdvancedTable.generateAutoIncrementValue(c, state);
+            } else if (c.type === 'checkbox') {
+                newRow.cells[c.id] = false;
+            } else if (['multi-select', 'relation'].includes(c.type)) {
+                newRow.cells[c.id] = [];
+            } else if (['date', 'datetime'].includes(c.type)) {
+                newRow.cells[c.id] = c.hasEndDate ? { start: '', end: '' } : '';
+            } else {
+                newRow.cells[c.id] = '';
+            }
         });
 
         // Collega gerarchicamente il nuovo record in base alla direzione dello schema
@@ -472,7 +482,7 @@ const AdvancedTree = {
             traverseTree(rootId, 0);
         });
 
-        // 11. Costruzione Markup Tabella Fluida (Struttura Lineare Naturale)
+        // 11. Costruzione Markup Tabella Fluida
         let html = '';
         html += AdvancedTable.renderQuickSearchBar(tableId, state);
 
@@ -720,12 +730,18 @@ const AdvancedTree = {
                     html += recordCountHtml;
 
                     if (state.selectedRows && state.selectedRows.length > 0) {
-                        if (state.selectedRows.length === 1) {
-                            html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} ${I18n.t('adv_render.open_record')}</span></button>`;
+                        const visibleTreeRows = flatTreeRows.map(item => item.row);
+                        const allVisibleSelected = visibleTreeRows.length > 0 && visibleTreeRows.every(r => state.selectedRows.includes(r.id));
+                        if (!allVisibleSelected) {
+                            html += `<button class="adv-add-btn" title="${I18n.t('table.select_all_visible_tooltip')}" onclick="AdvancedTable.selectAllVisibleRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkSquare} ${I18n.t('table.select_all_visible')}</span></button>`;
                         }
-                        const btnLabel = state.selectedRows.length === 1 ? I18n.t('table.delete_rows_singular') : I18n.t('table.delete_rows_plural', { count: state.selectedRows.length });
-                        html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                        html += `<button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color);" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
+
+                        const delTitle = state.selectedRows.length === 1 
+                            ? I18n.t('table.delete_selected_tooltip_single') 
+                            : I18n.t('table.delete_selected_tooltip_plural', { count: state.selectedRows.length });
+                        const btnLabel = I18n.t('table.delete_selected_btn', { count: state.selectedRows.length });
+                        html += `<button class="adv-add-btn danger" title="${delTitle}" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
+                        html += `<button class="adv-add-btn" title="${I18n.t('table.cancel_selection_tooltip')}" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection_btn')}</span></button>`;
                     }
                 } else if (!isSysDB) {
                     html += recordCountHtml;

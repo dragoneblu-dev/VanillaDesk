@@ -6,6 +6,7 @@
  * Lazy Rendering Incrementale per Colonna (Pulsante "Mostra altri 30 di [totale]").
  * Protegge le prestazioni del browser con migliaia di record e mantiene intatta la posizione di scroll.
  * Ricalcolo dinamico ad ogni ciclo di render per riflettere tempestivamente le modifiche delle relazioni.
+ * FEAT AUTOINCREMENT: Generazione progressiva dell'ID per nuove schede aggiunte da bacheca.
  */
 
 const AdvancedBoard = {
@@ -49,7 +50,7 @@ const AdvancedBoard = {
         if (selfRelCols.length === 0) {
             menuItems.push({ 
                 type: 'custom', 
-                html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_self_relation')}</div>` 
+                html: `<div style="font-size:0.75rem; opacity: 0.5; padding:4px;">${I18n.t('adv_board.no_self_relation')}</div>` 
             });
         } else {
             // Click diretto sul campo per attivare la WBS corrispondente
@@ -95,7 +96,7 @@ const AdvancedBoard = {
         menuItems.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">${I18n.t('adv_board.board_group_title')}</div>` });
 
         if (selectCols.length === 0) {
-            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_select_column')}</div>` });
+            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; opacity: 0.5; padding:4px;">${I18n.t('adv_board.no_select_column')}</div>` });
         } else {
             selectCols.forEach(c => {
                 const isActive = state.viewType === 'board' && state.boardGroupBy === c.id;
@@ -111,7 +112,7 @@ const AdvancedBoard = {
         menuItems.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-top:2px; margin-bottom:2px;">${I18n.t('adv_board.time_views_title')}</div>` });
 
         if (dateCols.length === 0) {
-            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; color:var(--danger-color); padding:4px;">${I18n.t('adv_board.no_date_column')}</div>` });
+            menuItems.push({ type: 'custom', html: `<div style="font-size:0.75rem; opacity: 0.5; padding:4px;">${I18n.t('adv_board.no_date_column')}</div>` });
         } else {
             dateCols.forEach(c => {
                 const isCalActive = state.viewType === 'calendar' && state.calendarDateCol === c.id;
@@ -255,7 +256,7 @@ const AdvancedBoard = {
             });
         }
 
-        // RICALCOLO DINAMICO RIGHE VIRTUALI (Garantisce che i campi calcolati e relazionali siano sempre aggiornati)
+        // RICALCOLO DINAMICO RIGHE VIRTUALI
         let viewRows = [];
         const renderCache = {};
         state.rows.forEach(r => {
@@ -532,6 +533,8 @@ const AdvancedBoard = {
         state.columns.forEach(c => {
             if (c.id === groupColId) {
                 newRow.cells[c.id] = groupValue;
+            } else if (c.type === 'autoincrement') {
+                newRow.cells[c.id] = AdvancedTable.generateAutoIncrementValue(c, state);
             } else if (c.type === 'checkbox') {
                 newRow.cells[c.id] = false;
             } else if (c.type === 'multi-select' || c.type === 'relation') {

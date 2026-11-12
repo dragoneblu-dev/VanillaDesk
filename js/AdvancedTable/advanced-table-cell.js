@@ -14,11 +14,13 @@
  * garantendo che le pillole relazionali scorrano compatte a filo senza contenitori gonfiati.
  * FIX CTRL+A CELL ISOLATION: Intercettazione inline di Ctrl+A / Cmd+A sui campi input (numero e url)
  * per circoscrivere la selezione alla sola cella attiva senza selezionare la pagina intera.
+ * FEAT CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
+ * FEAT AUTOINCREMENT: Rendering cella read-only monospace per la nuova tipologia 'autoincrement'.
  */
 
 Object.assign(AdvancedTable, {
     renderCell: (tableId, row, col, val, state, isEdit) => {
-        const isComputed = ['formula', 'rollup', 'relation_backlink', 'created_time', 'last_edited_time'].includes(col.type);
+        const isComputed = ['formula', 'rollup', 'relation_backlink', 'created_time', 'last_edited_time', 'autoincrement'].includes(col.type);
         const editable = (isEdit && !isComputed) ? 'true' : 'false';
         const readonly = (isEdit && !isComputed) ? '' : 'readonly';
         const disabled = (isEdit && !isComputed) ? '' : 'disabled';
@@ -55,6 +57,14 @@ Object.assign(AdvancedTable, {
                     </span>
                 </div>
             `;
+        }
+
+        // =========================================================================
+        // CAMPO ID AUTO-INCREMENTALE (READ-ONLY)
+        // =========================================================================
+        if (col.type === 'autoincrement') {
+            const safeVal = UI.escapeHTML(String(val || ''));
+            return `<div class="adv-cell-text adv-cell-readonly" contenteditable="false" style="font-family:var(--font-mono, monospace); font-weight:600; opacity:0.85; user-select:text;">${safeVal}</div>`;
         }
 
         if (isBacklink && (col.backlinkDisplay === 'count' || col.backlinkDisplay === 'property')) {
@@ -166,7 +176,8 @@ Object.assign(AdvancedTable, {
             if (isEdit) {
                 return `<div class="adv-cell-checkbox"><input type="checkbox" data-row="${row.id}" data-col="${col.id}" ${checked} ${disabled}></div>`;
             } else {
-                return `<div class="adv-cell-checkbox-ro">${val ? `<span style="display:inline-flex; align-items:center; gap:4px; color:var(--accent-color);">${Icons.checkSquare} Sì</span>` : `<span style="display:inline-flex; align-items:center; gap:4px; color:var(--text-secondary);">${Icons.square} No</span>`}</div>`;
+                // Sola icona elegante e centrata (senza testo Sì/No)
+                return `<div class="adv-cell-checkbox-ro">${val ? `<span style="display:inline-flex; align-items:center; color:var(--accent-color);">${Icons.checkSquare}</span>` : `<span style="display:inline-flex; align-items:center; color:var(--text-secondary);">${Icons.square}</span>`}</div>`;
             }
         } else if (col.type === 'date' || col.type === 'datetime') {
             const inputType = col.type === 'datetime' ? 'datetime-local' : 'date';
@@ -348,7 +359,7 @@ Object.assign(AdvancedTable, {
 
                 const tooltipAttr = isTooLong ? `data-tooltip="${safeText.replace(/"/g, '&quot;').replace(/\n/g, '<br>')}"` : '';
 
-                // Sui campi calcolati/derivati (rollup, formula) mostriamo SEMPRE E SOLO "Apri Testo Completo" (icona recordView), mai "Modifica"
+                // Sui campi calcolati/derivati (rollup, formula, autoincrement) mostriamo SEMPRE E SOLO "Apri Testo Completo", mai "Modifica"
                 const actionButtonHTML = isTooLong ? (
                     (isComputed || !isEdit)
                         ? `<button class="adv-icon-btn" title="${I18n.t('adv_cell.open_full_text')}" onclick="event.stopPropagation(); AdvancedTable.openLongTextModal('${tableId}', '${row.id}', '${col.id}')" style="flex-shrink:0; padding:2px; color:var(--text-secondary); margin-top:2px; pointer-events:auto; cursor:pointer;">${Icons.recordView}</button>`

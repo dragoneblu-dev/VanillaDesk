@@ -10,6 +10,7 @@
  * per impedire disallineamenti grafici (es. Creazione Nuova Riga con operatore '=' e campo testo)
  * quando la prima colonna del database è di tipo 'record_note' o non supporta assegnazioni dirette.
  * FIX COLUMN TYPE ICONS: Riuso centralizzato di AdvancedTable.getColumnTypeIcon.
+ * FEAT AUTOINCREMENT: Esclusione delle colonne autoincrement dalle azioni modificabili manualmente.
  */
 
 Object.assign(AdvancedAutomations, {
@@ -35,8 +36,8 @@ Object.assign(AdvancedAutomations, {
         if (!state || !Array.isArray(state.columns) || state.columns.length === 0) {
             return { colId: 'SYS_ACTION', type: 'show_toast', value: '' };
         }
-        // Cerca la prima colonna scrivibile (escludendo colonne calcolate e timestamp)
-        const writableCol = state.columns.find(c => !['created_time', 'last_edited_time', 'formula', 'rollup'].includes(c.type));
+        // Cerca la prima colonna scrivibile (escludendo colonne calcolate, timestamp e autoincrement)
+        const writableCol = state.columns.find(c => !['created_time', 'last_edited_time', 'formula', 'rollup', 'autoincrement'].includes(c.type));
         if (!writableCol) {
             return { colId: 'SYS_ACTION', type: 'show_toast', value: '' };
         }
@@ -594,8 +595,8 @@ Object.assign(AdvancedAutomations, {
         
         let colsForActions = ``;
         cols.forEach(c => {
-            // Previene l'assegnazione arbitraria di valori a colonne protette dal motore
-            if (['created_time', 'last_edited_time', 'formula', 'rollup'].includes(c.type)) return;
+            // Previene l'assegnazione arbitraria di valori a colonne protette dal motore, calcolate o autoincrement
+            if (['created_time', 'last_edited_time', 'formula', 'rollup', 'autoincrement'].includes(c.type)) return;
 
             if (c.type === 'record_note') {
                 colsForActions += `<option value="${c.id}">${c.name}: Titolo Nota</option>`;
@@ -604,7 +605,7 @@ Object.assign(AdvancedAutomations, {
                 if (propsDb && Array.isArray(propsDb.columns)) {
                     propsDb.columns.forEach(pCol => {
                         if (pCol.id === 'sys_c_note') return;
-                        if (['created_time', 'last_edited_time', 'formula', 'rollup'].includes(pCol.type)) return;
+                        if (['created_time', 'last_edited_time', 'formula', 'rollup', 'autoincrement'].includes(pCol.type)) return;
                         colsForActions += `<option value="${c.id}_PROP_${pCol.id}">${c.name} ➔ ${UI.escapeHTML(pCol.name)} (${pCol.type})</option>`;
                     });
                 }
@@ -664,8 +665,6 @@ Object.assign(AdvancedAutomations, {
                             <input type="text" class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" value="${String(a.value2 || '').replace(/"/g, '&quot;')}" placeholder="${I18n.t('adv_automations.new_record_title_placeholder')}" oninput="AdvancedAutomations._updateAction(event, ${idx}, 'value2', this.value)">
                         `;
                     } else if (a.type === 'color_row') {
-                        
-                        // LA MODIFICA: Utilizzo dell'helper centrale per i colori
                         const changeScript = `AdvancedAutomations._updateAction(event, ${idx}, 'value', '$$VAL$$'); AdvancedAutomations._renderBuilder('${tableId}');`;
                         const colorSwatches = AutomationUIBuilder.getColorSwatchesHTML(a.value, changeScript);
 

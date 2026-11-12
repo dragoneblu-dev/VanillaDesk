@@ -42,8 +42,7 @@ UI.Minimap = {
         
         if (editorArea && mini && wrapper && container) {
             
-            // FIX: Clona il contenuto ma previeni la duplicazione degli ID nel DOM.
-            // Converte id="..." in data-mini-id="..."
+            // Clona il contenuto ma previene la duplicazione degli ID nel DOM convertendoli in data-mini-id
             let clonedHTML = editorArea.innerHTML;
             clonedHTML = clonedHTML.replace(/\bid=(["'])(.*?)\1/gi, 'data-mini-id=$1$2$1');
             clonedHTML = clonedHTML.replace(/\bname=(["'])(.*?)\1/gi, 'data-mini-name=$1$2$1'); // Per sicurezza anche i name
@@ -97,16 +96,18 @@ UI.Minimap = {
 
         // Se l'editor non ha barre di scorrimento, il viewport copre l'intera altezza
         if (maxST === 0) {
-            viewport.style.height = `${CH}px`;
+            viewport.style.height = `${CH > 0 ? CH : Math.round(EV * scaleFactor)}px`;
             viewport.style.top = '0px';
             wrapper.style.transform = `scale(${scaleFactor})`;
             return;
         }
 
-        // Calcolo dell'altezza dello slider di anteprima (con limite minimo di usabilità)
+        // Calcolo dell'altezza dello slider di anteprima (con guardia difensiva su CH > 0)
         let sliderHeight = EV * scaleFactor;
-        if (sliderHeight < 24) sliderHeight = 24;
-        if (sliderHeight > CH) sliderHeight = CH;
+        if (CH > 0) {
+            if (sliderHeight < 24) sliderHeight = 24;
+            if (sliderHeight > CH) sliderHeight = CH;
+        }
 
         viewport.style.height = `${Math.round(sliderHeight)}px`;
 
@@ -114,17 +115,23 @@ UI.Minimap = {
         const scrollPercent = ST / maxST;
 
         // Corsa totale disponibile per lo slider visivo all'interno del container
-        const maxSliderTravel = Math.max(0, CH - sliderHeight);
-        const sliderTopVis = scrollPercent * maxSliderTravel;
+        let sliderTopVis = 0;
+        if (CH > 0) {
+            const maxSliderTravel = Math.max(0, CH - sliderHeight);
+            sliderTopVis = scrollPercent * maxSliderTravel;
+
+            // Scorrimento del contenuto in miniatura per le pagine lunghe tramite traslazione fluida
+            const scaledTotalHeight = EH * scaleFactor;
+            const maxMiniScroll = Math.max(0, scaledTotalHeight - CH);
+            const currentMiniScroll = scrollPercent * maxMiniScroll;
+            wrapper.style.transform = `translateY(${-currentMiniScroll}px) scale(${scaleFactor})`;
+        } else {
+            // Fallback lineare puro se il container non ha ancora altezza calcolata nel DOM (es. test headless)
+            sliderTopVis = ST * scaleFactor;
+            wrapper.style.transform = `scale(${scaleFactor})`;
+        }
 
         viewport.style.top = `${Math.round(sliderTopVis)}px`;
-
-        // Scorrimento del contenuto in miniatura per le pagine lunghe tramite traslazione fluida
-        const scaledTotalHeight = EH * scaleFactor;
-        const maxMiniScroll = Math.max(0, scaledTotalHeight - CH);
-        const currentMiniScroll = scrollPercent * maxMiniScroll;
-
-        wrapper.style.transform = `translateY(${-currentMiniScroll}px) scale(${scaleFactor})`;
         wrapper.style.transformOrigin = 'top left';
 
         // Previene qualsiasi accumulo accidentale di scroll nativo sul container

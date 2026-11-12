@@ -22,6 +22,8 @@
  * della pagina (totalPages > 1), viene mostrata la sola barra di navigazione/conteggio senza tasti di inserimento,
  * impedendo che tabelle estese appaiano troncate o corrotte.
  * FEAT ZERO-RESULTS FILTER FEEDBACK (1B): Feedback descrittivo con conteggio record e pulsante per azzerare filtri e ricerca con un click.
+ * FEAT SELECT ALL VISIBLE IN FOOTER: Pulsante compatto con tooltip per selezionare tutti i record visibili nella pagina corrente,
+ * eliminando il superfluo "Apri Record" e ottimizzando l'ingombro orizzontale.
  */
 
 Object.assign(AdvancedTable, {
@@ -676,12 +678,17 @@ Object.assign(AdvancedTable, {
                     html += recordCountHtml;
                     
                     if (state.selectedRows && state.selectedRows.length > 0) {
-                        if (state.selectedRows.length === 1) {
-                            html += `<button class="adv-add-btn" style="color:var(--accent-color); background:rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2);" onclick="AdvancedTable.openRecordView('${tableId}', '${state.selectedRows[0]}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.recordView} ${I18n.t('adv_render.open_record')}</span></button>`;
+                        const allVisibleSelected = pagedRows.length > 0 && pagedRows.every(r => state.selectedRows.includes(r.id));
+                        if (!allVisibleSelected) {
+                            html += `<button class="adv-add-btn" title="${I18n.t('table.select_all_visible_tooltip')}" onclick="AdvancedTable.selectAllVisibleRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkSquare} ${I18n.t('table.select_all_visible')}</span></button>`;
                         }
-                        const btnLabel = state.selectedRows.length === 1 ? I18n.t('table.delete_rows_singular') : I18n.t('table.delete_rows_plural', { count: state.selectedRows.length });
-                        html += `<button class="adv-add-btn danger" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                        html += `<button class="adv-add-btn" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection')}</span></button>`;
+
+                        const delTitle = state.selectedRows.length === 1 
+                            ? I18n.t('table.delete_selected_tooltip_single') 
+                            : I18n.t('table.delete_selected_tooltip_plural', { count: state.selectedRows.length });
+                        const btnLabel = I18n.t('table.delete_selected_btn', { count: state.selectedRows.length });
+                        html += `<button class="adv-add-btn danger" title="${delTitle}" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
+                        html += `<button class="adv-add-btn" title="${I18n.t('table.cancel_selection_tooltip')}" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection_btn')}</span></button>`;
                     }
                 } else if (!isSysDB) {
                     html += recordCountHtml;

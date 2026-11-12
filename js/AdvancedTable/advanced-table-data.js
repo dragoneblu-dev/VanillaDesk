@@ -13,6 +13,7 @@
  * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano in modo intelligente su tutti i tipi.
  * LIVE REFRESH DA DISCO: forceRecalculate ricarica i dati freschi dal file system (evitando sovrascritture concorrenti).
  * FEAT CLEAR SELECTION: Aggiunta funzione clearSelectedRows per azzerare tutte le righe selezionate.
+ * FEAT SELECT ALL VISIBLE: Aggiunta funzione selectAllVisibleRows per selezionare tutti i record visibili nella schermata.
  * FEAT INTERVAL ALGEBRA: Supporto completo e unificato per filtri su intervalli temporali e range con delimitatore ➔.
  * FEAT PAGINAZIONE: Opzioni scala bilanciata [10, 25, 50, 100, 200], default a 25 e clamp massimo a 200.
  * FEAT SYS_PROPERTIES PROPAGATION: Invocazione automatica di triggerFromPropertyChange quando viene mutato SYS_PROPERTIES_DB.
@@ -29,6 +30,9 @@
  * FEAT CENTRALIZED SHADOW DB SHIELD: Metodo isSystemDatabaseProtected per bloccare l'inserimento,
  * la duplicazione e l'eliminazione di righe su SYS_PROPERTIES_DB da qualsiasi vista con alert esplicito.
  * FEAT PEEK TRACKING: Aggiornamento tracciamento stato dirty in AdvancedTable._activeRelationPeek con refresh reattivo del footer.
+ * FEAT AUTOINCREMENT: Generazione progressiva ID per addRow, duplicateRecord, createRecordAtDate e backfill per addColumn.
+ * FEAT SMART RECORD NOTE DUPLICATION: Ispezione complessità note collegate (_isNoteComplexForDuplication), duplicazione
+ * trasparente per note semplici con clonazione proprietà SYS_PROPERTIES_DB, e conferma con svuotamento campo per note complesse.
  */
 
 Object.assign(AdvancedTable, {
@@ -61,6 +65,42 @@ Object.assign(AdvancedTable, {
                 alert(msg);
             }
             return true;
+        }
+
+        return false;
+    },
+
+    // =========================================================================
+    // ISPEZIONE COMPLESSITÀ NOTA PER LA DUPLICAZIONE
+    // Identifica se una nota associata possiede sotto-note o widget complessi con stato
+    // =========================================================================
+    _isNoteComplexForDuplication: (noteId) => {
+        if (!noteId || typeof Store === 'undefined') return false;
+        const note = Store.getNote(noteId);
+        if (!note) return false;
+
+        // 1. Possiede sotto-note figlie nell'albero gerarchico?
+        const children = Store.getChildren(note.id, false);
+        if (children && children.length > 0) return true;
+
+        // 2. Contiene widget complessi dotati di stato registrato in AppState.databases
+        // (database relazionali, viste analitiche, viste collegate, diari, barre bottoni macro, blocchi codice o colonne)
+        if (note.content && typeof note.content === 'string') {
+            // Rimuove temporaneamente il contenuto delle citazioni live per non confondere transclusioni con widget nativi
+            const sanitizedContent = note.content.replace(/<blockquote[^>]*class=["'][^"']*block-citation[^"']*["'][\s\S]*?<\/blockquote>/gi, '');
+
+            const complexRegex = /\bid=["'](adv_tbl_[^"']+|adv_pivot_[^"']+|adv_link_[^"']+|adv_journal_[^"']+|adv_btnbar_[^"']+|adv_cols_[^"']+|adv_code_[^"']+)["']/gi;
+            let match;
+            while ((match = complexRegex.exec(sanitizedContent)) !== null) {
+                if (!match[1].includes('_cited_')) {
+                    return true;
+                }
+            }
+
+            const complexTypeRegex = /data-widget-type=["'](database|pivot|journal|buttonbar|code|columns)["']/i;
+            if (complexTypeRegex.test(sanitizedContent)) {
+                return true;
+            }
         }
 
         return false;
@@ -275,10 +315,17 @@ Object.assign(AdvancedTable, {
 
         const now = Date.now();
         const newRow = { id: 'r' + Store.generateId(), createdAt: now, updatedAt: now, cells: {} };
+        
         state.columns.forEach(c => {
-            if (c.type === 'checkbox') newRow.cells[c.id] = false;
-            else if (c.type === 'multi-select' || c.type === 'relation') newRow.cells[c.id] = [];
-            else newRow.cells[c.id] = '';
+            if (c.type === 'autoincrement') {
+                newRow.cells[c.id] = AdvancedTable.generateAutoIncrementValue(c, state);
+            } else if (c.type === 'checkbox') {
+                newRow.cells[c.id] = false;
+            } else if (c.type === 'multi-select' || c.type === 'relation') {
+                newRow.cells[c.id] = [];
+            } else {
+                newRow.cells[c.id] = '';
+            }
         });
         state.rows.push(newRow);
 
@@ -307,6 +354,8 @@ Object.assign(AdvancedTable, {
 
     // =========================================================================
     // DUPLICAZIONE RECORD CON UN CLICK (CLONE ROW)
+    // Gestione differenziale: duplicazione fedele per note semplici; avviso trasparente
+    // con azzeramento del campo per note contenenti sotto-note o widget complessi.
     // =========================================================================
     duplicateRecord: async (tableId, rowId) => {
         if (!tableId || !rowId) return;
@@ -322,14 +371,51 @@ Object.assign(AdvancedTable, {
         if (srcIdx === -1) return;
         const sourceRow = state.rows[srcIdx];
 
+        // 1. ISPEZIONE PREVENTIVA DELLE NOTE COLLEGATE
+        const recordNoteCols = state.columns.filter(c => c.type === 'record_note');
+        const complexNotesFound = [];
+
+        recordNoteCols.forEach(c => {
+            const oldNoteId = sourceRow.cells ? sourceRow.cells[c.id] : null;
+            if (oldNoteId && AdvancedTable._isNoteComplexForDuplication(oldNoteId)) {
+                const oldNote = Store.getNote(oldNoteId);
+                const titleStr = oldNote ? (oldNote.title || I18n.t('editor.untitled')) : I18n.t('editor.untitled');
+                complexNotesFound.push({ colId: c.id, colName: c.name, noteTitle: titleStr });
+            }
+        });
+
+        // Se sono presenti note complesse, avvisa chiaramente l'utente
+        if (complexNotesFound.length > 0) {
+            const namesList = complexNotesFound.map(item => `"${item.noteTitle}" (${item.colName})`).join(', ');
+            const confirmMsg = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
+                ? I18n.t('table.duplicate_complex_note_warning', { names: namesList })
+                : `Attenzione: La pagina collegata a questo record [${namesList}] contiene elementi complessi (database, diari, codice o sotto-note) che non possono essere duplicati automaticamente.\n\nSe prosegui, il record verrà duplicato ma il collegamento alla pagina complessa non verrà clonato nel nuovo record (il campo rimarrà vuoto, preservando la pagina originale).\n\nVuoi procedere con la duplicazione?`;
+
+            if (!confirm(confirmMsg)) {
+                return;
+            }
+        }
+
         const now = Date.now();
         const newRowId = 'r' + Store.generateId();
 
         const clonedCells = JSON.parse(JSON.stringify(sourceRow.cells || {}));
 
-        state.columns.filter(c => c.type === 'record_note').forEach(c => {
+        // GESTIONE AUTOINCREMENT NELLA DUPLICAZIONE: Assegna un nuovo ID univoco progressivo!
+        state.columns.filter(c => c.type === 'autoincrement').forEach(c => {
+            clonedCells[c.id] = AdvancedTable.generateAutoIncrementValue(c, state);
+        });
+
+        // 2. CLONAZIONE DELLE CELLE RECORD NOTE
+        recordNoteCols.forEach(c => {
             const oldNoteId = clonedCells[c.id];
-            if (oldNoteId && typeof Store !== 'undefined') {
+            const isComplex = complexNotesFound.some(item => item.colId === c.id);
+
+            if (isComplex) {
+                // Per le note complesse approvate dall'utente, il campo viene lasciato vuoto nel nuovo record
+                clonedCells[c.id] = '';
+            } else if (oldNoteId && typeof Store !== 'undefined') {
+                // Per le note semplici (testo, checklist, immagini, tabelle semplici, citazioni live): clonazione sicura
                 const oldNote = Store.getNote(oldNoteId);
                 const freshNoteId = Store.generateId();
                 const nowStr = new Date().toISOString();
@@ -340,7 +426,7 @@ Object.assign(AdvancedTable, {
 
                 const clonedNote = {
                     id: freshNoteId,
-                    parentId: AppState.currentNoteId || null,
+                    parentId: (oldNote && oldNote.parentId) ? oldNote.parentId : (AppState.currentNoteId || null),
                     title: newTitle,
                     content: newContent,
                     isMarked: false,
@@ -356,8 +442,20 @@ Object.assign(AdvancedTable, {
                     linkedRowId: newRowId
                 };
                 AppState.notes.push(clonedNote);
+
                 if (typeof AdvancedTable.syncSystemPropertiesRow === 'function') {
                     AdvancedTable.syncSystemPropertiesRow(freshNoteId);
+                    // Copia fedele dei tag e delle proprietà di pagina per la nuova nota in SYS_PROPERTIES_DB
+                    const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+                    if (propsDb && Array.isArray(propsDb.rows)) {
+                        const oldSysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === oldNoteId);
+                        const newSysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === freshNoteId);
+                        if (oldSysRow && newSysRow) {
+                            newSysRow.cells = JSON.parse(JSON.stringify(oldSysRow.cells));
+                            newSysRow.cells['sys_c_note'] = freshNoteId;
+                            newSysRow.updatedAt = Date.now();
+                        }
+                    }
                 }
                 clonedCells[c.id] = freshNoteId;
             } else {
@@ -552,7 +650,9 @@ Object.assign(AdvancedTable, {
         const newRow = { id: 'r' + Store.generateId(), createdAt: now, updatedAt: now, cells: {} };
 
         sourceState.columns.forEach(c => {
-            if (c.id === dateColId) {
+            if (c.type === 'autoincrement') {
+                newRow.cells[c.id] = AdvancedTable.generateAutoIncrementValue(c, sourceState);
+            } else if (c.id === dateColId) {
                 newRow.cells[c.id] = col.hasEndDate ? {start: startVal, end: endVal} : startVal;
             } else if (groupColId && c.id === groupColId) {
                 if (c.type === 'multi-select' || c.type === 'relation') {
@@ -604,6 +704,31 @@ Object.assign(AdvancedTable, {
         } else {
             viewState.selectedRows = viewState.selectedRows.filter(id => id !== rowId);
         }
+
+        AdvancedTable.setState(tableId, viewState);
+        AdvancedTable.renderTable(tableId);
+    },
+
+    selectAllVisibleRows: (tableId) => {
+        if (!tableId) return;
+        let viewState = AdvancedTable.getState(tableId);
+        if (!viewState || viewState.isPivot) return;
+
+        const tableWrapper = document.getElementById(tableId);
+        let visibleIds = [];
+        if (tableWrapper) {
+            const trs = tableWrapper.querySelectorAll('tbody tr[data-row-id]');
+            visibleIds = Array.from(trs).map(tr => tr.getAttribute('data-row-id')).filter(Boolean);
+        }
+
+        if (visibleIds.length === 0 && Array.isArray(viewState.rows)) {
+            visibleIds = viewState.rows.map(r => r.id);
+        }
+
+        if (!viewState.selectedRows) viewState.selectedRows = [];
+        const currentSet = new Set(viewState.selectedRows);
+        visibleIds.forEach(id => currentSet.add(id));
+        viewState.selectedRows = Array.from(currentSet);
 
         AdvancedTable.setState(tableId, viewState);
         AdvancedTable.renderTable(tableId);
@@ -708,6 +833,7 @@ Object.assign(AdvancedTable, {
         const typeNames = {
             'text': 'Testo',
             'number': 'Numero',
+            'autoincrement': 'ID',
             'select': 'Selezione',
             'multi-select': 'Selezione Multipla',
             'date': 'Data',
@@ -727,7 +853,12 @@ Object.assign(AdvancedTable, {
         const colName = typeNames[type] || 'Nuova Colonna';
 
         const newCol = { id: newColId, name: colName, type: type, width: 150 };
-        if (type === 'button') {
+        
+        if (type === 'autoincrement') {
+            newCol.prefix = '@';
+            newCol.digits = 0;
+            newCol.width = 110;
+        } else if (type === 'button') {
             newCol.buttonLabel = 'Esegui';
             newCol.buttonColor = '#2563eb';
             newCol.buttonIcon = typeof Icons !== 'undefined' ? Icons.play : '▶';
@@ -738,11 +869,18 @@ Object.assign(AdvancedTable, {
 
         state.columns.push(newCol);
 
+        // BACKFILL DELLE RIGHE ESISTENTI
         if (!state.isPivot) {
             state.rows.forEach(r => {
-                if (type === 'checkbox') r.cells[newColId] = false;
-                else if (type === 'multi-select' || type === 'relation') r.cells[newColId] = [];
-                else r.cells[newColId] = '';
+                if (type === 'autoincrement') {
+                    r.cells[newColId] = AdvancedTable.generateAutoIncrementValue(newCol, state);
+                } else if (type === 'checkbox') {
+                    r.cells[newColId] = false;
+                } else if (type === 'multi-select' || type === 'relation') {
+                    r.cells[newColId] = [];
+                } else {
+                    r.cells[newColId] = '';
+                }
                 if (r.virtualCells) r.virtualCells[newColId] = r.cells[newColId];
             });
         }

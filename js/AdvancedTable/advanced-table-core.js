@@ -33,6 +33,7 @@ const AdvancedTable = {
         switch (type) {
             case 'text': return Icons.text;
             case 'number': return Icons.number;
+            case 'autoincrement': return '<span style="font-family:monospace; font-weight:bold; font-size:0.85rem;">@</span>';
             case 'select': return Icons.select;
             case 'multi-select': return Icons.multiSelect;
             case 'date':
@@ -51,6 +52,33 @@ const AdvancedTable = {
             case 'button': return Icons.play;
             default: return Icons.text;
         }
+
+    },
+
+    // =========================================================================
+    // GENERATORE SEQUENZIALE PER CAMPI AUTO-INCREMENTALI
+    // =========================================================================
+    generateAutoIncrementValue: (col, state) => {
+        if (!state) return '@1';
+        
+        if (!state.autoIncrementCounter || isNaN(state.autoIncrementCounter) || state.autoIncrementCounter < 1) {
+            let maxNum = 0;
+            (state.rows || []).forEach(r => {
+                const val = String((r.cells && r.cells[col.id]) || '');
+                const digitsMatch = val.match(/\d+/g);
+                if (digitsMatch) {
+                    const lastNum = parseInt(digitsMatch[digitsMatch.length - 1], 10);
+                    if (!isNaN(lastNum) && lastNum > maxNum) maxNum = lastNum;
+                }
+            });
+            state.autoIncrementCounter = maxNum + 1;
+        }
+
+        const prefix = col.prefix !== undefined ? col.prefix : '@';
+        const digits = col.digits !== undefined ? parseInt(col.digits, 10) : 0;
+        const currentNum = state.autoIncrementCounter++;
+        const numStr = (digits > 0) ? String(currentNum).padStart(digits, '0') : String(currentNum);
+        return `${prefix}${numStr}`;
     },
 
     // =========================================================================
@@ -571,7 +599,8 @@ const AdvancedTable = {
             currentPage: state.currentPage || 1,
             hideFooterControls: state.hideFooterControls || false,
             quickSearch: state.quickSearch || '',
-            showQuickSearch: !!state.showQuickSearch
+            showQuickSearch: !!state.showQuickSearch,
+            autoIncrementCounter: state.autoIncrementCounter || 1
         };
 
         if (state.isLinkedView) {
@@ -713,6 +742,7 @@ const AdvancedTable = {
             hideFooterControls: false,
             quickSearch: '',
             showQuickSearch: false,
+            autoIncrementCounter: 1,
             columns:[
                 { id: 'c_1', name: 'Nome', type: 'text', width: 200, hidden: false, comment: defaultNameComment },
                 { id: 'c_2', name: 'Tag', type: 'multi-select', width: 180, hidden: false },

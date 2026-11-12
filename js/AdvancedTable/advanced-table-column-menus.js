@@ -4,7 +4,7 @@
  * Configurazione esplicita per relazioni con popup di alert per la prevenzione perdita dati.
  * Gestione dinamica della visibilità del campo (compatibile con griglia e Drawer).
  * Pulizia a cascata dello stato (sort, filtri, viste e formattazione condizionale) su eliminazione colonna.
- * Integrazione del tipo 'note_link' (Collegamento a Nota).
+ * Integrazione del tipo 'note_link' (Collegamento a Nota) e 'autoincrement' (ID Auto-Incrementale).
  * PROTEZIONE ROLLUP BIDIREZIONALE: Verifica che nessuna tabella dello spazio di lavoro possieda
  * rollup o relazioni (uscenti o entranti) puntate a questa colonna prima di consentirne la cancellazione.
  * FIX CONVERSIONE RELAZIONE/ROLLUP: Richiesta di conferma preventiva su perdita dati prima dell'apertura
@@ -25,6 +25,7 @@
  * FIX OPEN_COL_MENU TYPEGUARD: Protezione da chiamate asincrone o debounced per openColMenu senza eccezioni stopPropagation.
  * FIX BLUR RENAME CONFIRMATION: Intercettazione del cambio nome abbandonato senza Invio, con richiesta di conferma
  * esplicita dell'annullamento e promemoria sull'obbligo di premere Invio per confermare la modifica.
+ * FEAT AUTOINCREMENT: Configurazione prefisso e padding numerico per ID Auto-Incrementale.
  */
 
 const AdvancedTableColumnMenus = {
@@ -34,6 +35,48 @@ const AdvancedTableColumnMenus = {
         let state = AdvancedTable.getState(realTableId);
         const col = state.columns.find(c => c.id === colId);
         col.hasEndDate = !col.hasEndDate;
+
+        AdvancedTable.setState(realTableId, state);
+        AdvancedTable.updateDependentViews(realTableId);
+        Store.triggerAutoSave();
+        AdvancedTable.closeDropdowns(true);
+    },
+
+    configureAutoIncrement: (tableId, colId) => {
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        let state = AdvancedTable.getState(realTableId);
+        const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
+
+        const currentPrefix = col.prefix !== undefined ? col.prefix : '@';
+        const currentDigits = col.digits !== undefined ? col.digits : 0;
+
+        const promptPrefixMsg = (typeof I18n !== 'undefined' && I18n.t('adv_col_menu.autoincrement_prefix_prompt')) || "Imposta il prefisso per l'ID Auto-Incrementale (es. INC-, TASK-, @):";
+        const newPrefix = prompt(promptPrefixMsg, currentPrefix);
+        if (newPrefix === null) return;
+
+        const promptDigitsMsg = (typeof I18n !== 'undefined' && I18n.t('adv_col_menu.autoincrement_digits_prompt')) || "Numero minimo di cifre per l'ID (0 per nessuna formattazione, 3 per 001, 4 per 0001):";
+        const newDigitsRaw = prompt(promptDigitsMsg, currentDigits);
+        if (newDigitsRaw === null) return;
+
+        const parsedDigits = Math.max(0, parseInt(newDigitsRaw, 10) || 0);
+
+        col.prefix = newPrefix.trim();
+        col.digits = parsedDigits;
+
+        // Riformatta le righe esistenti con le nuove impostazioni di prefisso/padding
+        state.rows.forEach(r => {
+            const rawVal = String((r.cells && r.cells[colId]) || '');
+            const digitsMatch = rawVal.match(/\d+/g);
+            if (digitsMatch) {
+                const num = parseInt(digitsMatch[digitsMatch.length - 1], 10);
+                if (!isNaN(num)) {
+                    const numStr = (parsedDigits > 0) ? String(num).padStart(parsedDigits, '0') : String(num);
+                    r.cells[colId] = `${col.prefix}${numStr}`;
+                    if (r.virtualCells) r.virtualCells[colId] = r.cells[colId];
+                }
+            }
+        });
 
         AdvancedTable.setState(realTableId, state);
         AdvancedTable.updateDependentViews(realTableId);
@@ -350,6 +393,7 @@ const AdvancedTableColumnMenus = {
             { icon: Icons.recordPage, label: I18n.t('adv_col_menu.type_record_note'), onClick: () => AdvancedTable.addColumn(tableId, 'record_note') },
             { icon: Icons.play, label: I18n.t('adv_col_menu.type_button'), onClick: () => AdvancedTable.addColumn(tableId, 'button') },
             { type: 'divider' },
+            { icon: '<span style="font-family:monospace; font-weight:bold; font-size:0.85rem;">@</span>', label: I18n.t('adv_col_menu.type_autoincrement') || "ID Auto-Incrementale", onClick: () => AdvancedTable.addColumn(tableId, 'autoincrement') },
             { icon: Icons.time, label: I18n.t('adv_col_menu.type_created_time'), onClick: () => AdvancedTable.addColumn(tableId, 'created_time') },
             { icon: Icons.time, label: I18n.t('adv_col_menu.type_last_edited_time'), onClick: () => AdvancedTable.addColumn(tableId, 'last_edited_time') }
         ];
@@ -414,6 +458,16 @@ const AdvancedTableColumnMenus = {
             },
             { type: 'divider' }
         ];
+
+        // CONFIGURAZIONE SPECIFICA PER ID AUTO-INCREMENTALE
+        if (col.type === 'autoincrement') {
+            menuItems.push({
+                icon: Icons.settings,
+                label: "Configura Prefisso / Cifre...",
+                onClick: () => AdvancedTableColumnMenus.configureAutoIncrement(realTableId, colId)
+            });
+            menuItems.push({ type: 'divider' });
+        }
 
         if (col.type === 'date' || col.type === 'datetime') {
             menuItems.push({ icon: Icons.time, label: I18n.t('adv_col_menu.end_date') + (col.hasEndDate ? chk : ''), onClick: () => AdvancedTableColumnMenus.toggleEndDate(realTableId, colId) });
@@ -497,6 +551,7 @@ const AdvancedTableColumnMenus = {
                         { icon: Icons.recordPage, label: I18n.t('adv_col_menu.type_record_note') + chkType('record_note'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'record_note') },
                         { icon: Icons.play, label: I18n.t('adv_col_menu.type_button') + chkType('button'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'button') },
                         { type: 'divider' },
+                        { icon: '<span style="font-family:monospace; font-weight:bold; font-size:0.85rem;">@</span>', label: (I18n.t('adv_col_menu.type_autoincrement') || "ID Auto-Incrementale") + chkType('autoincrement'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'autoincrement') },
                         { icon: Icons.time, label: I18n.t('adv_col_menu.type_created_time') + chkType('created_time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'created_time') },
                         { icon: Icons.time, label: I18n.t('adv_col_menu.type_last_edited_time') + chkType('last_edited_time'), onClick: () => AdvancedTableColumnMenus.changeColType(realTableId, colId, 'last_edited_time') }
                     ]
@@ -934,6 +989,10 @@ const AdvancedTableColumnMenus = {
                     hasDataLoss = true;
                 }
             }
+            else if (newType === 'autoincrement') {
+                // Assegneremo sequenzialmente dopo
+                newVal = '';
+            }
             else if (isNullOrEmpty) {
                 newVal = newType === 'checkbox' ? false : (newType === 'multi-select' ? [] : '');
             }
@@ -1042,6 +1101,16 @@ const AdvancedTableColumnMenus = {
         if (recordNoteIdsToDelete.length > 0 && typeof UI !== 'undefined' && UI.Trash) {
             recordNoteIdsToDelete.forEach(noteId => {
                 UI.Trash.forceHardDeleteRecursive(noteId);
+            });
+        }
+
+        // Se convertito in autoincrement, reimposta il counter e backfill
+        if (newType === 'autoincrement') {
+            col.prefix = '@';
+            col.digits = 0;
+            state.autoIncrementCounter = 1;
+            state.rows.forEach(r => {
+                pendingRowValues.set(r.id, AdvancedTable.generateAutoIncrementValue(col, state));
             });
         }
 

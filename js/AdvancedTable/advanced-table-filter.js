@@ -1,17 +1,18 @@
 /**
  * AdvancedTableFilter.js
  * Modulo Filtri Avanzato con Autocompletamento e Gestione Filtri Salvati.
- * FIX CHECKBOX SUGGESTIONS: Normalizzati i suggerimenti per i campi checkbox (Sì / No)
- * evitando simboli o stringhe descrittive composite che bloccavano il match esatto.
+ * FIX CHECKBOX SUGGESTIONS: Normalizzati i suggerimenti per i campi checkbox con icona chiara e valore associato
+ * per guidare l'utente anche in assenza della dicitura testuale nella cella.
  * FIX PIVOT MAX/MIN DATE: Risolto bug per cui le date venivano scambiate per numeri da parseFloat.
  * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano coerentemente anche nei filtri live:
  * - Numeri: confronto matematico.
- * - Testo/Select: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto alfabetico naturale su '<, >, <=, >='.
+ * - Testo/Select/ID: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto naturale su '<, >, <=, >='.
  * FIX AUTOCOMPLETE DATES: Allineamento parsing delle date con estrazione sicura di intervalli {start, end}
  * e timestamp di sistema in buildFilteredRows; rimozione automatica di stringhe "Invalid Date" dai suggerimenti unici.
  * FEAT DATE RANGE FILTERING: buildFilteredRows allineato all'algebra degli intervalli di advanced-table-data.js.
  * FEAT RIGHT-ALIGNED EXPANDABLE AUTOCOMPLETE: Ancoraggio al bordo destro dell'input con espansione fluida verso sinistra (fino a 2x) senza troncamenti forzati.
  * FEAT DYNAMIC TOOLTIP ON OVERFLOW: Tooltip mostrato solo quando il testo della voce è effettivamente troncato (scrollWidth > clientWidth).
+ * FEAT CHECKBOX FILTER PLACEHOLDER: Placeholder esplicito per guidare l'utente nei campi di tipo checkbox.
  */
 
 Object.assign(AdvancedTable, {
@@ -69,13 +70,15 @@ Object.assign(AdvancedTable, {
             
             const clearBtn = val ? `<button class="adv-icon-btn danger" style="position:absolute; right:2px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.clearSingleFilter('${tableId}', '${c.id}')" title="${I18n.t('adv_filter.clear_filter_title')}">${Icons.close}</button>` : '';
 
-            // L'uso di autocomplete="chrome-off", un name casuale e data-lpignore disinnesca l'autofill nativo e di terze parti
+            // Placeholder dedicato e informativo per le colonne checkbox
+            let placeholderText = '...';
+
             return `<div style="display:flex; flex-direction:row; align-items:center; justify-content:space-between; gap: 10px; margin-bottom:5px; position:relative;">
                         <span style="font-size:0.75rem; color:var(--text-secondary); white-space:nowrap; width: 100px; overflow:hidden; text-overflow:ellipsis;" title="${c.name.replace(/"/g, '&quot;')}">${c.name}</span>
                         <div style="flex:1; position:relative; display:flex; align-items:center;">
                             <input type="text" class="adv-menu-input" style="margin:0; padding-right:${val ? '25px' : '5px'};" 
                                    autocomplete="chrome-off" name="prevent_autofill_${c.id}" data-lpignore="true" data-1p-ignore="true" spellcheck="false"
-                                   data-col="${c.id}" value="${safeVal}" placeholder="..." 
+                                   data-col="${c.id}" value="${safeVal}" placeholder="${placeholderText}" 
                                    onkeydown="event.stopPropagation()" 
                                    oninput="AdvancedTable.applyFilter('${tableId}', this)"
                                    onfocus="AdvancedTable.showFilterAutocomplete('${tableId}', this)"
@@ -288,7 +291,7 @@ Object.assign(AdvancedTable, {
         const state = AdvancedTable.getState(tableId);
         const tgtColDef = (state.columns || []).find(c => c.id === targetColId);
 
-        // GESTIONE CHECKBOX: Suggerimenti dedicati puliti senza simboli che corrompono il match
+        // GESTIONE CHECKBOX: Suggerimenti visivi con icona e valore, eliminando ogni disorientamento
         if (tgtColDef && tgtColDef.type === 'checkbox') {
             let popup = document.getElementById('adv-filter-autocomplete-portal');
             if (!popup) {
@@ -312,6 +315,7 @@ Object.assign(AdvancedTable, {
 
             const optYes = I18n.t('adv_filter.cb_checked');
             const optNo = I18n.t('adv_filter.cb_unchecked');
+            
             popup.innerHTML = `
                 <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'Sì')">${optYes}</div>
                 <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'No')">${optNo}</div>

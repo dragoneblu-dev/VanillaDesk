@@ -95,13 +95,26 @@ describe("UI Minimap: Sincronizzazione Documento & Isolamento DOM", () => {
 
         // Imposta una scala discreta controllata (0.1)
         UI.Minimap.scale = 0.1;
-        UI.Minimap.updateViewport();
 
-        // Con scala 0.1:
+        // 1. Caso A: container headless o pre-render con clientHeight = 0 (fallback lineare difensivo)
+        UI.Minimap.updateViewport();
+        // Con scala 0.1 e fallback lineare:
         // viewportHeight = 500 * 0.1 = 50px
         // viewportTop = 400 * 0.1 = 40px
         Assert.strictEqual(viewport.style.height, '50px');
         Assert.strictEqual(viewport.style.top, '40px');
+
+        // 2. Caso B: container reale renderizzato con altezza definita in CSS (calcolo cinematico proporzionale)
+        Object.defineProperty(container, 'clientHeight', { value: 600, configurable: true });
+        UI.Minimap.updateViewport();
+
+        // Con container clientHeight = 600:
+        // sliderHeight = 500 * 0.1 = 50px
+        // maxST = 2000 - 500 = 1500px; scrollPercent = 400 / 1500 = 0.2666...
+        // maxSliderTravel = 600 - 50 = 550px
+        // sliderTop = Math.round(0.2666... * 550) = 147px
+        Assert.strictEqual(viewport.style.height, '50px');
+        Assert.strictEqual(viewport.style.top, '147px');
     });
 
     test("Minimap: Isolamento contro la duplicazione degli attributi NAME di input", () => {

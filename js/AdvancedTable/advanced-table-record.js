@@ -22,6 +22,11 @@
  * (+ i Tag) e raccoglie tutti i campi non compilati nell'accordion ripiegabile in fondo.
  * FEAT SHIFT+ENTER CONVERSION: Shift+Invio su campo monoriga converte al volo in textarea multilinea inserendo \n
  * con disinnesco del blur-race. Ctrl+Invio delegato in modo centralizzato al Drawer globale.
+ * FEAT CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
+ * FEAT AUTOINCREMENT: Visualizzazione non editabile per colonna autoincrement.
+ * FIX LABEL ID PRESERVATION: L'attributo id="drawer-prop-${col.id}" rimane sempre presente sulla label
+ * sia in modalità modifica che in sola lettura, condizionando unicamente gli handler interattivi (onclick e title).
+ * FIX TEXTAREA ATTRIBUTE ORDER: Uniformato l'attributo class="modern-input" in apertura del tag textarea.
  */
 
 Object.assign(AdvancedTable, {
@@ -184,14 +189,20 @@ Object.assign(AdvancedTable, {
         const renderFieldRowHTML = (col, isSecondaryGroup) => {
             const isBacklink = col.type === 'relation_backlink';
             const isSysNoteLink = isSysDB && col.id === 'sys_c_note';
+            const isAutoincrement = col.type === 'autoincrement';
             
             let val = vRow.virtualCells[col.id];
             let displayVal = '';
 
-            const isCellEdit = isEdit && !isBacklink && !isSysNoteLink;
+            const isCellEdit = isEdit && !isBacklink && !isSysNoteLink && !isAutoincrement;
 
+            // GESTIONE CAMPO ID AUTO-INCREMENTALE
+            if (isAutoincrement) {
+                const safeVal = UI.escapeHTML(String(val || ''));
+                displayVal = `<div style="text-align:right; font-family:var(--font-mono, monospace); font-weight:bold; color:var(--text-primary); opacity:0.85;">${safeVal}</div>`;
+            }
             // GESTIONE CAMPO PULSANTE MACRO
-            if (col.type === 'button') {
+            else if (col.type === 'button') {
                 const hasCustomLabel = col.buttonLabel !== undefined && col.buttonLabel !== null;
                 const btnLabel = (hasCustomLabel ? col.buttonLabel : (col.name || '')).replace(/"/g, '&quot;');
                 const btnColor = col.buttonColor || '#2563eb';
@@ -367,7 +378,7 @@ Object.assign(AdvancedTable, {
                         const taId = `rec_ta_${tableId}_${rowId}_${col.id}`;
 
                         displayVal = `
-                            <textarea id="${taId}" class="modern-input" 
+                            <textarea class="modern-input" id="${taId}" 
                                       style="margin:0; width:100%; box-sizing:border-box; min-height:${targetHeight}; text-align:left; resize:vertical;" 
                                       onblur="if(!this._skipBlur) { AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value); }">${safeVal}</textarea>
                         `;
@@ -486,7 +497,8 @@ Object.assign(AdvancedTable, {
                     if (col.type === 'created_time') displayVal = `<div style="text-align:right;">${AdvancedTable.formatTime(row.createdAt)}</div>`;
                     else if (col.type === 'last_edited_time') displayVal = `<div style="text-align:right;">${AdvancedTable.formatTime(row.updatedAt)}</div>`;
                     else if (col.type === 'checkbox') {
-                        displayVal = `<div style="text-align:right; display:flex; justify-content:flex-end;">${val ? `<span style="display:inline-flex; align-items:center; gap:4px; color:var(--accent-color);">${Icons.checkSquare} Sì</span>` : `<span style="display:inline-flex; align-items:center; gap:4px; color:var(--text-secondary);">${Icons.square} No</span>`}</div>`;
+                        // In sola lettura: solo icona verde se spuntato, solo icona grigia se vuoto (senza scritta Sì/No)
+                        displayVal = `<div style="text-align:right; display:flex; justify-content:flex-end;">${val ? `<span style="display:inline-flex; align-items:center; color:var(--accent-color);">${Icons.checkSquare}</span>` : `<span style="display:inline-flex; align-items:center; color:var(--text-secondary);">${Icons.square}</span>`}</div>`;
                     }
                     else if (col.type === 'date' || col.type === 'datetime') {
                         if (col.hasEndDate && val && typeof val === 'object') {
@@ -558,7 +570,7 @@ Object.assign(AdvancedTable, {
             }
 
             const labelId = `drawer-prop-${col.id}`;
-            const clickMenu = isEdit && !isSysNoteLink ? `id="${labelId}" onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
+            const clickMenu = isEdit && !isSysNoteLink ? `onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
             const labelEditableClass = isEdit && !isSysNoteLink ? 'adv-cell-label-editable' : '';
 
             const layoutClass = isLongText ? 'adv-cell-layout adv-cell-layout-long' : 'adv-cell-layout';
@@ -566,7 +578,7 @@ Object.assign(AdvancedTable, {
             return `
                 <div class="${layoutClass}">
                     <div class="adv-cell-label-wrap">
-                        <div class="adv-cell-label ${labelEditableClass}" ${clickMenu}>${col.name} ${commentIcon}</div>
+                        <div id="${labelId}" class="adv-cell-label ${labelEditableClass}" ${clickMenu}>${col.name} ${commentIcon}</div>
                     </div>
                     <div class="adv-cell-value-wrap">${displayVal}</div>
                 </div>
@@ -721,7 +733,6 @@ Object.assign(AdvancedTable, {
             }
 
             const el = document.getElementById(tableId);
-            // il test sul fatto che sia una function serve per poter richiamare la funzione anche quando la si invoca dall'applicazione/estensione Workflow
             if (el && typeof AdvancedTable.renderTable === 'function') {
                 AdvancedTable.renderTable(tableId);
             } else if (isWorkflowStudio && typeof WorkflowApp.onDatabaseModified === 'function') {

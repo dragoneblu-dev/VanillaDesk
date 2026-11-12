@@ -8,6 +8,7 @@
  * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() per isolare le scansioni dei database.
  * FIX LONG TEXT DISCARD SAFETY: Memorizzazione di data-original-value sul textarea e chiusura controllata
  * con conferma di annullamento per evitare la perdita silenziosa di testo su chiusura del cassetto.
+ * FEAT AUTOINCREMENT: Campo autoincrement trattato come valore calcolato e protetto (read-only).
  */
 
 Object.assign(AdvancedTable, {
@@ -334,6 +335,7 @@ Object.assign(AdvancedTable, {
                     
                     if (col.type === 'select' || col.type === 'multi-select' || col.type === 'relation' || col.type === 'relation_backlink') w += 20; 
                     if (col.type === 'record_note' || col.type === 'note_link') w += 25; 
+                    if (col.type === 'autoincrement') w += 10;
                     
                     if (w > maxWidth) maxWidth = w;
                 }
@@ -384,7 +386,7 @@ Object.assign(AdvancedTable, {
         const col = state.columns.find(c => c.id === colId);
         if (!row || !col) return;
 
-        const isComputed = ['formula', 'rollup', 'relation_backlink', 'created_time', 'last_edited_time'].includes(col.type);
+        const isComputed = ['formula', 'rollup', 'relation_backlink', 'created_time', 'last_edited_time', 'autoincrement'].includes(col.type);
 
         let val = '';
         if (isComputed) {

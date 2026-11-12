@@ -21,6 +21,7 @@
  * Calcolo dinamico in tempo reale dei Backlink (relation_backlink) con normalizzazione
  * a sempre-array dei valori sorgente e invalidazione sistematica della cache su mutazioni.
  * PERF INVERTED INDEX O(1): Risoluzione istantanea relazioni e rollup tramite AdvancedTable.getRow().
+ * FEAT AUTOINCREMENT: Riconoscimento valore stringa in getFormatDisplayValue.
  */
 
 Object.assign(AdvancedTable, {
@@ -83,7 +84,7 @@ Object.assign(AdvancedTable, {
             return `${parts[2]}/${parts[1]}/${parts[0]}`;
         }
 
-        // 6. Formattazione rapida deterministica DD/MM/YYYY HH:mm (oltre 700x più veloce di Intl su V8)
+        // 6. Formattazione rapida deterministica DD/MM/YYYY HH:mm
         const dd = String(d.getDate()).padStart(2, '0');
         const mm = String(d.getMonth() + 1).padStart(2, '0');
         const yyyy = d.getFullYear();
@@ -177,6 +178,10 @@ Object.assign(AdvancedTable, {
     getFormatDisplayValue: (colDef, rawValue, renderCache = {}) => {
         if (!colDef) return String(rawValue || '');
         if (rawValue === undefined || rawValue === null || rawValue === '') return '';
+
+        if (colDef.type === 'autoincrement') {
+            return String(rawValue);
+        }
 
         if (colDef.type === 'record_note') {
             const note = typeof Store !== 'undefined' ? Store.getNote(rawValue) : null;
@@ -657,9 +662,7 @@ Object.assign(AdvancedTable, {
                 }
             });
 
-            // =========================================================
-            // ORDINAMENTO TOPOLOGICO FORMULE (Risoluzione Loop & Dipendenze)
-            // =========================================================
+            // ORDINAMENTO TOPOLOGICO FORMULE
             const formulaCols = (state.columns || []).filter(c => c.type === 'formula');
             if (formulaCols.length > 0) {
                 const resolved = new Set();
