@@ -5,7 +5,7 @@
  * Include:
  * - Parsing e normalizzazione intervalli di date (_parseDateStringToMs, _extractIntervalFromValue).
  * - Motore centrale di ordinamento multi-colonna (sortRows).
- * - Motore centrale di filtraggio dati con ricerca rapida universale (filterRows).
+ * - Motore centrale di filtraggio dati con ricerca rapida universale (filterRows) e supporto a termini multipli in AND separati da ';'.
  */
 
 Object.assign(AdvancedTable, {
@@ -147,45 +147,55 @@ Object.assign(AdvancedTable, {
     },
 
     // ==========================================
-    // MOTORE CENTRALE FILTRAGGIO DATI (CON RICERCA RAPIDA OR)
+    // MOTORE CENTRALE FILTRAGGIO DATI (CON RICERCA RAPIDA AND)
     // ==========================================
     filterRows: (viewRows, state, isPivotContext = false, sourceStateForPivot = null) => {
         if (!state) return viewRows;
 
         let filtered = [...viewRows];
 
-        // 1. RICERCA RAPIDA UNIVERSALE (FULL-TEXT IN OR SU TUTTI I CAMPI)
+        // 1. RICERCA RAPIDA UNIVERSALE (FULL-TEXT IN AND A LIVELLO DI RIGA SU TUTTI I CAMPI, CON SUPPORTO A ';')
         if (state.quickSearch && state.quickSearch.trim() !== '') {
-            const q = state.quickSearch.trim().toLowerCase();
+            const quickTerms = state.quickSearch
+                .split(';')
+                .map(t => t.trim().toLowerCase())
+                .filter(t => t);
 
-            filtered = filtered.filter(r => {
-                return (state.columns || []).some(colDef => {
-                    let cellVal = r.virtualCells ? r.virtualCells[colDef.id] : undefined;
-                    if (cellVal === undefined && r.cells) cellVal = r.cells[colDef.id];
-                    if (cellVal === undefined || cellVal === null || cellVal === '') return false;
+            if (quickTerms.length > 0) {
+                filtered = filtered.filter(r => {
+                    const rowColumnTexts = [];
+                    (state.columns || []).forEach(colDef => {
+                        let cellVal = r.virtualCells ? r.virtualCells[colDef.id] : undefined;
+                        if (cellVal === undefined && r.cells) cellVal = r.cells[colDef.id];
+                        if (cellVal === undefined || cellVal === null || cellVal === '') return;
 
-                    let displayStr = '';
+                        let displayStr = '';
 
-                    if (isPivotContext) {
-                        displayStr = String(cellVal || '');
-                    } else {
-                        displayStr = AdvancedTable.getFormatDisplayValue(colDef, cellVal);
-                        
-                        if (colDef.type === 'checkbox') {
-                            if (cellVal === true) displayStr += ' completato true checked sì si yes';
-                            if (cellVal === false) displayStr += ' falso false unchecked no';
-                        }
-                        if (colDef.type === 'record_note' && cellVal) {
-                            const linkedNote = typeof Store !== 'undefined' ? Store.getNote(cellVal) : null;
-                            if (linkedNote && typeof UI !== 'undefined' && UI.extractSearchableText) {
-                                displayStr += " " + UI.extractSearchableText(linkedNote.content);
+                        if (isPivotContext) {
+                            displayStr = String(cellVal || '');
+                        } else {
+                            displayStr = AdvancedTable.getFormatDisplayValue(colDef, cellVal);
+                            
+                            if (colDef.type === 'checkbox') {
+                                if (cellVal === true) displayStr += ' completato true checked sì si yes';
+                                if (cellVal === false) displayStr += ' falso false unchecked no';
+                            }
+                            if (colDef.type === 'record_note' && cellVal) {
+                                const linkedNote = typeof Store !== 'undefined' ? Store.getNote(cellVal) : null;
+                                if (linkedNote && typeof UI !== 'undefined' && UI.extractSearchableText) {
+                                    displayStr += " " + UI.extractSearchableText(linkedNote.content);
+                                }
                             }
                         }
-                    }
 
-                    return String(displayStr || '').toLowerCase().includes(q);
+                        const lowerDisplay = String(displayStr || '').toLowerCase();
+                        if (lowerDisplay) rowColumnTexts.push(lowerDisplay);
+                    });
+
+                    // Ogni termine separato da ';' deve comparire in almeno una colonna della riga
+                    return quickTerms.every(term => rowColumnTexts.some(txt => txt.includes(term)));
                 });
-            });
+            }
         }
 
         // 2. FILTRI SPECIFICI PER COLONNA (IN AND)

@@ -326,7 +326,7 @@ Object.assign(AdvancedTable, {
                                     <div class="adv-url-ro-text" style="${clampStyle}; ${pointerEvent}">
                                         <a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline;">${val}</a>
                                     </div>
-                                    <button class="adv-icon-btn" style="${pointerEvent} padding:2px;" onclick="navigator.clipboard.writeText('${val.replace(/\\/g, '\\\\')}'); alert('${I18n.t('adv_record.copy_path_alert')}')" title="${I18n.t('adv_cell.copy_local_path')}">${Icons.clipboard}</button>
+                                    <button class="adv-icon-btn" style="${pointerEvent} padding:2px;" onclick="event.stopPropagation(); navigator.clipboard.writeText('${val.replace(/\\/g, '\\\\')}'); if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('${I18n.t('adv_record.copy_path_alert')}', 'success');" title="${I18n.t('adv_cell.copy_local_path')}">${Icons.clipboard}</button>
                                 </div>`;
                     } else {
                         if (!/^[a-zA-Z0-9+-.]+:/i.test(href)) href = 'https://' + href;

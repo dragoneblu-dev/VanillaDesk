@@ -8,7 +8,7 @@
     --text-secondary: #566172;
     --accent-color: #4f8b00; /*2563eb;*/
     --accent-color-tx: #FFFFFF;
-    --accent-hover: #1d4ed8;
+    --accent-hover: #19bc3f;
     --border-color: #e5e7eb;
     --item-hover: #edf3d0; /*f9fafb;*/
     --item-active: #f4fbcf; /*eff6ff;*/
@@ -77,6 +77,7 @@
     --text-primary: #000000;
     --text-secondary: #6b7280;
     --accent-color: #2563eb;
+    --accent-hover: #1d4ed8;
     --border-color: #e5e7eb;
     --item-hover: #f3f4f6;
     --item-active: #eff6ff;
@@ -208,7 +209,7 @@
 
 [data-theme="pastel"] {
     --bg-color: #F8FAF9;
-    --sidebar-bg: #EDF2F0;
+    --sidebar-bg: #EDF1F0;
     --box-bg: #00000006;
     --editor-bg: #F8FAF9;
     --text-primary: #101010;

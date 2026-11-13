@@ -34,6 +34,7 @@ common: {
     session_recovered: "Sessione Ripristinata (Senza Workspace)"
 },
 menu: {
+    default_font: "Carattere Predefinito",
     import: "Importa...",
     import_obsidian: "Importa Vault Obsidian...",
     configure: "Personalizza",
@@ -314,6 +315,74 @@ tree_db: {
     buttons_label: "Pulsanti",
     view_fallback: "Vista",
     button_bar: "Barra Pulsanti"
+},
+adv_data: {
+    date_end_before_start_alert: "⚠️ ATTENZIONE:\nLa Data di Fine non può essere antecedente alla Data di Inizio.\n\nIl valore è stato reimpostato automaticamente per coincidere con la data di Inizio.",
+    dedicated_record_title: "Record Dedicato",
+    confirm_delete_record: "Sei sicuro di voler eliminare definitivamente questo record dal database? L'operazione non può essere annullata.",
+    record_duplicated_toast: "Record duplicato con successo.",
+    default_new_column: "Nuova Colonna",
+    default_button_run: "Esegui",
+    table_reloaded_toast: "Tabella e dati ricaricati con successo.",
+    rows_per_page_title: "Righe per pagina",
+    rows_per_page_10: "10 righe per pagina",
+    rows_per_page_25: "25 righe per pagina (Default)",
+    rows_per_page_50: "50 righe per pagina",
+    rows_per_page_100: "100 righe per pagina",
+    rows_per_page_200: "200 righe per pagina (Max)"
+},
+adv_auto_core: {
+    toast_executed: "Automazione eseguita",
+    err_cond_page_col_deleted: "Condizione {num}: Colonna Pagina eliminata",
+    err_cond_prop_deleted: "Condizione {num}: Proprietà della Nota collegata eliminata dal sistema",
+    err_cond_col_deleted: "Condizione {num}: Colonna eliminata",
+    err_cond_no_end_date: "Condizione {num}: '{name}' non ha più la Data di Fine",
+    err_cond_requires_range: "Condizione {num}: '{name}' ora richiede un operatore Range",
+    err_act_page_col_deleted: "Azione {num}: Colonna Pagina destinazione eliminata",
+    err_act_prop_deleted: "Azione {num}: Proprietà della Nota collegata eliminata dal sistema",
+    err_act_col_deleted: "Azione {num}: Colonna destinazione eliminata",
+    err_act_no_end_date: "Azione {num}: '{name}' non ha più la Data di Fine",
+    alert_action_required: "Devi impostare almeno un'azione valida con una colonna di destinazione.",
+    alert_empty_triggers: "Rimuovi i trigger vuoti o seleziona una colonna/evento.",
+    default_trigger_name: "Modifica",
+    default_action_name: "Azione",
+    trigger_timer: "Orologio scatta",
+    label_page: "Pagina",
+    label_property: "Proprietà",
+    label_system: "Sistema",
+    generated_name: "Se [{trigger}] allora imposta [{action}]",
+    alert_invalid_automation: "L'automazione non è valida e non può essere eseguita.",
+    confirm_run_massive: "Sei sicuro di voler forzare l'esecuzione di \"{name}\" su TUTTE le {count} righe del database?\n\nI filtri della vista attuale verranno ignorati. L'operazione non è facilmente annullabile.",
+    alert_massive_completed: "✅ Esecuzione completata.\nSono state modificate {updated} righe su {total}.",
+    alert_massive_error: "Errore durante l'esecuzione massiva.",
+    default_record_title: "Record da Automazione"
+},
+adv_core: {
+    //sys_properties_title: "Proprietà e Tag di Pagina",
+    sys_c_note_name: "Pagina Collegata",
+    sys_c_tags_name: "Tag",
+    parent_system_global: "Sistema Globale",
+    parent_workspace: "Workspace",
+    parent_orphan: "Orfano",
+    corrupt_data_title: "⚠️ Dati Corrotti",
+    corrupt_data_col: "Errore",
+    corrupt_data_msg: "Contenuto illeggibile.",
+    alert_widget_nesting_barrier: "Non è permesso inserire Widget Complessi all'interno delle Colonne o delle Tabelle Semplici per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.",
+    default_new_database: "Nuovo Database",
+    default_col_name: "Nome",
+    default_item_1: "Elemento 1"
+},
+adv_pivot: {
+    title_prefix: "Analisi: ",
+    default_group_prefix: "Gruppo {num}",
+    default_metric: "Metrica",
+    empty_group_label: "(Vuoto)",
+    source_deleted_msg: "Il Database originale di questa Tabella Pivot è stato eliminato.",
+    chart_label: "Grafico",
+    chart_tooltip: "Configura Grafico",
+    sort_pivot_title: "Ordina Tabella Pivot",
+    filter_pivot_title: "Filtra Tabella Pivot",
+    no_results_filtered: "Nessun risultato per i filtri attuali."
 },
 sidebar_filter: {
     resizer_title: "Trascina per ridimensionare la barra laterale",
@@ -662,7 +731,7 @@ adv_filter: {
 },
 adv_search: {
     title: "Cerca in tutti i campi...",
-    placeholder: "Cerca in tutti i campi (testo, tag, date, pagine)...",
+    placeholder: "Cerca in tutti i campi (usa ; per combinare più criteri in AND)...",
     clear: "Azzera ricerca"
 },
 adv_col_menu: {
@@ -913,6 +982,12 @@ table_ui: {
     col_delete: "Elimina Colonna"
 },
 adv_actions: {
+    rel_no_secondary_detail: "-- Nessun Dettaglio --",
+    quick_peek_new_badge: "Nuovo",
+    quick_create_enter_hint: "Invio ↵",
+    rel_type_relation: "Relazione",
+    rel_type_backlink: "Backlink",
+    rollup_incoming_option: "➔ Da [{dbTitle}] campo '{colName}' (in: {parentName})",
     quick_peek_save_toast: "Modifiche salvate con successo.",
     quick_peek_cancel_toast: "Modifiche annullate.",
     rel_single_record_hint: "Vincolo: 1 solo record associabile",
@@ -1262,7 +1337,29 @@ adv_cond_colors: {
     btn_new_rule: "Nuova Regola di Colore",
     btn_save_rules: "Salva Regole",
     confirm_delete_rule: "Rimuovere questa regola visiva?",
-    alert_empty_rules: "Rimuovi le regole vuote prima di salvare."
+    alert_empty_rules: "Rimuovi le regole vuote prima di salvare.",
+    write_or_choose_placeholder: "Scrivi o scegli...",
+    days_offset_title: "Giorni (+/-)",
+    formula_val_placeholder: "Valore (=Formula JS)",
+    badge_cell: "[Cella: {name}]",
+    badge_row: "[Riga]"
+},
+adv_auto_ui: {
+    default_auto_name: "Automazione {num}",
+    col_title_suffix: ": Titolo",
+    col_content_suffix: ": Corpo Testo",
+    every_change_hint: "L'automazione scatterà ad <b>ogni singola modifica</b> della riga.",
+    write_or_choose_placeholder: "Scrivi o scegli...",
+    days_offset_label: "( +/- Giorni )",
+    days_offset_title: "Aggiungi o sottrai giorni",
+    value_placeholder: "Valore...",
+    col_note_title_suffix: "{name}: Titolo Nota",
+    sys_action_execute: "⚙️ Esegui..."
+},
+adv_context: {
+    unnamed: "Senza Nome",
+    orphan_page: "Pagina Orfana",
+    circular_ref_warning: "⚠️ Riferimento Circolare"
 },
 adv_csv: {
     export_error: "Errore tecnico durante l'esportazione della tabella.",
@@ -1838,6 +1935,7 @@ common: {
     session_recovered: "Recovered Session (No Workspace)"
 },
 menu: {
+    default_font: "Default Font",
     import: "Import...",
     import_obsidian: "Import Obsidian Vault...",
     configure: "Customize",
@@ -2115,6 +2213,74 @@ tree_db: {
     buttons_label: "Buttons",
     view_fallback: "View",
     button_bar: "Button Bar"
+},
+adv_data: {
+    date_end_before_start_alert: "⚠️ WARNING:\nThe End Date cannot precede the Start Date.\n\nThe value has been automatically reset to match the Start Date.",
+    dedicated_record_title: "Dedicated Record",
+    confirm_delete_record: "Are you sure you want to permanently delete this record from the database? This operation cannot be undone.",
+    record_duplicated_toast: "Record duplicated successfully.",
+    default_new_column: "New Column",
+    default_button_run: "Run",
+    table_reloaded_toast: "Table and data reloaded successfully.",
+    rows_per_page_title: "Rows per page",
+    rows_per_page_10: "10 rows per page",
+    rows_per_page_25: "25 rows per page (Default)",
+    rows_per_page_50: "50 rows per page",
+    rows_per_page_100: "100 rows per page",
+    rows_per_page_200: "200 rows per page (Max)"
+},
+adv_auto_core: {
+    toast_executed: "Automation executed",
+    err_cond_page_col_deleted: "Condition {num}: Page column deleted",
+    err_cond_prop_deleted: "Condition {num}: Linked note property deleted from system",
+    err_cond_col_deleted: "Condition {num}: Column deleted",
+    err_cond_no_end_date: "Condition {num}: '{name}' no longer has an End Date",
+    err_cond_requires_range: "Condition {num}: '{name}' now requires a Range operator",
+    err_act_page_col_deleted: "Action {num}: Target page column deleted",
+    err_act_prop_deleted: "Action {num}: Linked note property deleted from system",
+    err_act_col_deleted: "Action {num}: Target column deleted",
+    err_act_no_end_date: "Action {num}: '{name}' no longer has an End Date",
+    alert_action_required: "You must set at least one valid action with a destination column.",
+    alert_empty_triggers: "Remove empty triggers or select a column/event.",
+    default_trigger_name: "Edit",
+    default_action_name: "Action",
+    trigger_timer: "Clock fires",
+    label_page: "Page",
+    label_property: "Property",
+    label_system: "System",
+    generated_name: "If [{trigger}] then set [{action}]",
+    alert_invalid_automation: "The automation is invalid and cannot be executed.",
+    confirm_run_massive: "Are you sure you want to force the execution of \"{name}\" on ALL {count} rows in the database?\n\nCurrent view filters will be ignored. This operation cannot be easily undone.",
+    alert_massive_completed: "✅ Execution completed.\n{updated} of {total} rows were modified.",
+    alert_massive_error: "Error during batch execution.",
+    default_record_title: "Automation Record"
+},
+adv_core: {
+    //sys_properties_title: "Page Properties & Tags",
+    sys_c_note_name: "Linked Page",
+    sys_c_tags_name: "Tags",
+    parent_system_global: "Global System",
+    parent_workspace: "Workspace",
+    parent_orphan: "Orphan",
+    corrupt_data_title: "⚠️ Corrupted Data",
+    corrupt_data_col: "Error",
+    corrupt_data_msg: "Unreadable content.",
+    alert_widget_nesting_barrier: "Inserting Complex Widgets inside Columns or Simple Tables is not allowed to prevent layout corruption.\nMove the cursor outside before inserting.",
+    default_new_database: "New Database",
+    default_col_name: "Name",
+    default_item_1: "Item 1"
+},
+adv_pivot: {
+    title_prefix: "Analysis: ",
+    default_group_prefix: "Group {num}",
+    default_metric: "Metric",
+    empty_group_label: "(Empty)",
+    source_deleted_msg: "The original Database for this Pivot Table has been deleted.",
+    chart_label: "Chart",
+    chart_tooltip: "Configure Chart",
+    sort_pivot_title: "Sort Pivot Table",
+    filter_pivot_title: "Filter Pivot Table",
+    no_results_filtered: "No results for current filters."
 },
 sidebar_filter: {
     resizer_title: "Drag to resize sidebar",
@@ -2463,7 +2629,7 @@ adv_filter: {
 },
 adv_search: {
     title: "Search in all fields...",
-    placeholder: "Search in all fields (text, tags, dates, pages)...",
+    placeholder: "Search all fields (use ; to combine multiple criteria with AND)...",
     clear: "Clear search"
 },
 adv_col_menu: {
@@ -2714,6 +2880,12 @@ table_ui: {
     col_delete: "Delete Column"
 },
 adv_actions: {
+    rel_no_secondary_detail: "-- No Detail --",
+    quick_peek_new_badge: "New",
+    quick_create_enter_hint: "Enter ↵",
+    rel_type_relation: "Relation",
+    rel_type_backlink: "Backlink",
+    rollup_incoming_option: "➔ From [{dbTitle}] field '{colName}' (in: {parentName})",
     quick_peek_save_toast: "Changes saved successfully.",
     quick_peek_cancel_toast: "Changes cancelled.",
     rel_single_record_hint: "Constraint: 1 record only",
@@ -3063,7 +3235,29 @@ adv_cond_colors: {
     btn_new_rule: "New Color Rule",
     btn_save_rules: "Save Rules",
     confirm_delete_rule: "Remove this visual rule?",
-    alert_empty_rules: "Please remove empty rules before saving."
+    alert_empty_rules: "Please remove empty rules before saving.",
+    write_or_choose_placeholder: "Type or choose...",
+    days_offset_title: "Days (+/-)",
+    formula_val_placeholder: "Value (=JS Formula)",
+    badge_cell: "[Cell: {name}]",
+    badge_row: "[Row]"
+},
+adv_auto_ui: {
+    default_auto_name: "Automation {num}",
+    col_title_suffix: ": Title",
+    col_content_suffix: ": Body Text",
+    every_change_hint: "The automation will trigger on <b>every single change</b> to the row.",
+    write_or_choose_placeholder: "Type or choose...",
+    days_offset_label: "( +/- Days )",
+    days_offset_title: "Add or subtract days",
+    value_placeholder: "Value...",
+    col_note_title_suffix: "{name}: Note Title",
+    sys_action_execute: "⚙️ Execute..."
+},
+adv_context: {
+    unnamed: "Unnamed",
+    orphan_page: "Orphan Page",
+    circular_ref_warning: "⚠️ Circular Reference"
 },
 adv_csv: {
     export_error: "Technical error during table export.",
@@ -3637,6 +3831,7 @@ common: {
     session_recovered: "Sesión Recuperada (Sin Espacio)"
 },
 menu: {
+    default_font: "Fuente Predeterminada",
     import: "Importar...",
     import_obsidian: "Importar Vault de Obsidian...",
     configure: "Personalizar",
@@ -3914,6 +4109,74 @@ tree_db: {
     buttons_label: "Botones",
     view_fallback: "Vista",
     button_bar: "Barra de botones"
+},
+adv_data: {
+    date_end_before_start_alert: "⚠️ ATENCIÓN:\nLa Fecha de Fin no puede ser anterior a la Fecha de Inicio.\n\nEl valor se ha restablecido automáticamente para coincidir con la Fecha de Inicio.",
+    dedicated_record_title: "Registro Dedicado",
+    confirm_delete_record: "¿Estás seguro de que deseas eliminar permanentemente este registro de la base de datos? La operación no se puede deshacer.",
+    record_duplicated_toast: "Registro duplicado con éxito.",
+    default_new_column: "Nueva Columna",
+    default_button_run: "Ejecutar",
+    table_reloaded_toast: "Tabla y datos recargados con éxito.",
+    rows_per_page_title: "Filas por página",
+    rows_per_page_10: "10 filas por página",
+    rows_per_page_25: "25 filas por página (Predeterminado)",
+    rows_per_page_50: "50 filas por página",
+    rows_per_page_100: "100 filas por página",
+    rows_per_page_200: "200 filas por página (Máx)"
+},
+adv_auto_core: {
+    toast_executed: "Automatización ejecutada",
+    err_cond_page_col_deleted: "Condición {num}: Columna de página eliminada",
+    err_cond_prop_deleted: "Condición {num}: Propiedad de la nota vinculada eliminada del sistema",
+    err_cond_col_deleted: "Condición {num}: Columna eliminada",
+    err_cond_no_end_date: "Condición {num}: '{name}' ya no tiene Fecha de Fin",
+    err_cond_requires_range: "Condición {num}: '{name}' ahora requiere un operador de rango",
+    err_act_page_col_deleted: "Acción {num}: Columna de página de destino eliminada",
+    err_act_prop_deleted: "Acción {num}: Propiedad de la nota vinculada eliminada del sistema",
+    err_act_col_deleted: "Acción {num}: Columna de destino eliminada",
+    err_act_no_end_date: "Acción {num}: '{name}' ya no tiene Fecha de Fin",
+    alert_action_required: "Debes configurar al menos una acción válida con una columna de destino.",
+    alert_empty_triggers: "Elimina los desencadenadores vacíos o selecciona una columna/evento.",
+    default_trigger_name: "Modificación",
+    default_action_name: "Acción",
+    trigger_timer: "Reloj activado",
+    label_page: "Página",
+    label_property: "Propiedad",
+    label_system: "Sistema",
+    generated_name: "Si [{trigger}] entonces establecer [{action}]",
+    alert_invalid_automation: "La automatización no es válida y no se puede ejecutar.",
+    confirm_run_massive: "¿Estás seguro de que deseas forzar la ejecución de \"{name}\" en TODAS las {count} filas de la base de datos?\n\nLos filtros de la vista actual se ignorarán. Esta operación no se puede deshacer fácilmente.",
+    alert_massive_completed: "✅ Ejecución completada.\nSe modificaron {updated} de {total} filas.",
+    alert_massive_error: "Error durante la ejecución masiva.",
+    default_record_title: "Registro de Automatización"
+},
+adv_core: {
+    //sys_properties_title: "Propiedades y Etiquetas de Página",
+    sys_c_note_name: "Página Vinculada",
+    sys_c_tags_name: "Etiquetas",
+    parent_system_global: "Sistema Global",
+    parent_workspace: "Espacio de trabajo",
+    parent_orphan: "Huérfano",
+    corrupt_data_title: "⚠️ Datos Dañados",
+    corrupt_data_col: "Error",
+    corrupt_data_msg: "Contenido ilegible.",
+    alert_widget_nesting_barrier: "No está permitido insertar Widgets Complejos dentro de Columnas o Tablas Simples para evitar la corrupción del diseño.\nMueve el cursor afuera antes de insertar.",
+    default_new_database: "Nueva Base de Datos",
+    default_col_name: "Nombre",
+    default_item_1: "Elemento 1"
+},
+adv_pivot: {
+    title_prefix: "Análisis: ",
+    default_group_prefix: "Grupo {num}",
+    default_metric: "Métrica",
+    empty_group_label: "(Vacío)",
+    source_deleted_msg: "La base de datos original de esta Tabla Dinámica ha sido eliminada.",
+    chart_label: "Gráfico",
+    chart_tooltip: "Configurar Gráfico",
+    sort_pivot_title: "Ordenar Tabla Dinámica",
+    filter_pivot_title: "Filtrar Tabla Dinámica",
+    no_results_filtered: "No hay resultados para los filtros actuales."
 },
 sidebar_filter: {
     resizer_title: "Arrastra para redimensionar la barra lateral",
@@ -4262,7 +4525,7 @@ adv_filter: {
 },
 adv_search: {
     title: "Buscar en todos los campos...",
-    placeholder: "Buscar en todos los campos (texto, etiquetas, fechas, páginas)...",
+    placeholder: "Buscar en todos los campos (usa ; para combinar varios criterios con AND)...",
     clear: "Borrar búsqueda"
 },
 adv_col_menu: {
@@ -4513,6 +4776,12 @@ table_ui: {
     col_delete: "Eliminar Columna"
 },
 adv_actions: {
+    rel_no_secondary_detail: "-- Sin Detalle --",
+    quick_peek_new_badge: "Nuevo",
+    quick_create_enter_hint: "Intro ↵",
+    rel_type_relation: "Relación",
+    rel_type_backlink: "Backlink",
+    rollup_incoming_option: "➔ Desde [{dbTitle}] campo '{colName}' (en: {parentName})",
     quick_peek_save_toast: "Cambios guardados con éxito.",
     quick_peek_cancel_toast: "Cambios cancelados.",
     rel_single_record_hint: "Restricción: 1 solo registro asociable",
@@ -4862,7 +5131,29 @@ adv_cond_colors: {
     btn_new_rule: "Nueva Regla de Color",
     btn_save_rules: "Guardar Reglas",
     confirm_delete_rule: "¿Eliminar esta regla visual?",
-    alert_empty_rules: "Elimina las reglas vacías antes de guardar."
+    alert_empty_rules: "Elimina las reglas vacías antes de guardar.",
+    write_or_choose_placeholder: "Escribe o elige...",
+    days_offset_title: "Días (+/-)",
+    formula_val_placeholder: "Valor (=Fórmula JS)",
+    badge_cell: "[Celda: {name}]",
+    badge_row: "[Fila]"
+},
+adv_auto_ui: {
+    default_auto_name: "Automatización {num}",
+    col_title_suffix: ": Título",
+    col_content_suffix: ": Cuerpo del texto",
+    every_change_hint: "La automatización se activará en <b>cada cambio individual</b> de la fila.",
+    write_or_choose_placeholder: "Escribe o elige...",
+    days_offset_label: "( +/- Días )",
+    days_offset_title: "Añadir o restar días",
+    value_placeholder: "Valor...",
+    col_note_title_suffix: "{name}: Título de la nota",
+    sys_action_execute: "⚙️ Ejecutar..."
+},
+adv_context: {
+    unnamed: "Sin Nombre",
+    orphan_page: "Página Huérfana",
+    circular_ref_warning: "⚠️ Referencia Circular"
 },
 adv_csv: {
     export_error: "Error técnico durante la exportación de la tabla.",
@@ -5436,6 +5727,7 @@ common: {
     session_recovered: "Wiederhergestellte Sitzung (Ohne Arbeitsbereich)"
 },
 menu: {
+    default_font: "Standardschriftart",
     import: "Importieren...",
     import_obsidian: "Obsidian-Vault importieren...",
     configure: "Anpassen",
@@ -5713,6 +6005,74 @@ tree_db: {
     buttons_label: "Schaltflächen",
     view_fallback: "Ansicht",
     button_bar: "Schaltflächenleiste"
+},
+adv_data: {
+    date_end_before_start_alert: "⚠️ ACHTUNG:\nDas Enddatum darf nicht vor dem Startdatum liegen.\n\nDer Wert wurde automatisch auf das Startdatum zurückgesetzt.",
+    dedicated_record_title: "Zugeordneter Datensatz",
+    confirm_delete_record: "Möchten Sie diesen Datensatz wirklich dauerhaft aus der Datenbank löschen? Dieser Vorgang kann nicht rückgängig gemacht werden.",
+    record_duplicated_toast: "Datensatz erfolgreich dupliziert.",
+    default_new_column: "Neue Spalte",
+    default_button_run: "Ausführen",
+    table_reloaded_toast: "Tabelle und Daten erfolgreich neu geladen.",
+    rows_per_page_title: "Zeilen pro Seite",
+    rows_per_page_10: "10 Zeilen pro Seite",
+    rows_per_page_25: "25 Zeilen pro Seite (Standard)",
+    rows_per_page_50: "50 Zeilen pro Seite",
+    rows_per_page_100: "100 Zeilen pro Seite",
+    rows_per_page_200: "200 Zeilen pro Seite (Max)"
+},
+adv_auto_core: {
+    toast_executed: "Automatisierung ausgeführt",
+    err_cond_page_col_deleted: "Bedingung {num}: Seitenspalte gelöscht",
+    err_cond_prop_deleted: "Bedingung {num}: Eigenschaft der verknüpften Notiz aus dem System gelöscht",
+    err_cond_col_deleted: "Bedingung {num}: Spalte gelöscht",
+    err_cond_no_end_date: "Bedingung {num}: '{name}' hat kein Enddatum mehr",
+    err_cond_requires_range: "Bedingung {num}: '{name}' erfordert jetzt einen Bereichs-Operator",
+    err_act_page_col_deleted: "Aktion {num}: Ziel-Seitenspalte gelöscht",
+    err_act_prop_deleted: "Aktion {num}: Eigenschaft der verknüpften Notiz aus dem System gelöscht",
+    err_act_col_deleted: "Aktion {num}: Zielspalte gelöscht",
+    err_act_no_end_date: "Aktion {num}: '{name}' hat kein Enddatum mehr",
+    alert_action_required: "Sie müssen mindestens eine gültige Aktion mit einer Zielspalte festlegen.",
+    alert_empty_triggers: "Entfernen Sie leere Auslöser oder wählen Sie eine Spalte/ein Ereignis.",
+    default_trigger_name: "Bearbeitung",
+    default_action_name: "Aktion",
+    trigger_timer: "Uhr löst aus",
+    label_page: "Seite",
+    label_property: "Eigenschaft",
+    label_system: "System",
+    generated_name: "Wenn [{trigger}] dann setze [{action}]",
+    alert_invalid_automation: "Die Automatisierung ist ungültig und kann nicht ausgeführt werden.",
+    confirm_run_massive: "Möchten Sie die Ausführung von \"{name}\" wirklich für ALLE {count} Zeilen in der Datenbank erzwingen?\n\nFilter der aktuellen Ansicht werden ignoriert. Dieser Vorgang kann nicht einfach rückgängig gemacht werden.",
+    alert_massive_completed: "✅ Ausführung abgeschlossen.\n{updated} von {total} Zeilen wurden geändert.",
+    alert_massive_error: "Fehler bei der Massenausführung.",
+    default_record_title: "Automatisierungsdatensatz"
+},
+adv_core: {
+    //sys_properties_title: "Seiteneigenschaften & Tags",
+    sys_c_note_name: "Verknüpfte Seite",
+    sys_c_tags_name: "Tags",
+    parent_system_global: "Globales System",
+    parent_workspace: "Arbeitsbereich",
+    parent_orphan: "Verwaist",
+    corrupt_data_title: "⚠️ Beschädigte Daten",
+    corrupt_data_col: "Fehler",
+    corrupt_data_msg: "Unlesbarer Inhalt.",
+    alert_widget_nesting_barrier: "Das Einfügen komplexer Widgets in Spalten oder einfache Tabellen ist nicht zulässig, um Layoutbeschädigungen zu verhindern.\nBewegen Sie den Cursor vor dem Einfügen nach draußen.",
+    default_new_database: "Neue Datenbank",
+    default_col_name: "Name",
+    default_item_1: "Element 1"
+},
+adv_pivot: {
+    title_prefix: "Analyse: ",
+    default_group_prefix: "Gruppe {num}",
+    default_metric: "Metrik",
+    empty_group_label: "(Leer)",
+    source_deleted_msg: "Die ursprüngliche Datenbank dieser Pivot-Tabelle wurde gelöscht.",
+    chart_label: "Diagramm",
+    chart_tooltip: "Diagramm konfigurieren",
+    sort_pivot_title: "Pivot-Tabelle sortieren",
+    filter_pivot_title: "Pivot-Tabelle filtern",
+    no_results_filtered: "Keine Ergebnisse für die aktuellen Filter."
 },
 sidebar_filter: {
     resizer_title: "Ziehen zum Ändern der Seitenleistenbreite",
@@ -6061,7 +6421,7 @@ adv_filter: {
 },
 adv_search: {
     title: "In allen Feldern suchen...",
-    placeholder: "In allen Feldern suchen (Text, Tags, Daten, Seiten)...",
+    placeholder: "Alle Felder durchsuchen (nutze ; um mehrere Kriterien mit AND zu verknüpfen)...",
     clear: "Suche zurücksetzen"
 },
 adv_col_menu: {
@@ -6312,6 +6672,12 @@ table_ui: {
     col_delete: "Spalte löschen"
 },
 adv_actions: {
+    rel_no_secondary_detail: "-- Kein Detail --",
+    quick_peek_new_badge: "Neu",
+    quick_create_enter_hint: "Enter ↵",
+    rel_type_relation: "Beziehung",
+    rel_type_backlink: "Backlink",
+    rollup_incoming_option: "➔ Von [{dbTitle}] Feld '{colName}' (in: {parentName})",
     quick_peek_save_toast: "Änderungen erfolgreich gespeichert.",
     quick_peek_cancel_toast: "Änderungen verworfen.",
     rel_single_record_hint: "Einschränkung: Nur 1 Datensatz verknüpfbar",
@@ -6638,6 +7004,23 @@ preferences: {
     path_prefix: "Pfad:",
     reload_prompt_lang: "Um den Sprachwechsel abzuschließen, muss die Seite neu geladen werden (F5).\n\nMöchten Sie die Seite jetzt neu laden?"
 },
+adv_auto_ui: {
+    default_auto_name: "Automatisierung {num}",
+    col_title_suffix: ": Titel",
+    col_content_suffix: ": Textkörper",
+    every_change_hint: "Die Automatisierung wird bei <b>jeder einzelnen Änderung</b> der Zeile ausgelöst.",
+    write_or_choose_placeholder: "Schreiben oder wählen...",
+    days_offset_label: "( +/- Tage )",
+    days_offset_title: "Tage hinzufügen oder abziehen",
+    value_placeholder: "Wert...",
+    col_note_title_suffix: "{name}: Notiztitel",
+    sys_action_execute: "⚙️ Ausführen..."
+},
+adv_context: {
+    unnamed: "Unbenannt",
+    orphan_page: "Verwaiste Seite",
+    circular_ref_warning: "⚠️ Zirkelbezug"
+},
 adv_cond_colors: {
     panel_title: "🎨 Bedingte Farbformatierung",
     panel_desc: "Regeln werden <b>in Echtzeit</b> von oben nach unten ausgewertet. <br>Diese Formatierung ändert nur das Aussehen und <b>überschreibt nicht das Datum der letzten Änderung</b>.",
@@ -6661,7 +7044,12 @@ adv_cond_colors: {
     btn_new_rule: "Neue Farbregel",
     btn_save_rules: "Regeln speichern",
     confirm_delete_rule: "Diese visuelle Regel entfernen?",
-    alert_empty_rules: "Bitte leere Regeln vor dem Speichern entfernen."
+    alert_empty_rules: "Bitte leere Regeln vor dem Speichern entfernen.",
+    write_or_choose_placeholder: "Schreiben oder wählen...",
+    days_offset_title: "Tage (+/-)",
+    formula_val_placeholder: "Wert (=JS-Formel)",
+    badge_cell: "[Zelle: {name}]",
+    badge_row: "[Zeile]"
 },
 adv_csv: {
     export_error: "Technischer Fehler beim Exportieren der Tabelle.",

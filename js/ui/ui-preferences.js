@@ -2,7 +2,7 @@
  * ui-preferences.js
  * Sottomodulo di UI.
  * Gestione delle impostazioni dell'utente (Salvataggio in LocalStorage), 
- * temi, Toggle di layout dell'editor e inizializzazione dei Tooltip.
+ * temi, carattere predefinito dell'editor, Toggle di layout dell'editor e inizializzazione dei Tooltip.
  * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
  * FEAT UNIFIED IMPORT/EXPORT: Spostamento di "Carica Backup JSON..." nel sottomenu "Importa..." ed eliminazione del blocco ridondante File JSON.
  * FEAT BROWSER WORKSPACES MENU ENTRY: Integrazione nativa dell'opzione "Workspace nel Browser (IDB)..." nel Menu Principale con icona vettoriale Icons.globe.
@@ -19,6 +19,34 @@
  */
 
 Object.assign(UI, {
+    _getThemeSwatchesIcon: (themeName = null) => {
+        const svg = `<svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+            <path d="M8 8 L8 0.8 A7.2 7.2 0 0 1 15.2 8 Z" fill="var(--accent-color)"></path>
+            <path d="M8 8 L15.2 8 A7.2 7.2 0 0 1 8 15.2 Z" fill="var(--accent-hover)"></path>
+            <path d="M8 8 L8 15.2 A7.2 7.2 0 0 1 0.8 8 Z" fill="var(--bg-color)"></path>
+            <path d="M8 8 L0.8 8 A7.2 7.2 0 0 1 8 0.8 Z" fill="var(--sidebar-bg)"></path>
+            <circle cx="8" cy="8" r="7.2" fill="none" stroke="rgba(128,128,128,0.45)" stroke-width="0.8"></circle>
+        </svg>`;
+
+        if (!themeName) {
+            return `<span style="display:inline-flex; align-items:center;">${svg}</span>`;
+        }
+
+        // Isola dai valori ereditati da body[data-theme="..."] ripristinando i token base di :root sul wrapper esterno
+        const rootStyle = getComputedStyle(document.documentElement);
+        const tp = rootStyle.getPropertyValue('--sidebar-bg').trim();
+        const ts = rootStyle.getPropertyValue('--bg-color').trim();
+        const ac = rootStyle.getPropertyValue('--accent-color').trim();
+        const ah = rootStyle.getPropertyValue('--accent-hover').trim();
+        const resetVars = `--sidebar-bg:${tp}; --bg-color:${ts}; --accent-color:${ac}; --accent-hover:${ah};`;
+
+        const innerAttr = themeName === 'light'
+            ? `style="display:inline-flex; align-items:center;"`
+            : `data-theme="${themeName}" style="display:inline-flex; align-items:center; background:transparent !important;"`;
+
+        return `<span style="display:inline-flex; align-items:center; ${resetVars}"><span ${innerAttr}>${svg}</span></span>`;
+    },
+
     toggleMainMenu: (e) => {
         if (e) e.stopPropagation();
         
@@ -27,8 +55,10 @@ Object.assign(UI, {
         if (existing && e) return;
 
         const currentTheme = localStorage.getItem('theme') || 'light';
+        const currentEditorFont = localStorage.getItem('pronotes_editor_font') || 'ff-default';
         const currentLang = I18n.lang || I18n.currentLang || 'it';
         const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
+        const fontIconHtml = '<span style="font-size:0.70rem; font-weight:bold; line-height:1;">Ft</span>';
         
         const trashCount = AppState.notes ? AppState.notes.filter(n => n.deletedAt).length : 0;
         const currentWidth = document.documentElement.style.getPropertyValue('--page-max-width');
@@ -143,30 +173,75 @@ Object.assign(UI, {
                     },
                     { type: 'divider' },
                     {
-                        type: 'custom',
-                        html: `<div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('menu.color_theme')}</div>`
+                        icon: UI._getThemeSwatchesIcon(),
+                        label: I18n.t('menu.color_theme'),
+                        type: 'submenu',
+                        items: [
+                            {
+                                icon: UI._getThemeSwatchesIcon('white'),
+                                label: I18n.t('menu.theme_white') + (currentTheme === 'white' ? chk : ''),
+                                onClick: () => UI.setTheme('white')
+                            },
+                            {
+                                icon: UI._getThemeSwatchesIcon('light'),
+                                label: I18n.t('menu.theme_light') + (currentTheme === 'light' ? chk : ''),
+                                onClick: () => UI.setTheme('light')
+                            },
+                            {
+                                icon: UI._getThemeSwatchesIcon('pastel'),
+                                label: I18n.t('menu.theme_pastel') + (currentTheme === 'pastel' ? chk : ''),
+                                onClick: () => UI.setTheme('pastel')
+                            },
+                            {
+                                icon: UI._getThemeSwatchesIcon('dark'),
+                                label: I18n.t('menu.theme_dark') + (currentTheme === 'dark' ? chk : ''),
+                                onClick: () => UI.setTheme('dark')
+                            },
+                            {
+                                icon: UI._getThemeSwatchesIcon('notion-dark'),
+                                label: I18n.t('menu.theme_notion_dark') + (currentTheme === 'notion-dark' ? chk : ''),
+                                onClick: () => UI.setTheme('notion-dark')
+                            }
+                        ]
                     },
                     {
-                        label: I18n.t('menu.theme_white') + (currentTheme === 'white' ? chk : ''),
-                        onClick: () => UI.setTheme('white')
+                        icon: fontIconHtml,
+                        label: I18n.t('menu.default_font'),
+                        type: 'submenu',
+                        items: [
+                            {
+                                icon: fontIconHtml,
+                                label: '<span class="ff-default">' + I18n.t('format_text.font_default') + '</span>' + (currentEditorFont === 'ff-default' ? chk : ''),
+                                onClick: () => UI.setEditorFont('ff-default')
+                            },
+                            {
+                                icon: fontIconHtml,
+                                label: '<span class="ff-serif">' + I18n.t('format_text.font_serif') + '</span>' + (currentEditorFont === 'ff-serif' ? chk : ''),
+                                onClick: () => UI.setEditorFont('ff-serif')
+                            },
+                            {
+                                icon: fontIconHtml,
+                                label: '<span class="ff-cursive">' + I18n.t('format_text.font_cursive') + '</span>' + (currentEditorFont === 'ff-cursive' ? chk : ''),
+                                onClick: () => UI.setEditorFont('ff-cursive')
+                            },
+                            {
+                                icon: fontIconHtml,
+                                label: '<span class="ff-easyreading">' + I18n.t('format_text.font_easyreading') + '</span>' + (currentEditorFont === 'ff-easyreading' ? chk : ''),
+                                onClick: () => UI.setEditorFont('ff-easyreading')
+                            },
+                            { type: 'divider' },
+                            {
+                                type: 'custom',
+                                html: `
+                                    <div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('menu.font_zoom')}</div>
+                                    <div style="display:flex; gap:5px; padding:4px 0;">
+                                        <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(-1); event.stopPropagation();">A -</button>
+                                        <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(1); event.stopPropagation();">A +</button>
+                                    </div>
+                                `
+                            }
+                        ]
                     },
-                    {
-                        label: I18n.t('menu.theme_light') + (currentTheme === 'light' ? chk : ''),
-                        onClick: () => UI.setTheme('light')
-                    },
-                    {
-                        label: I18n.t('menu.theme_pastel') + (currentTheme === 'pastel' ? chk : ''),
-                        onClick: () => UI.setTheme('pastel')
-                    },
-                    {
-                        label: I18n.t('menu.theme_dark') + (currentTheme === 'dark' ? chk : ''),
-                        onClick: () => UI.setTheme('dark')
-                    },
-                    {
-                        label: I18n.t('menu.theme_notion_dark') + (currentTheme === 'notion-dark' ? chk : ''),
-                        onClick: () => UI.setTheme('notion-dark')
-                    },
-                    { type: 'divider' },
                     {
                         icon: Icons.globe || '🌐',
                         label: I18n.t('menu.language'),
@@ -189,17 +264,6 @@ Object.assign(UI, {
                                 onClick: () => I18n.setLanguage('de')
                             }
                         ]
-                    },
-                    { type: 'divider' },
-                    {
-                        type: 'custom',
-                        html: `
-                            <div class="adv-dropdown-title" style="padding:0 4px; margin-bottom:4px;">${I18n.t('menu.font_zoom')}</div>
-                            <div style="display:flex; gap:5px; padding:4px 0;">
-                                <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(-1); event.stopPropagation();">A -</button>
-                                <button class="btn" style="flex:1; justify-content:center; font-weight:bold;" onclick="UI.changeFontSize(1); event.stopPropagation();">A +</button>
-                            </div>
-                        `
                     }
                 ]
             },
@@ -216,6 +280,27 @@ Object.assign(UI, {
         const menuEl = document.querySelector('.adv-dropdown.adv-context-menu:last-child');
         if (menuEl) {
             menuEl.classList.add('main-menu-portal');
+        }
+    },
+
+    setEditorFont: (fontClass = 'ff-default') => {
+        const allowedFonts = ['ff-default', 'ff-serif', 'ff-cursive', 'ff-easyreading'];
+        const targetFont = allowedFonts.includes(fontClass) ? fontClass : 'ff-default';
+
+        localStorage.setItem('pronotes_editor_font', targetFont);
+
+        const editor = document.getElementById('noteContent');
+        if (editor) {
+            editor.classList.remove('monospace', 'ff-default', 'ff-serif', 'ff-cursive', 'ff-easyreading');
+            if (targetFont === 'ff-default') {
+                editor.classList.add('monospace');
+            } else {
+                editor.classList.add(targetFont);
+            }
+        }
+
+        if (AppState.showMinimap && typeof UI.Minimap !== 'undefined') {
+            UI.Minimap.sync();
         }
     },
 
@@ -505,6 +590,9 @@ Object.assign(UI, {
             if (icon) icon.innerHTML = savedPageWidth === '100%' ? Icons.widthFull : Icons.widthFit;
             if (text) text.innerText = savedPageWidth === '100%' ? I18n.t('menu.width_full') : I18n.t('menu.width_standard');
         }
+
+        const savedEditorFont = localStorage.getItem('pronotes_editor_font') || 'ff-default';
+        UI.setEditorFont(savedEditorFont);
 
         const savedMinimap = localStorage.getItem('pronotes_minimap');
         if (savedMinimap === 'true' && typeof UI.Minimap !== 'undefined') {

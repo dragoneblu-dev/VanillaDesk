@@ -18,6 +18,7 @@
  * - FIX HEADER LAYOUT PEEK: Header del pop-up modale blindato su singola riga orizzontale con pulsante ✕ allineato a destra.
  * - FIX POPUP BUBBLING: Stop completo alla propagazione del click per impedire la chiusura accidentale del Drawer sottostante.
  * - FIX SEARCH AUTOFILL BLOCK: Disinnescato l'autocompletamento nativo degli indirizzi del browser e dei password manager sul campo cerca.
+ * - REFACTOR I18N: Rimozione integrale delle stringhe italiane hardcoded tramite chiavi I18n.t().
  */
 
 Object.assign(AdvancedTable, {
@@ -263,7 +264,11 @@ Object.assign(AdvancedTable, {
                         const parentName = AdvancedTable.getParentNoteName(dbId);
                         incomingRelations.push({
                             val: `INCOMING:${dbId}:${otherCol.id}`,
-                            label: `➔ Da [${otherDb.title || 'DB'}] campo '${otherCol.name}' (in: ${parentName})`,
+                            label: I18n.t('adv_actions.rollup_incoming_option', {
+                                dbTitle: otherDb.title || I18n.t('editor.database'),
+                                colName: otherCol.name,
+                                parentName: parentName
+                            }),
                             dbId: dbId,
                             colId: otherCol.id
                         });
@@ -275,23 +280,19 @@ Object.assign(AdvancedTable, {
         let relOptionsHTML = `<option value="">${I18n.t('adv_actions.select_rel_col_placeholder')}</option>`;
 
         if (outgoingRelationCols.length > 0) {
-            const outgoingLabel = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
-                ? I18n.t('adv_actions.rollup_outgoing_relations')
-                : "Relazioni di questa tabella (Uscenti)";
+            const outgoingLabel = I18n.t('adv_actions.rollup_outgoing_relations');
             relOptionsHTML += `<optgroup label="${outgoingLabel}">`;
             outgoingRelationCols.forEach(c => {
                 const targetDb = AdvancedTable.getTableState(c.targetTableId || c.linkedTableId);
-                const targetName = targetDb ? targetDb.title : 'DB';
-                const kind = c.type === 'relation_backlink' ? 'Backlink' : 'Relazione';
-                relOptionsHTML += `<option value="${c.id}">[${c.name}] ➔ verso '${targetName}' (${kind})</option>`;
+                const targetName = targetDb ? targetDb.title : I18n.t('editor.database');
+                const kind = c.type === 'relation_backlink' ? I18n.t('adv_actions.rel_type_backlink') : I18n.t('adv_actions.rel_type_relation');
+                relOptionsHTML += `<option value="${c.id}">[${c.name}] ➔ '${targetName}' (${kind})</option>`;
             });
             relOptionsHTML += `</optgroup>`;
         }
 
         if (incomingRelations.length > 0) {
-            const incomingLabel = (typeof I18n !== 'undefined' && typeof I18n.t === 'function')
-                ? I18n.t('adv_actions.rollup_incoming_relations')
-                : "Relazioni da altri database verso questa tabella (Entranti / Inverse)";
+            const incomingLabel = I18n.t('adv_actions.rollup_incoming_relations');
             relOptionsHTML += `<optgroup label="${incomingLabel}">`;
             incomingRelations.forEach(inc => {
                 relOptionsHTML += `<option value="${inc.val}">${inc.label}</option>`;
@@ -405,7 +406,7 @@ Object.assign(AdvancedTable, {
                 const targetRelVal = String(targetCol.relationColId || '');
                 const targetPointsBackToThisDb = (targetCol.targetTableId === realTableId) || targetRelVal.includes(realTableId);
                 if (targetPointsBackToThisDb && targetCol.targetColId === colId) {
-                    alert(I18n.t('adv_actions.circular_rollup_blocked') || "Operazione bloccata: la colonna selezionata è a sua volta un Rollup che punta a questo campo (Dipendenza Circolare).");
+                    alert(I18n.t('adv_actions.circular_rollup_blocked'));
                     return;
                 }
             }
@@ -491,7 +492,7 @@ Object.assign(AdvancedTable, {
         const primaryDisplayColId = targetColId;
         const activeSecondaryColId = col.secondaryDisplayColId || '';
 
-        let secondaryColOptionsHtml = `<option value="">-- Nessun Dettaglio --</option>`;
+        let secondaryColOptionsHtml = `<option value="">${I18n.t('adv_actions.rel_no_secondary_detail')}</option>`;
         (targetState.columns || []).forEach(c => {
             if (c.id !== primaryDisplayColId) {
                 const isSelected = (c.id === activeSecondaryColId) ? 'selected' : '';
@@ -501,8 +502,8 @@ Object.assign(AdvancedTable, {
 
         const isSingle = !!col.singleRecord;
         const modeBadgeLabel = isSingle 
-            ? (I18n.t('adv_actions.rel_single_record_hint') || "Vincolo: 1 solo record")
-            : (I18n.t('adv_actions.rel_multi_record_hint') || "Selezione multipla");
+            ? I18n.t('adv_actions.rel_single_record_hint')
+            : I18n.t('adv_actions.rel_multi_record_hint');
 
         // Salvataggio parametri completi di sessione del selettore
         AdvancedTable._pendingRelSelect = { 
@@ -683,7 +684,7 @@ Object.assign(AdvancedTable, {
             searchInput.value = '';
         }
 
-        const toastMsg = (typeof I18n !== 'undefined' && I18n.t('adv_actions.quick_create_success', { title: cleanTitle })) || `Record "${cleanTitle}" creato e collegato!`;
+        const toastMsg = I18n.t('adv_actions.quick_create_success', { title: cleanTitle });
         if (typeof UI !== 'undefined' && UI.showToast) {
             UI.showToast(toastMsg, "success");
         }
@@ -724,7 +725,7 @@ Object.assign(AdvancedTable, {
         // 3. Chiude il pop-up modale
         AdvancedTable.closeRelationQuickPeek(e);
 
-        const toastMsg = (typeof I18n !== 'undefined' && I18n.t('adv_actions.quick_create_canceled_toast')) || "Nuovo record annullato ed eliminato.";
+        const toastMsg = I18n.t('adv_actions.quick_create_canceled_toast');
         if (typeof UI !== 'undefined' && UI.showToast) {
             UI.showToast(toastMsg, "info");
         }
@@ -742,13 +743,13 @@ Object.assign(AdvancedTable, {
         const isNewlyCreated = peek.isNewlyCreated;
         const isDirty = peek.isDirty;
 
-        const saveLabel = (typeof I18n !== 'undefined' && I18n.t('common.save')) || "Salva";
-        const cancelLabel = (typeof I18n !== 'undefined' && I18n.t('common.cancel')) || "Annulla";
-        const closeLabel = (typeof I18n !== 'undefined' && I18n.t('common.close')) || "Chiudi";
+        const saveLabel = I18n.t('common.save');
+        const cancelLabel = I18n.t('common.cancel');
+        const closeLabel = I18n.t('common.close');
 
         if (isNewlyCreated) {
             // Record appena creato al volo: Annulla ed Elimina (Abort) vs Salva
-            const discardCreatedLabel = (typeof I18n !== 'undefined' && I18n.t('adv_actions.quick_create_cancel_btn')) || cancelLabel;
+            const discardCreatedLabel = I18n.t('adv_actions.quick_create_cancel_btn');
             footer.innerHTML = `
                 <button type="button" class="btn" onclick="AdvancedTable.cancelRelationQuickPeek(event)" style="border-color:var(--danger-color); color:var(--danger-color);">
                     ${discardCreatedLabel}
@@ -806,7 +807,7 @@ Object.assign(AdvancedTable, {
         const titleCol = targetState.columns[0];
         const rawTitle = titleCol ? (row.cells[titleCol.id] || I18n.t('editor.untitled')) : I18n.t('editor.untitled');
         const safeTitle = UI.escapeHTML(String(rawTitle));
-        const safeDbName = UI.escapeHTML(String(targetState.title || 'Database'));
+        const safeDbName = UI.escapeHTML(String(targetState.title || I18n.t('editor.database')));
 
         const overlay = document.createElement('div');
         overlay.id = 'advRelationPeekModalOverlay';
@@ -838,7 +839,7 @@ Object.assign(AdvancedTable, {
 
         // Badge distintivo per record appena creati da Quick-Create riciclando .adv-select-pill
         const newRecordBadgeHtml = isNewlyCreated 
-            ? `<span class="adv-select-pill hl-c7" style="margin-left:6px; font-size:0.7rem;">Nuovo</span>` 
+            ? `<span class="adv-select-pill hl-c7" style="margin-left:6px; font-size:0.7rem;">${I18n.t('adv_actions.quick_peek_new_badge')}</span>` 
             : '';
 
         // Layout dell'header orizzontale a riga singola con classi semantiche di sistema
@@ -852,7 +853,7 @@ Object.assign(AdvancedTable, {
                             <span style="font-size:0.75rem; color:var(--text-secondary); margin-left:6px; flex-shrink:0;">(${safeDbName})</span>
                             ${newRecordBadgeHtml}
                         </div>
-                        <button type="button" class="close-modal-btn" onclick="AdvancedTable.handleQuickPeekHeaderClose(event)" title="${typeof I18n !== 'undefined' ? I18n.t('common.close') : 'Chiudi'} (Esc)">✕</button>
+                        <button type="button" class="close-modal-btn" onclick="AdvancedTable.handleQuickPeekHeaderClose(event)" title="${I18n.t('common.close')} (Esc)">✕</button>
                     </div>
                 </div>
                 <div class="link-modal-list adv-scroll-container" style="padding: 15px;">
@@ -963,7 +964,7 @@ Object.assign(AdvancedTable, {
                     }
                 }
                 if (typeof UI !== 'undefined' && UI.showToast) {
-                    UI.showToast((typeof I18n !== 'undefined' && I18n.t('adv_actions.quick_peek_cancel_toast')) || "Modifiche annullate.", "info");
+                    UI.showToast(I18n.t('adv_actions.quick_peek_cancel_toast'), "info");
                 }
             }
             AdvancedTable._activeRelationPeek = null;
@@ -995,7 +996,7 @@ Object.assign(AdvancedTable, {
             }
 
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast((typeof I18n !== 'undefined' && I18n.t('adv_actions.quick_peek_save_toast')) || "Modifiche salvate con successo.", "success");
+                UI.showToast(I18n.t('adv_actions.quick_peek_save_toast'), "success");
             }
             AdvancedTable._activeRelationPeek = null;
         }
@@ -1124,9 +1125,9 @@ Object.assign(AdvancedTable, {
         if (counterFeedbackEl) {
             const shownCount = Math.min(itemsToRender.length, currentLimit);
             if (cleanFilter) {
-                counterFeedbackEl.innerHTML = I18n.t('adv_actions.filter_counter_filtered', { shown: shownCount, total: itemsToRender.length, totalInDb: targetState.rows.length }) || `Filtrati ${shownCount} di ${itemsToRender.length} record (${targetState.rows.length} nel database)`;
+                counterFeedbackEl.innerHTML = I18n.t('adv_actions.filter_counter_filtered', { shown: shownCount, total: itemsToRender.length, totalInDb: targetState.rows.length });
             } else {
-                counterFeedbackEl.innerHTML = I18n.t('adv_actions.filter_counter_feedback', { shown: shownCount, total: totalCount }) || `Visualizzati ${shownCount} di ${totalCount} record`;
+                counterFeedbackEl.innerHTML = I18n.t('adv_actions.filter_counter_feedback', { shown: shownCount, total: totalCount });
             }
         }
 
@@ -1147,6 +1148,9 @@ Object.assign(AdvancedTable, {
             const safeFilter = UI.escapeHTML(cleanFilter);
             const escapedFilter = cleanFilter.replace(/'/g, "\\'");
             const safeTabName = UI.escapeHTML(targetTabName);
+            const quickPrefix = I18n.t('adv_actions.quick_create_prefix').replace(/^\+\s*/, '');
+            const quickIn = I18n.t('adv_actions.quick_create_in');
+            const enterHint = I18n.t('adv_actions.quick_create_enter_hint');
 
             html += `
                 <div class="link-modal-item quick-create-item" 
@@ -1156,9 +1160,9 @@ Object.assign(AdvancedTable, {
                      onclick="AdvancedTable.quickCreateRelationRecord('${escapedFilter}')">
                     <span style="display:flex; align-items:center; gap:6px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">
                         <span style="font-size:1.15rem; line-height:1; display:inline-flex;">+</span>
-                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">Crea "<b>${safeFilter}</b>" in <i>${safeTabName}</i></span>
+                        <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${quickPrefix} "<b>${safeFilter}</b>" ${quickIn} <i>${safeTabName}</i></span>
                     </span>
-                    <span style="font-size:0.7rem; font-family:monospace; background:rgba(37,99,235,0.15); padding:2px 6px; border-radius:4px; font-weight:600; flex-shrink:0;">Invio ↵</span>
+                    <span style="font-size:0.7rem; font-family:monospace; background:rgba(37,99,235,0.15); padding:2px 6px; border-radius:4px; font-weight:600; flex-shrink:0;">${enterHint}</span>
                 </div>
             `;
         }
@@ -1176,7 +1180,7 @@ Object.assign(AdvancedTable, {
             const peekBtn = `
                 <button class="adv-icon-btn" 
                         style="padding: 2px 4px; margin-right: 6px; color: var(--text-secondary); opacity: 0.7; flex-shrink: 0;" 
-                        title="${I18n.t('adv_actions.quick_peek_tooltip') || 'Ispeziona e compila scheda record (Anteprima)'}" 
+                        title="${I18n.t('adv_actions.quick_peek_tooltip')}" 
                         onclick="event.stopPropagation(); AdvancedTable.openRelationQuickPeek('${targetDbId}', '${item.id}', false)">
                     ${typeof Icons !== 'undefined' ? Icons.recordView : '📄'}
                 </button>

@@ -7,7 +7,7 @@
  * FIX DRAG&DROP INFALLIBILE: L'attributo draggable="true" è ora staticamente confinato SOLO all'icona della maniglia.
  * L'immagine fantasma del trascinamento (setDragImage) è stata riprogrammata per mostrare l'intera Card.
  * FEAT CELL-LEVEL RULES: Supporto all'ambito per cella singola (targetScope: 'row' | 'cell') con selezione colonna bersaglio.
- * FIX DEFENSIVE I18N: Fallback sicuro per le label di traduzione per prevenire la visualizzazione delle chiavi raw.
+ * REFACTOR I18N: Integrazione completa dei testi e dei placeholder localizzati tramite I18n.t().
  */
 
 const AdvancedTableConditionalColors = {
@@ -74,9 +74,9 @@ const AdvancedTableConditionalColors = {
                 const targetScope = rule.targetScope || 'row';
                 const targetColId = rule.targetColId || (state.columns.length > 0 ? state.columns[0].id : '');
 
-                const scopeLabel = (typeof I18n !== 'undefined' && I18n.t('adv_cond_colors.scope_label') !== 'adv_cond_colors.scope_label') ? I18n.t('adv_cond_colors.scope_label') : 'Ambito:';
-                const scopeRow = (typeof I18n !== 'undefined' && I18n.t('adv_cond_colors.scope_row') !== 'adv_cond_colors.scope_row') ? I18n.t('adv_cond_colors.scope_row') : 'Intera Riga';
-                const scopeCell = (typeof I18n !== 'undefined' && I18n.t('adv_cond_colors.scope_cell') !== 'adv_cond_colors.scope_cell') ? I18n.t('adv_cond_colors.scope_cell') : 'Cella Specifica';
+                const scopeLabel = I18n.t('adv_cond_colors.scope_label');
+                const scopeRow = I18n.t('adv_cond_colors.scope_row');
+                const scopeCell = I18n.t('adv_cond_colors.scope_cell');
 
                 let targetColSelectHtml = '';
                 if (targetScope === 'cell') {
@@ -149,19 +149,19 @@ const AdvancedTableConditionalColors = {
                                 if (!cond.dateShift) cond.dateShift = 0;
                                 let dynamicHtml = `<select class="modern-input" style="flex:1; padding:6px; font-size:0.8rem;" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'dateMode', this.value)"><option value="exact" ${cond.dateMode === 'exact' ? 'selected' : ''}>${I18n.t('adv_automations.timer_mode_exact')}</option><option value="today" ${cond.dateMode === 'today' ? 'selected' : ''}>${I18n.t('adv_timeline.btn_today')}</option></select>`;
                                 if (cond.dateMode === 'exact') dynamicHtml += `<input type="date" class="modern-input" style="flex:1; padding:6px; font-size:0.8rem;" value="${safeVal}" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)">`;
-                                else dynamicHtml += `<div style="flex:1; font-size:0.75rem; color:var(--text-secondary); align-self:center; text-align:center;">( +/- Giorni )</div>`;
-                                dynamicHtml += `<input type="number" class="modern-input" style="width:50px; padding:6px; text-align:center; font-size:0.8rem;" title="Giorni (+/-)" value="${cond.dateShift}" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'dateShift', this.value)">`;
+                                else dynamicHtml += `<div style="flex:1; font-size:0.75rem; color:var(--text-secondary); align-self:center; text-align:center;">${I18n.t('adv_auto_ui.days_offset_label')}</div>`;
+                                dynamicHtml += `<input type="number" class="modern-input" style="width:50px; padding:6px; text-align:center; font-size:0.8rem;" title="${I18n.t('adv_cond_colors.days_offset_title')}" value="${cond.dateShift}" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'dateShift', this.value)">`;
                                 valHtml = `<div style="display:flex; flex:2; gap:5px;">${dynamicHtml}</div>`;
                             } 
                             else if (['select', 'multi-select'].includes(cDef.type)) {
                                 let opts = state.selectOptions[cDef.id] || []; let listId = `dl_cc_${cDef.id}_${idx}_${cIdx}`;
-                                valHtml = `<input type="text" list="${listId}" class="modern-input" style="flex:2; padding:6px; font-size:0.8rem;" value="${safeVal}" placeholder="Scrivi o scegli..." oninput="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)"><datalist id="${listId}">${opts.map(o => `<option value="${String(o).replace(/"/g, '&quot;')}">`).join('')}</datalist>`;
+                                valHtml = `<input type="text" list="${listId}" class="modern-input" style="flex:2; padding:6px; font-size:0.8rem;" value="${safeVal}" placeholder="${I18n.t('adv_cond_colors.write_or_choose_placeholder')}" oninput="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)"><datalist id="${listId}">${opts.map(o => `<option value="${String(o).replace(/"/g, '&quot;')}">`).join('')}</datalist>`;
                             }
                             else if (cDef.type === 'checkbox') {
-                                valHtml = `<select class="modern-input" style="flex:2; padding:6px; font-size:0.8rem;" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)"><option value="true" ${cond.value === 'true' ? 'selected' : ''}>Sì (Spuntato)</option><option value="false" ${cond.value === 'false' ? 'selected' : ''}>No (Vuoto)</option></select>`;
+                                valHtml = `<select class="modern-input" style="flex:2; padding:6px; font-size:0.8rem;" onchange="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)"><option value="true" ${cond.value === 'true' ? 'selected' : ''}>${I18n.t('sidebar_filter.yes_checked')}</option><option value="false" ${cond.value === 'false' ? 'selected' : ''}>${I18n.t('sidebar_filter.no_empty')}</option></select>`;
                             }
                             else {
-                                valHtml = `<input type="text" class="modern-input" style="flex:2; padding:6px; font-size:0.8rem;" value="${safeVal}" placeholder="Valore (=Formula JS)" oninput="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)">`;
+                                valHtml = `<input type="text" class="modern-input" style="flex:2; padding:6px; font-size:0.8rem;" value="${safeVal}" placeholder="${I18n.t('adv_cond_colors.formula_val_placeholder')}" oninput="AdvancedTableConditionalColors._updateCondField('${tableId}', ${idx}, ${cIdx}, 'value', this.value)">`;
                             }
                         }
 
@@ -182,9 +182,10 @@ const AdvancedTableConditionalColors = {
                 }
 
                 const targetColDef = targetScope === 'cell' ? state.columns.find(c => c.id === targetColId) : null;
+                const colDisplayName = targetColDef ? targetColDef.name : I18n.t('adv_cond_colors.target_col_label');
                 const scopeBadgeText = targetScope === 'cell' 
-                    ? `[Cella: ${UI.escapeHTML(targetColDef ? targetColDef.name : 'Colonna')}]` 
-                    : `[Riga]`;
+                    ? I18n.t('adv_cond_colors.badge_cell', { name: UI.escapeHTML(colDisplayName) }) 
+                    : I18n.t('adv_cond_colors.badge_row');
 
                 // DRAG INFALLIBILE: Solo la maniglia ⠿ ha draggable="true"
                 listHTML += `
@@ -358,7 +359,7 @@ const AdvancedTableConditionalColors = {
     },
     
     _onCondDrop: (e, tableId, targetIdx) => {
-        e.preventDefault();
+        e.preventDefault(); 
         const srcIdx = AdvancedTableConditionalColors._draggedRuleIdx;
         AdvancedTableConditionalColors._draggedRuleIdx = null;
         document.querySelectorAll('.drag-item').forEach(el => { el.style.opacity='1'; el.style.borderTop='1px solid var(--border-color)'; });

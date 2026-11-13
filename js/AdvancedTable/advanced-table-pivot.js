@@ -8,6 +8,7 @@
  * FIX AGGREGAZIONI DATA MAX/MIN: Il controllo isDateCol ha la precedenza assoluta sul controllo numerico,
  * evitando che date ISO (es. '2026-05-20') vengano scambiate per numeri da parseFloat.
  * FEAT QUICK SORT TH: Supporto all'ordinamento rapido su th con ondblclick per tabelle pivot.
+ * REFACTOR I18N: Sostituzione di tutte le stringhe fisse (etichette, tooltips, vuoti e messaggi) con I18n.t().
  */
 
 const AdvancedPivot = {
@@ -27,7 +28,7 @@ const AdvancedPivot = {
         if (!sourceState) return;
 
         let pivotState = {
-            title: title || ('Analisi: ' + (sourceState.title || 'Database')),
+            title: title || (I18n.t('adv_pivot.title_prefix') + (sourceState.title || I18n.t('editor.database'))),
             isPivot: true,
             sourceTableId: sourceId,
             groupBy: groupByArr,
@@ -80,7 +81,7 @@ const AdvancedPivot = {
             const sc = sourceState.columns.find(c => c.id === gColId);
             pivotState.columns.push({
                 id: 'grp_' + idx,
-                name: sc ? sc.name : 'Gruppo ' + (idx + 1),
+                name: sc ? sc.name : I18n.t('adv_pivot.default_group_prefix', { num: idx + 1 }),
                 type: sc ? sc.type : 'text',
                 sourceColId: sc ? sc.id : null,
                 width: 150
@@ -90,7 +91,7 @@ const AdvancedPivot = {
         aggregations.forEach((agg, idx) => {
             pivotState.columns.push({
                 id: 'agg_' + idx,
-                name: agg.label || 'Metrica',
+                name: agg.label || I18n.t('adv_pivot.default_metric'),
                 type: (agg.type === 'list' || agg.type === 'count') ? 'text' : 'number',
                 sourceColId: agg.sourceColId,
                 width: 150
@@ -150,7 +151,7 @@ const AdvancedPivot = {
                 }
 
                 if (Array.isArray(val)) return val.join(', ');
-                return String(val || '(Vuoto)').trim() || '(Vuoto)';
+                return String(val || I18n.t('adv_pivot.empty_group_label')).trim() || I18n.t('adv_pivot.empty_group_label');
             });
 
             let compositeKey = JSON.stringify(keyParts);
@@ -279,8 +280,8 @@ const AdvancedPivot = {
                 }
                 bodyContainer.innerHTML = `
                     <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; color:var(--danger-color); border:1px dashed var(--danger-color); border-radius:6px; background:rgba(239, 68, 68, 0.05);">
-                        <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Errore Critico: I dati di configurazione di questo Widget sono andati perduti.</span></span>
-                        <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="document.getElementById('${tableId}').remove(); if(typeof Store !== 'undefined') Store.triggerAutoSave();"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} Rimuovi Widget Rotto</span></button>
+                        <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} ${I18n.t('adv_render.critical_error_lost')}</span></span>
+                        <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="document.getElementById('${tableId}').remove(); if(typeof Store !== 'undefined') Store.triggerAutoSave();"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${I18n.t('adv_render.remove_broken_widget')}</span></button>
                     </div>
                 `;
             }
@@ -296,10 +297,10 @@ const AdvancedPivot = {
         if (!bodyContainer) {
             wrapper.innerHTML = `
                 <div class="widget-header adv-table-header">
-                    <span class="widget-drag-handle adv-drag-handle" title="Trascina per spostare" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
-                    <span class="widget-options-btn adv-drag-handle" title="Opzioni" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
+                    <span class="widget-drag-handle adv-drag-handle" title="${I18n.t('widget_manager.drag_to_move')}" draggable="true" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dragHandle}</span>
+                    <span class="widget-options-btn adv-drag-handle" title="${I18n.t('widget_manager.options')}" style="${isEdit ? 'display:flex;' : 'display:none;'}">${Icons.dotsVertical}</span>
                     <span class="widget-icon" style="display:inline-flex;"></span>
-                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">Caricamento...</span>
+                    <span class="widget-title adv-table-title" contenteditable="${isEdit ? 'true' : 'false'}" style="flex: 0 1 auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 50px;">${I18n.t('common.loading')}</span>
                     <div class="widget-tools adv-tools" style="flex-shrink: 0;"></div>
                 </div>
                 <div class="widget-body"></div>
@@ -310,8 +311,8 @@ const AdvancedPivot = {
         if (!sourceState) {
             bodyContainer.innerHTML = `
                 <div style="display:flex; justify-content:space-between; align-items:center; padding:15px; color:var(--danger-color); border:1px dashed var(--danger-color); border-radius:6px; background:rgba(239, 68, 68, 0.05);">
-                    <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} Il Database originale di questa Tabella Pivot è stato eliminato.</span></span>
-                    <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="AdvancedTable.deleteTable('${tableId}', true)"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} Rimuovi Pivot</span></button>
+                    <span><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.alertTriangle} ${I18n.t('adv_pivot.source_deleted_msg')}</span></span>
+                    <button class="adv-add-btn danger" style="border: 1px solid var(--danger-color); background: var(--bg-color);" onclick="AdvancedTable.deleteTable('${tableId}', true)"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${I18n.t('adv_menus.remove_pivot')}</span></button>
                 </div>
             `;
             return;
@@ -331,11 +332,11 @@ const AdvancedPivot = {
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
             if (isEdit && typeof AdvancedTableCharts !== 'undefined') {
-                tools.push({ icon: Icons.data, label: 'Grafico', title: 'Configura Grafico', active: hasChart, onClick: () => AdvancedTableCharts.openConfigMenu(tableId) });
+                tools.push({ icon: Icons.data, label: I18n.t('adv_pivot.chart_label'), title: I18n.t('adv_pivot.chart_tooltip'), active: hasChart, onClick: () => AdvancedTableCharts.openConfigMenu(tableId) });
             }
             
-            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: 'Ordina Tabella Pivot', active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
-            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: 'Filtra Tabella Pivot', active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
+            tools.push({ id: `adv-sort-btn-${tableId}`, icon: Icons.sort, title: I18n.t('adv_pivot.sort_pivot_title'), active: hasSort, editOnly: false, onClick: AdvancedTable.openSortMenu });
+            tools.push({ id: `adv-filter-btn-${tableId}`, icon: Icons.filter, title: I18n.t('adv_pivot.filter_pivot_title'), active: hasFilter, editOnly: false, onClick: AdvancedTable.openFilterMenu });
 
             WidgetManager.updateShellUI(tableId, {
                 icon: hasChart ? Icons.tablePivot : Icons.tablePivot,
@@ -401,7 +402,7 @@ const AdvancedPivot = {
             html += `</tr></thead><tbody>`;
 
             if (pivotRows.length === 0) {
-                html += `<tr><td colspan="${state.columns.length}" style="text-align:center; color:var(--text-secondary); padding:20px;">Nessun risultato per i filtri attuali.</td></tr>`;
+                html += `<tr><td colspan="${state.columns.length}" style="text-align:center; color:var(--text-secondary); padding:20px;">${I18n.t('adv_pivot.no_results_filtered')}</td></tr>`;
             } else {
                 pivotRows.forEach(row => {
                     
@@ -463,7 +464,7 @@ const AdvancedPivot = {
                         let htmlVal = row.virtualCells[col.id] || '';
                         const safeColName = String(col.name || '').replace(/"/g, '&quot;');
 
-                        if (isGroup && row.rawGroupKeys[idx] !== '(Vuoto)') {
+                        if (isGroup && row.rawGroupKeys[idx] !== I18n.t('adv_pivot.empty_group_label')) {
                             const srcColDef = sourceState.columns.find(c => c.id === col.sourceColId);
 
                             if (srcColDef &&['select', 'multi-select'].includes(srcColDef.type)) {
@@ -484,7 +485,7 @@ const AdvancedPivot = {
                                         if (sv) content += `<span class="adv-select-pill default-color">${UI.escapeHTML(sv)}</span> `;
                                     });
                                 });
-                                htmlVal = content || '<span class="adv-select-empty">Vuoto</span>';
+                                htmlVal = content || `<span class="adv-select-empty">${I18n.t('common.empty')}</span>`;
                             }
                         }
                         html += `<td style="${isGroup ? 'font-weight:bold; background: rgba(0,0,0,0.01);' : ''} width: ${col.width}px; max-width: ${col.width}px; word-wrap: break-word;" data-col-name="${safeColName}">${htmlVal}</td>`;

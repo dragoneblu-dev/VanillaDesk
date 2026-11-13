@@ -22,6 +22,7 @@
  * a sempre-array dei valori sorgente e invalidazione sistematica della cache su mutazioni.
  * PERF INVERTED INDEX O(1): Risoluzione istantanea relazioni e rollup tramite AdvancedTable.getRow().
  * FEAT AUTOINCREMENT: Riconoscimento valore stringa in getFormatDisplayValue.
+ * REFACTOR I18N: Sostituzione delle stringhe di fallback (Orfano, Senza Nome, Senza Titolo, Riferimento Circolare) con I18n.t().
  */
 
 Object.assign(AdvancedTable, {
@@ -114,10 +115,11 @@ Object.assign(AdvancedTable, {
         if (vals.length === 0) return [];
 
         const targetDbId = colDef.type === 'relation' ? colDef.targetTableId : colDef.linkedTableId;
-        if (!targetDbId) return vals.map(id => ({ id: id, name: 'Orfano' }));
+        const orphanLabel = I18n.t('adv_record.orphan_badge');
+        if (!targetDbId) return vals.map(id => ({ id: id, name: orphanLabel }));
 
         const targetState = AdvancedTable.getTableState(targetDbId);
-        if (!targetState) return vals.map(id => ({ id: id, name: 'Orfano' }));
+        if (!targetState) return vals.map(id => ({ id: id, name: orphanLabel }));
 
         // Per relation_backlink il displayColId è la prima colonna del DB target (es. ID_Attività o Nome Attività)
         const displayColId = (colDef.type === 'relation' && colDef.targetColId) 
@@ -132,7 +134,7 @@ Object.assign(AdvancedTable, {
         return vals.map(tId => {
             // LOOKUP O(1) TRAMITE INDICE INVERTITO IN MEMORIA
             const tRow = AdvancedTable.getRow(targetDbId, tId) || (targetState.rows || []).find(r => r.id === tId);
-            if (!tRow) return { id: tId, name: 'Orfano' };
+            if (!tRow) return { id: tId, name: orphanLabel };
             
             let val;
             if (isCalculatedCol) {
@@ -158,7 +160,7 @@ Object.assign(AdvancedTable, {
             // Se la colonna target è a sua volta una "Pagina", risolve il titolo reale della nota
             if (displayColDef && displayColDef.type === 'record_note' && val) {
                 const note = typeof Store !== 'undefined' ? Store.getNote(val) : null;
-                return { id: tId, name: note ? (note.title || 'Senza Titolo') : 'Pagina Orfana' };
+                return { id: tId, name: note ? (note.title || I18n.t('editor.untitled')) : I18n.t('adv_context.orphan_page') };
             }
             
             // Appiattimento di sicurezza nel caso di array nidificati
@@ -166,7 +168,7 @@ Object.assign(AdvancedTable, {
             
             return { 
                 id: tId, 
-                name: val !== undefined && val !== null && val !== '' ? String(val) : 'Senza Nome' 
+                name: val !== undefined && val !== null && val !== '' ? String(val) : I18n.t('adv_context.unnamed') 
             };
         });
     },
@@ -185,7 +187,7 @@ Object.assign(AdvancedTable, {
 
         if (colDef.type === 'record_note') {
             const note = typeof Store !== 'undefined' ? Store.getNote(rawValue) : null;
-            return note ? (note.title || 'Senza Titolo') : 'Pagina Orfana';
+            return note ? (note.title || I18n.t('editor.untitled')) : I18n.t('adv_context.orphan_page');
         }
 
         if (colDef.type === 'note_link') {
@@ -197,11 +199,11 @@ Object.assign(AdvancedTable, {
             if (linkObj && linkObj.noteId) {
                 const note = typeof Store !== 'undefined' ? Store.getNote(linkObj.noteId) : null;
                 if (note && !note.deletedAt) {
-                    return linkObj.anchor ? `${note.title} > ${linkObj.anchor}` : (note.title || 'Senza Titolo');
+                    return linkObj.anchor ? `${note.title} > ${linkObj.anchor}` : (note.title || I18n.t('editor.untitled'));
                 } else if (note && note.deletedAt) {
-                    return 'Nota nel Cestino';
+                    return I18n.t('adv_cell.trashed_note');
                 }
-                return linkObj.title || 'Nota Mancante';
+                return linkObj.title || I18n.t('adv_cell.missing_note');
             }
             return '';
         }
@@ -320,7 +322,7 @@ Object.assign(AdvancedTable, {
                                 const crossCycleKey = `${foundId}.${row.id}.${c.id}`;
 
                                 if (safeCache._resolvingCrossDB.has(crossCycleKey)) {
-                                    val = '⚠️ Riferimento Circolare';
+                                    val = I18n.t('adv_context.circular_ref_warning');
                                 } else {
                                     safeCache._resolvingCrossDB.add(crossCycleKey);
                                     try {
@@ -646,7 +648,7 @@ Object.assign(AdvancedTable, {
                         if (val !== undefined && val !== null && val !== '') {
                             if (targetColDef.type === 'relation' || targetColDef.type === 'relation_backlink') {
                                 const details = AdvancedTable.resolveRelationDetails(targetColDef, val, renderCache);
-                                val = details.map(d => d.name).filter(n => n && n !== 'Orfano');
+                                val = details.map(d => d.name).filter(n => n && n !== I18n.t('adv_record.orphan_badge'));
                             }
                             if (typeof val === 'object' && !Array.isArray(val)) {
                                 if (val.start && val.end) val = `${val.start} ➔ ${val.end}`;
@@ -673,7 +675,7 @@ Object.assign(AdvancedTable, {
                     
                     // Prevenzione Paradossi / Loop Infiniti
                     if (resolving.has(col.id)) {
-                        vRow.virtualCells[col.id] = '⚠️ Riferimento Circolare';
+                        vRow.virtualCells[col.id] = I18n.t('adv_context.circular_ref_warning');
                         resolved.add(col.id);
                         return;
                     }

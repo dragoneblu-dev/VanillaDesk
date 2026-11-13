@@ -4,7 +4,8 @@
  * Sottomodulo di Editor.
  * Include:
  * - Salvataggio e ripristino sicuro del range (saveSelection, restoreSelection).
- * - Calcolo matematico delle posizioni assolute del cursore (_getAbsoluteCaretPosition, _setAbsoluteCaretPosition).
+ * - Calcolo matematico delle posizioni assolute del cursore (_getAbsoluteCaretPosition, _setAbsoluteCaretPosition)
+ *   con esclusione coerente dei nodi nascosti o decorativi (appunti inline, commenti segnalibri).
  * - Motore di coordinate lineare per codice e testo con tag BR (_getCodeOffset, _setCodeOffset, _getRawText).
  * - Espulsione dalla zona morta del cuscinetto \u200B (adjustCaretAwayFromZwsDeadZone).
  * - Posizionamento O(1) post-widget inline (setCaretAfterInlineElement).
@@ -25,6 +26,18 @@ Object.assign(Editor, {
         }
         return text;
     },
+
+    // Esclude i nodi nascosti o decorativi non editabili dal calcolo degli offset assoluti del cursore
+    _isSkippedCaretNode: (node) => node && node.nodeType === 1 && (
+        (node.style && node.style.display === 'none') ||
+        (node.classList && (
+            node.classList.contains('inline-note-data') ||
+            node.classList.contains('bookmark-comment-data') ||
+            node.classList.contains('inline-note-marker') ||
+            node.classList.contains('bookmark-icon') ||
+            node.classList.contains('snippet-copy-btn')
+        ))
+    ),
 
     // Corregge la posizione del cursore se è intrappolato nella zona morta tra la shell inline e il suo cuscinetto \u200B
     adjustCaretAwayFromZwsDeadZone: () => {
@@ -133,7 +146,18 @@ Object.assign(Editor, {
         const preCaretRange = range.cloneRange();
         preCaretRange.selectNodeContents(el);
         preCaretRange.setEnd(isStart ? range.startContainer : range.endContainer, isStart ? range.startOffset : range.endOffset);
-        return preCaretRange.toString().length;
+        
+        let len = preCaretRange.toString().length;
+        el.querySelectorAll('.inline-note-data, .bookmark-comment-data, .inline-note-marker, .bookmark-icon, .snippet-copy-btn').forEach(skipEl => {
+            if (preCaretRange.intersectsNode(skipEl)) {
+                const r = document.createRange();
+                r.selectNodeContents(skipEl);
+                if (preCaretRange.compareBoundaryPoints(Range.END_TO_END, r) >= 0) {
+                    len -= skipEl.textContent.length;
+                }
+            }
+        });
+        return Math.max(0, len);
     },
 
     _setAbsoluteCaretPosition: (el, start, end) => {
@@ -141,6 +165,7 @@ Object.assign(Editor, {
         let startChar = 0, endChar = 0, charCount = 0;
 
         const traverseNodes = (node) => {
+            if (Editor._isSkippedCaretNode(node)) return;
             if (node.nodeType === 3) {
                 let nextCharCount = charCount + node.length;
                 if (!startNode && start >= charCount && start <= nextCharCount) {

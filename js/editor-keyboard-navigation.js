@@ -10,7 +10,7 @@
  * Rilascio automatico della selezione widget al movimento del cursore con tasti freccia.
  * FIX CARET GLITCH: Navigazione fluida fuori dallo snippet scavalcando i cuscinetti \u200B ed esclusione
  * degli inline widget dall'escape verticale su nuova riga per impedire salti del cursore.
- * FIX HORIZONTAL INLINE ENTRY: Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso lo snippet.
+ * FIX HORIZONTAL INLINE ENTRY: Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso qualsiasi .adv-inline-shell (snippet, note inline, segnalibri).
  * FIX FORMAT ESCAPE JUMP: Risolto salto anomalo del cursore nei testi formattati/colorati annidati,
  * vincolando l'escape con ArrowRight alla reale fine corsa del testo all'interno dell'intero blocco contenitore.
  * FEAT VISUAL LINE HOME/END: Gestione deterministica di Home, End, Shift+Home e Shift+End sulle righe visive con soft-wrap.
@@ -150,9 +150,9 @@ Object.assign(Editor, {
     },
 
     /**
-     * SNIPPET HORIZONTAL ESCAPE & ENTRY
-     * Consente alle frecce ArrowLeft e ArrowRight di uscire e di entrare fluidamente nello snippet copiabile
-     * scavalcando il cuscinetto \u200B senza arrestarsi nello spazio vuoto tra lo \u200B e il widget.
+     * SNIPPET & INLINE SHELL HORIZONTAL ESCAPE / ENTRY
+     * Consente alle frecce ArrowLeft e ArrowRight di superare con un solo tocco
+     * i cuscinetti \u200B attorno a qualsiasi .adv-inline-shell (snippet, note inline, segnalibri).
      */
     _handleSnippetHorizontalEscape: (e) => {
         if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return false;
@@ -224,17 +224,18 @@ Object.assign(Editor, {
             return false;
         }
 
-        // 2. INGRESSO NELLO SNIPPET DALL'ESTERNO (Scavalcamento dello \u200B senza soste nel limbo)
+        // 2. ATTRAVERSAMENTO FLUIDO DI QUALSIASI .adv-inline-shell DALL'ESTERNO
         if (node.nodeType === 3) {
             const val = node.nodeValue || '';
             const offset = range.startOffset;
 
-            // Avvicinamento da sinistra verso lo snippet con ArrowRight
+            // Avvicinamento da sinistra verso la shell inline con ArrowRight
             if (e.key === 'ArrowRight') {
                 const nextEl = node.nextSibling;
-                if (nextEl && nextEl.nodeType === 1 && nextEl.classList.contains('adv-copy-snippet') && val.endsWith('\u200B')) {
-                    if (offset >= val.length - 1) {
-                        const textSpan = nextEl.querySelector('.snippet-text');
+                if (nextEl && nextEl.nodeType === 1 && nextEl.classList.contains('adv-inline-shell')) {
+                    const isAtBoundary = val.endsWith('\u200B') ? (offset >= val.length - 1) : (offset === val.length);
+                    if (isAtBoundary) {
+                        const textSpan = nextEl.classList.contains('adv-copy-snippet') ? nextEl.querySelector('.snippet-text') : null;
                         if (textSpan) {
                             e.preventDefault();
                             const newRange = document.createRange();
@@ -244,16 +245,31 @@ Object.assign(Editor, {
                             sel.addRange(newRange);
                             return true;
                         }
+                        // Note inline o segnalibri: salta direttamente oltre la shell e il suo \u200B finale
+                        e.preventDefault();
+                        const afterNode = nextEl.nextSibling;
+                        const newRange = document.createRange();
+                        if (afterNode && afterNode.nodeType === 3) {
+                            const afterVal = afterNode.nodeValue || '';
+                            newRange.setStart(afterNode, afterVal.startsWith('\u200B') ? Math.min(1, afterVal.length) : 0);
+                        } else {
+                            newRange.setStartAfter(nextEl);
+                        }
+                        newRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                        return true;
                     }
                 }
             }
 
-            // Avvicinamento da destra verso lo snippet con ArrowLeft
+            // Avvicinamento da destra verso la shell inline con ArrowLeft
             if (e.key === 'ArrowLeft') {
                 const prevEl = node.previousSibling;
-                if (prevEl && prevEl.nodeType === 1 && prevEl.classList.contains('adv-copy-snippet') && val.startsWith('\u200B')) {
-                    if (offset <= 1) {
-                        const textSpan = prevEl.querySelector('.snippet-text');
+                if (prevEl && prevEl.nodeType === 1 && prevEl.classList.contains('adv-inline-shell')) {
+                    const isAtBoundary = val.startsWith('\u200B') ? (offset <= 1) : (offset === 0);
+                    if (isAtBoundary) {
+                        const textSpan = prevEl.classList.contains('adv-copy-snippet') ? prevEl.querySelector('.snippet-text') : null;
                         if (textSpan) {
                             e.preventDefault();
                             const newRange = document.createRange();
@@ -263,6 +279,20 @@ Object.assign(Editor, {
                             sel.addRange(newRange);
                             return true;
                         }
+                        // Note inline o segnalibri: salta direttamente prima della shell e del suo \u200B iniziale
+                        e.preventDefault();
+                        const beforeNode = prevEl.previousSibling;
+                        const newRange = document.createRange();
+                        if (beforeNode && beforeNode.nodeType === 3) {
+                            const beforeVal = beforeNode.nodeValue || '';
+                            newRange.setStart(beforeNode, beforeVal.endsWith('\u200B') ? Math.max(0, beforeVal.length - 1) : beforeVal.length);
+                        } else {
+                            newRange.setStartBefore(prevEl);
+                        }
+                        newRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+                        return true;
                     }
                 }
             }
@@ -490,7 +520,7 @@ Object.assign(Editor, {
             Editor.clearWidgetSelection();
         }
 
-        // Gestione escape orizzontale dagli snippet
+        // Gestione escape orizzontale dagli snippet e inline shell
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
             if (Editor._handleSnippetHorizontalEscape(e)) return true;
         }

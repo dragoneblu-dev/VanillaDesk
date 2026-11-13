@@ -6,19 +6,14 @@
  * - Incolla rich text (Word, Google Docs, siti web) con sanificazione profonda tramite Editor.cleanDOMTree.
  * - Incolla plain text con preservazione della struttura e spaziatura.
  * - Intercettore diretto in fase di cattura su #inlineNoteInput e #bookmarkCommentInput.
- * - FIX MULTI-PARAGRAPH SELECTION REPLACEMENT: Eliminazione atomica preventiva della selezione estesa
- *   prima dell'inserimento, garantendo la sostituzione esatta del testo selezionato su più paragrafi.
- * - FIX SEAMLESS PARAGRAPH MERGE: Fusione naturale dei blocchi incollati nello stile di Word e Google Docs.
- * - FIX EXCEL RASTER IMAGE OVERRIDE: Neutralizzazione del file image/png accessorio generato da Microsoft Excel.
- * - FIX CARET UNCOLLAPSED ON WIDGET PASTE: Riposizionamento e collasso esatto del cursore alla fine del testo
- *   incollato all'interno di Snippet Copiabili e celle di Tabelle Semplici.
- * - REFACTOR DRY: Centralizzazione di _formatTextToInlineHTML e _insertInlineHTMLAndCollapse.
- * - FEAT PERSISTENZA TOTALE ASSET IN IDB & FSAA: Salvataggio fisico automatico delle immagini sia su disco
- *   (cartella assets/) sia in IndexedDB (store idb_assets in modalità Browser) con log diagnostici.
- * - FIX PRESERVE ADJACENT SPACES ON PASTE: Risolto l'annientamento dello spazio precedente su incolla.
- * - FIX ROOT BR ISOLATION: Ogni <br> a livello root viene convertito direttamente in <p><br></p>.
- * - FIX WEB IMAGES CORS FALLBACK: Gestione unificata di download e fallback per immagini web remote.
- * - FIX ASYNC PASTE CARET PRESERVATION: Ancoraggio preventivo sincrono nel DOM vivo prima del download asincrono.
+ * - Fusione preventiva dei blocchi residui su cancellazione di selezioni multi-paragrafo.
+ * - Fusione continua di testa e coda (Seamless Paragraph Merging) su incolla di blocchi multipli o singoli.
+ * - Normalizzazione preventiva del blocco ospite quando il cursore si trova su testo nudo dentro #noteContent.
+ * - Salvataggio dello snapshot Undo prima di qualsiasi mutazione del DOM (compreso il marcatore asincrono).
+ * - Neutralizzazione del file image/png accessorio generato da Microsoft Excel.
+ * - Riposizionamento e collasso esatto del cursore al termine del testo incollato.
+ * - Salvataggio fisico automatico delle immagini sia su disco (cartella assets/) sia in IndexedDB (idb_assets).
+ * - Isolamento dei titoli editabili (.widget-title, .adv-table-title) dall'area codice <pre>.
  */
 
 Object.assign(Editor, {
@@ -243,7 +238,9 @@ Object.assign(Editor, {
 
         // Controllo contesti protetti ed editor dedicati (Note Inline e Commenti Segnalibri)
         const isInsideWidget = WidgetManager.isProtectedBlock(targetNode) || WidgetManager.isProtectedInline(targetNode);
-        const codeWrapper = targetNode.closest('[data-widget-type="code"]');
+        const titleNode = targetNode.closest('.widget-title, .adv-table-title');
+        const codePreNode = targetNode.closest('pre.code-content');
+        const codeWrapper = codePreNode ? targetNode.closest('[data-widget-type="code"]') : null;
         const snippetText = targetNode.closest('.snippet-text');
 
         // =========================================================================
@@ -256,7 +253,7 @@ Object.assign(Editor, {
             const tableHTML = Editor._createSimpleTableFromExcel(pastedHTML, pastedText);
             if (tableHTML) {
                 e.preventDefault();
-                Editor.saveSnapshot();
+                Editor.saveSnapshot(true);
 
                 if (sel.rangeCount > 0 && !sel.isCollapsed) {
                     sel.getRangeAt(0).deleteContents();
@@ -336,7 +333,7 @@ Object.assign(Editor, {
                     const fileOrBlob = item.getAsFile();
                     if (!fileOrBlob) return;
 
-                    Editor.saveSnapshot();
+                    Editor.saveSnapshot(true);
 
                     if (typeof UI !== 'undefined' && UI.showToast) {
                         UI.showToast(typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('editor_core.toast_saving_image') : "Salvataggio immagine in corso...", "info");
@@ -389,27 +386,62 @@ Object.assign(Editor, {
         const isHeavyLoad = pastedText.length > 15000 || (pastedHTML && pastedHTML.length > 30000);
         e.preventDefault();
 
+        // Salvataggio preventivo dello snapshot PRIMA di qualsiasi alterazione del DOM (selezione o marker)
+        Editor.saveSnapshot(true);
+
         // =========================================================================
         // ANCORAGGIO PREVENTIVO NEL DOM VIVO (Previene perdita del range su await)
         // =========================================================================
         const editorRootEl = document.getElementById('noteContent');
         let preAsyncAnchorMarker = null;
 
-        if (sel.rangeCount > 0 && editorRootEl && editorRootEl.contains(sel.anchorNode)) {
+        if (!isInsideWidget && sel.rangeCount > 0 && editorRootEl && editorRootEl.contains(sel.anchorNode)) {
             const rawRange = sel.getRangeAt(0);
-            if (!rawRange.collapsed) {
-                rawRange.deleteContents();
-            }
             preAsyncAnchorMarker = document.createElement('span');
             preAsyncAnchorMarker.id = 'paste-anchor-temp-' + Date.now();
             preAsyncAnchorMarker.style.display = 'none';
-            rawRange.insertNode(preAsyncAnchorMarker);
+
+            if (!rawRange.collapsed) {
+                const getBlockHost = (n) => {
+                    const el = n.nodeType === 3 ? n.parentNode : n;
+                    const blk = el && el.closest ? el.closest('p, div, li, h1, h2, h3, h4, h5, h6, blockquote') : null;
+                    return (blk && blk.id !== 'noteContent' && editorRootEl.contains(blk)) ? blk : null;
+                };
+                const startBlock = getBlockHost(rawRange.startContainer);
+                const endBlock = getBlockHost(rawRange.endContainer);
+
+                rawRange.deleteContents();
+
+                // Se la selezione attraversava due blocchi distinti, deleteContents() lascia i due blocchi separati
+                // e collassa il range nell'antenato comune: li fondiamo subito in startBlock con il marker al punto di giunzione.
+                if (startBlock && endBlock && startBlock !== endBlock &&
+                    document.body.contains(startBlock) && document.body.contains(endBlock) &&
+                    !startBlock.closest('.adv-widget-shell, .simple-table-wrapper') &&
+                    !endBlock.closest('.adv-widget-shell, .simple-table-wrapper')) {
+
+                    if (startBlock.lastChild && startBlock.lastChild.nodeName === 'BR') {
+                        startBlock.lastChild.remove();
+                    }
+                    startBlock.appendChild(preAsyncAnchorMarker);
+
+                    const endHasBrOnly = endBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' &&
+                                         !endBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+                    if (!endHasBrOnly) {
+                        while (endBlock.firstChild) {
+                            startBlock.appendChild(endBlock.firstChild);
+                        }
+                    }
+                    endBlock.remove();
+                } else {
+                    rawRange.insertNode(preAsyncAnchorMarker);
+                }
+            } else {
+                rawRange.insertNode(preAsyncAnchorMarker);
+            }
         }
 
         const processPaste = async () => {
             try {
-                Editor.saveSnapshot();
-
                 const rawPastedText = (pastedText || '').trim();
                 const hasImagesInHTML = pastedHTML && /<img\b/i.test(pastedHTML);
                 // Non trattare come URL web se l'HTML veicola immagini (es. Google Immagini che fornisce l'URL in text/plain)
@@ -419,6 +451,11 @@ Object.assign(Editor, {
                 // Gestione incolla link web
                 if (!isInsideWidget && !isCodeContext && !snippetText && isSingleWebUrl) {
                     if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                        const restoreRange = document.createRange();
+                        restoreRange.setStartBefore(preAsyncAnchorMarker);
+                        restoreRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(restoreRange);
                         preAsyncAnchorMarker.remove();
                         preAsyncAnchorMarker = null;
                     }
@@ -484,6 +521,25 @@ Object.assign(Editor, {
                         return;
                     }
 
+                    // Incolla su titolo del widget (es. blocco di codice, database, diario):
+                    // inserisce testo piano monoriga mantenendo il cursore esattamente nel titolo
+                    if (titleNode) {
+                        const cleanTitleText = pastedText.replace(/[\r\n]+/g, ' ');
+                        const range = sel.getRangeAt(0);
+                        range.deleteContents();
+                        const textNode = document.createTextNode(cleanTitleText);
+                        range.insertNode(textNode);
+
+                        const newRange = document.createRange();
+                        newRange.setStart(textNode, textNode.nodeValue.length);
+                        newRange.collapse(true);
+                        sel.removeAllRanges();
+                        sel.addRange(newRange);
+
+                        Store.triggerAutoSave();
+                        return;
+                    }
+
                     if (snippetText || targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th')) {
                         const inlineHtml = Editor._formatTextToInlineHTML(pastedText);
                         Editor._insertInlineHTMLAndCollapse(inlineHtml, sel.getRangeAt(0), sel);
@@ -493,8 +549,8 @@ Object.assign(Editor, {
 
                     let cleanText = pastedText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
                     
-                    if (codeWrapper) {
-                        const preNode = codeWrapper.querySelector('pre');
+                    if (codeWrapper && codePreNode) {
+                        const preNode = codePreNode;
                         if (preNode.innerHTML === '<br>') preNode.innerHTML = '';
                         
                         const selection = window.getSelection();
@@ -530,27 +586,39 @@ Object.assign(Editor, {
 
                 let finalHTML = '';
 
-                // GESTIONE INCOLLA TESTO PIATTO
-                if (!pastedHTML) {
+                // Helper locale per rimuovere il marker solo sui ritorni immediati ripristinando la posizione
+                const restoreAndRemoveMarker = () => {
                     if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                        const r = document.createRange();
+                        r.setStartBefore(preAsyncAnchorMarker);
+                        r.collapse(true);
+                        freshSel.removeAllRanges();
+                        freshSel.addRange(r);
                         preAsyncAnchorMarker.remove();
                         preAsyncAnchorMarker = null;
                     }
+                };
 
+                // GESTIONE INCOLLA TESTO PIATTO
+                if (!pastedHTML) {
                     if (!currentTargetNode || !currentTargetNode.closest('td, th, li, pre')) {
                         if (!pastedText.includes('\n')) {
+                            restoreAndRemoveMarker();
                             document.execCommand('insertText', false, pastedText);
                             Store.triggerAutoSave();
                             return;
                         } else {
+                            // Mantiene preAsyncAnchorMarker intatto per lo split e merge preciso nel Caso B
                             finalHTML = Editor._formatPlainTextForHTML(pastedText);
                         }
                     } else if (currentTargetNode.closest('td, th, li')) {
+                        restoreAndRemoveMarker();
                         const inlineHtml = Editor._formatTextToInlineHTML(pastedText);
                         Editor._insertInlineHTMLAndCollapse(inlineHtml, freshSel.getRangeAt(0), freshSel);
                         Store.triggerAutoSave();
                         return;
                     } else {
+                        restoreAndRemoveMarker();
                         document.execCommand('insertText', false, pastedText);
                         Store.triggerAutoSave();
                         return;
@@ -964,7 +1032,7 @@ Object.assign(Editor, {
                 }
 
                 // =========================================================================
-                // INSERIMENTO NEL DOM E FUSIONE NATURALE PARAGRAFI
+                // INSERIMENTO NEL DOM E FUSIONE NATURALE PARAGRAFI (SEAMLESS MERGE)
                 // =========================================================================
                 const tempDiv = document.createElement('div');
                 tempDiv.innerHTML = finalHTML;
@@ -978,19 +1046,54 @@ Object.assign(Editor, {
                 const isBlockElement = (el) => {
                     if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
                     const tag = el.tagName.toUpperCase();
-                    return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'TABLE', 'HR', 'UL', 'OL'].includes(tag) ||
+                    return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'TABLE', 'HR', 'UL', 'OL'].includes(tag) ||
                            el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper');
                 };
 
                 const hasAnyBlocks = Array.from(tempDiv.children).some(isBlockElement);
                 let caretTargetNode = null;
                 let caretTargetOffset = 0;
+                let caretPositionMode = null; // 'after' | 'start' | 'end'
 
                 // Determinazione del blocco contenitore (targetBlock) usando l'ancora o la selezione
                 let targetBlock = null;
                 if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
                     targetBlock = preAsyncAnchorMarker.closest('p, div, li, h1, h2, h3, h4, h5, h6, blockquote');
                     if (targetBlock && targetBlock.id === 'noteContent') targetBlock = null;
+                }
+
+                // Se il cursore si trova su testo nudo direttamente figlio di #noteContent (senza <p> attorno),
+                // avvolgiamo i nodi inline contigui in un <p> ospite così da applicare la fusione continua anche in quel caso
+                if (!targetBlock && hasAnyBlocks && preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode === editorRootEl) {
+                    const isInlineSibling = (n) => {
+                        if (!n) return false;
+                        if (n.nodeType === Node.TEXT_NODE) return true;
+                        if (n.nodeType === Node.ELEMENT_NODE) {
+                            return n.tagName !== 'BR' && !isBlockElement(n);
+                        }
+                        return false;
+                    };
+
+                    const leftNodes = [];
+                    let prev = preAsyncAnchorMarker.previousSibling;
+                    while (prev && isInlineSibling(prev)) {
+                        leftNodes.unshift(prev);
+                        prev = prev.previousSibling;
+                    }
+
+                    const rightNodes = [];
+                    let next = preAsyncAnchorMarker.nextSibling;
+                    while (next && isInlineSibling(next)) {
+                        rightNodes.push(next);
+                        next = next.nextSibling;
+                    }
+
+                    const wrapperP = document.createElement('p');
+                    editorRootEl.insertBefore(wrapperP, preAsyncAnchorMarker);
+                    leftNodes.forEach(n => wrapperP.appendChild(n));
+                    wrapperP.appendChild(preAsyncAnchorMarker);
+                    rightNodes.forEach(n => wrapperP.appendChild(n));
+                    targetBlock = wrapperP;
                 }
 
                 // CASO A: Contenuto puramente inline (es. immagine singola, frase o link)
@@ -1039,7 +1142,7 @@ Object.assign(Editor, {
                         caretTargetOffset = lastNode.nodeType === Node.TEXT_NODE ? lastNode.nodeValue.length : 1;
                     }
                 } else {
-                    // CASO B: Contenuto strutturato con blocchi multipli
+                    // CASO B: Contenuto strutturato con blocchi multipli o singoli incapsulati
                     const normalizedBlocks = [];
                     let inlineBuffer = [];
 
@@ -1079,39 +1182,223 @@ Object.assign(Editor, {
                     });
                     flushInlineBuffer();
 
-                    const isTargetEmpty = targetBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' &&
-                                          !targetBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell');
+                    // Verifica se un blocco è un contenitore testuale i cui figli inline possono fondersi col paragrafo ospite
+                    const isMergeableTextBlock = (el) => {
+                        if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+                        if (el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper') || el.classList.contains('col-box')) return false;
+                        return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(el.tagName.toUpperCase());
+                    };
 
-                    if (isTargetEmpty) {
-                        const parent = targetBlock.parentNode;
-                        let lastInserted = null;
-                        normalizedBlocks.forEach(b => {
-                            parent.insertBefore(b, targetBlock);
-                            lastInserted = b;
-                        });
-                        targetBlock.remove();
+                    // Estrae il contenuto inline effettivo di un blocco omettendo eventuali <br> segnaposto di riga vuota
+                    const extractInlineContent = (blockEl) => {
+                        const t = blockEl.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                        const m = blockEl.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+                        const contentFrag = document.createDocumentFragment();
+                        if (!t && !m) return contentFrag;
+                        while (blockEl.firstChild) {
+                            contentFrag.appendChild(blockEl.firstChild);
+                        }
+                        return contentFrag;
+                    };
 
-                        if (lastInserted) {
-                            caretTargetNode = lastInserted;
-                            caretTargetOffset = isBlockElement(lastInserted) ? -1 : lastInserted.childNodes.length;
+                    // Adatta i blocchi <p>/<div> in <li> se inseriti direttamente dentro una lista <ul>/<ol>
+                    const adaptBlockForParent = (blockEl) => {
+                        if (targetBlock.tagName === 'LI' && targetBlock.parentNode && ['UL', 'OL'].includes(targetBlock.parentNode.tagName)) {
+                            if (isMergeableTextBlock(blockEl)) {
+                                const li = document.createElement('li');
+                                while (blockEl.firstChild) li.appendChild(blockEl.firstChild);
+                                if (li.childNodes.length === 0) li.innerHTML = '<br>';
+                                return li;
+                            }
+                        }
+                        return blockEl;
+                    };
+
+                    const setCaretAfterInlineNode = (node) => {
+                        caretTargetNode = node;
+                        if (node.nodeType === Node.TEXT_NODE) {
+                            caretTargetOffset = node.nodeValue.length;
+                            caretPositionMode = null;
+                        } else {
+                            caretPositionMode = 'after';
+                        }
+                    };
+
+                    const checklistTextSpan = (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode)
+                        ? preAsyncAnchorMarker.parentNode.closest('.checklist-text')
+                        : null;
+
+                    if (checklistTextSpan && normalizedBlocks.length === 1 && isMergeableTextBlock(normalizedBlocks[0])) {
+                        const inlineFrag = extractInlineContent(normalizedBlocks[0]);
+                        const lastMoved = inlineFrag.lastChild;
+                        preAsyncAnchorMarker.parentNode.insertBefore(inlineFrag, preAsyncAnchorMarker);
+                        preAsyncAnchorMarker.remove();
+                        preAsyncAnchorMarker = null;
+
+                        if (lastMoved) {
+                            setCaretAfterInlineNode(lastMoved);
+                        } else {
+                            caretTargetNode = checklistTextSpan;
+                            caretPositionMode = 'end';
                         }
                     } else {
-                        // Inserimento con preservazione del punto d'ancoraggio nel blocco
-                        const frag = document.createDocumentFragment();
-                        normalizedBlocks.forEach(b => frag.appendChild(b));
-                        const lastNode = frag.lastChild;
-
-                        if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
-                            preAsyncAnchorMarker.parentNode.insertBefore(frag, preAsyncAnchorMarker);
+                        // Estrae l'eventuale coda di testo/formattazione presente dopo il cursore nel blocco ospite
+                        let tailFrag = null;
+                        let hasTailContent = false;
+                        if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode && targetBlock.contains(preAsyncAnchorMarker)) {
+                            const tailRange = document.createRange();
+                            tailRange.setStartAfter(preAsyncAnchorMarker);
+                            tailRange.setEnd(targetBlock, targetBlock.childNodes.length);
+                            tailFrag = tailRange.extractContents();
                             preAsyncAnchorMarker.remove();
                             preAsyncAnchorMarker = null;
-                        } else {
-                            targetBlock.parentNode.insertBefore(frag, targetBlock.nextSibling);
+
+                            hasTailContent = tailFrag.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() !== '' ||
+                                             !!tailFrag.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
                         }
 
-                        if (lastNode) {
-                            caretTargetNode = lastNode;
-                            caretTargetOffset = isBlockElement(lastNode) ? -1 : lastNode.childNodes.length;
+                        const hasHeadContent = targetBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() !== '' ||
+                                               !!targetBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+
+                        if (!hasHeadContent && !hasTailContent) {
+                            // Blocco ospite vuoto: sostituisce interamente con i nuovi blocchi
+                            const frag = document.createDocumentFragment();
+                            let lastInsertedBlock = null;
+                            normalizedBlocks.forEach(b => {
+                                const adapted = adaptBlockForParent(b);
+                                frag.appendChild(adapted);
+                                lastInsertedBlock = adapted;
+                            });
+                            targetBlock.parentNode.replaceChild(frag, targetBlock);
+                            if (lastInsertedBlock) {
+                                caretTargetNode = lastInsertedBlock;
+                                caretPositionMode = 'end';
+                            }
+                        } else if (normalizedBlocks.length === 1) {
+                            const onlyBlock = normalizedBlocks[0];
+
+                            if (isMergeableTextBlock(onlyBlock)) {
+                                // Singolo blocco testuale incollato in un blocco non vuoto: fusione diretta inline tra testa e coda
+                                if (!hasHeadContent) {
+                                    targetBlock.innerHTML = '';
+                                }
+                                const inlineFrag = extractInlineContent(onlyBlock);
+                                const lastMoved = inlineFrag.lastChild;
+                                if (lastMoved) {
+                                    targetBlock.appendChild(inlineFrag);
+                                    setCaretAfterInlineNode(lastMoved);
+                                } else if (hasHeadContent && targetBlock.lastChild) {
+                                    setCaretAfterInlineNode(targetBlock.lastChild);
+                                } else {
+                                    caretTargetNode = targetBlock;
+                                    caretPositionMode = 'start';
+                                }
+
+                                if (hasTailContent && tailFrag) {
+                                    targetBlock.appendChild(tailFrag);
+                                }
+                            } else {
+                                // Singolo blocco strutturale non fondibile (lista, tabella, widget)
+                                const adaptedOnly = adaptBlockForParent(onlyBlock);
+                                if (!hasHeadContent && hasTailContent) {
+                                    targetBlock.innerHTML = '';
+                                    targetBlock.appendChild(tailFrag);
+                                    targetBlock.parentNode.insertBefore(adaptedOnly, targetBlock);
+                                } else if (hasHeadContent && !hasTailContent) {
+                                    targetBlock.parentNode.insertBefore(adaptedOnly, targetBlock.nextSibling);
+                                } else {
+                                    const tailBlock = document.createElement(targetBlock.tagName === 'LI' ? 'li' : 'p');
+                                    tailBlock.appendChild(tailFrag);
+                                    const parent = targetBlock.parentNode;
+                                    const nextSib = targetBlock.nextSibling;
+                                    parent.insertBefore(adaptedOnly, nextSib);
+                                    parent.insertBefore(tailBlock, nextSib);
+                                }
+                                caretTargetNode = adaptedOnly;
+                                caretPositionMode = 'end';
+                            }
+                        } else {
+                            // Più blocchi incollati in un blocco non vuoto: fusione continua di testa (B_0) e coda (B_k)
+                            const remainingBlocks = [...normalizedBlocks];
+
+                            // 1. Testa: se c'è contenuto prima del cursore e il primo blocco è testuale, fondilo in coda a targetBlock
+                            let headMergedNode = null;
+                            if (hasHeadContent && isMergeableTextBlock(remainingBlocks[0])) {
+                                const firstBlock = remainingBlocks.shift();
+                                const firstFrag = extractInlineContent(firstBlock);
+                                const lastFromFirst = firstFrag.lastChild;
+                                if (lastFromFirst) {
+                                    targetBlock.appendChild(firstFrag);
+                                    headMergedNode = lastFromFirst;
+                                } else {
+                                    headMergedNode = targetBlock.lastChild;
+                                }
+                            }
+
+                            // 2. Coda: se c'è contenuto dopo il cursore, fondilo in coda all'ultimo blocco testuale (o crea blocco coda)
+                            let tailBlock = null;
+                            let lastBlockInInsertion = null;
+
+                            if (hasTailContent && tailFrag) {
+                                const lastIdx = remainingBlocks.length - 1;
+                                if (lastIdx >= 0 && isMergeableTextBlock(remainingBlocks[lastIdx])) {
+                                    const lastBlock = remainingBlocks[lastIdx];
+                                    const tLast = lastBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                                    const mLast = lastBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+                                    if (!tLast && !mLast) {
+                                        lastBlock.innerHTML = '';
+                                    }
+                                    const lastInLastBlock = lastBlock.lastChild;
+                                    lastBlock.appendChild(tailFrag);
+
+                                    const adaptedLast = adaptBlockForParent(lastBlock);
+                                    remainingBlocks[lastIdx] = adaptedLast;
+
+                                    if (lastInLastBlock) {
+                                        setCaretAfterInlineNode(lastInLastBlock);
+                                    } else {
+                                        caretTargetNode = adaptedLast;
+                                        caretPositionMode = 'start';
+                                    }
+                                } else {
+                                    tailBlock = document.createElement(targetBlock.tagName === 'LI' ? 'li' : 'p');
+                                    tailBlock.appendChild(tailFrag);
+                                    if (lastIdx >= 0) {
+                                        lastBlockInInsertion = remainingBlocks[lastIdx];
+                                    } else if (headMergedNode) {
+                                        setCaretAfterInlineNode(headMergedNode);
+                                    }
+                                }
+                            } else {
+                                if (remainingBlocks.length > 0) {
+                                    lastBlockInInsertion = remainingBlocks[remainingBlocks.length - 1];
+                                } else if (headMergedNode) {
+                                    setCaretAfterInlineNode(headMergedNode);
+                                }
+                            }
+
+                            const frag = document.createDocumentFragment();
+                            remainingBlocks.forEach((b) => {
+                                const adapted = adaptBlockForParent(b);
+                                if (b === lastBlockInInsertion) {
+                                    lastBlockInInsertion = adapted;
+                                }
+                                frag.appendChild(adapted);
+                            });
+                            if (tailBlock) {
+                                frag.appendChild(tailBlock);
+                            }
+
+                            if (!caretTargetNode && lastBlockInInsertion) {
+                                caretTargetNode = lastBlockInInsertion;
+                                caretPositionMode = 'end';
+                            }
+
+                            if (hasHeadContent) {
+                                targetBlock.parentNode.insertBefore(frag, targetBlock.nextSibling);
+                            } else {
+                                targetBlock.parentNode.replaceChild(frag, targetBlock);
+                            }
                         }
                     }
                 }
@@ -1145,7 +1432,16 @@ Object.assign(Editor, {
                 const finalSel = window.getSelection();
                 if (caretTargetNode && document.body.contains(caretTargetNode) && finalSel) {
                     const newRange = document.createRange();
-                    if (caretTargetNode.nodeType === Node.TEXT_NODE) {
+                    if (caretPositionMode === 'start') {
+                        newRange.setStart(caretTargetNode, 0);
+                        newRange.collapse(true);
+                    } else if (caretPositionMode === 'end') {
+                        newRange.selectNodeContents(caretTargetNode);
+                        newRange.collapse(false);
+                    } else if (caretPositionMode === 'after') {
+                        newRange.setStartAfter(caretTargetNode);
+                        newRange.collapse(true);
+                    } else if (caretTargetNode.nodeType === Node.TEXT_NODE) {
                         const safeOffset = Math.min(caretTargetOffset, caretTargetNode.nodeValue.length);
                         newRange.setStart(caretTargetNode, safeOffset);
                         newRange.collapse(true);
@@ -1183,6 +1479,8 @@ Object.assign(Editor, {
                     Store.triggerAutoSave();
                 }
 
+            } catch (err) {
+                console.error('[Editor.handlePaste] Errore durante processPaste:', err);
             } finally {
                 if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
                     preAsyncAnchorMarker.remove();

@@ -33,6 +33,7 @@
  * FEAT AUTOINCREMENT: Generazione progressiva ID per addRow, duplicateRecord, createRecordAtDate e backfill per addColumn.
  * FEAT SMART RECORD NOTE DUPLICATION: Ispezione complessità note collegate (_isNoteComplexForDuplication), duplicazione
  * trasparente per note semplici con clonazione proprietà SYS_PROPERTIES_DB, e conferma con svuotamento campo per note complesse.
+ * REFACTOR I18N: Tutte le stringhe utente, alert, menu paginazione e tipi di dato sono tradotte con I18n.
  */
 
 Object.assign(AdvancedTable, {
@@ -228,7 +229,7 @@ Object.assign(AdvancedTable, {
                 } else if (part === 'end' && dateObj.start) {
                     const startMs = new Date(dateObj.start).getTime();
                     if (!isNaN(startMs) && newValMs < startMs) {
-                        alert("⚠️ ATTENZIONE:\nLa Data di Fine non può essere antecedente alla Data di Inizio.\n\nIl valore è stato reimpostato automaticamente per coincidere con la data di Inizio.");
+                        alert(I18n.t('adv_data.date_end_before_start_alert'));
                         normalizedValue = dateObj.start;
                         wasAdjusted = true;
                     }
@@ -497,7 +498,7 @@ Object.assign(AdvancedTable, {
         AdvancedTable.openRecordView(tableId, newRowId, null, true);
 
         if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
-            UI.showToast("Record duplicato con successo.", "success");
+            UI.showToast(I18n.t('adv_data.record_duplicated_toast'), "success");
         }
     },
 
@@ -549,7 +550,7 @@ Object.assign(AdvancedTable, {
         // GUARDIA CENTRALE: Blocco eliminazione riga sullo Shadow Database
         if (AdvancedTable.isSystemDatabaseProtected(tableId)) return;
 
-        if (!confirm("Sei sicuro di voler eliminare definitivamente questo record dal database? L'operazione non può essere annullata.")) return;
+        if (!confirm(I18n.t('adv_data.confirm_delete_record'))) return;
         
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         let state = AdvancedTable.getState(realTableId);
@@ -831,26 +832,26 @@ Object.assign(AdvancedTable, {
         const newColId = 'c_' + Store.generateId();
 
         const typeNames = {
-            'text': 'Testo',
-            'number': 'Numero',
-            'autoincrement': 'ID',
-            'select': 'Selezione',
-            'multi-select': 'Selezione Multipla',
-            'date': 'Data',
-            'datetime': 'Data e Ora',
-            'time': 'Orario',
-            'checkbox': 'Spunta',
-            'formula': 'Formula',
-            'relation': 'Relazione',
-            'rollup': 'Rollup',
-            'url': 'Link',
-            'created_time': 'Creazione',
-            'last_edited_time': 'Ultima Modifica',
-            'record_note': 'Pagina Record',
-            'note_link': 'Collegamento a Nota',
-            'button': 'Macro'
+            'text': I18n.t('adv_col_menu.type_text'),
+            'number': I18n.t('adv_col_menu.type_number'),
+            'autoincrement': I18n.t('adv_col_menu.type_autoincrement') || "ID",
+            'select': I18n.t('adv_col_menu.type_select'),
+            'multi-select': I18n.t('adv_col_menu.type_multi_select'),
+            'date': I18n.t('adv_col_menu.type_date'),
+            'datetime': I18n.t('adv_col_menu.type_datetime'),
+            'time': I18n.t('adv_col_menu.type_time'),
+            'checkbox': I18n.t('adv_col_menu.type_checkbox'),
+            'formula': I18n.t('adv_col_menu.type_formula'),
+            'relation': I18n.t('adv_col_menu.type_relation'),
+            'rollup': I18n.t('adv_col_menu.type_rollup'),
+            'url': I18n.t('adv_col_menu.type_url'),
+            'created_time': I18n.t('adv_col_menu.type_created_time'),
+            'last_edited_time': I18n.t('adv_col_menu.type_last_edited_time'),
+            'record_note': I18n.t('adv_col_menu.type_record_note'),
+            'note_link': I18n.t('adv_col_menu.type_note_link'),
+            'button': I18n.t('adv_col_menu.type_button')
         };
-        const colName = typeNames[type] || 'Nuova Colonna';
+        const colName = typeNames[type] || I18n.t('adv_data.default_new_column');
 
         const newCol = { id: newColId, name: colName, type: type, width: 150 };
         
@@ -859,7 +860,7 @@ Object.assign(AdvancedTable, {
             newCol.digits = 0;
             newCol.width = 110;
         } else if (type === 'button') {
-            newCol.buttonLabel = 'Esegui';
+            newCol.buttonLabel = I18n.t('adv_data.default_button_run');
             newCol.buttonColor = '#2563eb';
             newCol.buttonIcon = typeof Icons !== 'undefined' ? Icons.play : '▶';
             newCol.requireConfirm = false;
@@ -939,7 +940,7 @@ Object.assign(AdvancedTable, {
         if (typeof AdvancedPivot !== 'undefined') AdvancedPivot.updateDependent(realTableId);
 
         if (!silent && typeof UI !== 'undefined' && UI.showToast) {
-            UI.showToast("Tabella e dati ricaricati con successo.", "info");
+            UI.showToast(I18n.t('adv_data.table_reloaded_toast'), "info");
         }
     },
 
@@ -968,14 +969,14 @@ Object.assign(AdvancedTable, {
         dropdown.onclick = (ev) => ev.stopPropagation();
 
         const opts = [
-            { val: 10, label: '10 righe per pagina' },
-            { val: 25, label: '25 righe per pagina (Default)' },
-            { val: 50, label: '50 righe per pagina' },
-            { val: 100, label: '100 righe per pagina' },
-            { val: 200, label: '200 righe per pagina (Max)' }
+            { val: 10, label: I18n.t('adv_data.rows_per_page_10') },
+            { val: 25, label: I18n.t('adv_data.rows_per_page_25') },
+            { val: 50, label: I18n.t('adv_data.rows_per_page_50') },
+            { val: 100, label: I18n.t('adv_data.rows_per_page_100') },
+            { val: 200, label: I18n.t('adv_data.rows_per_page_200') }
         ];
 
-        let html = `<div class="adv-dropdown-title">Righe per pagina</div>`;
+        let html = `<div class="adv-dropdown-title">${I18n.t('adv_data.rows_per_page_title')}</div>`;
         opts.forEach(opt => {
             let isActive = (state.pageSize || 25) == opt.val;
             html += `<div class="adv-dropdown-item ${isActive ? 'active' : ''}" onclick="AdvancedTable.setPageSize('${tableId}', '${opt.val}')">

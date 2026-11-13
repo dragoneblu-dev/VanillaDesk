@@ -25,6 +25,8 @@
  * possa clonare il link sulla nuova riga, eliminando sdoppiamenti alla radice senza pezze a posteriori.
  * FIX CHECKLIST BACKSPACE CRASH & CARET BOUNDARY (2.2): Calcolo protetto di isAtChecklistStart con span.contains()
  * per prevenire eccezioni IndexSizeError e garantire la conversione pulita del primo elemento to-do in paragrafo.
+ * FIX MEDIA DELETION GUARD: Esclusione dei blocchi contenenti immagini, audio, iframe, hr o widget inline
+ * dalla rimozione automatica di righe vuote in handleBackspaceKey e handleDeleteKey.
  */
 
 Object.assign(Editor, {
@@ -667,11 +669,13 @@ Object.assign(Editor, {
             }
         }
 
+        const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+        const hasNonTextMedia = (el) => !!(el && el.querySelector && el.querySelector('img, audio, iframe, hr, .adv-widget-shell, .adv-inline-shell'));
+
         // Verifica se il cursore è all'inizio del blocco corrente tenendo conto di tag inline e media
         let isAtBlockStart = false;
         if (block) {
-            const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-            const isEmptyBlock = cleanText(block.textContent) === '' && !block.querySelector('img, audio, iframe, .adv-widget-shell, .adv-inline-shell, hr');
+            const isEmptyBlock = cleanText(block.textContent) === '' && !hasNonTextMedia(block);
 
             if (isEmptyBlock) {
                 isAtBlockStart = true;
@@ -706,8 +710,7 @@ Object.assign(Editor, {
                 return;
             }
 
-            const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-            const isEmptyBlock = cleanText(block.textContent) === '';
+            const isEmptyBlock = cleanText(block.textContent) === '' && !hasNonTextMedia(block);
             
             // Trova il blocco visivo precedente tramite TreeWalker
             let prevNode = null;
@@ -751,16 +754,22 @@ Object.assign(Editor, {
                 return;
             }
 
-            // Se il blocco precedente è vuoto (tra testi normali): rimuovilo senza spostare il cursore a fine riga
-            if (prevNode && !WidgetManager.isProtectedBlock(prevNode) && cleanText(prevNode.textContent) === '') {
+            // Se il blocco precedente è effettivamente vuoto (senza testo né immagini/audio/widget): rimuovilo senza spostare il cursore a fine riga
+            if (prevNode && !WidgetManager.isProtectedBlock(prevNode) && cleanText(prevNode.textContent) === '' && !hasNonTextMedia(prevNode)) {
                 e.preventDefault();
                 Editor.saveSnapshot();
+                let currParent = prevNode.parentNode;
                 prevNode.remove();
+                while (currParent && (currParent.tagName === 'UL' || currParent.tagName === 'OL') && currParent.children.length === 0) {
+                    const upper = currParent.parentNode;
+                    currParent.remove();
+                    currParent = upper;
+                }
                 Store.triggerAutoSave();
                 return;
             }
 
-            // Se il blocco corrente è vuoto (tra testi normali): rimuovilo e posiziona il cursore sul blocco precedente
+            // Se il blocco corrente è vuoto (tra testi normali o sotto un media): rimuovilo e posiziona il cursore sul blocco precedente
             if (isEmptyBlock && prevNode && !WidgetManager.isProtectedBlock(prevNode) && !block.closest('li, table, .adv-widget-shell')) {
                 e.preventDefault();
                 Editor.saveSnapshot();
@@ -940,7 +949,8 @@ Object.assign(Editor, {
             let isAtEnd = false;
             
             const cleanText = (str) => (str || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
-            const isEmptyBlock = cleanText(block.textContent) === '' && !block.querySelector('img, audio, iframe, .adv-widget-shell, .adv-inline-shell, hr');
+            const hasNonTextMedia = (el) => !!(el && el.querySelector && el.querySelector('img, audio, iframe, hr, .adv-widget-shell, .adv-inline-shell'));
+            const isEmptyBlock = cleanText(block.textContent) === '' && !hasNonTextMedia(block);
 
             if (isEmptyBlock) {
                 isAtEnd = true;
@@ -1007,11 +1017,17 @@ Object.assign(Editor, {
                     return; 
                 }
 
-                // Se il blocco successivo è vuoto (tra testi normali): rimuovilo con snapshot e autosave immediato
-                if (nextNode && !WidgetManager.isProtectedBlock(nextNode) && cleanText(nextNode.textContent) === '') {
+                // Se il blocco successivo è effettivamente vuoto (senza testo né immagini/audio/widget): rimuovilo con snapshot e autosave immediato
+                if (nextNode && !WidgetManager.isProtectedBlock(nextNode) && cleanText(nextNode.textContent) === '' && !hasNonTextMedia(nextNode)) {
                     e.preventDefault();
                     Editor.saveSnapshot();
+                    let currParent = nextNode.parentNode;
                     nextNode.remove();
+                    while (currParent && (currParent.tagName === 'UL' || currParent.tagName === 'OL') && currParent.children.length === 0) {
+                        const upper = currParent.parentNode;
+                        currParent.remove();
+                        currParent = upper;
+                    }
                     Store.triggerAutoSave();
                     return;
                 }

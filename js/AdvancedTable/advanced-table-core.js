@@ -13,6 +13,7 @@
  * PERF QUICK SEARCH: Gestione sincrona del focus/cursore senza timeout intermedi e correzione 'event.key' su Escape.
  * PERF INVERTED INDEX O(1): Struttura volatile in memoria _rowIndices e lookup atomico getRow() per relazioni e rollup.
  * FIX QUICK SEARCH FOCUS STYLING: Rimozione degli stili inline invasivi e adozione della classe .adv-quick-search-input per consentire l'evidenziazione :focus.
+ * REFACTOR I18N: Sostituzione delle stringhe hardcoded nei default di creazione, nomi di sistema e avvisi con I18n.t().
  */
 
 const AdvancedTable = {
@@ -208,8 +209,8 @@ const AdvancedTable = {
                 title: "Proprietà e Tag di Pagina",
                 isSystemDB: true,
                 columns: [
-                    { id: 'sys_c_note', name: 'Pagina Collegata', type: 'record_note', width: 200, hidden: false },
-                    { id: 'sys_c_tags', name: 'Tag', type: 'multi-select', width: 250, hidden: false }
+                    { id: 'sys_c_note', name: I18n.t('adv_core.sys_c_note_name'), type: 'record_note', width: 200, hidden: false },
+                    { id: 'sys_c_tags', name: I18n.t('adv_core.sys_c_tags_name'), type: 'multi-select', width: 250, hidden: false }
                 ],
                 rows: [],
                 selectOptions: { 'sys_c_tags': [] },
@@ -286,14 +287,14 @@ const AdvancedTable = {
 
     // Gestione DB Virtuale in Background
     getParentNoteName: (widgetId) => {
-        if (widgetId === 'SYS_PROPERTIES_DB') return "Sistema Globale";
-        if (!AppState.notes) return "Workspace";
+        if (widgetId === 'SYS_PROPERTIES_DB') return I18n.t('adv_core.parent_system_global');
+        if (!AppState.notes) return I18n.t('adv_core.parent_workspace');
         for (let n of AppState.notes) {
             if (n.content && n.content.includes(widgetId)) {
-                return n.title || 'Senza Titolo';
+                return n.title || I18n.t('editor.untitled');
             }
         }
-        return "Orfano";
+        return I18n.t('adv_core.parent_orphan');
     },
 
     _sanitizeState: (state) => {
@@ -468,14 +469,14 @@ const AdvancedTable = {
 
     _convertJournalToTableState: (id, jState) => {
         const fakeState = {
-            title: 'Diario/Log',
+            title: I18n.t('journal.default_title'),
             isPivot: false,
             columns:[
-                { id: 'j_date', name: 'Data', type: 'date' },
-                { id: 'j_time', name: 'Ora', type: 'time' },
-                { id: 'j_text', name: 'Testo', type: 'text' },
-                { id: 'j_done', name: 'Completato', type: 'checkbox' },
-                { id: 'j_end', name: 'Data Fine', type: 'datetime' }
+                { id: 'j_date', name: I18n.t('journal.csv_header_date'), type: 'date' },
+                { id: 'j_time', name: I18n.t('journal.csv_header_time'), type: 'time' },
+                { id: 'j_text', name: I18n.t('adv_col_menu.type_text'), type: 'text' },
+                { id: 'j_done', name: I18n.t('template_preview.status_done'), type: 'checkbox' },
+                { id: 'j_end', name: I18n.t('adv_col_menu.end_date'), type: 'datetime' }
             ],
             rows: []
         };
@@ -522,7 +523,7 @@ const AdvancedTable = {
                     AppState.databases[trueId] = AdvancedTable._sanitizeState(state);
                     wrapper.removeAttribute('data-state');
                 } catch (e) { 
-                    state = { title: "⚠️ Dati Corrotti", isPivot: false, columns:[{ id: 'c_err', name: 'Errore', type: 'text', width: 200 }], rows:[{ id: 'r_err', cells: { 'c_err': 'Contenuto illeggibile.' } }], selectOptions: {}, selectColors: {}, sorts: [], filters: {}, automations:[], conditionalColors:[] };
+                    state = { title: I18n.t('adv_core.corrupt_data_title'), isPivot: false, columns:[{ id: 'c_err', name: I18n.t('adv_core.corrupt_data_col'), type: 'text', width: 200 }], rows:[{ id: 'r_err', cells: { 'c_err': I18n.t('adv_core.corrupt_data_msg') } }], selectOptions: {}, selectColors: {}, sorts: [], filters: {}, automations:[], conditionalColors:[] };
                     AppState.databases[trueId] = state;
                 }
             }
@@ -722,7 +723,7 @@ const AdvancedTable = {
         if(node && node.nodeType === 3) node = node.parentNode;
 
         if (node && node.closest('.widget-type-columns, .simple-table-wrapper')) {
-            alert("Non è permesso inserire Widget Complessi all'interno delle Colonne o delle Tabelle Semplici per prevenire la corruzione del layout.\nSposta il cursore fuori prima di inserire.");
+            alert(I18n.t('adv_core.alert_widget_nesting_barrier'));
             return;
         }
 
@@ -730,7 +731,7 @@ const AdvancedTable = {
         const now = Date.now();
         const defaultNameComment = I18n.t('adv_cell.default_text_col_comment');
         const initialState = {
-            title: 'Nuovo Database',
+            title: I18n.t('adv_core.default_new_database'),
             viewType: 'table',
             freeWidth: false,
             striped: true,
@@ -744,12 +745,12 @@ const AdvancedTable = {
             showQuickSearch: false,
             autoIncrementCounter: 1,
             columns:[
-                { id: 'c_1', name: 'Nome', type: 'text', width: 200, hidden: false, comment: defaultNameComment },
-                { id: 'c_2', name: 'Tag', type: 'multi-select', width: 180, hidden: false },
-                { id: 'c_3', name: 'Ultima Modifica', type: 'last_edited_time', width: 150, hidden: false }
+                { id: 'c_1', name: I18n.t('adv_core.default_col_name'), type: 'text', width: 200, hidden: false, comment: defaultNameComment },
+                { id: 'c_2', name: I18n.t('adv_core.sys_c_tags_name'), type: 'multi-select', width: 180, hidden: false },
+                { id: 'c_3', name: I18n.t('adv_col_menu.type_last_edited_time'), type: 'last_edited_time', width: 150, hidden: false }
             ],
             rows:[
-                { id: 'r_1', createdAt: now, updatedAt: now, cells: { c_1: 'Elemento 1', c_2: [], c_3: '' } },
+                { id: 'r_1', createdAt: now, updatedAt: now, cells: { c_1: I18n.t('adv_core.default_item_1'), c_2: [], c_3: '' } },
                 { id: 'r_2', createdAt: now, updatedAt: now, cells: { c_1: '', c_2:[], c_3: '' } }
             ],
             selectOptions: { c_2:[] },

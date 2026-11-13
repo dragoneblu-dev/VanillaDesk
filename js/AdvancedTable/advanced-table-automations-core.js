@@ -11,6 +11,7 @@
  * delle note verso qualsiasi database collegato tramite triggerFromPropertyChange.
  * FIX GLOBAL WINDOW EXPORT: Esposizione esplicita dell'istanza su window.AdvancedAutomations per interoperabilità e test.
  * REFACTOR TYPE GUARDS: Sfrutta AppState.getRelationalDatabaseIds() eliminando iterazioni su widget non-tabellari.
+ * REFACTOR I18N: Sostituzione integrale di alert, messaggi di validazione, toast e conferme con chiavi multilingua I18n.t().
  */
 
 const AdvancedAutomations = {
@@ -23,7 +24,7 @@ const AdvancedAutomations = {
         clearTimeout(AdvancedAutomations._autoToastTimer);
         AdvancedAutomations._autoToastTimer = setTimeout(() => {
             if (typeof UI !== 'undefined' && UI.showToast) {
-                UI.showToast("Automazione eseguita", "auto");
+                UI.showToast(I18n.t('adv_auto_core.toast_executed'), "auto");
             }
         }, 800); 
     },
@@ -293,9 +294,9 @@ const AdvancedAutomations = {
                 const parts = t.colId.split('_PROP_');
                 const baseCol = (state.id === 'SYS_PROPERTIES_DB' || state.title === 'Proprietà e Tag di Pagina') ? state.columns.find(col => col.id === parts[1]) : state.columns.find(col => col.id === parts[0]);
                 if (!baseCol) {
-                    errors.push(`Condizione ${i + 1}: Colonna Pagina eliminata`);
+                    errors.push(I18n.t('adv_auto_core.err_cond_page_col_deleted', { num: i + 1 }));
                 } else if (!propsDb || !propsDb.columns.some(c => c.id === parts[1])) {
-                    errors.push(`Condizione ${i + 1}: Proprietà della Nota collegata eliminata dal sistema`);
+                    errors.push(I18n.t('adv_auto_core.err_cond_prop_deleted', { num: i + 1 }));
                 }
                 return;
             }
@@ -306,10 +307,10 @@ const AdvancedAutomations = {
 
             let c = state.columns.find(col => col.id === actualColId);
             if (!c) {
-                errors.push(`Condizione ${i + 1}: Colonna eliminata`);
+                errors.push(I18n.t('adv_auto_core.err_cond_col_deleted', { num: i + 1 }));
             } else if (c.type === 'date' || c.type === 'datetime') {
-                if (t.operator.startsWith('range_') && !c.hasEndDate) errors.push(`Condizione ${i + 1}: '${c.name}' non ha più la Data di Fine`);
-                if (!t.operator.startsWith('range_') && t.operator !== 'empty' && t.operator !== 'not_empty' && t.operator !== 'changed' && c.hasEndDate) errors.push(`Condizione ${i + 1}: '${c.name}' ora richiede un operatore Range`);
+                if (t.operator.startsWith('range_') && !c.hasEndDate) errors.push(I18n.t('adv_auto_core.err_cond_no_end_date', { num: i + 1, name: c.name }));
+                if (!t.operator.startsWith('range_') && t.operator !== 'empty' && t.operator !== 'not_empty' && t.operator !== 'changed' && c.hasEndDate) errors.push(I18n.t('adv_auto_core.err_cond_requires_range', { num: i + 1, name: c.name }));
             }
         });
 
@@ -320,19 +321,19 @@ const AdvancedAutomations = {
                 const parts = a.colId.split('_PROP_');
                 const baseCol = (state.id === 'SYS_PROPERTIES_DB' || state.title === 'Proprietà e Tag di Pagina') ? state.columns.find(col => col.id === parts[1]) : state.columns.find(col => col.id === parts[0]);
                 if (!baseCol) {
-                    errors.push(`Azione ${i + 1}: Colonna Pagina destinazione eliminata`);
+                    errors.push(I18n.t('adv_auto_core.err_act_page_col_deleted', { num: i + 1 }));
                 } else if (!propsDb || !propsDb.columns.some(c => c.id === parts[1])) {
-                    errors.push(`Azione ${i + 1}: Proprietà della Nota collegata eliminata dal sistema`);
+                    errors.push(I18n.t('adv_auto_core.err_act_prop_deleted', { num: i + 1 }));
                 }
                 return;
             }
 
             let c = state.columns.find(col => col.id === a.colId);
             if (!c) {
-                errors.push(`Azione ${i + 1}: Colonna destinazione eliminata`);
+                errors.push(I18n.t('adv_auto_core.err_act_col_deleted', { num: i + 1 }));
             } else if (c.type === 'date' || c.type === 'datetime') {
                 if (a.type.includes('_start') || a.type.includes('_end')) {
-                    if (!c.hasEndDate) errors.push(`Azione ${i + 1}: '${c.name}' non ha più la Data di Fine`);
+                    if (!c.hasEndDate) errors.push(I18n.t('adv_auto_core.err_act_no_end_date', { num: i + 1, name: c.name }));
                 }
             }
         });
@@ -347,32 +348,32 @@ const AdvancedAutomations = {
 
         const auto = AdvancedAutomations._tempAuto;
         if (auto.actions.length === 0 || auto.actions.some(a => !a.colId)) {
-            alert("Devi impostare almeno un'azione valida con una colonna di destinazione.");
+            alert(I18n.t('adv_auto_core.alert_action_required'));
             return;
         }
         if (auto.triggers.some(t => !t.colId)) {
-            alert("Rimuovi i trigger vuoti o seleziona una colonna/evento.");
+            alert(I18n.t('adv_auto_core.alert_empty_triggers'));
             return;
         }
 
         if (!auto.name || auto.name.trim() === '') {
-            let tName = "Modifica";
-            let aName = "Azione";
+            let tName = I18n.t('adv_auto_core.default_trigger_name');
+            let aName = I18n.t('adv_auto_core.default_action_name');
 
             if (auto.triggers.length > 0) {
                 const t = auto.triggers[0];
-                if (t.colId === 'SYS_NEW_ROW') tName = "Nuova riga";
-                else if (t.colId === 'SYS_ANY_CHANGE') tName = "Qualsiasi modifica";
-                else if (t.colId === 'SYS_TIMER') tName = "Orologio scatta";
-                else if (t.colId === 'SYS_CROSS_DB') tName = "Evento DB Esterno";
-                else if (t.colId === 'SYS_ON_LOAD') tName = "Caricamento Tabella";
-                else if (t.colId === 'SYS_JS_FORMULA') tName = "Condizione Personalizzata JS";
+                if (t.colId === 'SYS_NEW_ROW') tName = I18n.t('adv_automations.evt_new_row');
+                else if (t.colId === 'SYS_ANY_CHANGE') tName = I18n.t('adv_automations.evt_any_change');
+                else if (t.colId === 'SYS_TIMER') tName = I18n.t('adv_auto_core.trigger_timer');
+                else if (t.colId === 'SYS_CROSS_DB') tName = I18n.t('adv_automations.evt_cross_db');
+                else if (t.colId === 'SYS_ON_LOAD') tName = I18n.t('adv_automations.evt_on_load');
+                else if (t.colId === 'SYS_JS_FORMULA') tName = I18n.t('adv_automations.timer_mode_formula');
                 else if (t.colId.includes('_PROP_')) {
                     const parts = t.colId.split('_PROP_');
                     const c = state.columns.find(col => col.id === parts[0]);
                     const pDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
                     const pCol = pDb ? pDb.columns.find(col => col.id === parts[1]) : null;
-                    tName = `${c ? c.name : 'Pagina'} ➔ ${pCol ? pCol.name : 'Proprietà'}`;
+                    tName = `${c ? c.name : I18n.t('adv_auto_core.label_page')} ➔ ${pCol ? pCol.name : I18n.t('adv_auto_core.label_property')}`;
                 } else {
                     let actualColId = t.colId;
                     if (actualColId.endsWith('_TITLE')) actualColId = actualColId.replace('_TITLE', '');
@@ -385,21 +386,21 @@ const AdvancedAutomations = {
             if (auto.actions.length > 0) {
                 const a = auto.actions[0];
                 if (a.colId === 'SYS_ACTION') {
-                    if (a.type === 'alarm') aName = "Allarme Sonoro";
-                    else aName = "Sistema";
+                    if (a.type === 'alarm') aName = I18n.t('adv_automations.act_alarm');
+                    else aName = I18n.t('adv_auto_core.label_system');
                 } else if (a.colId.includes('_PROP_')) {
                     const parts = a.colId.split('_PROP_');
                     const c = state.columns.find(col => col.id === parts[0]);
                     const pDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
                     const pCol = pDb ? pDb.columns.find(col => col.id === parts[1]) : null;
-                    aName = `${c ? c.name : 'Pagina'} ➔ ${pCol ? pCol.name : 'Proprietà'}`;
+                    aName = `${c ? c.name : I18n.t('adv_auto_core.label_page')} ➔ ${pCol ? pCol.name : I18n.t('adv_auto_core.label_property')}`;
                 } else {
                     const c = state.columns.find(col => col.id === a.colId);
                     if (c) aName = c.name;
                 }
             }
 
-            auto.name = `Se [${tName}] allora imposta [${aName}]`;
+            auto.name = I18n.t('adv_auto_core.generated_name', { trigger: tName, action: aName });
         }
 
         const existingIdx = state.automations.findIndex(a => a.id === auto.id);
@@ -422,11 +423,12 @@ const AdvancedAutomations = {
         const auto = state.automations.find(a => a.id === autoId);
         
         if (!auto || !auto.isValid) {
-            alert("L'automazione non è valida e non può essere eseguita.");
+            alert(I18n.t('adv_auto_core.alert_invalid_automation'));
             return;
         }
 
-        if (!confirm(`Sei sicuro di voler forzare l'esecuzione di "${auto.name}" su TUTTE le ${state.rows.length} righe del database?\n\nI filtri della vista attuale verranno ignorati. L'operazione non è facilmente annullabile.`)) {
+        const confirmMsg = I18n.t('adv_auto_core.confirm_run_massive', { name: auto.name, count: state.rows.length });
+        if (!confirm(confirmMsg)) {
             return;
         }
 
@@ -456,14 +458,14 @@ const AdvancedAutomations = {
             AdvancedTable.renderTable(tableId);
             Store.triggerAutoSave();
             
-            alert(`✅ Esecuzione completata.\nSono state modificate ${rowsUpdated} righe su ${state.rows.length}.`);
+            alert(I18n.t('adv_auto_core.alert_massive_completed', { updated: rowsUpdated, total: state.rows.length }));
 
         } catch(err) {
             console.error(err);
             state = AdvancedTable.getState(tableId);
             state.automations = originalAutomations;
             AdvancedTable.setState(tableId, state);
-            alert("Errore durante l'esecuzione massiva.");
+            alert(I18n.t('adv_auto_core.alert_massive_error'));
         }
     },
 
@@ -667,7 +669,7 @@ const AdvancedAutomations = {
                                 if (targetDbId) {
                                     const targetState = AdvancedTable.getState(targetDbId);
                                     if (targetState && !targetState.isPivot && targetState.columns.length > 0) {
-                                        let newTitle = act.value2 || 'Record da Automazione';
+                                        let newTitle = act.value2 || I18n.t('adv_auto_core.default_record_title');
                                         if (newTitle.startsWith('=')) {
                                             newTitle = await AdvancedTable.executeAsyncScript(newTitle.substring(1), row, state.columns, tableId, state.title, vRow.virtualCells);
                                         }
@@ -732,7 +734,7 @@ const AdvancedAutomations = {
                                     const newNote = {
                                         id: newNoteId,
                                         parentId: AppState.currentNoteId || null,
-                                        title: "Record Dedicato",
+                                        title: I18n.t('adv_data.dedicated_record_title'),
                                         content: `<p><br></p>`,
                                         isMarked: false,
                                         expanded: true,
@@ -839,7 +841,7 @@ const AdvancedAutomations = {
                                     titleToSet = d.toISOString().slice(0, 16);
                                 }
                                 
-                                titleToSet = String(titleToSet || 'Record da Automazione').trim();
+                                titleToSet = String(titleToSet || I18n.t('adv_auto_core.default_record_title')).trim();
 
                                 if (currentVal && Store.getNote(currentVal)) {
                                     const linkedNote = Store.getNote(currentVal);

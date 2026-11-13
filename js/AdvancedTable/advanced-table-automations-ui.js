@@ -11,6 +11,7 @@
  * quando la prima colonna del database è di tipo 'record_note' o non supporta assegnazioni dirette.
  * FIX COLUMN TYPE ICONS: Riuso centralizzato di AdvancedTable.getColumnTypeIcon.
  * FEAT AUTOINCREMENT: Esclusione delle colonne autoincrement dalle azioni modificabili manualmente.
+ * REFACTOR I18N: Sostituzione di tutte le stringhe fisse dell'interfaccia con I18n.t().
  */
 
 Object.assign(AdvancedAutomations, {
@@ -79,7 +80,7 @@ Object.assign(AdvancedAutomations, {
                 auto.isValid = errors.length === 0;
 
                 const isActive = auto.active !== false && auto.isValid;
-                const safeName = (auto.name || 'Automazione ' + (idx + 1)).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+                const safeName = (auto.name || I18n.t('adv_auto_ui.default_auto_name', { num: idx + 1 })).replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
                 let errorBanner = '';
                 if (!auto.isValid) {
@@ -300,8 +301,8 @@ Object.assign(AdvancedAutomations, {
             const icon = AdvancedTable.getColumnTypeIcon(c.type);
 
             if (c.type === 'record_note') {
-                colOptions += `<option value="${c.id}_TITLE">${Icons.recordPage} ${safeColName}: Titolo</option>`;
-                colOptions += `<option value="${c.id}_CONTENT">${Icons.recordPage} ${safeColName}: Corpo Testo</option>`;
+                colOptions += `<option value="${c.id}_TITLE">${Icons.recordPage} ${safeColName}${I18n.t('adv_auto_ui.col_title_suffix')}</option>`;
+                colOptions += `<option value="${c.id}_CONTENT">${Icons.recordPage} ${safeColName}${I18n.t('adv_auto_ui.col_content_suffix')}</option>`;
 
                 // Iniezione di tutte le proprietà/tag da SYS_PROPERTIES_DB
                 if (propsDb && Array.isArray(propsDb.columns)) {
@@ -321,7 +322,7 @@ Object.assign(AdvancedAutomations, {
 
         let triggersHTML = '';
         if (auto.triggers.length === 0) {
-            triggersHTML = `<div style="font-size:0.8rem; color:#888; margin:10px 0; text-align:center;">L'automazione scatterà ad <b>ogni singola modifica</b> della riga.</div>`;
+            triggersHTML = `<div style="font-size:0.8rem; color:#888; margin:10px 0; text-align:center;">${I18n.t('adv_auto_ui.every_change_hint')}</div>`;
         } else {
             auto.triggers.forEach((t, idx) => {
                 const isFirst = idx === 0;
@@ -494,7 +495,7 @@ Object.assign(AdvancedAutomations, {
                         let opts = (targetOptionsState && targetOptionsState.selectOptions) ? (targetOptionsState.selectOptions[tColDef.id] || []) : [];
                         let listId = `dl_trg_${tColDef.id}_${idx}`;
                         valInput = `
-                            <input type="text" list="${listId}" class="modern-input" style="flex:2; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="Scrivi o scegli..." oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">
+                            <input type="text" list="${listId}" class="modern-input" style="flex:2; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="${I18n.t('adv_auto_ui.write_or_choose_placeholder')}" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">
                             <datalist id="${listId}">${opts.map(o => `<option value="${String(o).replace(/"/g, '&quot;')}">`).join('')}</datalist>
                         `;
                     } else if (tColDef.type === 'relation') {
@@ -503,8 +504,8 @@ Object.assign(AdvancedAutomations, {
                                     </select>`;
                     } else if (tColDef.type === 'checkbox') {
                         valInput = `<select class="modern-input" style="flex:2; padding:6px; font-size:0.85rem;" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">
-                                        <option value="true" ${t.value === 'true' ? 'selected' : ''}>Sì (Spuntato)</option>
-                                        <option value="false" ${t.value === 'false' ? 'selected' : ''}>No (Vuoto)</option>
+                                        <option value="true" ${t.value === 'true' ? 'selected' : ''}>${I18n.t('sidebar_filter.yes_checked')}</option>
+                                        <option value="false" ${t.value === 'false' ? 'selected' : ''}>${I18n.t('sidebar_filter.no_empty')}</option>
                                     </select>`;
                     } else if (tColDef.type === 'date' || tColDef.type === 'datetime') {
                         if (!t.dateMode) t.dateMode = 'exact';
@@ -512,24 +513,24 @@ Object.assign(AdvancedAutomations, {
 
                         let dynamicHtml = `
                             <select class="modern-input" style="flex:1; padding:6px; min-width:90px; font-size:0.85rem;" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'dateMode', this.value)">
-                                <option value="exact" ${t.dateMode === 'exact' ? 'selected' : ''}>Data Esatta</option>
-                                <option value="today" ${t.dateMode === 'today' ? 'selected' : ''}>Oggi</option>
+                                <option value="exact" ${t.dateMode === 'exact' ? 'selected' : ''}>${I18n.t('adv_automations.timer_mode_exact')}</option>
+                                <option value="today" ${t.dateMode === 'today' ? 'selected' : ''}>${I18n.t('adv_timeline.btn_today')}</option>
                             </select>
                         `;
 
                         if (t.dateMode === 'exact') {
                             dynamicHtml += `<input type="date" class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" value="${safeVal}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">`;
                         } else {
-                            dynamicHtml += `<div style="flex:1; font-size:0.75rem; color:var(--text-secondary); align-self:center; text-align:center;">( +/- Giorni )</div>`;
+                            dynamicHtml += `<div style="flex:1; font-size:0.75rem; color:var(--text-secondary); align-self:center; text-align:center;">${I18n.t('adv_auto_ui.days_offset_label')}</div>`;
                         }
 
                         dynamicHtml += `
-                            <input type="number" class="modern-input" style="width:50px; padding:6px; text-align:center; font-size:0.85rem;" title="Aggiungi o sottrai giorni" value="${t.dateShift}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'dateShift', this.value)">
+                            <input type="number" class="modern-input" style="width:50px; padding:6px; text-align:center; font-size:0.85rem;" title="${I18n.t('adv_auto_ui.days_offset_title')}" value="${t.dateShift}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'dateShift', this.value)">
                         `;
 
                         valInput = `<div style="display:flex; flex:2; gap:5px; align-items:center;">${dynamicHtml}</div>`;
                     } else {
-                        valInput = `<input type="text" class="modern-input" style="flex:2; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="Valore..." oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">`;
+                        valInput = `<input type="text" class="modern-input" style="flex:2; padding:6px; font-size:0.85rem;" value="${safeVal}" placeholder="${I18n.t('adv_auto_ui.value_placeholder')}" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">`;
                     }
                 }
 
@@ -599,7 +600,7 @@ Object.assign(AdvancedAutomations, {
             if (['created_time', 'last_edited_time', 'formula', 'rollup', 'autoincrement'].includes(c.type)) return;
 
             if (c.type === 'record_note') {
-                colsForActions += `<option value="${c.id}">${c.name}: Titolo Nota</option>`;
+                colsForActions += `<option value="${c.id}">${I18n.t('adv_auto_ui.col_note_title_suffix', { name: c.name })}</option>`;
                 
                 // Iniezione delle proprietà scrivibili della nota da SYS_PROPERTIES_DB
                 if (propsDb && Array.isArray(propsDb.columns)) {
@@ -616,7 +617,7 @@ Object.assign(AdvancedAutomations, {
 
         let targetColOptions = `
             <optgroup label="${I18n.t('adv_automations.group_sys_actions')}">
-                <option value="SYS_ACTION">⚙️ Esegui...</option>
+                <option value="SYS_ACTION">${I18n.t('adv_auto_ui.sys_action_execute')}</option>
             </optgroup>
             <optgroup label="${I18n.t('adv_automations.group_tbl_columns')}">
                 ${colsForActions}
@@ -776,7 +777,7 @@ Object.assign(AdvancedAutomations, {
                     <div style="flex:1; color:var(--text-secondary);">
                         <b>${I18n.t('adv_automations.formula_mode_title')}</b> ${I18n.t('adv_automations.formula_mode_desc')}
                     </div>
-                    <button id="btnCopyAutoAIPrompt_Auto" class="btn" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink:0;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btnCopyAutoAIPrompt_Auto')" title="Copia Prompt per AI">
+                    <button id="btnCopyAutoAIPrompt_Auto" class="btn" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink:0;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btnCopyAutoAIPrompt_Auto')" title="${I18n.t('formula_editor.copy_prompt_title')}">
                         <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${I18n.t('adv_automations.copy_ai_prompt')}</span>
                     </button>
                 </div>

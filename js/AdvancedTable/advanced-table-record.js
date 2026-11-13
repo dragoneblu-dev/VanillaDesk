@@ -245,15 +245,15 @@ Object.assign(AdvancedTable, {
                         
                         displayVal = `
                             <div style="display:flex; align-items:center; gap:4px; width:100%;">
-                                <input type="${inputType}" value="${startVal}" class="modern-input" style="flex:1; padding:2px; font-size:0.8rem; background:rgba(0,0,0,0.02); min-width:0;" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'start')">
+                                <input type="${inputType}" value="${startVal}" class="modern-input" style="flex:1; padding:2px; font-size:0.8rem; background:rgba(0,0,0,0.02); min-width:0;" onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'start')">
                                 <span style="font-size:0.8rem; color:var(--text-secondary);">➔</span>
-                                <input type="${inputType}" value="${endVal}" class="modern-input" style="flex:1; padding:2px; font-size:0.8rem; background:rgba(0,0,0,0.02); min-width:0;" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'end')">
+                                <input type="${inputType}" value="${endVal}" class="modern-input" style="flex:1; padding:2px; font-size:0.8rem; background:rgba(0,0,0,0.02); min-width:0;" onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateDateRange('${tableId}', '${row.id}', '${col.id}', this.value, 'end')">
                             </div>
                         `;
                     } else {
                         let singleVal = val && typeof val === 'object' ? val.start : (val || '');
                         if (inputType === 'datetime-local' && singleVal && singleVal.length === 10) singleVal += 'T00:00';
-                        displayVal = `<input type="${inputType}" value="${singleVal}" class="modern-input" style="margin:0; text-align:right;" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
+                        displayVal = `<input type="${inputType}" value="${singleVal}" class="modern-input" style="margin:0; text-align:right;" onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
                     }
                 }
                 else if (col.type === 'number') {
@@ -271,6 +271,7 @@ Object.assign(AdvancedTable, {
                                class="modern-input adv-number-input" 
                                style="margin:0; text-align:right;" 
                                onfocus="if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true); this.type='number'; this.value=this.getAttribute('data-raw-value');" 
+                               onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}"
                                onblur="${blurScript}">
                     `;
                 }
@@ -366,7 +367,7 @@ Object.assign(AdvancedTable, {
                 }
                 else if (col.type === 'url') {
                     const safeVal = (val || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                    displayVal = `<input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
+                    displayVal = `<input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
                 }
                 else if (col.type === 'text') {
                     const isMultiline = val && (val.length > 50 || val.includes('\n'));
@@ -395,7 +396,7 @@ Object.assign(AdvancedTable, {
                 }
                 else {
                     const safeVal = (val || '').replace(/"/g, '&quot;');
-                    displayVal = `<input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
+                    displayVal = `<input type="text" value="${safeVal}" class="modern-input" style="margin:0; text-align:right;" onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}" onblur="AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', this.value)">`;
                 }
             } else {
                 
@@ -541,7 +542,7 @@ Object.assign(AdvancedTable, {
                             let isLocal = href.match(/^[a-zA-Z]:[\\/]/) || href.startsWith('\\\\');
                             if (isLocal) {
                                 href = 'file:///' + href.replace(/\\/g, '/');
-                                displayVal = `<div style="display:flex; align-items:center; justify-content:flex-end; gap:5px; word-break:break-all;"><a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline; ${pointerEvent}">${val}</a> <button class="adv-icon-btn" style="${pointerEvent}" onclick="navigator.clipboard.writeText('${val.replace(/\\/g, '\\\\')}'); alert('Percorso copiato negli appunti!')" title="Copia percorso locale">${Icons.clipboard}</button></div>`;
+                                displayVal = `<div style="display:flex; align-items:center; justify-content:flex-end; gap:5px; word-break:break-all;"><a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline; ${pointerEvent}">${val}</a> <button class="adv-icon-btn" style="${pointerEvent}" onclick="event.stopPropagation(); navigator.clipboard.writeText('${val.replace(/\\/g, '\\\\')}'); if (typeof UI !== 'undefined' && UI.showToast) UI.showToast('${I18n.t('adv_record.copy_path_alert')}', 'success');" title="Copia percorso locale">${Icons.clipboard}</button></div>`;
                             } else {
                                 if (!href.startsWith('http://') && !href.startsWith('https://') && !href.startsWith('file:///')) href = 'https://' + href;
                                 displayVal = `<div style="text-align:right;"><a href="${href}" target="_blank" style="color:var(--accent-color); text-decoration:underline; word-break:break-all; ${pointerEvent}">${val}</a></div>`;
