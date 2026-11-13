@@ -63,11 +63,11 @@ Manual.registerSection(
     <h3 id="sec-4-rdbms" style="color: var(--accent-color); display:flex; align-items:center; gap:8px;">
         ${typeof Icons !== 'undefined' ? Icons.tableDatabase : '📊'} I Database Relazionali (RDBMS)
     </h3>
-    <p>Nei Database le informazioni non sono memorizzate come semplice markup visivo, ma come record strutturati isolati in memoria. Questo garantisce che modifiche a formule, ordinamenti o filtri non corrompano mai i dati grezzi. Le intestazioni delle colonne rimangono sempre visibili durante lo scorrimento grazie alla barra galleggiante superiore.</p>
+    <p>Nei Database le informazioni non sono memorizzate come semplice markup visivo, ma come record strutturati isolati in memoria. Questo garantisce che modifiche a formule, ordinamenti o filtri non corrompano mai i dati grezzi. Le intestazioni delle colonne rimangono sempre visibili durante lo scorrimento grazie alla barra galleggiante superiore, e puoi duplicare qualsiasi record con un click dal pannello Dettaglio Record.</p>
 
     <h4>Architettura Relazionale: Relazioni, Backlink e Rollup</h4>
     <ul>
-        <li><b>Relazione (🔗):</b> Crea un puntatore fisico verso un altro database dello spazio di lavoro (o verso se stesso). Cliccando su una cella di tipo Relazione, si apre il selettore per associare uno o più record con un click, visualizzati sotto forma di pillole collegate.</li>
+        <li><b>Relazione (🔗), Quick-Create e Quick-Peek:</b> Crea un puntatore fisico verso un altro database dello spazio di lavoro (o verso se stesso). Cliccando su una cella di tipo Relazione, si apre il selettore per associare uno o più record con un click, visualizzati sotto forma di pillole collegate. Dal selettore puoi anche <b>creare un nuovo record al volo</b> nel database di destinazione (Quick-Create) oppure ispezionare e modificare la scheda di un record collegato tramite l'anteprima galleggiante (Quick-Peek).</li>
         <li><b>Relazione Inversa (Backlink):</b> Quando colleghi il record <i>Fattura 102</i> al cliente <i>Acme Corp</i>, nel database Clienti compare in automatico una colonna Backlink che elenca tutte le fatture collegate a quel cliente. La colonna può essere configurata in tre modalità:
             <ol>
                 <li><i>Elenco Record:</i> Mostra i tag cliccabili che aprono il rispettivo record.</li>
@@ -80,8 +80,9 @@ Manual.registerSection(
 
     <h4 id="sec-4-types">Tipologie di Dato Supportate</h4>
     <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px; font-size:0.85rem; margin-bottom:15px;">
-        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Testo (📝):</b> Stringa libera con troncamento visivo configurabile. Premendo Invio o cliccando l'icona, puoi aprire il testo nel pannello laterale per una comoda lettura e modifica.</div>
+        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Testo (📝):</b> Stringa libera con troncamento visivo configurabile. Premendo Ctrl+Invio (o Shift+Invio) o cliccando l'icona, puoi aprire il testo nel pannello laterale per una comoda lettura e modifica.</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Numero (123):</b> Valori numerici con arrotondamento e decimali fissi (0-4).</div>
+        <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• ID Auto-Incrementale (@):</b> Codice progressivo automatico in sola lettura con prefisso e numero di cifre configurabili (es. <code>TASK-001</code>).</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Select / Multi-Select (▾ / 🍱):</b> Tag colorati con gestione colori e rinomina globale.</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Data e Datetime (📅):</b> Date singole o intervalli con <i>Data di Fine</i>.</div>
         <div style="background:var(--sidebar-bg); border:1px solid var(--border-color); padding:8px 12px; border-radius:6px;"><b>• Checkbox (☑):</b> Booleano (Sì / No).</div>
@@ -96,5 +97,5 @@ Manual.registerSection(
     <p>Quando le informazioni relative a una riga non possono essere riassunte in una singola cella (ad esempio per una commessa, un contatto o un caso studio), la colonna <b>Pagina Record</b> genera una nota autonoma a pieno schermo ancorata a quel record. Cliccando sul pulsante <code>[📄 Apri Pagina]</code>, l'editor visualizza una pagina completa in cui è possibile inserire testi, immagini, allegati o ulteriori database annidati.</p>
 
     <h4 id="sec-4-conditional-colors">Colorazione Condizionale con Opacità Dinamica</h4>
-    <p>Dal menu opzioni del Database (⋮), la voce <b>Colorazione Condizionale</b> consente di creare regole di formattazione automatica in tempo reale. È possibile impostare sia un'opacità fissa percentuale (es. 30%), sia un'<b>Opacità Dinamica via Formula JS</b>: scrivendo ad esempio <code>riga["Avanzamento"]</code>, l'intensità del colore della riga varierà automaticamente da quasi trasparente a saturo man mano che la percentuale di completamento aumenta.</p>`
+    <p>Dal menu opzioni del Database (⋮), la voce <b>Colorazione Condizionale</b> consente di creare regole di formattazione automatica in tempo reale, applicabili sia all'<b>Intera Riga</b> che a una <b>Cella Specifica</b>. È possibile impostare sia un'opacità fissa percentuale (es. 30%), sia un'<b>Opacità Dinamica via Formula JS</b>: scrivendo ad esempio <code>riga["Avanzamento"]</code>, l'intensità del colore varierà automaticamente da quasi trasparente a saturo man mano che la percentuale di completamento aumenta.</p>`
 );

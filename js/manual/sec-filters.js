@@ -4,20 +4,21 @@ Manual.registerSection(
     `<p>L'applicazione distingue tra la ricerca generale (usata per trovare le Note e filtrare tramite metadati globali) e la manipolazione analitica dei database tramite le condizioni WHERE.</p>
     
     <h4>Ricerca Globale e Autocompletamento Tag (Sidebar)</h4>
-    <p>La barra di ricerca in alto a sinistra (<i>"Cerca o digita Tag..."</i>) scandaglia l'intero spazio di lavoro. Cerca le parole in tempo reale sia nei titoli che nei contenuti, <b>inclusi tutti i campi dei database, i testi degli appunti nascosti (Footnotes), i blocchi di codice e i diari</b>.</p>
+    <p>La barra di ricerca in alto a sinistra (<i>"Cerca testo o digita #tag..."</i>, apribile rapidamente con <kbd>Ctrl + P</kbd>) scandaglia l'intero spazio di lavoro. Cerca le parole in tempo reale (a partire da 2 caratteri, oppure 1 premendo <kbd>Invio</kbd>) sia nei titoli che nei contenuti, <b>inclusi tutti i campi dei database, i testi degli appunti nascosti (Footnotes), i blocchi di codice e i diari</b>.</p>
 
     <ul>
         <li><b>Contatore Risultati a 2 Cifre:</b> Nel campo di ricerca il contatore indica con precisione <code>attuale/totale</code> della nota aperta (es. <code>1/3</code>, oppure <code>0/0</code> se non vi sono riscontri nella nota corrente).</li>
         <li><b>Pillole Occorrenze per Singola Nota:</b> Accanto al nome di ciascuna nota che contiene il testo cercato compare una piccola pillola colorata con il numero di corrispondenze trovate (es. <code>[5]</code>), consentendo di valutare immediatamente dove risiedono le informazioni. Il colore della pillola si adatta dinamicamente a qualunque tema attivo.</li>
-        <li><b>Reset Istantaneo con la Croce (✕):</b> Cliccando sulla ✕ o cancellando il testo, tutte le evidenziazioni gialle vengono rimosse all'istante dall'editor della nota aperta.</li>
+        <li><b>Hashtag Cliccabili nel Testo:</b> Scrivendo un <code>#tag</code> nel corpo della nota, questo viene evidenziato automaticamente. In modalità lettura puoi cliccarlo direttamente (oppure usare <kbd>Ctrl + Click</kbd> in modalità modifica) per filtrare all'istante l'albero laterale.</li>
+        <li><b>Reset Istantaneo con la Croce (✕) o <kbd>ESC</kbd>:</b> Cliccando sulla ✕ o premendo <kbd>ESC</kbd>, tutte le evidenziazioni gialle vengono rimosse all'istante dall'editor della nota aperta.</li>
     </ul>
     
     <p><b>La Magia dei Filtri Strutturali (Tag e Proprietà):</b><br>
-    Non appena inizi a digitare nella barra di ricerca, compare una tendina ad alta visibilità (con capienza espansa a <b>7-8 righe visibili</b>). Il sistema legge in tempo reale il Database di Sistema (quello che gestisce le Proprietà e le Etichette di tutte le Note) e ti suggerisce filtri mirati:</p>
+    Digitando il prefisso <code>#</code> seguito dal termine desiderato nella barra di ricerca, compare una tendina ad alta visibilità. Il sistema legge in tempo reale il Database di Sistema (quello che gestisce le Proprietà e le Etichette di tutte le Note) e ti suggerisce filtri mirati:</p>
     <ul>
-        <li><b>Filtro per Valore Specifico:</b> Se digiti una parola (es. <i>"Urgente"</i>), il sistema ti mostra la pillola colorata con il valore esatto e la colonna a cui appartiene (es. <code>Urgente in Priorità</code>). Cliccandola, l'albero mostrerà solo le note con quel valore.</li>
+        <li><b>Filtro per Valore Specifico:</b> Se digiti <code>#Urgente</code>, il sistema ti mostra la pillola colorata con il valore esatto e la colonna a cui appartiene (es. <code>Urgente in Priorità</code>). Cliccandola, l'albero mostrerà solo le note con quel valore.</li>
         <li><b>Risoluzione Semantica delle Relazioni:</b> Se la proprietà è una <i>Relazione</i> verso un altro database o verso altre note, non vedrai mai codici tecnici incomprensibili (come <code>sys_r_*</code>). L'autocompletamento mostra sempre il <b>titolo reale e leggibile</b> del record o della pagina collegata.</li>
-        <li><b>Filtro di Esistenza (*EXISTS*):</b> Digitando il nome di una colonna (es. <i>"Scadenza"</i>), il sistema ti proporrà <code>🏷️ Scadenza (Mostra note con questo campo compilato)</code>. Cliccandolo, isolerai tutte le pagine che hanno quella proprietà valorizzata, a prescindere dal valore inserito.</li>
+        <li><b>Filtro di Esistenza (*EXISTS*):</b> Digitando <code>#</code> seguito dal nome di una colonna (es. <code>#Scadenza</code>), il sistema ti proporrà <code>🏷️ Scadenza (Qualsiasi valore)</code>. Cliccandolo, isolerai tutte le pagine che hanno quella proprietà valorizzata, a prescindere dal valore inserito.</li>
     </ul>
 
     <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 25px 0;">
@@ -38,7 +39,7 @@ Manual.registerSection(
             <li><b>Corpo della Pillola (Click per aprire il menu ▾):</b> Cliccando sul testo della pillola si apre una tendina compatta ad alta densità informativa. Da qui puoi:
                 <ul>
                     <li>Cambiare istantaneamente il valore del filtro (es. passare da <i>Alta</i> a <i>Bassa</i>) senza dover riscrivere nella barra di ricerca.</li>
-                    <li>Scegliere la prima voce <code>Qualsiasi valore (*EXISTS*)</code> per allargare il filtro a tutti i record compilati.</li>
+                    <li>Scegliere la prima voce <code>Qualsiasi valore (*EXISTS*)</code> per allargare il filtro a tutti i record compilati, oppure <code>Nessun valore (Vuoto)</code>.</li>
                     <li>Visualizzare l'elenco ordinato da A alla Z di tutti i valori realmente presenti nel workspace, con spunta di conferma sul valore attivo.</li>
                 </ul>
             </li>
@@ -49,8 +50,8 @@ Manual.registerSection(
 
     <hr style="border: 0; border-top: 1px dashed var(--border-color); margin: 30px 0;">
 
-    <h4>Filtri Database e Operatori (Sulle singole Tabelle)</h4>
-    <p>I tasti "Filtra" e "Viste Salvate" sul singolo database non cercano solo stringhe, ma nascondono righe in tempo reale usando operatori logici e matematici. Cliccando sull'icona a imbuto aprirai l'impostazione dei filtri attuali, mentre l'icona a segnalibro ti permetterà di salvare quelle configurazioni e richiamarle in seguito (Viste Personalizzate).</p>
+    <h4>Ricerca Rapida e Filtri Database (Sulle singole Tabelle)</h4>
+    <p>Nell'intestazione di ogni Database trovi l'icona della <b>Lente (🔍)</b> per attivare la barra di <b>Ricerca Rapida Universale</b> (cerca istantaneamente su tutti i campi della riga; puoi separare più parole con <code>;</code> per combinarle in logica AND). I tasti "Filtra" e "Viste Salvate" permettono invece di filtrare per singola colonna usando operatori logici e matematici. Cliccando sull'icona a imbuto aprirai l'impostazione dei filtri attuali, mentre l'icona a segnalibro ti permetterà di salvare quelle configurazioni e richiamarle in seguito (Viste Personalizzate).</p>
     
     <div style="background: rgba(0,0,0,0.03); padding: 15px; border-radius: 6px; border: 1px solid var(--border-color); margin-bottom: 20px;">
         <ul style="list-style-type: none; padding-left: 0; margin: 0;">
@@ -102,5 +103,5 @@ Manual.registerSection(
     </div>
 
     <h4>Paginazione (Per Database Estremi)</h4>
-    <p>Se il tuo Database conta centinaia di righe, l'editor ti permette di dividerlo in pagine per non sovraccaricare il browser. In basso a destra della tabella troverai il testo "Tutte le righe". Cliccaci per selezionare la visualizzazione a <b>10, 20 o 50 righe per pagina</b>. Appariranno le freccette ◀ ▶ per sfogliare il database mantenendo l'app fluidissima.</p>`
+    <p>Se il tuo Database conta centinaia o migliaia di righe, l'editor lo divide automaticamente in pagine (25 righe di default) per garantire prestazioni istantanee. In basso a destra della tabella troverai l'indicatore <code>Pagina X di Y</code>: cliccandoci puoi selezionare la visualizzazione a <b>10, 25, 50, 100 o 200 righe per pagina</b>. Usa le freccette ◀ ▶ per sfogliare il database mantenendo l'app fluidissima.</p>`
 );
