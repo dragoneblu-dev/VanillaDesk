@@ -678,17 +678,20 @@ Object.assign(AdvancedTable, {
                     html += recordCountHtml;
                     
                     if (state.selectedRows && state.selectedRows.length > 0) {
+                        html += `<span style="width:1px; height:14px; background:var(--border-color); margin:0 2px; display:inline-block;"></span>`;
+
                         const allVisibleSelected = pagedRows.length > 0 && pagedRows.every(r => state.selectedRows.includes(r.id));
                         if (!allVisibleSelected) {
                             html += `<button class="adv-add-btn" title="${I18n.t('table.select_all_visible_tooltip')}" onclick="AdvancedTable.selectAllVisibleRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkSquare} ${I18n.t('table.select_all_visible')}</span></button>`;
                         }
+
+                        html += `<button class="adv-add-btn" title="${I18n.t('table.cancel_selection_tooltip')}" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection_btn')}</span></button>`;
 
                         const delTitle = state.selectedRows.length === 1 
                             ? I18n.t('table.delete_selected_tooltip_single') 
                             : I18n.t('table.delete_selected_tooltip_plural', { count: state.selectedRows.length });
                         const btnLabel = I18n.t('table.delete_selected_btn', { count: state.selectedRows.length });
                         html += `<button class="adv-add-btn danger" title="${delTitle}" onclick="AdvancedTable.deleteSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.trash} ${btnLabel}</span></button>`;
-                        html += `<button class="adv-add-btn" title="${I18n.t('table.cancel_selection_tooltip')}" onclick="AdvancedTable.clearSelectedRows('${tableId}')"><span style="display:inline-flex; align-items:center; gap:5px;">${Icons.close} ${I18n.t('table.cancel_selection_btn')}</span></button>`;
                     }
                 } else if (!isSysDB) {
                     html += recordCountHtml;
