@@ -1,28 +1,26 @@
 /**
  * LinkManager.js
- * Gestisce i Tipi di Link (Esterni, Interni, File Locali testuali) e l'inserimento Video YouTube.
- * FIX WORKSPACE: Aggiunto l'Auto-Loading per i file testuali referenziati con Path Relativo.
- * FIX CURSORE E POLLUZIONE DOM: Inserimento pulito dei link senza Zero-Width Space parassiti.
- * FEAT UX: Aggiunta indicazione visiva della shortcut "[[" nel pannello di selezione link.
- * FEAT MIDDLE-CLICK: Centralizzata la funzione openLinkDirect per consentire l'apertura rapida tramite rotella mouse.
- * FIX REGEX URL: Raggruppamento con ancora iniziale esplicita per impedire che percorsi locali (es. C:\notepad.exe) vengano scambiati per URL web.
- * FEAT CLEAN URL INPUT: Rimozione del prefisso forzato "https://" dall'input URL.
- * FEAT URL TRUNCATE 60: Troncamento automatico a 60 caratteri del testo visualizzato quando corrisponde all'indirizzo web.
- * FIX STALE SAVED RANGE: Ripristino di Editor.savedRange solo se il cursore non si trova già attivo e valido nell'editor.
- * FEAT FULL HEIGHT DRAWER: Layout a tutta altezza (height: 100%, flex: 1) per il Drawer dei link, consentendo
+ * Gestisce i Tipi di Link (Esterni, Interni, File Locali testuali) e l'inserimento/modifica Video YouTube.
+ * WORKSPACE: Auto-Loading per i file testuali referenziati con Path Relativo.
+ * Inserimento pulito dei link senza Zero-Width Space parassiti.
+ * Indicazione visiva della shortcut "[[" nel pannello di selezione link.
+ * Centralizzata la funzione openLinkDirect per consentire l'apertura rapida tramite rotella mouse.
+ * Raggruppamento con ancora iniziale esplicita per impedire che percorsi locali (es. C:\notepad.exe) vengano scambiati per URL web.
+ * Rimozione del prefisso forzato "https://" dall'input URL.
+ * Troncamento automatico a 60 caratteri del testo visualizzato quando corrisponde all'indirizzo web.
+ * Ripristino di Editor.savedRange solo se il cursore non si trova già attivo e valido nell'editor.
+ * Layout a tutta altezza (height: 100%, flex: 1) per il Drawer dei link, consentendo
  * alla textarea delle note opzionali di espandersi armoniosamente fino al footer.
- * FEAT COPY WEB LINK: Aggiunto pulsante di copia negli appunti dell'indirizzo web dal popover contestuale fluttuante.
- * FIX DOUBLE SUBMIT ON CTRL+ENTER: Eliminati listener locali ridondanti che causavano la doppia esecuzione
- * e il raddoppio del link; gestione unificata affidata al Drawer.
- * FEAT CARET RESUME POST-EDIT: Riposizionamento automatico e restituzione del focus all'editor subito dopo
+ * Pulsante di copia negli appunti dell'indirizzo web dal popover contestuale fluttuante.
+ * Riposizionamento automatico e restituzione del focus all'editor subito dopo
  * il link al termine della modifica, con blocco dello scroll { preventScroll: true } per impedire salti a inizio pagina.
- * REFACTOR: Eliminata duplicazione di openLinkDirect delegando a EventsGlobal.openLinkDirectly.
- * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
+ * YOUTUBE FILE PROTOCOL FALLBACK: Su protocollo file:// delega a WidgetManager.setupVideoShell evitando l'Errore 153.
  */
 
 const LinkManager = {
     activeLink: null,
-    editingLink: null, 
+    editingLink: null,
+    editingVideoWidgetId: null,
     currentFileLinkElement: null,
     isEditingMode: false,
 
@@ -84,6 +82,7 @@ const LinkManager = {
         UI.closeDrawer();
         LinkManager.isEditingMode = false;
         LinkManager.editingLink = null;
+        LinkManager.editingVideoWidgetId = null;
 
         let selectedText = "";
         if (Editor.savedRange && !Editor.savedRange.collapsed) {
@@ -611,8 +610,28 @@ const LinkManager = {
     // -------------------------------------------------------------
     // VIDEO YOUTUBE (WIDGET SHELL ISOLATA)
     // -------------------------------------------------------------
-    openYoutubeModal: (prefilledUrl = null) => {
-        const title = `<span style="display:inline-flex; align-items:center; gap:5px; color:var(--danger-color);">${Icons.youtube} ${I18n.t('link_manager.drawer_embed_youtube')}</span>`;
+    editYoutubeWidget: (widgetId) => {
+        const wrapper = document.getElementById(widgetId);
+        if (!wrapper) return;
+
+        const iframe = wrapper.querySelector('iframe');
+        const rawSrc = iframe ? (iframe.getAttribute('src') || iframe.getAttribute('data-src') || '') : '';
+        const match = rawSrc.match(/embed\/([^?&]+)/);
+        const currentUrl = match ? `https://www.youtube.com/watch?v=${match[1]}` : '';
+
+        LinkManager.editingVideoWidgetId = widgetId;
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
+        LinkManager.openYoutubeModal(currentUrl, true);
+    },
+
+    openYoutubeModal: (prefilledUrl = null, isEditing = false) => {
+        if (!isEditing) {
+            LinkManager.editingVideoWidgetId = null;
+        }
+
+        const titleText = isEditing ? I18n.t('link_manager.drawer_edit_youtube') : I18n.t('link_manager.drawer_embed_youtube');
+        const btnLabel = isEditing ? I18n.t('link_manager.btn_save_changes') : I18n.t('link_manager.btn_insert_video');
+        const title = `<span style="display:inline-flex; align-items:center; gap:5px; color:var(--danger-color);">${Icons.youtube} ${titleText}</span>`;
         const html = `
             <div id="youtubeDrawerContainer" style="display:flex; flex-direction:column; gap:15px;">
                 <div style="font-size:0.85rem; color:var(--text-secondary); background:rgba(37,99,235,0.05); border:1px solid rgba(37,99,235,0.2); padding:10px; border-radius:6px; line-height:1.5;">
@@ -624,7 +643,10 @@ const LinkManager = {
                 </div>
             </div>
         `;
-        const footer = `<button class="btn btn-primary" onclick="LinkManager.confirmYoutube()" style="width:100%; justify-content:center;" title="${I18n.t('link_manager.btn_insert_video')} (Ctrl+Invio)">${I18n.t('link_manager.btn_insert_video')}</button>`;
+        const footer = `
+            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn btn-primary" onclick="LinkManager.confirmYoutube()" title="${btnLabel} (Ctrl+Invio)">${btnLabel}</button>
+        `;
         
         UI.openDrawer(title, html, footer);
 
@@ -633,7 +655,10 @@ const LinkManager = {
             if (prefilledUrl && urlInput) {
                 urlInput.value = prefilledUrl;
             }
-            if (urlInput) urlInput.focus();
+            if (urlInput) {
+                urlInput.focus();
+                if (isEditing) urlInput.select();
+            }
         }, 50);
     },
 
@@ -652,15 +677,49 @@ const LinkManager = {
 
         const videoId = match[1];
         const embedUrl = `https://www.youtube.com/embed/${videoId}`;
-        
+        const editingWidgetId = LinkManager.editingVideoWidgetId;
+        LinkManager.editingVideoWidgetId = null;
+
         UI.closeDrawer();
         Editor.saveSnapshot();
+
+        // MODALITÀ MODIFICA LINK DI WIDGET ESISTENTE
+        if (editingWidgetId) {
+            const wrapper = document.getElementById(editingWidgetId);
+            if (wrapper) {
+                const iframe = wrapper.querySelector('iframe');
+                const isFileProtocol = window.location.protocol === 'file:';
+                if (iframe) {
+                    if (isFileProtocol) {
+                        iframe.setAttribute('data-src', embedUrl);
+                        iframe.removeAttribute('src');
+                    } else {
+                        iframe.setAttribute('src', embedUrl);
+                        iframe.removeAttribute('data-src');
+                    }
+                }
+                wrapper.querySelectorAll('.yt-file-protocol-fallback').forEach(el => el.remove());
+
+                if (typeof WidgetManager.setupVideoShell === 'function') {
+                    WidgetManager.setupVideoShell(wrapper, videoId, true);
+                }
+
+                Store.triggerAutoSave();
+                return;
+            }
+        }
+
+        // MODALITÀ INSERIMENTO NUOVO WIDGET
         Editor.restoreSelection();
 
         const widgetId = 'adv_vid_' + Store.generateId();
-        const iframeHTML = `<iframe src="${embedUrl}" width="100%" height="400" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="border-radius:6px; display:block;"></iframe>`;
+        const isFileProtocol = window.location.protocol === 'file:';
+        const srcAttr = isFileProtocol ? `data-src="${embedUrl}"` : `src="${embedUrl}"`;
+        const displayStyle = isFileProtocol ? 'display:none;' : 'display:block;';
+        const iframeHTML = `<iframe ${srcAttr} width="100%" height="400" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen style="border-radius:6px; background:#000; height:400px; ${displayStyle}"></iframe>`;
         
         const wrapper = WidgetManager.createShell('video', widgetId, iframeHTML);
+        wrapper.setAttribute('data-video-height', '400');
         
         const sel = window.getSelection();
         let node = sel.rangeCount > 0 ? sel.getRangeAt(0).commonAncestorContainer : null;
@@ -690,27 +749,9 @@ const LinkManager = {
         p.innerHTML = '<br>';
         wrapper.parentNode.insertBefore(p, wrapper.nextSibling);
 
-        // Disegna l'header del widget
-        WidgetManager.updateShellUI(widgetId, {
-            icon: Icons.youtube,
-            title: I18n.t('link_manager.video_widget_title'),
-            optionsId: `adv-opt-btn-${widgetId}`,
-            onOptionsClick: (e) => {
-                e.stopPropagation();
-                UI.Menu.closeAll(true);
-                UI.Menu.buildContextMenu(`adv-opt-btn-${widgetId}`, [
-                    { icon: Icons.globe, label: I18n.t('link_manager.open_in_browser'), onClick: () => window.open(`https://www.youtube.com/watch?v=${videoId}`, '_blank') },
-                    { type: 'divider' },
-                    { icon: Icons.trash, label: I18n.t('link_manager.remove_video'), danger: true, onClick: () => Editor.safeDeleteWidget(document.getElementById(widgetId)) }
-                ]);
-            },
-            onDragStart: (e) => {
-                AppState.draggedBlockId = widgetId;
-                AppState.draggedBlockType = 'video';
-                e.dataTransfer.effectAllowed = 'move';
-            },
-            onDragEnd: () => { AppState.draggedBlockId = null; AppState.draggedBlockType = null; }
-        });
+        if (typeof WidgetManager.setupVideoShell === 'function') {
+            WidgetManager.setupVideoShell(wrapper, videoId, true);
+        }
 
         Store.triggerAutoSave();
     },

@@ -1248,6 +1248,13 @@ table_csv: {
     default_column_name: "Colonna {index}"
 }, 
 link_manager: {
+    edit_video_link: "Modifica Link Video...",
+    drawer_edit_youtube: "Modifica Video YouTube",
+    video_height_menu: "Altezza Widget",
+    video_height_normal: "Altezza Normale (400px)",
+    video_height_compact: "Altezza Ridotta (250px)",
+    yt_watch_on_youtube: "Guarda su YouTube",
+    yt_file_protocol_hint: "La riproduzione incorporata richiede un server locale o web (su file:// YouTube blocca il player).",
     drawer_insert_title: "Inserisci Link o Media",
     internal_link_title: "Link Interno",
     internal_link_badge: "Digita [[",
@@ -3152,6 +3159,13 @@ table_csv: {
     default_column_name: "Column {index}"
 },
 link_manager: {
+    edit_video_link: "Edit Video Link...",
+    drawer_edit_youtube: "Edit YouTube Video",
+    video_height_menu: "Widget Height",
+    video_height_normal: "Normal Height (400px)",
+    video_height_compact: "Compact Height (250px)",
+    yt_watch_on_youtube: "Watch on YouTube",
+    yt_file_protocol_hint: "Embedded playback requires a local or web server (YouTube blocks the player on file://).",
     drawer_insert_title: "Insert Link or Media",
     internal_link_title: "Internal Link",
     internal_link_badge: "Type [[",
@@ -5054,6 +5068,13 @@ table_csv: {
     default_column_name: "Columna {index}"
 },
 link_manager: {
+    edit_video_link: "Editar enlace de vídeo...",
+    drawer_edit_youtube: "Editar vídeo de YouTube",
+    video_height_menu: "Altura del widget",
+    video_height_normal: "Altura normal (400px)",
+    video_height_compact: "Altura reducida (250px)",
+    yt_watch_on_youtube: "Ver en YouTube",
+    yt_file_protocol_hint: "La reproducción integrada requiere un servidor local o web (en file:// YouTube bloquea el reproductor).",
     drawer_insert_title: "Insertar Enlace o Multimedia",
     internal_link_title: "Enlace Interno",
     internal_link_badge: "Escribe [[",
@@ -6956,6 +6977,13 @@ table_csv: {
     default_column_name: "Spalte {index}"
 },
 link_manager: {
+    edit_video_link: "Videolink bearbeiten...",
+    drawer_edit_youtube: "YouTube-Video bearbeiten",
+    video_height_menu: "Widget-Höhe",
+    video_height_normal: "Normale Höhe (400px)",
+    video_height_compact: "Reduzierte Höhe (250px)",
+    yt_watch_on_youtube: "Auf YouTube ansehen",
+    yt_file_protocol_hint: "Die eingebettete Wiedergabe erfordert einen lokalen oder Webserver (unter file:// blockiert YouTube den Player).",
     drawer_insert_title: "Link oder Medien einfügen",
     internal_link_title: "Interner Link",
     internal_link_badge: "Tippe [[",

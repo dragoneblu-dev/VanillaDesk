@@ -11,9 +11,10 @@
  * - Gestione evidenziazioni di ricerca prima e dopo il salvataggio (applyHighlight, cleanHighlightsBeforeSave).
  * - Scansione e supporto per match cross-node di termini multi-parola separati da tag inline (es. "ciao <b>bello</b>").
  * - Pulizia centralizzata cache in RAM (cleanOrphanedCaches).
- * - FEAT EXACT WHITESPACE HIGHLIGHTING: Preservazione degli spazi e trasparenza regex verso \u00A0 (&nbsp;).
- * - FIX SEARCH HIGHLIGHT PERSISTENCE (1.2): Srotolamento automatico di mark.search-highlight in minifyHTMLForStorage,
+ * - Preservazione degli spazi e trasparenza regex verso \u00A0 (&nbsp;).
+ * - Srotolamento automatico di mark.search-highlight in minifyHTMLForStorage,
  *   garantendo che le evidenziazioni di ricerca non vengano mai salvate permanentemente nel file JSON della nota.
+ * - Rimozione del fallback YouTube su file:// (.yt-file-protocol-fallback) prima del salvataggio.
  */
 
 Object.assign(Editor, {
@@ -295,12 +296,18 @@ Object.assign(Editor, {
             dataSpan.innerHTML = Editor.sanitizeMiniText(dataSpan.innerHTML);
         });
 
+        // Rimozione fallback visivo YouTube su file:// per preservare su disco il solo iframe pulito
+        temp.querySelectorAll('.yt-file-protocol-fallback').forEach(el => el.remove());
+
         // Rimozione fonti dinamiche e iframes per prevenire Network Errors e CORS in background
         temp.querySelectorAll('iframe').forEach(ifr => {
             const src = ifr.getAttribute('src');
             if (src) {
                 ifr.setAttribute('data-src', src);
                 ifr.removeAttribute('src');
+            }
+            if (ifr.style && ifr.style.display === 'none') {
+                ifr.style.display = 'block';
             }
         });
         

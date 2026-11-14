@@ -95,9 +95,35 @@
 .editor-container.read-mode .adv-widget-shell .journal-search-wrapper,
 .editor-container.read-mode .widget-type-audio audio,
 .editor-container.read-mode .widget-type-video iframe,
+.editor-container.read-mode .widget-type-video .yt-file-protocol-fallback,
+.editor-container.read-mode .widget-type-video .yt-file-protocol-fallback button,
 .editor-container.read-mode .snippet-copy-btn,
 .editor-container.read-mode .adv-widget-shell a.internal-link { 
     pointer-events: auto !important;
+}
+
+/* --- WIDGET VIDEO YOUTUBE (Fallback file://) --- */
+.yt-file-protocol-hint {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    box-sizing: border-box;
+    padding: 6px 12px;
+    font-size: 0.75rem;
+    color: #e5e7eb;
+    background: rgba(0, 0, 0, 0.78);
+    text-align: center;
+    line-height: 1.35;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+    z-index: 2;
+}
+
+.yt-file-protocol-fallback:hover .yt-file-protocol-hint {
+    opacity: 1;
 }
 
 /* FIX UX 3: Soft-Delete visivo per i Widget */

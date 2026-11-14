@@ -2,7 +2,7 @@
  * editor-paste.js
  * Modulo per la gestione dell'evento Incolla (Paste) nell'Editor.
  * Sottomodulo di Editor.
- * - Incolla URL con autolink / link-wrap.
+ * - Incolla URL con autolink / link-wrap e risoluzione asincrona del titolo reale per link YouTube.
  * - Incolla rich text (Word, Google Docs, siti web) con sanificazione profonda tramite Editor.cleanDOMTree.
  * - Incolla plain text con preservazione della struttura e spaziatura.
  * - Intercettore diretto in fase di cattura su #inlineNoteInput e #bookmarkCommentInput.
@@ -501,6 +501,42 @@ Object.assign(Editor, {
                             newRange.collapse(true);
                             sel.removeAllRanges();
                             sel.addRange(newRange);
+                        }
+
+                        // Se è un URL di YouTube, recupera in background il titolo del video per sostituire l'indirizzo grezzo
+                        const ytMatch = rawPastedText.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i);
+                        if (ytMatch && ytMatch[1]) {
+                            const ytId = ytMatch[1];
+                            const applyYtTitle = (ytTitle) => {
+                                if (!ytTitle || !document.body.contains(link)) return;
+                                link.textContent = ytTitle;
+                                if (AppState.currentNoteId) {
+                                    const curNote = Store.getNote(AppState.currentNoteId);
+                                    if (curNote && typeof Editor.getCleanHTML === 'function') {
+                                        curNote.content = Editor.getCleanHTML();
+                                        curNote._isDirty = true;
+                                        curNote.updatedAt = new Date().toISOString();
+                                    }
+                                }
+                                if (typeof Store !== 'undefined') Store.triggerAutoSave();
+                            };
+
+                            if (typeof WidgetManager !== 'undefined' && WidgetManager._ytMetaCache && WidgetManager._ytMetaCache[ytId] && WidgetManager._ytMetaCache[ytId].title) {
+                                applyYtTitle(WidgetManager._ytMetaCache[ytId].title);
+                            } else if (typeof fetch === 'function') {
+                                const watchUrl = `https://www.youtube.com/watch?v=${ytId}`;
+                                fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(watchUrl)}&format=json`)
+                                    .then(res => res.ok ? res.json() : null)
+                                    .then(data => {
+                                        if (data && data.title) {
+                                            if (typeof WidgetManager !== 'undefined' && WidgetManager._ytMetaCache) {
+                                                WidgetManager._ytMetaCache[ytId] = { title: data.title, author_name: data.author_name || '' };
+                                            }
+                                            applyYtTitle(data.title);
+                                        }
+                                    })
+                                    .catch(() => {});
+                            }
                         }
 
                         Store.triggerAutoSave();

@@ -16,6 +16,7 @@
  * FIX SIDEBAR TOOLTIP COLLISION: Protezione del tooltip custom (#advCustomTooltip) dall'estinzione accidentale
  * scatenata dal listener globale di mouseover quando il cursore passa sopra i titoli o icone dei database nella sidebar.
  * FEAT FLOATING CODE ACTIONS HOOK: Chiamata sincronizzata a CodeManager.updateFloatingActions sullo scroll di editorScrollContent.
+ * FEAT YOUTUBE LINK PREVIEW TOOLTIP: Anteprima on-the-fly della thumbnail YouTube al passaggio del mouse sui link <a> di YouTube.
  */
 
 Object.assign(UI, {
@@ -730,7 +731,30 @@ Object.assign(UI, {
                     displayPathInfo = displayPathInfo.substring(0, half) + '...' + displayPathInfo.substring(displayPathInfo.length - half);
                 }
 
-                if (userNote) {
+                const ytMatch = !target.classList.contains('internal-link') && !target.classList.contains('file-link')
+                    ? pathInfo.match(/(?:youtube\.com\/(?:[^\/]+\/.+\/|(?:v|e(?:mbed)?|shorts)\/|.*[?&]v=)|youtu\.be\/)([^"&?\/\s]{11})/i)
+                    : null;
+
+                if (ytMatch && ytMatch[1]) {
+                    const ytId = ytMatch[1];
+                    const thumbUrl = `https://i.ytimg.com/vi/${ytId}/mqdefault.jpg`;
+                    const cachedMeta = (typeof WidgetManager !== 'undefined' && WidgetManager._ytMetaCache) ? WidgetManager._ytMetaCache[ytId] : null;
+                    const channelHtml = (cachedMeta && cachedMeta.author_name)
+                        ? `<div style="font-size:0.75rem; color:var(--accent-color); font-weight:bold; margin-top:4px;">${UI.escapeHTML(cachedMeta.author_name)}</div>`
+                        : '';
+                    const noteHtml = userNote
+                        ? `<div style="margin-top:4px; font-size:0.78rem;"><b>${I18n.t('preferences.note_prefix')}</b> ${userNote}</div>`
+                        : '';
+
+                    htmlText = `
+                        <div style="display:flex; flex-direction:column; width:240px;">
+                            <img src="${thumbUrl}" alt="YouTube Preview" style="width:240px; height:135px; object-fit:cover; border-radius:4px; display:block; background:#000;" onerror="this.style.display='none'">
+                            ${channelHtml}
+                            ${noteHtml}
+                            <div style="opacity:0.65; font-size:0.72rem; margin-top:4px; word-break:break-all;">${UI.escapeHTML(displayPathInfo)}</div>
+                        </div>
+                    `;
+                } else if (userNote) {
                     htmlText = `<b>${I18n.t('preferences.note_prefix')}</b> ${userNote}<br><span style="opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;">[ ${I18n.t('preferences.path_prefix')} ${displayPathInfo} ]</span>`;
                 } else if (displayPathInfo && displayPathInfo !== '#' && displayPathInfo !== I18n.t('preferences.internal_note_badge')) {
                     htmlText = `<span style="font-size:0.85rem; word-break: break-all;">${displayPathInfo}</span>`;
