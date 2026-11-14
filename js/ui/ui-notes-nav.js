@@ -4,10 +4,9 @@
  * Gestione della navigazione: Cronologia di navigazione lineare (History Stack),
  * transizione verso la Dashboard (goHome) e risoluzione salti verso i widget (jumpToWidget).
  * Sincronizzazione automatica del titolo nell'header su due righe al ritorno alla Dashboard.
- * FEAT FEEDFORWARD TOOLTIPS: Mostra nel tooltip delle frecce Indietro/Avanti il titolo esatto della nota di destinazione.
- * FEAT RETURNING RECORD ANCHOR: Evidenziazione visiva e centratura temporanea (pulse di 1.2s)
- * confinata esclusivamente alle celle della riga di partenza, con soppressione totale dell'alone sul database contenitore.
- * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
+ * FEEDFORWARD TOOLTIPS: Mostra nel tooltip delle frecce Indietro/Avanti il titolo esatto della nota di destinazione.
+ * RETURNING RECORD ANCHOR: Evidenziazione visiva e centratura temporanea (pulse di 1.2s)
+ * confinata alla riga/card di partenza (stili definiti in css/advanced-table.css).
  */
 
 Object.assign(UI, {
@@ -227,47 +226,6 @@ Object.assign(UI, {
     // MOTORE DI ANCORAGGIO VISIVO SUL RECORD DI PROVENIENZA
     highlightReturningRecord: (tableId, rowId) => {
         if (!tableId || !rowId) return;
-
-        // Iniezione automatica dello stile: animazione confinata alle sole celle td della riga per non sporcare il perimetro del database
-        if (!document.getElementById('adv-returning-row-style')) {
-            const st = document.createElement('style');
-            st.id = 'adv-returning-row-style';
-            st.innerHTML = `
-                @keyframes advRowCellPulse {
-                    0% {
-                        background-color: var(--item-active) !important;
-                        box-shadow: inset 0 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color);
-                    }
-                    60% {
-                        background-color: var(--item-active) !important;
-                        box-shadow: inset 0 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color);
-                    }
-                    100% {
-                        background-color: transparent;
-                        box-shadow: none;
-                    }
-                }
-                .adv-row-returning-pulse td {
-                    animation: advRowCellPulse 1.2s ease-out forwards !important;
-                }
-                .adv-row-returning-pulse td:first-child {
-                    box-shadow: inset 2px 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color) !important;
-                }
-                .adv-row-returning-pulse td:last-child {
-                    box-shadow: inset -2px 2px 0 0 var(--accent-color), inset 0 -2px 0 0 var(--accent-color) !important;
-                }
-                @keyframes advCardPulse {
-                    0% { box-shadow: 0 0 0 3px var(--accent-color) !important; }
-                    60% { box-shadow: 0 0 0 3px var(--accent-color) !important; }
-                    100% { box-shadow: none !important; }
-                }
-                .adv-board-card.adv-row-returning-pulse,
-                .adv-timeline-bar.adv-row-returning-pulse {
-                    animation: advCardPulse 1.2s ease-out forwards !important;
-                }
-            `;
-            document.head.appendChild(st);
-        }
 
         const realTableId = (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable._resolveSourceId === 'function')
             ? AdvancedTable._resolveSourceId(tableId)

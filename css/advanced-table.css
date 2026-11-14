@@ -277,7 +277,6 @@ z-index: 2;
 .adv-relation-container[onclick] { cursor: pointer; }
 .adv-relation-container[onclick]:hover:not(:has(.adv-select-pill:hover)) {
     background-color: color-mix(in srgb, var(--accent-color) 10%, transparent);
-    /*box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-color) 35%, transparent);*/
 }
 .adv-relation-container[onclick]:hover:not(:has(.adv-select-pill:hover)) .adv-select-empty {
     color: var(--accent-color);
@@ -285,12 +284,11 @@ z-index: 2;
 }
 .adv-relation-container .adv-select-pill[onclick] { cursor: pointer; transition: box-shadow 0.15s ease, filter 0.15s ease; }
 .adv-relation-container .adv-select-pill[onclick]:hover {
-    /*box-shadow: 0 0 0 1px var(--accent-color);*/
     filter: brightness(0.96);
 }
 [data-theme="dark"] .adv-relation-container .adv-select-pill[onclick]:hover,
 [data-theme="notion-dark"] .adv-relation-container .adv-select-pill[onclick]:hover {
-   /* filter: brightness(1.15);*/
+    filter: brightness(1.15);
 }
 
 .adv-url-edit { white-space: nowrap; overflow: hidden; width: 100%; }
@@ -444,4 +442,36 @@ body.is-panning * { user-select: none !important; pointer-events: none !importan
     flex-direction: column;
     gap: 8px;
     border-top: 1px solid var(--border-color);
+}
+
+/* =========================================================================
+   ANIMAZIONE RITORNO DA RECORD NOTE (Sincronizzata su tutta la riga/card)
+   ========================================================================= */
+
+@keyframes advRowReturningPulse {
+    0%, 60% {
+        background-color: var(--item-active);
+        outline-color: var(--accent-color);
+    }
+    100% {
+        background-color: transparent;
+        outline-color: transparent;
+    }
+}
+
+@keyframes advCardReturningPulse {
+    0%, 60% { outline-color: var(--accent-color); }
+    100% { outline-color: transparent; }
+}
+
+.adv-table tbody tr.adv-row-returning-pulse {
+    outline: 2px solid transparent;
+    outline-offset: -2px;
+    animation: advRowReturningPulse 1.2s ease-out forwards;
+}
+
+.adv-board-card.adv-row-returning-pulse,
+.adv-timeline-bar.adv-row-returning-pulse {
+    outline: 2px solid transparent;
+    animation: advCardReturningPulse 1.2s ease-out forwards;
 }
