@@ -21,8 +21,9 @@
  * Calcolo dinamico in tempo reale dei Backlink (relation_backlink) con normalizzazione
  * a sempre-array dei valori sorgente e invalidazione sistematica della cache su mutazioni.
  * PERF INVERTED INDEX O(1): Risoluzione istantanea relazioni e rollup tramite AdvancedTable.getRow().
- * FEAT AUTOINCREMENT: Riconoscimento valore stringa in getFormatDisplayValue.
- * REFACTOR I18N: Sostituzione delle stringhe di fallback (Orfano, Senza Nome, Senza Titolo, Riferimento Circolare) con I18n.t().
+ * AUTOINCREMENT: Riconoscimento valore stringa in getFormatDisplayValue.
+ * Sostituzione delle stringhe di fallback (Orfano, Senza Nome, Senza Titolo, Riferimento Circolare) con I18n.t().
+ * SIMBOLO/UNITÀ NUMERICA: Supporto opzionale numberUnit (%, €, $) in getFormatDisplayValue.
  */
 
 Object.assign(AdvancedTable, {
@@ -254,7 +255,18 @@ Object.assign(AdvancedTable, {
 
         if (colDef.type === 'number' || colDef.type === 'formula' || colDef.type === 'rollup') {
             const formatted = AdvancedTable.formatDecimal(rawValue, colDef.decimals);
-            return formatted !== '' && formatted !== null ? String(formatted) : '';
+            if (formatted !== '' && formatted !== null && formatted !== undefined) {
+                const unitSymbol = colDef.numberUnit || '';
+                if (unitSymbol) {
+                    const numCheck = String(rawValue).trim().replace(',', '.');
+                    if (numCheck !== '' && !isNaN(Number(numCheck))) {
+                        const unitSuffix = unitSymbol === '%' ? '%' : ` ${unitSymbol}`;
+                        return String(formatted) + unitSuffix;
+                    }
+                }
+                return String(formatted);
+            }
+            return '';
         }
 
         return String(rawValue);

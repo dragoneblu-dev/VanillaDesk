@@ -1,21 +1,22 @@
 /**
  * AdvancedTableCell.js
  * Genera il markup HTML di ogni singola cella del database in base al Tipo.
- * FIX UX: Se il dato fa parte di una relazione, viene passato il context sorgente (relationCtx)
+ * Se il dato fa parte di una relazione, viene passato il context sorgente (relationCtx)
  * al drawer per generare i pulsanti di "Scollegamento" anziché eliminazione distruttiva.
- * FIX MULTI-SELECT: I valori (Tag) vengono ora sempre visualizzati in ordine alfabetico crescente.
- * FIX RESOLVE SYSTEM: La risoluzione di Pagine e Relazioni per le Viste del DB di sistema ora è infallibile.
- * FIX RELAZIONI FORMULE: Utilizzo nativo e pulito dell'engine centrale 'resolveRelationDetails' senza codice duplicato.
- * FEAT: Rendering e navigazione interattiva per la tipologia 'note_link' (Collegamento a Nota).
- * FIX READONLY COMPUTED: Rollup, Formule e Backlink lunghi mostrano solo 'Apri Testo Completo' in sola lettura.
- * FEAT TRANSPARENT FORMULA ERROR: Rilevamento token di errore (ERROR: ...) con generazione del badge semantico
+ * MULTI-SELECT: I valori (Tag) vengono ora sempre visualizzati in ordine alfabetico crescente.
+ * La risoluzione di Pagine e Relazioni per le Viste del DB di sistema è gestita con fallback sicuro.
+ * Utilizzo nativo e pulito dell'engine centrale 'resolveRelationDetails' senza codice duplicato.
+ * Rendering e navigazione interattiva per la tipologia 'note_link' (Collegamento a Nota).
+ * Rollup, Formule e Backlink lunghi mostrano solo 'Apri Testo Completo' in sola lettura.
+ * TRANSPARENT FORMULA ERROR: Rilevamento token di errore (ERROR: ...) con generazione del badge semantico
  * '⚠️ #VALORE!' con corretto escaping degli attributi data-tooltip per eliminare la rottura del DOM.
- * PERF READ-ONLY RELATIONS CLEANUP: Rimosso il padding superfluo e il margin-left di 10px in modalità sola lettura,
+ * Rimozione del padding superfluo e del margin-left di 10px in modalità sola lettura,
  * garantendo che le pillole relazionali scorrano compatte a filo senza contenitori gonfiati.
- * FIX CTRL+A CELL ISOLATION: Intercettazione inline di Ctrl+A / Cmd+A sui campi input (numero e url)
+ * Intercettazione inline di Ctrl+A / Cmd+A sui campi input (numero e url)
  * per circoscrivere la selezione alla sola cella attiva senza selezionare la pagina intera.
- * FEAT CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
- * FEAT AUTOINCREMENT: Rendering cella read-only monospace per la nuova tipologia 'autoincrement'.
+ * CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
+ * AUTOINCREMENT: Rendering cella read-only monospace per la nuova tipologia 'autoincrement'.
+ * SIMBOLO/UNITÀ NUMERICA: Rendering del simbolo opzionale (%, €, $) subito fuori dall'input numerico.
  */
 
 Object.assign(AdvancedTable, {
@@ -228,12 +229,21 @@ Object.assign(AdvancedTable, {
         } else if (col.type === 'number') {
             const rawVal = val !== null && val !== undefined ? val : '';
             const formattedVal = AdvancedTable.formatDecimal(rawVal, col.decimals);
-            
+            const hasVal = formattedVal !== '' && formattedVal !== null && formattedVal !== undefined;
+            const unitSymbol = col.numberUnit || '';
+            const unitClass = unitSymbol === '%' ? 'adv-number-unit is-compact' : 'adv-number-unit';
+
             if (!isEdit) {
-                return `<div class="adv-cell-text adv-text-right">${formattedVal}</div>`;
+                if (!hasVal) return `<div class="adv-cell-text adv-text-right"></div>`;
+                const unitHtml = unitSymbol ? `<span class="${unitClass}">${unitSymbol}</span>` : '';
+                return `<div class="adv-cell-text adv-text-right">${formattedVal}${unitHtml}</div>`;
             }
             
             const decAttr = col.decimals !== undefined ? col.decimals : 'default';
+            const unitSpan = unitSymbol
+                ? `<span class="${unitClass} ${hasVal ? '' : 'is-empty'}">${unitSymbol}</span>`
+                : '';
+
             return `
                 <div class="adv-cell-number">
                     <input type="text" 
@@ -246,8 +256,9 @@ Object.assign(AdvancedTable, {
                            class="adv-input-right adv-number-input" 
                            onfocus="if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true); this.type='number'; this.value=this.getAttribute('data-raw-value');" 
                            onkeydown="if((event.ctrlKey||event.metaKey)&&(event.key==='a'||event.key==='A')){event.preventDefault();event.stopPropagation();this.select();return;}if(event.key==='Enter'){event.preventDefault(); this.blur();}"
-                           onblur="this.setAttribute('data-raw-value', this.value); this.type='text'; this.value=AdvancedTable.formatDecimal(this.value, this.getAttribute('data-decimals'));" 
+                           onblur="this.setAttribute('data-raw-value', this.value); this.type='text'; this.value=AdvancedTable.formatDecimal(this.value, this.getAttribute('data-decimals')); const u=this.parentElement.querySelector('.adv-number-unit'); if(u){ if(this.value!=='') u.classList.remove('is-empty'); else u.classList.add('is-empty'); }" 
                            ${readonly}>
+                    ${unitSpan}
                 </div>`;
                 
         } else if (col.type === 'select' || col.type === 'multi-select') {

@@ -1,32 +1,31 @@
 /**
  * AdvancedTableRecord.js
  * Crea il Drawer a scorrimento laterale per visualizzare o editare un singolo Record.
- * FIX HISTORY: Supporto al ricaricamento del DOM post Back-Navigation.
- * FIX UX: Rinominato "Elimina Record" in "Elimina Definitivamente".
- * FIX MULTI-SELECT: I valori (Tag) vengono ora sempre visualizzati in ordine alfabetico crescente.
- * FIX TIPI DATO: La cella "Number" ora invia il dato in formato Float e non String.
- * FIX RELAZIONI FORMULE: Risoluzione corretta tramite il metodo del Core.
- * FEAT: Rendering e navigazione della colonna 'note_link' (Collegamento a Nota).
- * FIX VALUE EXTRACTION: Utilizzo universale di AdvancedTable.getFormatDisplayValue.
- * FEAT DUPLICATE RECORD (CLONE ROW): Pulsante 'Duplica Record' nel footer del drawer.
- * FEAT CONTEXT HEADER & BANNER: Intestazione drawer arricchita con il Titolo del Database di appartenenza
+ * Supporto al ricaricamento del DOM post Back-Navigation.
+ * MULTI-SELECT: I valori (Tag) vengono ora sempre visualizzati in ordine alfabetico crescente.
+ * La cella "Number" ora invia il dato in formato Float e non String.
+ * Risoluzione corretta tramite il metodo del Core.
+ * Rendering e navigazione della colonna 'note_link' (Collegamento a Nota).
+ * Utilizzo universale di AdvancedTable.getFormatDisplayValue.
+ * DUPLICATE RECORD (CLONE ROW): Pulsante 'Duplica Record' nel footer del drawer.
+ * CONTEXT HEADER & BANNER: Intestazione drawer arricchita con il Titolo del Database di appartenenza
  * e banner informativo esplicito quando si visualizza un record collegato proveniente da un'altra tabella.
- * FEAT RECORD BUTTON MACRO: Rendering nativo del pulsante interattivo eseguibile per colonne di tipo 'button'.
- * FEAT COLUMN COMMENT ICON: Visualizzazione dell'icona info con tooltip esplicativo se la colonna possiede un commento.
- * FIX READONLY FORCED: isReadOnlyForced scatta unicamente se si consulta un record esterno da altra tabella;
+ * RECORD BUTTON MACRO: Rendering nativo del pulsante interattivo eseguibile per colonne di tipo 'button'.
+ * COLUMN COMMENT ICON: Visualizzazione dell'icona info con tooltip esplicativo se la colonna possiede un commento.
+ * isReadOnlyForced scatta unicamente se si consulta un record esterno da altra tabella;
  * il footer delle azioni relazionali (Scollega Record) rimane sempre accessibile in Edit Mode.
  * DEFAULT COLOR: Allineamento colore pulsanti macro su #2563eb per coerenza con la palette selezionabile.
- * FEAT EMPTY BUTTON LABEL: Supporto per pulsanti senza testo (solo icona) se buttonLabel è vuoto.
- * REFACTOR CSS ARCHITECTURE: Eliminazione degli stili inline e delega completa alle classi di layout in advanced-table.css.
- * FEAT SMART SPARSE PROPERTIES (SYS_PROPERTIES_DB): Nelle proprietà di pagina, mostra in cima i soli campi valorizzati
+ * EMPTY BUTTON LABEL: Supporto per pulsanti senza testo (solo icona) se buttonLabel è vuoto.
+ * Delega completa alle classi di layout in advanced-table.css.
+ * SMART SPARSE PROPERTIES (SYS_PROPERTIES_DB): Nelle proprietà di pagina, mostra in cima i soli campi valorizzati
  * (+ i Tag) e raccoglie tutti i campi non compilati nell'accordion ripiegabile in fondo.
- * FEAT SHIFT+ENTER CONVERSION: Shift+Invio su campo monoriga converte al volo in textarea multilinea inserendo \n
+ * SHIFT+ENTER CONVERSION: Shift+Invio su campo monoriga converte al volo in textarea multilinea inserendo \n
  * con disinnesco del blur-race. Ctrl+Invio delegato in modo centralizzato al Drawer globale.
- * FEAT CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
- * FEAT AUTOINCREMENT: Visualizzazione non editabile per colonna autoincrement.
- * FIX LABEL ID PRESERVATION: L'attributo id="drawer-prop-${col.id}" rimane sempre presente sulla label
+ * CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
+ * AUTOINCREMENT: Visualizzazione non editabile per colonna autoincrement.
+ * L'attributo id="drawer-prop-${col.id}" rimane sempre presente sulla label
  * sia in modalità modifica che in sola lettura, condizionando unicamente gli handler interattivi (onclick e title).
- * FIX TEXTAREA ATTRIBUTE ORDER: Uniformato l'attributo class="modern-input" in apertura del tag textarea.
+ * SIMBOLO/UNITÀ NUMERICA: Visualizzazione del simbolo (%, €, $) anche nel Dettaglio Record in modalità modifica.
  */
 
 Object.assign(AdvancedTable, {
@@ -259,20 +258,29 @@ Object.assign(AdvancedTable, {
                 else if (col.type === 'number') {
                     const rawVal = val !== null && val !== undefined ? val : '';
                     const formattedVal = AdvancedTable.formatDecimal(rawVal, col.decimals);
+                    const hasVal = formattedVal !== '' && formattedVal !== null && formattedVal !== undefined;
                     const decAttr = col.decimals !== undefined ? col.decimals : 'default';
+                    const unitSymbol = col.numberUnit || '';
+                    const unitClass = unitSymbol === '%' ? 'adv-number-unit is-compact' : 'adv-number-unit';
+                    const unitSpan = unitSymbol
+                        ? `<span class="${unitClass} ${hasVal ? '' : 'is-empty'}">${unitSymbol}</span>`
+                        : '';
                     
-                    const blurScript = `let v = this.value.trim(); let n = v === '' ? '' : parseFloat(v.replace(',', '.')); n = isNaN(n) ? '' : n; this.setAttribute('data-raw-value', n); this.type='text'; this.value=AdvancedTable.formatDecimal(n, this.getAttribute('data-decimals')); AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', n);`;
+                    const blurScript = `let v = this.value.trim(); let n = v === '' ? '' : parseFloat(v.replace(',', '.')); n = isNaN(n) ? '' : n; this.setAttribute('data-raw-value', n); this.type='text'; this.value=AdvancedTable.formatDecimal(n, this.getAttribute('data-decimals')); const u=this.parentElement.querySelector('.adv-number-unit'); if(u){ if(this.value!=='') u.classList.remove('is-empty'); else u.classList.add('is-empty'); } AdvancedTable.updateData('${tableId}', '${rowId}', '${col.id}', n);`;
 
                     displayVal = `
-                        <input type="text" 
-                               value="${formattedVal}" 
-                               data-raw-value="${rawVal}" 
-                               data-decimals="${decAttr}" 
-                               class="modern-input adv-number-input" 
-                               style="margin:0; text-align:right;" 
-                               onfocus="if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true); this.type='number'; this.value=this.getAttribute('data-raw-value');" 
-                               onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}"
-                               onblur="${blurScript}">
+                        <div class="adv-cell-number">
+                            <input type="text" 
+                                   value="${formattedVal}" 
+                                   data-raw-value="${rawVal}" 
+                                   data-decimals="${decAttr}" 
+                                   class="modern-input adv-number-input" 
+                                   style="margin:0; text-align:right;" 
+                                   onfocus="if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true); this.type='number'; this.value=this.getAttribute('data-raw-value');" 
+                                   onkeydown="if(event.key==='Enter' && !event.ctrlKey && !event.metaKey){event.preventDefault(); this.blur();}"
+                                   onblur="${blurScript}">
+                            ${unitSpan}
+                        </div>
                     `;
                 }
                 else if (col.type === 'select' || col.type === 'multi-select') {
@@ -686,7 +694,7 @@ Object.assign(AdvancedTable, {
                 if (!isReadOnlyForced) {
                     html += `
                         <button class="adv-add-btn" style="border: 1px solid var(--border-color); background: var(--bg-color); font-weight:500;" onclick="AdvancedTable.duplicateRecord('${tableId}', '${rowId}')">
-                            <span style="margin-right:5px; display:inline-flex; align-items:center;">${Icons.clipboard || '📑'}</span> Duplica Record
+                            <span style="margin-right:5px; display:inline-flex; align-items:center;">${Icons.clipboard}</span> ${I18n.t('adv_record.duplica_record')}
                         </button>
                     `;
                 }

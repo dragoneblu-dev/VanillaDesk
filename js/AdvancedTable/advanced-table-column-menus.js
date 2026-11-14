@@ -7,25 +7,22 @@
  * Integrazione del tipo 'note_link' (Collegamento a Nota) e 'autoincrement' (ID Auto-Incrementale).
  * PROTEZIONE ROLLUP BIDIREZIONALE: Verifica che nessuna tabella dello spazio di lavoro possieda
  * rollup o relazioni (uscenti o entranti) puntate a questa colonna prima di consentirne la cancellazione.
- * FIX CONVERSIONE RELAZIONE/ROLLUP: Richiesta di conferma preventiva su perdita dati prima dell'apertura
- * dei drawer di configurazione per evitare che le colonne rimangano in stato ibrido.
- * FEAT SMART DATE PARSER: Conversione robusta da Testo a Data con rilevamento range (start/end),
+ * Richiesta di conferma preventiva su perdita dati prima dell'apertura dei drawer di configurazione
+ * per evitare che le colonne rimangano in stato ibrido.
+ * SMART DATE PARSER: Conversione robusta da Testo a Data con rilevamento range (start/end),
  * decodifica entità HTML (-&gt; ➔ ->), supporto separatori multipli, riconoscimento anno a 4 cifre (ISO vs EU/US),
  * disambiguazione matematica giorno/mese (>12), risoluzione ambiguità basata sulla lingua (en vs it/es/de)
  * e composizione deterministica indipendente dal fuso orario.
- * FIX DATE RANGE TO TEXT WITH ARROWS: Conversione coerente da range a testo con freccia direzionale esplicita
+ * Conversione coerente da range a testo con freccia direzionale esplicita
  * per entrambe le date (s ➔ e), solo inizio (s ➔) o solo fine (➔ e).
- * FIX RANGE SPLIT ISO DATE: Eliminata la falsa segmentazione delle date singole ISO (YYYY-MM-DD)
- * che provocava l'impostazione errata della data di fine al 1° Gennaio.
- * FEAT CASCADE FORMULA REFACTOR ON RENAME: Rinomina colonna sincronizza automaticamente tutte le formule
+ * CASCADE FORMULA REFACTOR ON RENAME: Rinomina colonna sincronizza automaticamente tutte le formule
  * dello stesso database e di tabelle collegate esterne (sia per nome che per ID immutabile), prevenendo rotture.
- * FIX TYPEERROR S.COLUMNS.SOME: Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare
- * crash su widget non tabellari presenti in AppState.databases (diari, codice, bottoni).
- * FEAT WBS SEMANTIC DIRECTION: Toggle rapido e memorizzazione sullo schema colonna (col.treeDirection) per auto-relazioni.
- * FIX OPEN_COL_MENU TYPEGUARD: Protezione da chiamate asincrone o debounced per openColMenu senza eccezioni stopPropagation.
- * FIX BLUR RENAME CONFIRMATION: Intercettazione del cambio nome abbandonato senza Invio, con richiesta di conferma
- * esplicita dell'annullamento e promemoria sull'obbligo di premere Invio per confermare la modifica.
- * FEAT AUTOINCREMENT: Configurazione prefisso e padding numerico per ID Auto-Incrementale.
+ * Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare crash su widget non tabellari presenti in AppState.databases.
+ * WBS SEMANTIC DIRECTION: Toggle rapido e memorizzazione sullo schema colonna (col.treeDirection) per auto-relazioni.
+ * Protezione da chiamate asincrone o debounced per openColMenu senza eccezioni stopPropagation.
+ * Intercettazione del cambio nome abbandonato senza Invio, con richiesta di conferma esplicita dell'annullamento.
+ * AUTOINCREMENT: Configurazione prefisso e padding numerico per ID Auto-Incrementale.
+ * SIMBOLO/UNITÀ NUMERICA: Sottomenù dedicato per impostare %, € o $ sui campi numerici, rollup e formule.
  */
 
 const AdvancedTableColumnMenus = {
@@ -307,6 +304,21 @@ const AdvancedTableColumnMenus = {
         AdvancedTable.closeDropdowns(true);
     },
 
+    setColUnit: (tableId, colId, unit) => {
+        const realTableId = AdvancedTable._resolveSourceId(tableId);
+        let state = AdvancedTable.getState(realTableId);
+        const col = state.columns.find(c => c.id === colId);
+        if (!col) return;
+
+        if (!unit) delete col.numberUnit;
+        else col.numberUnit = unit;
+
+        AdvancedTable.setState(realTableId, state);
+        AdvancedTable.updateDependentViews(realTableId);
+        Store.triggerAutoSave();
+        AdvancedTable.closeDropdowns(true);
+    },
+
     reconfigureRelation: (tableId, colId) => {
         const realTableId = AdvancedTable._resolveSourceId(tableId);
         const state = AdvancedTable.getState(realTableId);
@@ -508,18 +520,35 @@ const AdvancedTableColumnMenus = {
         }
 
         if (col.type === 'number' || col.type === 'rollup') {
-            const dec = col.decimals !== undefined ? col.decimals : 'default';
+            if (col.type === 'number' || col.type === 'rollup') {
+                const dec = col.decimals !== undefined ? col.decimals : 'default';
+                menuItems.push({
+                    icon: Icons.number, label: I18n.t('adv_col_menu.decimal_format'), type: 'submenu',
+                    items: [
+                        { label: I18n.t('adv_col_menu.decimal_default') + (dec === 'default' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 'default') },
+                        { label: I18n.t('adv_col_menu.decimal_zero') + (dec === 0 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 0) },
+                        { label: I18n.t('adv_col_menu.decimal_1') + (dec === 1 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 1) },
+                        { label: I18n.t('adv_col_menu.decimal_2') + (dec === 2 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 2) },
+                        { label: I18n.t('adv_col_menu.decimal_3') + (dec === 3 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 3) },
+                        { label: I18n.t('adv_col_menu.decimal_4') + (dec === 4 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 4) }
+                    ]
+                });
+            }
+
+            const unit = col.numberUnit || '';
+            const unitLabel = I18n.t('adv_col_menu.number_unit_format');
             menuItems.push({
-                icon: Icons.number, label: I18n.t('adv_col_menu.decimal_format'), type: 'submenu',
+                icon: '<span style="font-family:monospace; font-weight:bold; font-size:0.85rem;">€</span>',
+                label: (unitLabel && unitLabel !== 'adv_col_menu.number_unit_format' ? unitLabel : 'Simbolo / Unità'),
+                type: 'submenu',
                 items: [
-                    { label: I18n.t('adv_col_menu.decimal_default') + (dec === 'default' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 'default') },
-                    { label: I18n.t('adv_col_menu.decimal_zero') + (dec === 0 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 0) },
-                    { label: I18n.t('adv_col_menu.decimal_1') + (dec === 1 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 1) },
-                    { label: I18n.t('adv_col_menu.decimal_2') + (dec === 2 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 2) },
-                    { label: I18n.t('adv_col_menu.decimal_3') + (dec === 3 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 3) },
-                    { label: I18n.t('adv_col_menu.decimal_4') + (dec === 4 ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColDecimals(realTableId, colId, 4) }
+                    { label: (I18n.t('adv_col_menu.unit_none') !== 'adv_col_menu.unit_none' ? I18n.t('adv_col_menu.unit_none') : 'Nessuno') + (unit === '' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColUnit(realTableId, colId, '') },
+                    { label: (I18n.t('adv_col_menu.unit_percent') !== 'adv_col_menu.unit_percent' ? I18n.t('adv_col_menu.unit_percent') : 'Percentuale (%)') + (unit === '%' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColUnit(realTableId, colId, '%') },
+                    { label: (I18n.t('adv_col_menu.unit_euro') !== 'adv_col_menu.unit_euro' ? I18n.t('adv_col_menu.unit_euro') : 'Euro (€)') + (unit === '€' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColUnit(realTableId, colId, '€') },
+                    { label: (I18n.t('adv_col_menu.unit_dollar') !== 'adv_col_menu.unit_dollar' ? I18n.t('adv_col_menu.unit_dollar') : 'Dollaro ($)') + (unit === '$' ? chk : ''), onClick: () => AdvancedTableColumnMenus.setColUnit(realTableId, colId, '$') }
                 ]
             });
+
             menuItems.push({ type: 'divider' });
         }
         
@@ -1171,6 +1200,9 @@ const AdvancedTableColumnMenus = {
             delete col.targetColId;
             delete col.rollupDirection;
             delete col.foreignRelColId;
+        }
+        if (!['number', 'rollup'].includes(newType)) {
+            delete col.numberUnit;
         }
 
         if (newType === 'select' || newType === 'multi-select') {

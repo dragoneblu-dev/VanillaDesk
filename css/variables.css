@@ -8,7 +8,7 @@
     --text-secondary: #566172;
     --accent-color: #4f8b00; /*2563eb;*/
     --accent-color-tx: #FFFFFF;
-    --accent-hover: #19bc3f;
+    --accent-hover: #60a900;
     --border-color: #e5e7eb;
     --item-hover: #edf3d0; /*f9fafb;*/
     --item-active: #f4fbcf; /*eff6ff;*/
@@ -95,6 +95,7 @@
     --editor-bg: #272c34;
     --text-primary: #f9fafb;
     --text-secondary: #9ca3af;
+    --accent-color-tx: #000000;
     --accent-color: #82b9fb;
     --accent-hover: #3b82f6;
     --border-color: #374151;
