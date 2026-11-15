@@ -1796,6 +1796,9 @@ modpack_guide: {
     btn_confirm: "Procedi e Scegli File"
 },
 workflow: {
+    btn_add_record: "Nuovo Record",
+    btn_add_record_title: "Aggiungi un nuovo record al database",
+    toast_record_created: "Nuovo record creato e aggiunto al workflow!",
     title: "Workflow & Node Graph Studio",
     btn_open_workspace: "Apri Cartella Workspace...",
     btn_switch_db: "Cambia Database",
@@ -3705,6 +3708,9 @@ modpack_guide: {
     btn_confirm: "Proceed and Choose File"
 },
 workflow: {
+    btn_add_record: "New Record",
+    btn_add_record_title: "Add a new record to the database",
+    toast_record_created: "New record created and added to the workflow!",
     title: "Workflow & Node Graph Studio",
     btn_open_workspace: "Open Workspace Folder...",
     btn_switch_db: "Switch Database",
@@ -5614,6 +5620,9 @@ modpack_guide: {
     btn_confirm: "Continuar y Elegir Archivo"
 },
 workflow: {
+    btn_add_record: "Nuevo Registro",
+    btn_add_record_title: "Añadir un nuevo registro a la base de datos",
+    toast_record_created: "¡Nuevo registro creado y añadido al flujo de trabajo!",
     title: "Workflow & Node Graph Studio",
     btn_open_workspace: "Abrir Carpeta de Workspace...",
     btn_switch_db: "Cambiar Base de Datos",
@@ -7523,6 +7532,9 @@ modpack_guide: {
     btn_confirm: "Fortfahren und Datei wählen"
 },
 workflow: {
+    btn_add_record: "Neuer Datensatz",
+    btn_add_record_title: "Neuen Datensatz zur Datenbank hinzufügen",
+    toast_record_created: "Neuer Datensatz erstellt und zum Workflow hinzugefügt!",
     title: "Workflow & Node Graph Studio",
     btn_open_workspace: "Workspace-Ordner öffnen...",
     btn_switch_db: "Datenbank wechseln",

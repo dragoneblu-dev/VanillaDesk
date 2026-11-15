@@ -6,7 +6,8 @@
  * - Overlay di suggerimento su pagina vuota (toggleEmptyOverlay).
  * - Modale di gestione e cancellazione dei template (openManager, deleteTemplate).
  * - Salvataggio della nota attiva come template (saveNoteAsTemplate, saveCurrentNoteAsTemplate).
- * - Applicazione transazionale con deep-cloning di ID/formule e sincronizzazione proprietà con SYS_PROPERTIES_DB (applyTemplate).
+ * - Applicazione transazionale con deep-cloning di ID/formule, isolamento sicuro di record_note e backlink esterni,
+ *   e sincronizzazione proprietà con SYS_PROPERTIES_DB (applyTemplate).
  */
 
 const TemplateManager = {
@@ -342,6 +343,8 @@ const TemplateManager = {
             rawHtml = rawHtml.replace(regex, idMap[oldId]);
         });
 
+        const clonedWidgetIds = new Set(Object.values(idMap));
+
         Object.keys(tpl.widgets || {}).forEach(oldId => {
             const newId = idMap[oldId];
             if (!newId) return;
@@ -366,8 +369,46 @@ const TemplateManager = {
                 stateStr = stateStr.replace(formulaRegex2, `tabella[\\'${newTitle}\\']`);
             });
 
+            const parsedState = JSON.parse(stateStr);
+
+            // Isolamento sicuro delle colonne del database clonato
+            if (parsedState && Array.isArray(parsedState.columns)) {
+                const recordNoteColIds = [];
+
+                parsedState.columns.forEach(col => {
+                    // 1. Disattiva il backlink per relazioni che puntano a database ESTERNI al template,
+                    // evitando conflitti o cancellazioni accidentali della colonna backlink del DB originale.
+                    if (col.type === 'relation' && col.targetTableId && !clonedWidgetIds.has(col.targetTableId)) {
+                        if (col.showBacklink) {
+                            col.showBacklink = false;
+                        }
+                        delete col.backlinkColId;
+                    }
+
+                    // 2. Raccoglie le colonne di tipo record_note per scollegarle dalle note fisiche originali
+                    if (col.type === 'record_note') {
+                        recordNoteColIds.push(col.id);
+                    }
+                });
+
+                if (recordNoteColIds.length > 0 && Array.isArray(parsedState.rows)) {
+                    parsedState.rows.forEach(row => {
+                        if (row.cells) {
+                            recordNoteColIds.forEach(cId => {
+                                row.cells[cId] = '';
+                            });
+                        }
+                        if (row.virtualCells) {
+                            recordNoteColIds.forEach(cId => {
+                                row.virtualCells[cId] = '';
+                            });
+                        }
+                    });
+                }
+            }
+
             if (!AppState.databases) AppState.databases = {};
-            AppState.databases[newId] = JSON.parse(stateStr);
+            AppState.databases[newId] = parsedState;
         });
 
         if (text === '' && !hasWidgets) {

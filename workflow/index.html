@@ -70,15 +70,17 @@
 
             <div class="separator"></div>
 
-            <button id="btnSwitchDb" class="btn" style="display:none;" onclick="WorkflowApp.showDbPicker()">
-                <script>document.write(Icons.tableDatabase)</script> <span id="btnSwitchDbLabel"><script>document.write(I18n.t('workflow.btn_switch_db'))</script></span>
+            <button id="btnSwitchDb" class="btn" style="display:none;" onclick="WorkflowApp.showDbPicker()" title="">
+                <script>document.write(Icons.tableDatabase); document.getElementById('btnSwitchDb').title = I18n.t('workflow.btn_switch_db');</script> <span id="btnSwitchDbLabel"><script>document.write(I18n.t('workflow.btn_switch_db'))</script></span>
             </button>
 
             <button id="btnReloadDb" class="btn" style="display:none;" onclick="WorkflowApp.reloadCurrentDatabase(false)" title="">
-                <script>document.write(Icons.refresh); document.getElementById('btnReloadDb').title = I18n.t('workflow.toast_data_reloaded');</script> <span id="btnReloadDbLabel"><script>document.write(I18n.t('workflow.btn_reload'))</script></span>
+                <script>document.write(Icons.refresh); document.getElementById('btnReloadDb').title = I18n.t('workflow.toast_data_reloaded');</script> <span id="btnReloadDbLabel"></span>
             </button>
 
-            <span id="activeDbTitle" style="font-weight: bold; font-size: 0.95rem; color: var(--text-primary); display:none;"></span>
+            <button id="btnAddRecord" class="btn" style="display:none;" onclick="WorkflowApp.addNewRecord()" title="">
+                <script>document.write(Icons.plus); document.getElementById('btnAddRecord').title = I18n.t('workflow.btn_add_record_title');</script> <span id="btnAddRecordLabel"></span>
+            </button>
         </div>
 
         <div class="header-right" id="workflowCanvasControls" style="display:none;">

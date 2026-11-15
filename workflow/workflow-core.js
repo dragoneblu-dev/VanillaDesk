@@ -67,33 +67,223 @@ window.WorkflowApp = {
         return dir === 'parent' ? 'predecessor' : 'successor';
     },
 
+    // Aggiorna il testo del pulsante "Cambia Database" con il titolo del DB corrente (senza suffissi [Predecessore] o simili)
+    _updateDbButtonTitle: (titleText) => {
+        const btnLabel = document.getElementById('btnSwitchDbLabel');
+        if (btnLabel) {
+            btnLabel.innerText = titleText || I18n.t('workflow.btn_switch_db');
+        }
+    },
+
+    // Posiziona automaticamente i blocchi non ancora collocati in stile cascata Windows (leggermente a destra e in basso rispetto al padre)
+    positionUnplacedNodes: () => {
+        const db = WorkflowApp.currentDbState;
+        if (!db || !Array.isArray(db.rows)) return false;
+
+        if (!WorkflowApp.layout.nodes) WorkflowApp.layout.nodes = {};
+
+        const unplacedRows = db.rows.filter(r => {
+            const pos = WorkflowApp.layout.nodes[r.id];
+            return !pos || !isFinite(pos.x) || !isFinite(pos.y);
+        });
+
+        if (unplacedRows.length === 0) return false;
+
+        const step = WorkflowApp.getGridStep();
+        const relCol = WorkflowApp.selfRelCol;
+
+        // Funzione di controllo sovrapposizione esatta con altri nodi già piazzati
+        const isPositionOccupied = (x, y) => {
+            return Object.values(WorkflowApp.layout.nodes).some(p =>
+                p && isFinite(p.x) && isFinite(p.y) &&
+                Math.abs(p.x - x) < 16 && Math.abs(p.y - y) < 16
+            );
+        };
+
+        // Trova un nodo di fallback già posizionato (ultimo disponibile) nel caso non ci siano relazioni collegate
+        let fallbackPos = { x: 72, y: 72 };
+        const placedKeys = Object.keys(WorkflowApp.layout.nodes);
+        for (let i = placedKeys.length - 1; i >= 0; i--) {
+            const p = WorkflowApp.layout.nodes[placedKeys[i]];
+            if (p && isFinite(p.x) && isFinite(p.y)) {
+                fallbackPos = { x: p.x, y: p.y };
+                break;
+            }
+        }
+
+        unplacedRows.forEach(r => {
+            let basePos = null;
+
+            if (relCol && r.cells) {
+                // 1. Cerca tra i record referenziati direttamente da questo nodo nella colonna relazione
+                let ownTargets = r.cells[relCol.id];
+                if (ownTargets) {
+                    if (!Array.isArray(ownTargets)) ownTargets = [ownTargets];
+                    for (const tId of ownTargets) {
+                        const p = WorkflowApp.layout.nodes[tId];
+                        if (p && isFinite(p.x) && isFinite(p.y)) {
+                            basePos = { x: p.x, y: p.y };
+                            break;
+                        }
+                    }
+                }
+
+                // 2. Se non trovato, cerca un record già posizionato che punti a questo nodo
+                if (!basePos) {
+                    for (const otherRow of db.rows) {
+                        if (otherRow.id === r.id || !otherRow.cells) continue;
+                        const otherPos = WorkflowApp.layout.nodes[otherRow.id];
+                        if (!otherPos || !isFinite(otherPos.x) || !isFinite(otherPos.y)) continue;
+
+                        let otherTargets = otherRow.cells[relCol.id];
+                        if (!otherTargets) continue;
+                        if (!Array.isArray(otherTargets)) otherTargets = [otherTargets];
+                        if (otherTargets.includes(r.id)) {
+                            basePos = { x: otherPos.x, y: otherPos.y };
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (!basePos) {
+                basePos = fallbackPos;
+            }
+
+            // Effetto cascata "Esplora Risorse": sposta leggermente a destra e in basso rispetto al blocco padre/riferimento
+            let candX = WorkflowApp.snapToGrid(basePos.x + step);
+            let candY = WorkflowApp.snapToGrid(basePos.y + step);
+
+            let guard = 0;
+            while (isPositionOccupied(candX, candY) && guard < 100) {
+                candX = WorkflowApp.snapToGrid(candX + step);
+                candY = WorkflowApp.snapToGrid(candY + step);
+                guard++;
+            }
+
+            WorkflowApp.layout.nodes[r.id] = { x: candX, y: candY };
+            fallbackPos = { x: candX, y: candY };
+        });
+
+        return true;
+    },
+
+    // Aggiunge direttamente un nuovo record al database dal Workflow Studio e ne apre il cassetto di modifica
+    addNewRecord: async () => {
+        if (!WorkflowApp.currentDbId || !WorkflowApp.currentDbState) return;
+
+        if (WorkflowApp.layout.locked) {
+            UI.showToast(I18n.t('workflow.toast_locked_no_connect'), "warning");
+            return;
+        }
+
+        const db = WorkflowApp.currentDbState;
+        if (!Array.isArray(db.rows)) db.rows = [];
+
+        const now = Date.now();
+        const newRowId = 'r' + (typeof Store !== 'undefined' && typeof Store.generateId === 'function'
+            ? Store.generateId()
+            : (now + '_' + Math.random().toString(36).substr(2, 5)));
+
+        const newRow = {
+            id: newRowId,
+            createdAt: now,
+            updatedAt: now,
+            cells: {}
+        };
+
+        (db.columns || []).forEach(c => {
+            if (c.type === 'autoincrement' && typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.generateAutoIncrementValue === 'function') {
+                newRow.cells[c.id] = AdvancedTable.generateAutoIncrementValue(c, db);
+            } else if (c.type === 'checkbox') {
+                newRow.cells[c.id] = false;
+            } else if (c.type === 'multi-select' || c.type === 'relation') {
+                newRow.cells[c.id] = [];
+            } else if ((c.type === 'date' || c.type === 'datetime') && c.hasEndDate) {
+                newRow.cells[c.id] = { start: '', end: '' };
+            } else {
+                newRow.cells[c.id] = '';
+            }
+        });
+
+        db.rows.push(newRow);
+
+        // Posizionamento del nuovo blocco: se c'è un nodo selezionato, cascata da quello; altrimenti al centro della viewport
+        const step = WorkflowApp.getGridStep();
+        let baseX = 72;
+        let baseY = 72;
+
+        if (WorkflowApp.selectedNodeId && WorkflowApp.layout.nodes[WorkflowApp.selectedNodeId]) {
+            const selPos = WorkflowApp.layout.nodes[WorkflowApp.selectedNodeId];
+            baseX = selPos.x + step;
+            baseY = selPos.y + step;
+        } else {
+            const vp = document.getElementById('canvasViewport');
+            const vw = vp ? (vp.clientWidth || window.innerWidth) : window.innerWidth;
+            const vh = vp ? (vp.clientHeight || (window.innerHeight - 52)) : (window.innerHeight - 52);
+            const zoom = WorkflowApp.layout.zoom || 1;
+            const panX = isFinite(WorkflowApp.layout.pan.x) ? WorkflowApp.layout.pan.x : 72;
+            const panY = isFinite(WorkflowApp.layout.pan.y) ? WorkflowApp.layout.pan.y : 72;
+
+            baseX = ((vw / 2) - panX) / zoom - 144;
+            baseY = ((vh / 2) - panY) / zoom - 40;
+        }
+
+        let candX = WorkflowApp.snapToGrid(baseX);
+        let candY = WorkflowApp.snapToGrid(baseY);
+        const isOccupied = (x, y) => Object.values(WorkflowApp.layout.nodes || {}).some(p =>
+            p && isFinite(p.x) && isFinite(p.y) && Math.abs(p.x - x) < 16 && Math.abs(p.y - y) < 16
+        );
+        let guard = 0;
+        while (isOccupied(candX, candY) && guard < 100) {
+            candX = WorkflowApp.snapToGrid(candX + step);
+            candY = WorkflowApp.snapToGrid(candY + step);
+            guard++;
+        }
+
+        if (!WorkflowApp.layout.nodes) WorkflowApp.layout.nodes = {};
+        WorkflowApp.layout.nodes[newRowId] = { x: candX, y: candY };
+
+        if (typeof AdvancedAutomations !== 'undefined' && typeof AdvancedAutomations.evaluate === 'function') {
+            await AdvancedAutomations.evaluate(WorkflowApp.currentDbId, newRowId, true);
+        }
+
+        await WorkflowApp.persistDatabaseToDisk();
+
+        WorkflowApp.buildNodesDOM();
+        (db.rows || []).forEach(r => {
+            const pos = WorkflowApp.layout.nodes[r.id];
+            const el = document.getElementById(`wf_node_${r.id}`);
+            if (pos && el) {
+                el.style.left = `${pos.x}px`;
+                el.style.top = `${pos.y}px`;
+            }
+        });
+
+        WorkflowApp.renderConnections();
+        WorkflowApp.renderClusters();
+        WorkflowApp.updateMinimap();
+        await WorkflowApp.saveWorkflowAuto();
+
+        // Seleziona il nuovo nodo appena creato e apre subito il pannello laterale di dettaglio record
+        WorkflowApp.clearSelection();
+        WorkflowApp.selectedNodeIds.add(newRowId);
+        const newNodeEl = document.getElementById(`wf_node_${newRowId}`);
+        if (newNodeEl) {
+            newNodeEl.classList.add('selected');
+        }
+        WorkflowApp.focusBranch(newRowId);
+
+        UI.showToast(I18n.t('workflow.toast_record_created'), "success");
+        WorkflowApp.openRecordDrawer(newRowId);
+    },
+
     // Notifica reattiva quando il database subisce una mutazione dal Drawer di modifica record
     onDatabaseModified: (dbId) => {
         if (!dbId || dbId !== WorkflowApp.currentDbId) return;
         const db = AppState.databases[dbId];
         if (!db) return;
         WorkflowApp.currentDbState = db;
-
-        // Gestione di eventuali nuovi record (es. record duplicati dal drawer)
-        let maxY = 0;
-        let refX = 72;
-        Object.keys(WorkflowApp.layout.nodes || {}).forEach(k => {
-            const pos = WorkflowApp.layout.nodes[k];
-            if (pos && pos.y > maxY) {
-                maxY = pos.y;
-                refX = pos.x;
-            }
-        });
-
-        (db.rows || []).forEach(r => {
-            if (!WorkflowApp.layout.nodes[r.id]) {
-                WorkflowApp.layout.nodes[r.id] = {
-                    x: refX,
-                    y: WorkflowApp.snapToGrid(maxY + 120)
-                };
-                maxY += 120;
-            }
-        });
 
         // Rimozione dal layout di eventuali record eliminati
         const validRowIds = new Set((db.rows || []).map(r => r.id));
@@ -102,6 +292,9 @@ window.WorkflowApp = {
                 delete WorkflowApp.layout.nodes[k];
             }
         });
+
+        // Posizionamento automatico a cascata per eventuali nuovi record (es. record duplicati dal drawer)
+        WorkflowApp.positionUnplacedNodes();
 
         WorkflowApp.buildNodesDOM();
         (db.rows || []).forEach(r => {
@@ -262,12 +455,12 @@ window.WorkflowApp = {
         const ctrl = document.getElementById('workflowCanvasControls');
         const btnSw = document.getElementById('btnSwitchDb');
         const btnRel = document.getElementById('btnReloadDb');
-        const ttl = document.getElementById('activeDbTitle');
+        const btnAdd = document.getElementById('btnAddRecord');
 
         if (ctrl) ctrl.style.display = isWorkflow ? 'flex' : 'none';
         if (btnSw) btnSw.style.display = (isWorkflow || screenId === 'dbPickerScreen') ? 'inline-flex' : 'none';
         if (btnRel) btnRel.style.display = isWorkflow ? 'inline-flex' : 'none';
-        if (ttl) ttl.style.display = isWorkflow ? 'inline' : 'none';
+        if (btnAdd) btnAdd.style.display = isWorkflow ? 'inline-flex' : 'none';
 
         if (typeof WorkflowApp.updateSelectionToolbar === 'function') {
             WorkflowApp.updateSelectionToolbar();
@@ -289,6 +482,7 @@ window.WorkflowApp = {
         const isLocked = !!WorkflowApp.layout.locked;
         const btn = document.getElementById('btnLockLayout');
         const label = document.getElementById('lockBtnLabel');
+        const btnAdd = document.getElementById('btnAddRecord');
 
         if (document.body) {
             if (isLocked) document.body.classList.add('layout-locked');
@@ -301,6 +495,10 @@ window.WorkflowApp = {
         }
         if (label) {
             label.innerText = isLocked ? I18n.t('workflow.unlock') : I18n.t('workflow.lock');
+        }
+        if (btnAdd) {
+            btnAdd.disabled = isLocked;
+            btnAdd.style.opacity = isLocked ? '0.45' : '';
         }
     },
 
@@ -348,7 +546,16 @@ window.WorkflowApp = {
             WorkflowApp.layout = JSON.parse(JSON.stringify(WorkflowApp.layoutsByRelation[newRelColId]));
             WorkflowApp.applyCanvasBackground(WorkflowApp.layout.backgroundColor);
             WorkflowApp.applyLayoutLockState();
+            WorkflowApp.positionUnplacedNodes();
             WorkflowApp.buildNodesDOM();
+            (db.rows || []).forEach(r => {
+                const pos = WorkflowApp.layout.nodes[r.id];
+                const el = document.getElementById(`wf_node_${r.id}`);
+                if (pos && el) {
+                    el.style.left = `${pos.x}px`;
+                    el.style.top = `${pos.y}px`;
+                }
+            });
             WorkflowApp.renderConnections();
             WorkflowApp.renderClusters();
             WorkflowApp.updateCanvasTransform();
@@ -374,10 +581,7 @@ window.WorkflowApp = {
             WorkflowApp.fitToView();
         }
 
-        const titleEl = document.getElementById('activeDbTitle');
-        if (titleEl) {
-            titleEl.innerText = `${db.title || I18n.t('editor.database')} [${newRelCol.name}]`;
-        }
+        WorkflowApp._updateDbButtonTitle(db.title || I18n.t('editor.database'));
 
         WorkflowApp.saveWorkflowAuto();
         UI.showToast(I18n.t('workflow.toast_workflow_view_for', { name: newRelCol.name }), "info");
@@ -904,6 +1108,7 @@ window.WorkflowApp = {
     },
 
     showDbPicker: () => {
+        WorkflowApp._updateDbButtonTitle(I18n.t('workflow.btn_switch_db'));
         const grid = document.getElementById('dbGridList');
         if (!grid) {
             WorkflowApp.switchScreen('dbPickerScreen');
@@ -990,10 +1195,7 @@ window.WorkflowApp = {
         }
         WorkflowApp.selfRelCol = activeRel;
 
-        const titleEl = document.getElementById('activeDbTitle');
-        if (titleEl) {
-            titleEl.innerText = activeRel ? `${db.title || I18n.t('editor.database')} [${activeRel.name}]` : (db.title || I18n.t('editor.database'));
-        }
+        WorkflowApp._updateDbButtonTitle(db.title || I18n.t('editor.database'));
 
         // Inizializza il contenitore multi-layout per le relazioni
         WorkflowApp.layoutsByRelation = {};
@@ -1025,6 +1227,7 @@ window.WorkflowApp = {
         if (!hasLoadedCustomLayout) {
             WorkflowApp.runOrganicAutoLayout(true);
         } else {
+            const placedNewNodes = WorkflowApp.positionUnplacedNodes();
             (db.rows || []).forEach(r => {
                 const pos = WorkflowApp.layout.nodes[r.id];
                 const el = document.getElementById(`wf_node_${r.id}`);
@@ -1036,6 +1239,9 @@ window.WorkflowApp = {
             WorkflowApp.renderConnections();
             WorkflowApp.renderClusters();
             WorkflowApp.updateCanvasTransform();
+            if (placedNewNodes) {
+                WorkflowApp.saveWorkflowAuto();
+            }
         }
         
         setTimeout(() => {
@@ -1085,10 +1291,9 @@ window.WorkflowApp = {
             }
             WorkflowApp.selfRelCol = selfRel;
 
-            const titleEl = document.getElementById('activeDbTitle');
-            if (titleEl) {
-                titleEl.innerText = selfRel ? `${freshDbState.title || I18n.t('editor.database')} [${selfRel.name}]` : (freshDbState.title || I18n.t('editor.database'));
-            }
+            WorkflowApp._updateDbButtonTitle(freshDbState.title || I18n.t('editor.database'));
+
+            const placedNewNodes = WorkflowApp.positionUnplacedNodes();
 
             WorkflowApp.buildNodesDOM();
 
@@ -1104,6 +1309,9 @@ window.WorkflowApp = {
             WorkflowApp.renderConnections();
             WorkflowApp.renderClusters();
             WorkflowApp.updateMinimap();
+            if (placedNewNodes) {
+                WorkflowApp.saveWorkflowAuto();
+            }
             if (!silent) UI.showToast(I18n.t('workflow.toast_data_reloaded'), "success");
         } catch (e) {
             if (!silent) {
@@ -1258,6 +1466,7 @@ window.WorkflowApp = {
 
                 WorkflowApp.applyCanvasBackground(WorkflowApp.layout.backgroundColor);
                 WorkflowApp.applyLayoutLockState();
+                WorkflowApp.positionUnplacedNodes();
 
                 WorkflowApp.buildNodesDOM();
 
