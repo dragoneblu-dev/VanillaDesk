@@ -9,9 +9,12 @@
  * evitando che date ISO (es. '2026-05-20') vengano scambiate per numeri da parseFloat.
  * FEAT QUICK SORT TH: Supporto all'ordinamento rapido su th con ondblclick per tabelle pivot.
  * REFACTOR I18N: Sostituzione di tutte le stringhe fisse (etichette, tooltips, vuoti e messaggi) con I18n.t().
+ * FIX CHART LAYOUT SHIFT: Preservazione dell'altezza reale del contenitore grafico e rendering sincrono
+ * per eliminare lo spostamento verticale del contenuto sottostante durante gli aggiornamenti del database.
  */
 
 const AdvancedPivot = {
+    _lastChartHeights: {},
 
     updateDependent: (sourceTableId) => {
         if (!AppState.databases) return;
@@ -329,6 +332,23 @@ const AdvancedPivot = {
         const hasSort = state.sorts.length > 0;
         const hasChart = state.chartConfig && state.chartConfig.visible;
 
+        // Firma della configurazione grafica corrente per preservare l'altezza senza sbalzi
+        const chartHeightKey = state.chartConfig?.height || 'medium';
+        const chartTypeKey = state.chartConfig?.type || 'bar';
+        const chartLegendKey = state.chartConfig?.legendPos || 'bottom';
+        const chartConfigSig = `${chartHeightKey}_${chartTypeKey}_${chartLegendKey}`;
+
+        const existingChartContainer = document.getElementById(`chart_container_${tableId}`);
+        if (hasChart && existingChartContainer && existingChartContainer.offsetHeight > 0) {
+            const prevCached = AdvancedPivot._lastChartHeights[tableId];
+            if (!prevCached || prevCached.sig === chartConfigSig) {
+                AdvancedPivot._lastChartHeights[tableId] = {
+                    sig: chartConfigSig,
+                    height: existingChartContainer.offsetHeight
+                };
+            }
+        }
+
         if (typeof WidgetManager !== 'undefined') {
             const tools =[];
             if (isEdit && typeof AdvancedTableCharts !== 'undefined') {
@@ -353,13 +373,18 @@ const AdvancedPivot = {
         let html = '';
 
         if (hasChart) {
-            const chartHeight = state.chartConfig?.height || 'medium';
-            let minH = '350px';
-            if (chartHeight === 'small') minH = '260px';
-            else if (chartHeight === 'large') minH = '550px';
+            const isPie = chartTypeKey === 'doughnut' || chartTypeKey === 'pie';
+            let defaultMinH = isPie ? 380 : 400;
+            if (chartHeightKey === 'small') defaultMinH = isPie ? 270 : 260;
+            else if (chartHeightKey === 'large') defaultMinH = isPie ? 550 : 600;
+
+            const cachedEntry = AdvancedPivot._lastChartHeights[tableId];
+            const preservedH = (cachedEntry && cachedEntry.sig === chartConfigSig && cachedEntry.height > defaultMinH)
+                ? cachedEntry.height
+                : defaultMinH;
 
             html += `
-                <div id="chart_container_${tableId}" style="width:100%; min-height:${minH}; padding:15px; margin-bottom:5px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-color); box-sizing:border-box;">
+                <div id="chart_container_${tableId}" style="width:100%; min-height:${preservedH}px; padding:15px; margin-bottom:5px; border:1px solid var(--border-color); border-radius:6px; background:var(--bg-color); box-sizing:border-box;">
                     <!-- Il canvas verra iniettato qui da AdvancedTableCharts -->
                 </div>
             `;
@@ -507,9 +532,25 @@ const AdvancedPivot = {
         }
 
         if (hasChart && typeof AdvancedTableCharts !== 'undefined') {
-            setTimeout(() => {
-                AdvancedTableCharts.renderChart(tableId, `chart_container_${tableId}`, pivotRows, state);
-            }, 10);
+            const renderAndMeasure = () => {
+                const containerId = `chart_container_${tableId}`;
+                AdvancedTableCharts.renderChart(tableId, containerId, pivotRows, state);
+                const el = document.getElementById(containerId);
+                if (el && el.offsetHeight > 0) {
+                    AdvancedPivot._lastChartHeights[tableId] = {
+                        sig: chartConfigSig,
+                        height: el.offsetHeight
+                    };
+                    el.style.minHeight = `${el.offsetHeight}px`;
+                }
+            };
+
+            const containerEl = document.getElementById(`chart_container_${tableId}`);
+            if (containerEl && containerEl.offsetWidth > 0) {
+                renderAndMeasure();
+            } else {
+                requestAnimationFrame(renderAndMeasure);
+            }
         }
     }
 };
