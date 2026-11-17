@@ -27,7 +27,7 @@ main {
     display: flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
+    justify-content: flex-start;
     height: 100%;
     color: var(--text-secondary);
     text-align: center;
@@ -259,7 +259,6 @@ mark.active-highlight *,
 .editor-content li::marker { color: var(--text-secondary); font-weight: bold; }
 
 #noteLastUpdate { font-family: var(--font-editor); opacity: 0.8; }
-.hidden { display: none !important; }
 
 /* --- GHOST MODE: Toolbar contestuali fluttuanti (Tabelle, Link, Immagini) --- */
 .adv-floating-popover {

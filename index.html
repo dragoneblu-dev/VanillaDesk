@@ -131,6 +131,16 @@
             flex-wrap: wrap;
             margin-top: 6px;
         }
+
+        @media (max-height: 780px) {
+            .onboarding-hero-icon { display: none !important; }
+            #onboardingView { padding: 14px 15px 20px 15px !important; }
+            #onboardingView h1 { font-size: 1.55rem !important; margin-bottom: 4px !important; }
+            #onboardingView p { font-size: 0.92rem !important; line-height: 1.45 !important; margin-bottom: 14px !important; }
+            .onboarding-segmented-control { margin-bottom: 10px !important; }
+            .onboarding-single-container { margin-bottom: 14px !important; }
+            .onboarding-storage-card { padding: 14px !important; gap: 10px !important; }
+        }
     </style>
 
     <script src="js/icons.js"></script>
@@ -280,15 +290,15 @@
 
         <main id="mainArea">
             <div id="emptyState" class="empty-state">
-                <div id="onboardingView" class="hidden" style="display:flex; flex-direction:column; align-items:center; max-width:820px; margin: 0 auto; text-align:center; padding: 30px 15px 40px 15px; box-sizing:border-box;">
-                    <div style="margin-bottom: 20px; color:var(--accent-color); transform: scale(1.6);">
+                <div id="onboardingView" class="hidden" style="display:flex; flex-direction:column; align-items:center; max-width:820px; margin: auto; text-align:center; padding: 30px 15px 40px 15px; box-sizing:border-box;">
+                    <div class="onboarding-hero-icon" style="margin-bottom: 14px; color:var(--accent-color); transform: scale(1.6);">
                         <script>document.write(Icons.lightning || Icons.book)</script>
                     </div>
                     <h1 style="margin-bottom: 8px; font-size: 2.1rem; color: var(--text-primary);"><script>document.write(I18n.t('onboarding.title'))</script></h1>
-                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 20px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;">
+                    <div style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 14px; text-transform: uppercase; letter-spacing: 1.5px; font-weight: bold;">
                         <script>document.write(I18n.t('onboarding.author'));</script>
                     </div>
-                    <p style="font-size:1.05rem; line-height:1.65; color:var(--text-secondary); margin-bottom: 25px; max-width: 720px;">
+                    <p style="font-size:1.05rem; line-height:1.65; color:var(--text-secondary); margin-bottom: 22px; max-width: 720px;">
                         <script>document.write(I18n.t('onboarding.desc'))</script>
                     </p>
 
@@ -356,7 +366,7 @@
                     </div>
 
                     <!-- STRUMENTI SECONDARI DI BACKUP OFFLINE & RECUPERO SESSIONE DISCRETO -->
-                    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; border-top: 1px dashed var(--border-color); padding-top: 20px; width: 100%;">
+                    <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; border-top: 1px dashed var(--border-color); padding-top: 16px; width: 100%;">
                         <!-- Pulsante discreto di recupero sessione precedente (mostrato SOLO se presenti dati salvati prima della chiusura) -->
                         <button class="btn" id="btnRecoverSession" style="display:none;" onclick="Store.restoreRecoveredSession()">
                             <span style="display:inline-flex; align-items:center; gap:5px;">

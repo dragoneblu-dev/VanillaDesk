@@ -212,11 +212,6 @@ z-index: 2;
     line-height: 1.45;
 }
 
-
-.adv-cell-layout-long textarea.modern-input:focus {
-   /* background: var(--bg-color) !important;*/
-}
-
 .adv-col-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 5px; cursor: col-resize; z-index: 10;
 }
 .adv-col-resizer:hover, .adv-col-resizer.resizing { background-color: var(--accent-color); opacity: 0.5; }
@@ -348,9 +343,7 @@ textarea.modern-input::-webkit-scrollbar-thumb:hover { background: var(--text-se
 /* Blocca le interazioni native quando la tabella viene trascinata a mano (Pan Scroll) */
 body.is-panning * { user-select: none !important; pointer-events: none !important; }
 
-/* =========================================================================
-   STILI TABELLA GERARCHICA AD ALBERO (TREE TABLE / WBS)
-   ========================================================================= */
+/* STILI TABELLA GERARCHICA AD ALBERO (TREE TABLE / WBS) */
 
 .adv-tree-row { transition: background-color 0.15s ease;
 }

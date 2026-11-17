@@ -83,6 +83,7 @@
 .editor-container.read-mode .adv-widget-shell .adv-select-pill,
 .editor-container.read-mode .adv-widget-shell .adv-cal-more-btn,
 .editor-container.read-mode .adv-widget-shell .adv-icon-btn,
+.editor-container.read-mode .adv-widget-shell button.action-btn-run,
 .editor-container.read-mode .adv-action-cell button,
 .editor-container.read-mode .adv-action-button-wrapper button,
 .editor-container.read-mode .adv-widget-shell .adv-scroll-container,
@@ -126,7 +127,7 @@
     opacity: 1;
 }
 
-/* FIX UX 3: Soft-Delete visivo per i Widget */
+/* Soft-Delete visivo per i Widget */
 .adv-widget-selected {
     box-shadow: 0 0 0 3px var(--danger-color) !important;
     border-radius: 6px;
@@ -437,8 +438,6 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
     .adv-columns-independent > div.col-box { padding: 0 !important; }
     .col-resizer { display: none !important; }
 }
-
-.highlighted-target { transition: box-shadow 0.3s ease; }
 
 /* Snippet Riservato / Password (Mascherato) */
 .adv-copy-snippet.snippet-masked:not(:focus-within) .snippet-text {

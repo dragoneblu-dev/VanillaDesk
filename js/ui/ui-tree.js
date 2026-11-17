@@ -6,17 +6,14 @@
  * Include:
  * - Navigazione schede (Note, Preferiti, Segnalibri, Database).
  * - Rendering gerarchico delle note standard e record note (renderTree, buildTreeElement).
- * - Matching delle proprietà della pagina con SYS_PROPERTIES_DB (_checkNotePropertyMatch).
+ * - Matching delle proprietà della pagina delegato al motore centrale AppState.matchesPropertyFilters.
  * - Estrazione testo indicizzabile da note e blocchi codice (extractSearchableText).
  * - TOC dinamico per capitoli H1, H2, H3 (scrollToHeader).
  * - Evidenziazione del nodo attivo nella sidebar (highlightTreeNode).
- * - FEAT SEARCH ZERO-RESULTS FEEDBACK & ACTIONS (4C): Feedback esplicito e pulsanti di reset quando ricerca e filtri tag non producono riscontri.
- * - FIX RECORD NOTE SUBNOTES HIERARCHY: Sbloccata la ricorsione gerarchica sui figli delle record note senza alterare la struttura delle radici.
- * - FIX RECORD BRANCH ICON: Ereditarietà automatica dell'icona verde record per tutti i rami discendenti delle pagine di database.
- * - FIX WHITESPACE SEARCH PARITY: Parità e normalizzazione tra spazi ASCII e caratteri &nbsp; (\u00A0) in extractSearchableText e matching.
- * - FIX BOOKMARK COMMENT MULTILINE REGEX: Utilizzo di [\s\S]*? per catturare note su più righe senza perdere il fumetto nell'albero.
- * - FIX AUTO-SCROLL TO ACTIVE NODE: Riposizionamento automatico dello scroll dell'albero sulla nota attiva (per note di database e navigazione cronologia).
- * - FIX EXCLUDE DATA-REF-ID: Riconoscimento esatto dell'attributo id tramite spazio iniziale per non catturare le citazioni live.
+ * - Feedback esplicito e pulsanti di reset quando ricerca e filtri tag non producono riscontri.
+ * - Ricorsione gerarchica sui figli delle record note con ereditarietà dell'icona verde di database.
+ * - Normalizzazione tra spazi ASCII e &nbsp; (\u00A0) in extractSearchableText e matching.
+ * - Cattura multiriga dei commenti dei segnalibri e auto-scroll sul nodo attivo nell'albero.
  */
 
 Object.assign(UI, {
@@ -191,7 +188,7 @@ Object.assign(UI, {
             }
         }
 
-        // 3. GESTIONE STATO DI RICERCA A ZERO RISULTATI (4C)
+        // 3. GESTIONE STATO DI RICERCA A ZERO RISULTATI
         if (container.children.length === 0 && isFiltering) {
             const emptyDiv = document.createElement('div');
             emptyDiv.className = 'tree-empty-search-state';
@@ -329,68 +326,7 @@ Object.assign(UI, {
     },
 
     _checkNotePropertyMatch: (sysRow, activePropFilters) => {
-        return activePropFilters.every(f => {
-            const cellVal = (sysRow && sysRow.cells) ? sysRow.cells[f.colId] : undefined;
-
-            // 1. Controllo assenza (*EMPTY*): il campo non deve avere valore
-            if (f.realValue === '*EMPTY*') {
-                if (cellVal === undefined || cellVal === null || cellVal === '') return true;
-                if (Array.isArray(cellVal)) return cellVal.length === 0;
-                if (typeof cellVal === 'boolean') return false;
-                if (typeof cellVal === 'object') {
-                    const startEmpty = !cellVal.start || String(cellVal.start).trim() === '';
-                    const endEmpty = !cellVal.end || String(cellVal.end).trim() === '';
-                    return startEmpty && endEmpty;
-                }
-                return String(cellVal).trim() === '';
-            }
-
-            if (!sysRow || !sysRow.cells) return false;
-
-            // 2. Controllo di presenza (*EXISTS*) coerente su tutti i tipi di proprietà
-            if (f.realValue === '*EXISTS*') {
-                if (cellVal === undefined || cellVal === null || cellVal === '') return false;
-                if (Array.isArray(cellVal)) return cellVal.length > 0;
-                if (typeof cellVal === 'boolean') return cellVal === true;
-                if (typeof cellVal === 'object') {
-                    return (cellVal.start !== undefined && String(cellVal.start).trim() !== '') ||
-                           (cellVal.end !== undefined && String(cellVal.end).trim() !== '');
-                }
-                return String(cellVal).trim() !== '';
-            }
-
-            // 3. Booleani (Checkbox)
-            if (typeof f.realValue === 'boolean') {
-                return (cellVal === true || cellVal === 'true') === f.realValue;
-            }
-
-            // 4. Array (Multi-select o Relazioni)
-            if (Array.isArray(cellVal)) {
-                return cellVal.some(v => String(v).toLowerCase().replace(/\u00A0/g, ' ') === String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
-            }
-
-            // 5. Date Range con oggetto {start, end}
-            if (typeof cellVal === 'object' && cellVal !== null) {
-                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
-                const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
-                if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
-                const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
-                const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
-                return !!(startMatch || endMatch);
-            }
-
-            // 6. Note Link con oggetto {noteId, title, anchor}
-            if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
-                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
-                const titleStr = (cellVal.title || '').toLowerCase().replace(/\u00A0/g, ' ');
-                if (titleStr.includes(searchLower)) return true;
-                if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
-                return false;
-            }
-
-            // 7. Testo, Numeri e Singoli Valori
-            return String(cellVal || '').toLowerCase().replace(/\u00A0/g, ' ').includes(String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
-        });
+        return AppState.matchesPropertyFilters(sysRow, activePropFilters);
     },
 
     buildTreeElement: (node, forceRender = false, isDbBranch = false) => {
@@ -413,12 +349,10 @@ Object.assign(UI, {
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
         if (activePropFilters.length > 0) {
-            if (!propsDb || !Array.isArray(propsDb.rows)) {
-                nodeDirectMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
-            } else {
-                const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === node.id);
-                nodeDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);
-            }
+            const sysRow = (propsDb && Array.isArray(propsDb.rows))
+                ? propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === node.id)
+                : null;
+            nodeDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);
         }
 
         if (nodeDirectMatch && filter) {

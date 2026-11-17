@@ -4,6 +4,7 @@
  * Esecuzione macro con il motore centralizzato 'LogicEngine.executeMacroBlocks'
  * uniformando il comportamento tra Widget Macro e Colonne Macro.
  * Gestione corretta della persistenza su workspace tramite Store.triggerAutoSave.
+ * FEAT BUTTON COMMENT: Tooltip custom unificato con commento utente e azione tra parentesi quadre.
  */
 
 const ButtonManager = {
@@ -144,6 +145,7 @@ const ButtonManager = {
                 {
                     id: 'btn_' + Store.generateId(),
                     label: I18n.t('buttons.default_button_label'),
+                    comment: '',
                     icon: Icons.lightning,
                     color: '#2563eb',
                     requireConfirm: false,
@@ -197,6 +199,7 @@ const ButtonManager = {
         state.buttons.push({
             id: 'btn_' + Store.generateId(),
             label: I18n.t('buttons.default_button_label'),
+            comment: '',
             icon: Icons.lightning,
             color: '#2563eb',
             requireConfirm: false,
@@ -293,6 +296,9 @@ const ButtonManager = {
             const rawBtnColor = btn.color;
             const effectiveColor = (rawBtnColor && rawBtnColor !== 'var(--accent-color)') ? rawBtnColor : '#2563eb';
 
+            const rawComment = (btn.comment || '').trim();
+            const safeCommentHtml = rawComment ? UI.escapeHTML(rawComment).replace(/\n/g, '<br>') : '';
+
             const btnStyle = isEdit 
                 ? `opacity:0.8; box-shadow:none; cursor:default;` 
                 : `box-shadow: 0 4px 6px rgba(0,0,0,0.1); cursor:pointer;`;
@@ -300,15 +306,26 @@ const ButtonManager = {
             const runClass = isEdit ? '' : 'action-btn-run';
 
             if (isEdit) {
+                const editBtnTip = safeCommentHtml
+                    ? `data-tooltip="${safeCommentHtml}<span style='opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;'>[ Clicca sul testo per configurare ]</span>"`
+                    : `title="Clicca sul testo per configurare"`;
+                const iconTriggerTip = safeCommentHtml
+                    ? `data-tooltip="${safeCommentHtml}<span style='opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;'>[ Esegui Azione ]</span>"`
+                    : `title="Esegui Azione"`;
+
                 html += `
-                    <div class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${effectiveColor}; border-color: ${effectiveColor}; color: white; ${btnStyle} display:inline-flex; align-items:center; gap:8px;" title="Clicca sul testo per configurare">
-                        <span class="adv-btn-icon-trigger" style="cursor:pointer;" title="Esegui Azione" onclick="event.stopPropagation(); ButtonManager.execute('${id}', '${btn.id}', true)">${btn.icon || Icons.play}</span>
+                    <div class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${effectiveColor}; border-color: ${effectiveColor}; color: white; ${btnStyle} display:inline-flex; align-items:center; gap:8px;" ${editBtnTip}>
+                        <span class="adv-btn-icon-trigger" style="cursor:pointer;" ${iconTriggerTip} onclick="event.stopPropagation(); ButtonManager.execute('${id}', '${btn.id}', true)">${btn.icon || Icons.play}</span>
                         <span style="cursor:pointer; flex:1;" onclick="ButtonManager.openConfig(event, '${id}', '${btn.id}')">${safeLabel}</span>
                     </div>
                 `;
             } else {
+                const readBtnTip = safeCommentHtml
+                    ? `data-tooltip="${safeCommentHtml}<span style='opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;'>[ Esegui Azione ]</span>"`
+                    : `title="Esegui Azione"`;
+
                 html += `
-                    <button class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${effectiveColor}; border-color: ${effectiveColor}; color: white; ${btnStyle}" onclick="ButtonManager.execute('${id}', '${btn.id}', false)" title="Esegui Azione">
+                    <button class="btn ${runClass}" style="padding: 10px 20px; font-size: 1rem; border-radius: 6px; background-color: ${effectiveColor}; border-color: ${effectiveColor}; color: white; ${btnStyle}" onclick="ButtonManager.execute('${id}', '${btn.id}', false)" ${readBtnTip}>
                         <span style="display:inline-flex; align-items:center; gap:8px; pointer-events:none;">${btn.icon || ''} ${safeLabel}</span>
                     </button>
                 `;

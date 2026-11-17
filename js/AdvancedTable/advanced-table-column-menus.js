@@ -20,7 +20,7 @@
  * Verifica rigorosa con Array.isArray(s.columns) per isolare ed evitare crash su widget non tabellari presenti in AppState.databases.
  * WBS SEMANTIC DIRECTION: Toggle rapido e memorizzazione sullo schema colonna (col.treeDirection) per auto-relazioni.
  * Protezione da chiamate asincrone o debounced per openColMenu senza eccezioni stopPropagation.
- * Intercettazione del cambio nome abbandonato senza Invio, con richiesta di conferma esplicita dell'annullamento.
+ * Salvataggio automatico della rinomina colonna su blur (senza popup di conferma bloccanti) e supporto auto-focus su creazione.
  * AUTOINCREMENT: Configurazione prefisso e padding numerico per ID Auto-Incrementale.
  * SIMBOLO/UNITÀ NUMERICA: Sottomenù dedicato per impostare %, € o $ sui campi numerici, rollup e formule.
  */
@@ -414,7 +414,7 @@ const AdvancedTableColumnMenus = {
         UI.Menu.buildContextMenu(anchorId, menuItems);
     },
 
-    openColMenu: (e, tableId, colId) => {
+    openColMenu: (e, tableId, colId, autoFocusName = false, explicitAnchorId = null) => {
         if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
         if (e && e.target && e.target.classList && e.target.classList.contains('adv-col-resizer')) return;
 
@@ -450,13 +450,12 @@ const AdvancedTableColumnMenus = {
                 html: `
                     <div style="padding: 2px;">
                         <input type="text" class="adv-menu-input" value="${safeName}" placeholder="${I18n.t('adv_col_menu.rename_placeholder')}" id="editColNameInput" 
-                               onkeydown="event.stopPropagation(); if(event.key === 'Enter') { event.preventDefault(); AdvancedTableColumnMenus.changeColName('${realTableId}', '${colId}'); }" 
+                               onkeydown="event.stopPropagation(); if(event.key === 'Enter') { event.preventDefault(); AdvancedTableColumnMenus.changeColName('${realTableId}', '${colId}', true); }" 
                                onblur="AdvancedTableColumnMenus.handleColRenameBlur(event, '${realTableId}', '${colId}', '${safeName}')"
                                style="margin:0; width:100%; font-weight:bold;">
                     </div>
                 `
             },
-            { type: 'divider' },
             {
                 icon: Icons.noteInline,
                 label: col.comment ? I18n.t('adv_col_menu.comment_edit') : I18n.t('adv_col_menu.comment_add'),
@@ -608,8 +607,18 @@ const AdvancedTableColumnMenus = {
         const deleteLabel = col.type === 'relation_backlink' ? I18n.t('adv_col_menu.hide_backlink') : I18n.t('adv_col_menu.delete_column');
         menuItems.push({ icon: Icons.trash, label: deleteLabel, danger: true, onClick: () => AdvancedTableColumnMenus.deleteCol(realTableId, colId) });
 
-        const anchorId = e && e.currentTarget && e.currentTarget.id ? e.currentTarget.id : `adv-th-${tableId}-${colId}`;
+        const anchorId = explicitAnchorId || (e && e.currentTarget && e.currentTarget.id ? e.currentTarget.id : `adv-th-${tableId}-${colId}`);
         UI.Menu.buildContextMenu(anchorId, menuItems);
+
+        if (autoFocusName) {
+            setTimeout(() => {
+                const input = document.getElementById('editColNameInput');
+                if (input) {
+                    input.focus();
+                    input.select();
+                }
+            }, 40);
+        }
     },
 
     openColumnCommentModal: (tableId, colId) => {
@@ -662,7 +671,7 @@ const AdvancedTableColumnMenus = {
         UI.closeDrawer();
     },
 
-    changeColName: (tableId, colId) => {
+    changeColName: (tableId, colId, closeMenu = true) => {
         const input = document.getElementById('editColNameInput');
         if (!input) return;
         input._isSubmitting = true;
@@ -673,12 +682,16 @@ const AdvancedTableColumnMenus = {
         }
 
         let state = AdvancedTable.getState(tableId);
-        const col = state.columns.find(c => c.id === colId);
-        if (!col) return;
+        const col = state ? state.columns.find(c => c.id === colId) : null;
+        if (!col) {
+            input._isSubmitting = false;
+            return;
+        }
         const oldName = col.name;
 
         if (oldName === newName) {
-            AdvancedTable.closeDropdowns(true);
+            if (closeMenu) AdvancedTable.closeDropdowns(true);
+            else input._isSubmitting = false;
             return;
         }
 
@@ -689,16 +702,22 @@ const AdvancedTableColumnMenus = {
 
         AdvancedTable.setState(tableId, state);
         
-        // Sincronizzazione viste e Drawer
+        // Sincronizzazione viste e Drawer (solo se il Drawer aperto è un Record o Tag/Proprietà)
         AdvancedTable.updateDependentViews(tableId);
 
-        if (AdvancedTable.activeRecordId) {
+        const drawer = document.getElementById('advGlobalDrawer');
+        const drawerTitle = document.getElementById('advDrawerTitle');
+        if (drawer && drawer.classList.contains('open') && drawerTitle && (drawerTitle.innerText.includes('Dettaglio Record') || drawerTitle.innerText.includes('Tag e Proprietà')) && AdvancedTable.activeRecordId) {
             const activeTId = AdvancedTable.activeTableId || tableId;
             AdvancedTable.openRecordView(activeTId, AdvancedTable.activeRecordId);
         }
         
         Store.triggerAutoSave();
-        AdvancedTable.closeDropdowns(true);
+        if (closeMenu) {
+            AdvancedTable.closeDropdowns(true);
+        } else {
+            input._isSubmitting = false;
+        }
     },
 
     handleColRenameBlur: (e, tableId, colId, oldName) => {
@@ -706,33 +725,16 @@ const AdvancedTableColumnMenus = {
         if (!input || input._isSubmitting) return;
 
         const currentVal = input.value.trim();
-        // Se non è stato modificato rispetto a oldName o se è vuoto, non intervenire
-        if (currentVal === oldName || !currentVal) {
+        if (!currentVal) {
+            input.value = oldName;
+            return;
+        }
+        if (currentVal === oldName) {
             return;
         }
 
-        const msg = (typeof I18n !== 'undefined' && typeof I18n.t === 'function' ? I18n.t('adv_col_menu.confirm_discard_rename') : null);
-
-        const confirmCancel = confirm(msg);
-
-        if (confirmCancel) {
-            // L'utente conferma l'annullamento: ripristiniamo il vecchio valore
-            input.value = oldName;
-        } else {
-            // L'utente NON vuole annullare: impediamo la distruzione del menu e rimettiamo il focus
-            if (typeof UI !== 'undefined' && UI.Menu) {
-                UI.Menu._preventClose = true;
-            }
-            setTimeout(() => {
-                if (typeof UI !== 'undefined' && UI.Menu) {
-                    UI.Menu._preventClose = false;
-                }
-                if (document.body.contains(input)) {
-                    input.focus();
-                    input.select();
-                }
-            }, 100);
-        }
+        // Salva automaticamente la rinomina quando l'utente sposta il focus fuori dal campo
+        AdvancedTableColumnMenus.changeColName(tableId, colId, false);
     },
 
     changeColType: (tableId, colId, newType) => {

@@ -988,6 +988,8 @@ table_ui: {
     col_delete: "Elimina Colonna"
 },
 adv_actions: {
+    btn_comment_label: "Commento / Tooltip (Opzionale):",
+    btn_comment_placeholder: "Descrizione che apparirà passando il mouse sul pulsante...",
     rel_no_secondary_detail: "-- Nessun Dettaglio --",
     quick_peek_new_badge: "Nuovo",
     quick_create_enter_hint: "Invio ↵",
@@ -2902,6 +2904,8 @@ table_ui: {
     col_delete: "Delete Column"
 },
 adv_actions: {
+    btn_comment_label: "Comment / Tooltip (Optional):",
+    btn_comment_placeholder: "Description that will appear when hovering over the button...",
     rel_no_secondary_detail: "-- No Detail --",
     quick_peek_new_badge: "New",
     quick_create_enter_hint: "Enter ↵",
@@ -4814,6 +4818,8 @@ table_ui: {
     col_delete: "Eliminar Columna"
 },
 adv_actions: {
+    btn_comment_label: "Comentario / Tooltip (Opcional):",
+    btn_comment_placeholder: "Descripción que aparecerá al pasar el ratón sobre el botón...",
     rel_no_secondary_detail: "-- Sin Detalle --",
     quick_peek_new_badge: "Nuevo",
     quick_create_enter_hint: "Intro ↵",
@@ -6726,6 +6732,8 @@ table_ui: {
     col_delete: "Spalte löschen"
 },
 adv_actions: {
+    btn_comment_label: "Kommentar / Tooltip (Optional):",
+    btn_comment_placeholder: "Beschreibung, die beim Überfahren der Schaltfläche mit der Maus erscheint...",
     rel_no_secondary_detail: "-- Kein Detail --",
     quick_peek_new_badge: "Neu",
     quick_create_enter_hint: "Enter ↵",

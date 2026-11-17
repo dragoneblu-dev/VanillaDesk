@@ -26,6 +26,7 @@
  * L'attributo id="drawer-prop-${col.id}" rimane sempre presente sulla label
  * sia in modalità modifica che in sola lettura, condizionando unicamente gli handler interattivi (onclick e title).
  * SIMBOLO/UNITÀ NUMERICA: Visualizzazione del simbolo (%, €, $) anche nel Dettaglio Record in modalità modifica.
+ * FEAT BUTTON COMMENT: Tooltip custom unificato con commento utente e azione tra parentesi quadre.
  */
 
 Object.assign(AdvancedTable, {
@@ -206,11 +207,16 @@ Object.assign(AdvancedTable, {
                 const btnLabel = (hasCustomLabel ? col.buttonLabel : (col.name || '')).replace(/"/g, '&quot;');
                 const btnColor = col.buttonColor || '#2563eb';
                 const btnIcon = col.buttonIcon || Icons.play;
+                const rawComment = (col.buttonComment || '').trim();
+                const safeActionLabel = UI.escapeHTML(I18n.t('adv_cell.execute_action'));
+                const tooltipAttr = rawComment
+                    ? `data-tooltip="${UI.escapeHTML(rawComment).replace(/\n/g, '<br>')}<span style='opacity:0.6; font-size:0.75rem; margin-top:4px; display:block;'>[ ${safeActionLabel} ]</span>"`
+                    : `title="${safeActionLabel}"`;
                 const actionCall = `onclick="event.stopPropagation(); AdvancedTable.runCellMacro('${tableId}', '${rowId}', '${col.id}');"`;
 
                 displayVal = `
                     <div style="display:flex; justify-content:flex-end; width:100%;">
-                        <button class="btn action-btn-run" style="background-color:${btnColor}; border-color:${btnColor}; color:white; padding:6px 14px; font-size:0.85rem; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition: transform 0.1s, filter 0.1s;" ${actionCall} title="${I18n.t('adv_cell.execute_action')}" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
+                        <button class="btn action-btn-run" style="background-color:${btnColor}; border-color:${btnColor}; color:white; padding:6px 14px; font-size:0.85rem; font-weight:500; cursor:pointer; display:inline-flex; align-items:center; gap:6px; box-shadow:0 2px 4px rgba(0,0,0,0.1); transition: transform 0.1s, filter 0.1s;" ${actionCall} ${tooltipAttr} onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
                             <span style="display:inline-flex; flex-shrink:0; pointer-events:none;">${btnIcon}</span>
                             ${btnLabel ? `<span>${btnLabel}</span>` : ''}
                         </button>
@@ -579,7 +585,8 @@ Object.assign(AdvancedTable, {
             }
 
             const labelId = `drawer-prop-${col.id}`;
-            const clickMenu = isEdit && !isSysNoteLink ? `onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')" title="Rinomina / Opzioni Proprietà"` : '';
+            const clickMenu = isEdit && !isSysNoteLink ? `onclick="AdvancedTableColumnMenus.openColMenu(event, '${tableId}', '${col.id}')"` : '';
+            const labelTitleAttr = isEdit && !isSysNoteLink ? `title="Rinomina / Opzioni Proprietà"` : '';
             const labelEditableClass = isEdit && !isSysNoteLink ? 'adv-cell-label-editable' : '';
 
             const layoutClass = isLongText ? 'adv-cell-layout adv-cell-layout-long' : 'adv-cell-layout';
@@ -587,7 +594,7 @@ Object.assign(AdvancedTable, {
             return `
                 <div class="${layoutClass}">
                     <div class="adv-cell-label-wrap">
-                        <div id="${labelId}" class="adv-cell-label ${labelEditableClass}" ${clickMenu}>${col.name} ${commentIcon}</div>
+                        <div id="${labelId}" class="adv-cell-label ${labelEditableClass}" ${labelTitleAttr} ${clickMenu}>${col.name} ${commentIcon}</div>
                     </div>
                     <div class="adv-cell-value-wrap">${displayVal}</div>
                 </div>

@@ -1,39 +1,23 @@
 /**
  * events-global.js
  * Mappatura e intercettazione degli eventi globali dell'applicazione (Router Principale).
- * FIX MACRO DRAG: Esclusa la barra dei pulsanti dallo Scudo Drag (Drag Shield)
+ * Esclude la barra dei pulsanti dallo Scudo Drag (Drag Shield)
  * per evitare la corruzione dell'evento HTML5 nativo dovuto al pointer-events: none.
- * FIX CTRL+A: L'isolamento della selezione (Select-All) copre ora anche i campi testuali del Diario,
+ * L'isolamento della selezione (Select-All / Ctrl+A) copre anche i campi testuali del Diario,
  * gli snippet, tutte le celle di testo e numeriche dei database e i titoli di tutti i widget,
  * impedendo la selezione accidentale dell'intera pagina.
- * RESTORE AUTOFIT DBLCLICK: Ripristinato l'ascoltatore per l'auto-fit delle colonne al doppio click sul resizer.
- * RESTORE SMART CLICK ESCAPE: Ripristinato il listener mousedown su editorEl.
- * FIX ISOLAMENTO INPUT WIDGET: Impedisce all'evento input scatenato dentro componenti autonomi (Database, Diari, Codice)
- * di sporcare la nota principale, ma garantisce che le Tabelle Semplici (.simple-table-wrapper) e gli Snippet
+ * Ascoltatore per l'auto-fit delle colonne al doppio click sul resizer e smart click escape.
+ * Impedisce all'evento input scatenato dentro componenti autonomi (Database, Diari, Codice)
+ * di sporcare la nota principale, garantendo al contempo che le Tabelle Semplici (.simple-table-wrapper) e gli Snippet
  * scatenino regolarmente UI.handleEditorInput() e il salvataggio automatico.
- * FEAT HEADING SHORTCUTS: 
- * - H1 nativo (<h1>): Ctrl+Alt+1 o Ctrl+Shift+1
- * - H2 nativo (<h2>): Ctrl+Alt+2 o Ctrl+Shift+2
- * - H3 nativo (<h3>): Ctrl+Alt+3 o Ctrl+Shift+3 (esclusiva da tastiera)
- * - Paragrafo normale (<p>): Ctrl+Alt+0
- * FEAT SHORTCUTS COLORAZIONE TESTO ED EVIDENZIATORE:
- * - Ctrl+Shift+H: Applica/Rimuove (Toggle) l'ultimo Evidenziatore usato
- * - Ctrl+Alt+H: Applica/Rimuove (Toggle) l'ultimo Colore Testo usato
- * FEAT CTRL+CLICK DIRECT NAVIGATION: Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
- * FIX CARET DEAD ZONE ON CLICK & KEYDOWN: Normalizzazione immediata del cursore per impedire digitazioni
- * tra il bordo di una shell inline e il cuscinetto \u200B.
- * FEAT AUTO-DISMISS LINK TOOLBAR ON CARET EXIT: Quando il cursore si sposta fuori da un link (via frecce, click o digitazione),
- * la toolbar fluttuante del link scompare all'istante senza richiedere un click esplicito all'esterno.
- * FIX KEYDOWN RESILIENCE: Guardia robusta '!e.key && !e.code' per garantire il funzionamento
- * delle scorciatoie da tastiera anche in presenza di eventi sintetici o parziali.
- * FIX CANC/BACKSPACE TYPING HISTORY: Invocazione di registerTypingStart su Delete e Backspace per salvare
- * lo snapshot iniziale prima di cancellazioni continue o prolungate, proteggendo interi capitoli su Undo (Ctrl+Z).
- * REFACTOR: Rimosso listener fallback middle-click da click (gestito nativamente da auxclick).
- * FEAT VERTICAL SHIFT SELECTION HOOK: Intercettazione di Shift+ArrowUp/Down prima del table handler.
- * FIX IDEMPOTENT INIT: Guardia _initialized per prevenire l'accumulo di listener multipli su riesecuzione dei test.
- * FIX BEFOREUNLOAD IDB DISPATCH: Persistenza immediata su saveToIndexedDB() alla chiusura della scheda se in modalità Browser.
- * FIX READ-MODE CHECKBOX SAVE (1.1): Applicazione di minifyHTMLForStorage al cambio checkbox in lettura con guardia
- * sui database autonomi, impedendo il salvataggio su disco del markup espanso dei widget a video.
+ * Mantiene visibile il cursore nello scrollArea su ogni input nell'editor.
+ * Scorciatoie titoli: H1 (Ctrl+Alt+1 / Ctrl+Shift+1), H2 (Ctrl+Alt+2 / Ctrl+Shift+2), H3 (Ctrl+Alt+3 / Ctrl+Shift+3), Paragrafo (Ctrl+Alt+0).
+ * Scorciatoie colorazione: Ctrl+Shift+H (Evidenziatore), Ctrl+Alt+H (Colore Testo).
+ * Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
+ * Normalizzazione immediata del cursore per impedire digitazioni nella zona morta ZWS.
+ * Chiusura automatica della toolbar fluttuante del link all'uscita del cursore.
+ * Persistenza immediata su saveToIndexedDB() alla chiusura della scheda se in modalità Browser.
+ * Svuotamento rapido del campo di ricerca con ESC dalla schermata di scrittura.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -502,6 +486,15 @@ Object.assign(EventsGlobal, {
 
         document.addEventListener('keydown', (e) => {
             if (e.key === 'Escape') {
+                const drawer = document.getElementById('advGlobalDrawer');
+                const wasDrawerOpen = !!(drawer && drawer.classList.contains('open'));
+                const wasMultiSelect = !!(typeof Editor !== 'undefined' && Editor.multiSelectActive);
+                const wasMenuOpen = !!document.querySelector('.adv-dropdown, #adv-link-popover, #adv-bookmark-popover');
+                const hasOpenModal = !!document.querySelector('.link-modal-overlay:not(.hidden), #advRelationPeekModalOverlay');
+                const isGraphOpen = !!(typeof GraphApp !== 'undefined' && GraphApp.isOpen);
+                const editorWrapper = document.getElementById('editorWrapper');
+                const isWritingScreen = !!(editorWrapper && !editorWrapper.classList.contains('hidden'));
+
                 if (typeof TableManager !== 'undefined') {
                     if (TableManager.Drag && TableManager.Drag.dragState) TableManager.Drag.handleMouseUp();
                     if (TableManager.resizingCol) TableManager.handleMouseUp();
@@ -525,9 +518,20 @@ Object.assign(EventsGlobal, {
                 if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
                 if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
                 
-                const drawer = document.getElementById('advGlobalDrawer');
-                if (drawer && drawer.classList.contains('open')) {
+                if (wasDrawerOpen) {
                     if (typeof UI.closeDrawer !== 'undefined') UI.closeDrawer();
+                }
+
+                // Svuota il campo di ricerca nella schermata di scrittura se non erano aperti overlay, menu o multi-cursore
+                const searchInput = document.getElementById('searchInput');
+                if (searchInput && searchInput.value !== '' && isWritingScreen && !isGraphOpen && !wasDrawerOpen && !hasOpenModal && !wasMenuOpen && !wasMultiSelect) {
+                    searchInput.value = '';
+                    if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                        SidebarManager.SearchAutocomplete.hide();
+                    }
+                    if (typeof EventsGlobal._triggerSearchUpdate === 'function') {
+                        EventsGlobal._triggerSearchUpdate();
+                    }
                 }
             }
         });
@@ -620,6 +624,9 @@ Object.assign(EventsGlobal, {
                 ) && !target.closest('.simple-table-wrapper, [data-widget-type="simple-table"]');
 
                 if (isInsideAutonomousWidget) {
+                    if (typeof Editor !== 'undefined' && typeof Editor.ensureCaretVisible === 'function') {
+                        Editor.ensureCaretVisible();
+                    }
                     return;
                 }
 
@@ -628,6 +635,9 @@ Object.assign(EventsGlobal, {
                 }
                 if (typeof Editor !== 'undefined' && Editor.handleMarkdownShortcuts) {
                     Editor.handleMarkdownShortcuts();
+                }
+                if (typeof Editor !== 'undefined' && typeof Editor.ensureCaretVisible === 'function') {
+                    Editor.ensureCaretVisible();
                 }
                 
                 if (typeof UI !== 'undefined' && UI.handleEditorInput) {
@@ -851,37 +861,6 @@ Object.assign(EventsGlobal, {
 
             if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
             if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
-
-            if (target.classList.contains('code-copy-btn') || target.classList.contains('code-action-copy')) {
-                e.preventDefault();
-                const wrapper = target.closest('.code-wrapper');
-
-                const clone = wrapper.cloneNode(true);
-                const actionBars = clone.querySelectorAll('.code-action-bar');
-                actionBars.forEach(bar => bar.remove());
-
-                let textToCopy = "";
-                if (wrapper.id && AppState.databases) {
-                    const trueId = wrapper.id.split('_cited_')[0];
-                    if (AppState.databases[trueId] && AppState.databases[trueId].content !== undefined) {
-                        textToCopy = AppState.databases[trueId].content;
-                    }
-                }
-                
-                if (!textToCopy) textToCopy = clone.innerText.trim();
-
-                if (textToCopy) {
-                    navigator.clipboard.writeText(textToCopy).then(() => {
-                        target.style.color = "var(--accent-color)";
-                        if (typeof UI !== 'undefined' && UI.showToast) {
-                            UI.showToast(I18n.t('events_global.toast_copied_to_clipboard'), "success");
-                        }
-                        setTimeout(() => { target.style.color = ""; }, 1500);
-                    }).catch(err => {
-                        console.error("Errore copia:", err);
-                    });
-                }
-            }
         });
     }
 });

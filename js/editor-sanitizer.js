@@ -451,13 +451,6 @@ Object.assign(Editor, {
             el.style.backgroundColor = ''; el.style.transition = ''; el.style.transform = ''; el.style.color = '';
             if (el.getAttribute('style') === '') el.removeAttribute('style');
         });
-
-        const svgCopy = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-        clone.querySelectorAll('.code-action-copy, .code-copy-btn').forEach(btn => {
-            if (btn.innerHTML.includes("Copiato") || btn.innerHTML.includes("✓")) {
-                btn.innerHTML = svgCopy;
-            }
-        });
         
         clone.normalize();
         Editor._normalizeEmptyBlocks(clone);
@@ -507,10 +500,11 @@ Object.assign(Editor, {
             parent.removeChild(g);
         });
 
-        const svgCopy = `<svg viewBox="0 0 24 24" width="14" height="14" stroke="currentColor" stroke-width="2" fill="none"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>`;
-        editor.querySelectorAll('.code-action-copy, .code-copy-btn, .adv-tool-btn').forEach(btn => {
+        // Ripristina i pulsanti di copia eventualmente rimasti sullo stato temporaneo "Copiato" prima della chiusura
+        const copyIcon = (typeof Icons !== 'undefined' && Icons.clipboard) ? Icons.clipboard : '';
+        editor.querySelectorAll('.adv-tool-btn').forEach(btn => {
             if (btn.innerHTML.includes("Copiato") || btn.innerHTML.includes("✓")) {
-                btn.innerHTML = svgCopy + (btn.innerText.includes('Copia') ? ' Copia' : '');
+                btn.innerHTML = copyIcon + (btn.innerText.includes('Copia') ? ' Copia' : '');
             }
         });
 

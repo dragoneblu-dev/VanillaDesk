@@ -17,6 +17,7 @@
  * CHECKBOX ICON ONLY: Rimossa la dicitura 'Sì' / 'No' in modalità sola visualizzazione.
  * AUTOINCREMENT: Rendering cella read-only monospace per la nuova tipologia 'autoincrement'.
  * SIMBOLO/UNITÀ NUMERICA: Rendering del simbolo opzionale (%, €, $) subito fuori dall'input numerico.
+ * FEAT BUTTON COMMENT: Rendering di data-tooltip sui pulsanti macro di colonna quando configurato.
  */
 
 Object.assign(AdvancedTable, {
@@ -135,13 +136,17 @@ Object.assign(AdvancedTable, {
             const btnLabel = (hasCustomLabel ? col.buttonLabel : (col.name || '')).replace(/"/g, '&quot;');
             const btnColor = col.buttonColor || '#2563eb';
             const btnIcon = col.buttonIcon || Icons.play;
+            const rawComment = (col.buttonComment || '').trim();
+            const tooltipAttr = rawComment
+                ? `data-tooltip="${UI.escapeHTML(rawComment).replace(/\n/g, '<br>')}"`
+                : `title="${I18n.t('adv_cell.execute_action')}"`;
             
             const btnStyle = `cursor:pointer; box-shadow: 0 2px 4px rgba(0,0,0,0.1); transition: transform 0.1s, filter 0.1s;`;
             const actionCall = `onclick="event.stopPropagation(); AdvancedTable.runCellMacro('${tableId}', '${row.id}', '${col.id}')"`;
             
             return `
                 <div style="display:flex; justify-content:center; align-items:center; width:100%; height:100%; padding:2px;">
-                    <button class="btn action-btn-run" style="width:100%; min-height:28px; background-color:${btnColor}; border-color:${btnColor}; color:white; padding:4px 8px; font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; ${btnStyle}" ${actionCall} title="${I18n.t('adv_cell.execute_action')}" onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
+                    <button class="btn action-btn-run" style="width:100%; min-height:28px; background-color:${btnColor}; border-color:${btnColor}; color:white; padding:4px 8px; font-size:0.8rem; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; display:flex; align-items:center; justify-content:center; gap:5px; ${btnStyle}" ${actionCall} ${tooltipAttr} onmousedown="this.style.transform='scale(0.95)'" onmouseup="this.style.transform='scale(1)'" onmouseleave="this.style.transform='scale(1)'">
                         <span style="display:inline-flex; flex-shrink:0; pointer-events:none;">${btnIcon}</span> <span style="overflow:hidden; text-overflow:ellipsis; pointer-events:none;">${btnLabel}</span>
                     </button>
                 </div>

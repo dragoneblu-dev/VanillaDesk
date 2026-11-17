@@ -3,20 +3,15 @@
  * Sottomodulo di UI.
  * Gestione delle impostazioni dell'utente (Salvataggio in LocalStorage), 
  * temi, carattere predefinito dell'editor, Toggle di layout dell'editor e inizializzazione dei Tooltip.
- * REFACTOR CENTRALIZZATO: Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
- * FEAT UNIFIED IMPORT/EXPORT: Spostamento di "Carica Backup JSON..." nel sottomenu "Importa..." ed eliminazione del blocco ridondante File JSON.
- * FEAT BROWSER WORKSPACES MENU ENTRY: Integrazione nativa dell'opzione "Workspace nel Browser (IDB)..." nel Menu Principale con icona vettoriale Icons.globe.
- * FEAT FSAA GRACEFUL DEGRADATION: Se il browser non supporta showDirectoryPicker (Firefox, Safari), le voci di cartella
+ * Menu principale gestito interamente tramite UI.Menu.buildContextMenu.
+ * Integrazione nativa dell'opzione "Workspace nel Browser (IDB)..." e "Carica Backup JSON..." nel sottomenu Importa.
+ * Se il browser non supporta showDirectoryPicker (Firefox, Safari), le voci di cartella
  * fisica rimangono visibili nel menu ma disattivate con tooltip esplicativo per non disorientare l'utente.
- * FEAT CONTINUOUS EDIT: Attivazione di default (true) al primo avvio o su nuovi Workspace.
- * FIX READ-MODE CHECKLIST: Le checkbox delle To-Do list (.adv-checklist) restano attive e cliccabili
- * anche in modalità lettura (a meno che la nota non sia nel Cestino), consentendo la spunta rapida.
- * FIX MODAL CLICK CAPTURE: Esclusione di .link-modal-overlay e #advRelationPeekModalOverlay dal listener di chiusura
- * del Drawer per evitare che l'interazione con le finestre modali chiuda inavvertitamente il pannello laterale.
- * FIX SIDEBAR TOOLTIP COLLISION: Protezione del tooltip custom (#advCustomTooltip) dall'estinzione accidentale
- * scatenata dal listener globale di mouseover quando il cursore passa sopra i titoli o icone dei database nella sidebar.
- * FEAT FLOATING CODE ACTIONS HOOK: Chiamata sincronizzata a CodeManager.updateFloatingActions sullo scroll di editorScrollContent.
- * FEAT YOUTUBE LINK PREVIEW TOOLTIP: Anteprima on-the-fly della thumbnail YouTube al passaggio del mouse sui link <a> di YouTube.
+ * Attivazione di default dell'Edit Continuo al primo avvio o su nuovi Workspace.
+ * Le checkbox delle To-Do list (.adv-checklist) restano attive e cliccabili anche in modalità lettura (escluso Cestino).
+ * Esclusione di .link-modal-overlay e #advRelationPeekModalOverlay dal listener di chiusura del Drawer.
+ * Protezione del tooltip custom (#advCustomTooltip) quando il cursore passa sopra i nodi nella sidebar.
+ * Anteprima on-the-fly della thumbnail YouTube al passaggio del mouse sui link <a> di YouTube.
  */
 
 Object.assign(UI, {
@@ -308,12 +303,6 @@ Object.assign(UI, {
     setContinuousEdit: (enable = true) => {
         AppState.continuousEditMode = enable;
 
-        const icon = document.getElementById('continuousEditIcon');
-        if (icon) {
-            icon.innerHTML = AppState.continuousEditMode ? Icons.checkSquare : Icons.square;
-            icon.style.color = AppState.continuousEditMode ? 'var(--accent-color)' : '';
-        }
-
         if (AppState.continuousEditMode && AppState.currentNoteId) {
             UI.toggleEditMode(true);
         }
@@ -328,12 +317,6 @@ Object.assign(UI, {
     toggleWordWrap: () => {
         AppState.noWrapMode = !AppState.noWrapMode;
         const editor = document.getElementById('noteContent');
-
-        const icon = document.getElementById('wordWrapIcon');
-        if (icon) {
-            icon.innerHTML = AppState.noWrapMode ? Icons.checkSquare : Icons.square;
-            icon.style.color = AppState.noWrapMode ? 'var(--accent-color)' : '';
-        }
 
         if (editor) {
             if (AppState.noWrapMode) editor.classList.add('no-wrap');
@@ -352,15 +335,6 @@ Object.assign(UI, {
         
         docRoot.style.setProperty('--page-max-width', newWidth);
         localStorage.setItem('pronotes_pagewidth', newWidth);
-        
-        const icon = document.getElementById('pageWidthIcon');
-        const text = document.getElementById('pageWidthBtn');
-        if (icon) {
-            icon.innerHTML = !isFullWidth ? Icons.widthFull : Icons.widthFit;
-        }
-        if (text) {
-            text.innerText = !isFullWidth ? I18n.t('menu.width_full') : I18n.t('menu.width_standard');
-        }
     },
 
     changeFontSize: (delta) => {
@@ -380,18 +354,6 @@ Object.assign(UI, {
             body.setAttribute('data-theme', themeName);
         }
         localStorage.setItem('theme', themeName);
-
-        const chkLight = document.getElementById('theme-light-check');
-        const chkWhite = document.getElementById('theme-white-check');
-        const chkDark = document.getElementById('theme-dark-check');
-        const chkNotionDark = document.getElementById('theme-notion-dark-check');
-        const chkPastel = document.getElementById('theme-pastel-check');
-
-        if (chkLight) chkLight.textContent = themeName === 'light' ? '✓' : '';
-        if (chkWhite) chkWhite.textContent = themeName === 'white' ? '✓' : '';
-        if (chkDark) chkDark.textContent = themeName === 'dark' ? '✓' : '';
-        if (chkNotionDark) chkNotionDark.textContent = themeName === 'notion-dark' ? '✓' : '';
-        if (chkPastel) chkPastel.textContent = themeName === 'pastel' ? '✓' : '';
     },
 
     // Toggle Sidebar. Attivo quando visibile.
@@ -562,23 +524,12 @@ Object.assign(UI, {
             AppState.noWrapMode = true;
             const editor = document.getElementById('noteContent');
             if (editor) editor.classList.add('no-wrap');
-
-            const icon = document.getElementById('wordWrapIcon');
-            if (icon) {
-                icon.innerHTML = Icons.checkSquare;
-                icon.style.color = 'var(--accent-color)';
-            }
         }
         
         // Recupero l'impostazione dell'Edit Continuo: ATTIVO di default su nuovi workspace o primo avvio
         const savedContinuous = localStorage.getItem('pronotes_continuous');
         if (savedContinuous === null || savedContinuous === 'true') {
             AppState.continuousEditMode = true;
-            const icon = document.getElementById('continuousEditIcon');
-            if (icon) {
-                icon.innerHTML = Icons.checkSquare;
-                icon.style.color = 'var(--accent-color)';
-            }
         } else {
             AppState.continuousEditMode = false;
         }
@@ -586,10 +537,6 @@ Object.assign(UI, {
         const savedPageWidth = localStorage.getItem('pronotes_pagewidth');
         if (savedPageWidth) {
             document.documentElement.style.setProperty('--page-max-width', savedPageWidth);
-            const icon = document.getElementById('pageWidthIcon');
-            const text = document.getElementById('pageWidthBtn');
-            if (icon) icon.innerHTML = savedPageWidth === '100%' ? Icons.widthFull : Icons.widthFit;
-            if (text) text.innerText = savedPageWidth === '100%' ? I18n.t('menu.width_full') : I18n.t('menu.width_standard');
         }
 
         const savedEditorFont = localStorage.getItem('pronotes_editor_font') || 'ff-default';
@@ -653,7 +600,8 @@ Object.assign(UI, {
             }
         }, true);
 
-        // ASCOLTATORE SCROLL PRINCIPALE (Aggancio per TOC, Minimappa, Floating Header Bar e Floating Code Actions)
+        // ASCOLTATORE SCROLL PRINCIPALE (Aggancio per TOC, Minimappa e Floating Header Bar)
+        // Nota: CodeManager.updateFloatingActions gestisce autonomamente il proprio ascoltatore scroll in code-highlighter.js
         const editorScrollArea = document.getElementById('editorScrollContent');
         if (editorScrollArea) {
             editorScrollArea.addEventListener('scroll', () => {
@@ -667,11 +615,6 @@ Object.assign(UI, {
                 // Aggiornamento sincronizzato della barra intestazioni galleggiante
                 if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.updateFloatingHeader === 'function') {
                     AdvancedTable.updateFloatingHeader(editorScrollArea);
-                }
-
-                // Aggiornamento sincronizzato dei pulsanti fluttuanti del blocco di codice
-                if (typeof CodeManager !== 'undefined' && typeof CodeManager.updateFloatingActions === 'function') {
-                    CodeManager.updateFloatingActions(editorScrollArea);
                 }
             });
         }

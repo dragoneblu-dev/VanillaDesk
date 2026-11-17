@@ -1,20 +1,14 @@
 /**
  * editor-format-blocks.js
  * Sottomodulo di Editor.
- * Inserimento e movimento di Blocchi complessi, esecuzione di execCommand nativi e gestione del Contesto (Widget).
- * FIX SYNC BLOCCHI CODICE: All'inserimento del blocco codice, sincronizza immediatamente
- * il markup e il flag _isDirty sulla nota corrente per garantire la reattività dell'autosave.
- * FEAT SNIPPET RISERVATO: Supporto all'inserimento di snippet mascherati (password/credenziali)
- * tramite riciclo dell'elemento nativo e classe CSS 'snippet-masked'.
- * FEAT TOOLTIP DATABASE: Aggiunto title descrittivo sulla voce di menu Database per illustrare le viste supportate.
- * FEAT MULTI-CELL FORMATTING: Intercettazione in Editor.exec dei comandi bold, italic, underline, strikeThrough
- * per applicare o rimuovere la formattazione a tutte le celle selezionate in TableManager.
- * FIX INSERT CODE CARET POSITION: insertCodeBlock preserva la selezione attiva del cursore se già presente
- * nell'editor invece di ripristinare uno snapshot stantio, garantendo l'inserimento esatto su shortcut inline (''' e ```).
- * FEAT WORD-SNAP IN EXEC: Integrazione automatica di expandSelectionToWord e Smart Caret Collapse in Editor.exec
- * per estendere la formattazione da tastiera (Ctrl+B, Ctrl+I, Ctrl+U) alla parola sotto cursore collassato.
- * FIX PARTIAL CELL TEXT FORMATTING: Se è presente una selezione di testo parziale dentro una cella di tabella,
- * la formattazione opera esclusivamente sul testo selezionato senza alterare l'intera cella.
+ * Inserimento e movimento di Blocchi complessi, esecuzione di execCommand nativi.
+ * Sincronizzazione immediata del markup e del flag _isDirty all'inserimento del blocco codice.
+ * Supporto all'inserimento di snippet mascherati (password/credenziali) tramite classe CSS 'snippet-masked'.
+ * Tooltip descrittivo sulla voce di menu Database per illustrare le viste supportate.
+ * Formattazione multi-cella su tabelle semplici in Editor.exec (bold, italic, underline, strikeThrough),
+ * lasciando la normale formattazione inline quando è attiva una selezione di testo parziale dentro una cella.
+ * Preservazione della selezione attiva all'inserimento di codice tramite shortcut inline (''' e ```).
+ * Estensione automatica sulla parola sotto cursore (Word-Snap) con collasso intelligente del caret in Editor.exec.
  */
 
 Object.assign(Editor, {
@@ -183,7 +177,7 @@ Object.assign(Editor, {
         wrapper.appendChild(btnSpan);
         wrapper.appendChild(document.createTextNode('\u200B'));
 
-        // REINTEGRAZIONE E CORREZIONE: Controllo strutturale del blocco per prevenire il Nesting
+        // Controllo strutturale del blocco per prevenire il Nesting
         let targetBlock = range.startContainer.nodeType === 3 ? range.startContainer.parentNode.closest('p, div, li, h1, h2, h3, h4, h5, h6') : range.startContainer.closest('p, div, li, h1, h2, h3, h4, h5, h6');
         const hasWidgets = targetBlock ? !!targetBlock.querySelector('.adv-widget-shell, .adv-inline-shell, img, audio, iframe') : false;
         const isEmptyBlock = targetBlock && targetBlock.id !== 'noteContent' && !hasWidgets && targetBlock.textContent.replace(/[\u200B\n\r]/g, '').trim() === '';
@@ -459,61 +453,5 @@ Object.assign(Editor, {
                 parent.normalize();
             }
         }
-    },
-
-    checkContext: () => {
-        if (!AppState.isEditMode) return;
-        Editor.updateToolbarFormatting();
-        Editor.enforceBoundaries();
-
-        const selection = window.getSelection();
-        if (selection.rangeCount === 0) {
-            Editor.currentContext = null;
-            return;
-        }
-
-        let node = selection.anchorNode;
-        let parent = (node.nodeType === 3) ? node.parentNode : node;
-
-        const isInsideColumn = parent.closest('.widget-type-columns') ? true : false;
-        const isInsideSimpleTable = parent.closest('.simple-table-wrapper') ? true : false;
-        
-        const isInsideDB = WidgetManager.isProtectedBlock(parent) && !isInsideColumn && !isInsideSimpleTable;
-        
-        Editor.toggleAdvancedToolbar(!isInsideDB);
-
-        let targetElement = null;
-        if (parent.closest('table')) targetElement = parent.closest('table');
-        else if (parent.closest('ul, ol')) targetElement = parent.closest('ul, ol');
-
-        Editor.currentContext = targetElement;
-    },
-
-    editContextElement: () => {
-        if (!Editor.currentContext) return;
-        const el = Editor.currentContext;
-        if (el.tagName === 'TABLE') {
-            TableManager.editCurrentTable(el);
-        } else if (el.tagName === 'UL' || el.tagName === 'OL') {
-            if (typeof UI !== 'undefined' && UI.Menu) {
-                const btn = document.getElementById('btnListMenu');
-                if (btn) Editor.openListMenu(null, 'btnListMenu');
-            }
-        }
-    },
-
-    toggleAdvancedToolbar: (enable) => {
-        const tb = document.getElementById('editorToolbar');
-        if (!tb) return;
-        
-        // I pulsanti Undo/Redo vengono gestiti in esclusiva da Editor.updateUndoRedoUI() in history
-        const buttons = tb.querySelectorAll('button:not([title*="Annulla Ultima"]):not([title*="Ripeti ("]):not([title="Maiuscolo/Minuscolo"])');
-        const dropdowns = tb.querySelectorAll('.color-picker-group');
-
-        buttons.forEach(btn => btn.disabled = !enable);
-        dropdowns.forEach(grp => {
-            if (!enable) grp.classList.add('disabled-tool');
-            else grp.classList.remove('disabled-tool');
-        });
     }
 });

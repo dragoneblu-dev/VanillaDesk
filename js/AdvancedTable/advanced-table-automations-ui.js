@@ -11,6 +11,8 @@
  * quando la prima colonna del database è di tipo 'record_note' o non supporta assegnazioni dirette.
  * FIX COLUMN TYPE ICONS: Riuso centralizzato di AdvancedTable.getColumnTypeIcon.
  * FEAT AUTOINCREMENT: Esclusione delle colonne autoincrement dalle azioni modificabili manualmente.
+ * FEAT FORMULA CONDITION PARITY: La condizione SYS_JS_FORMULA adotta il medesimo layout full-width delle Azioni Formula JS
+ * con banner informativo AI Prompt e riquadro di anteprima live del risultato.
  * REFACTOR I18N: Sostituzione di tutte le stringhe fisse dell'interfaccia con I18n.t().
  */
 
@@ -288,6 +290,7 @@ Object.assign(AdvancedAutomations, {
 
     _renderBuilder: (tableId) => {
         const state = AdvancedTable.getState(tableId);
+        const stateWithId = state ? { ...state, id: tableId } : state;
         const auto = AdvancedAutomations._tempAuto;
         const cols = state.columns;
         const allDBs = AdvancedAutomations._getAllDatabases();
@@ -396,7 +399,7 @@ Object.assign(AdvancedAutomations, {
                             const inputId = `in_trg_timer_${idx}`;
                             const prevId = `prev_trg_timer_${idx}`;
                             
-                            formulaPreviews.push({ id: prevId, inputId: inputId, formula: t.value || '', targetState: state, filters: [] });
+                            formulaPreviews.push({ id: prevId, inputId: inputId, formula: t.value || '', targetState: stateWithId, filters: [] });
 
                             valInput = `
                                 <div style="display:flex; flex-direction:column; width:100%;">
@@ -406,7 +409,7 @@ Object.assign(AdvancedAutomations, {
                                             <span style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary);">${I18n.t('adv_automations.js_condition_label')}</span>
                                             <button class="btn" style="padding:2px 6px; font-size:0.75rem;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btn_prompt_timer_${idx}')" id="btn_prompt_timer_${idx}">${Icons.clipboard} ${I18n.t('adv_automations.ai_help')}</button>
                                         </div>
-                                        <textarea id="${inputId}" class="modern-input" style="width:100%; font-family:monospace; min-height:80px; resize:vertical; font-size:0.85rem; color:var(--accent-color);" placeholder="Es: riga['Stato'] === 'In Lavorazione' && OGGI() === '2025-12-31'" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">${safeVal}</textarea>
+                                        <textarea id="${inputId}" class="modern-input" style="width:100%; font-family:monospace; min-height:80px; resize:vertical; font-size:0.85rem; color:var(--accent-color);" placeholder="Es: riga['Stato'] === 'In Lavorazione' && OGGI() === '2025-12-31'" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">${UI.escapeHTML(t.value || '')}</textarea>
                                         <div id="${prevId}" style="width:100%; background:rgba(0,0,0,0.02); padding:8px; border-radius:4px; font-family:monospace; font-size:0.85rem; border:1px dashed var(--border-color); margin-top:5px;"></div>
                                         <div style="font-size:0.75rem; color:var(--text-secondary); opacity:0.8; margin-top:5px;">${I18n.t('adv_automations.timer_formula_hint')}</div>
                                     </div>
@@ -482,14 +485,12 @@ Object.assign(AdvancedAutomations, {
                         }
                     }
                 }
-                else if (tColDef) {
+                else if (tColDef && tColDef.id !== 'SYS_JS_FORMULA') {
                     isHiddenValue = t.operator === 'empty' || t.operator === 'not_empty' || t.operator === 'changed';
 
                     operatorOptions = LogicEngine.getConditionOperatorsHTML(tColDef, t.operator, true);
 
-                    if (tColDef.id === 'SYS_JS_FORMULA') {
-                        valInput = `<textarea class="modern-input" style="flex:2; padding:6px; font-size:0.85rem; font-family:monospace; min-height:80px; resize:vertical; color:var(--accent-color);" placeholder="Es: riga['Stato'] === 'Aperto' || Number(riga['Importo']) > 100" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value)">${safeVal}</textarea>`;
-                    } else if (tColDef.type === 'select' || tColDef.type === 'multi-select') {
+                    if (tColDef.type === 'select' || tColDef.type === 'multi-select') {
                         // Risoluzione opzioni dal database ospitante o da SYS_PROPERTIES_DB se è una proprietà nota
                         const targetOptionsState = t.colId.includes('_PROP_') ? propsDb : state;
                         let opts = (targetOptionsState && targetOptionsState.selectOptions) ? (targetOptionsState.selectOptions[tColDef.id] || []) : [];
@@ -563,11 +564,46 @@ Object.assign(AdvancedAutomations, {
                             </div>
                         </div>
                     `;
+                } else if (tColDef && tColDef.id === 'SYS_JS_FORMULA') {
+                    const inputId = `in_trg_js_${tableId}_${idx}`;
+                    const prevId = `prev_trg_js_${tableId}_${idx}`;
+                    const rawFormula = t.value || '';
+                    const lineCount = rawFormula.split(/\r\n|\r|\n/).length;
+                    const dynamicMinHeight = lineCount > 5 ? '140px' : '80px';
+
+                    formulaPreviews.push({ id: prevId, inputId: inputId, formula: rawFormula, targetState: stateWithId, filters: [] });
+
+                    triggersHTML += `
+                        <div style="display:flex; flex-direction:column; gap:8px; margin-bottom:8px; background: var(--bg-color); padding: 10px; border-radius: 6px; border: 1px solid var(--border-color);">
+                            <div style="display:flex; align-items:center; width:100%; gap:8px;">
+                                ${headerLeft}
+                                <select class="modern-input" style="flex:1; margin:0; padding:6px; font-size:0.85rem; font-weight:bold; color:var(--text-primary);" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'colId', this.value)">
+                                    <optgroup label="${I18n.t('adv_automations.group_sys_events')}">
+                                        <option value="SYS_NEW_ROW" ${t.colId === 'SYS_NEW_ROW' ? 'selected' : ''}>${I18n.t('adv_automations.evt_new_row')}</option>
+                                        <option value="SYS_ANY_CHANGE" ${t.colId === 'SYS_ANY_CHANGE' ? 'selected' : ''}>${I18n.t('adv_automations.evt_any_change')}</option>
+                                        <option value="SYS_TIMER" ${t.colId === 'SYS_TIMER' ? 'selected' : ''}>${I18n.t('adv_automations.evt_timer')}</option>
+                                        <option value="SYS_CROSS_DB" ${t.colId === 'SYS_CROSS_DB' ? 'selected' : ''}>${I18n.t('adv_automations.evt_cross_db')}</option>
+                                        <option value="SYS_ON_LOAD" ${t.colId === 'SYS_ON_LOAD' ? 'selected' : ''}>${I18n.t('adv_automations.evt_on_load')}</option>
+                                    </optgroup>
+                                    <optgroup label="${I18n.t('adv_automations.group_col_values')}">
+                                        ${colOptions.replace(`value="${t.colId}"`, `value="${t.colId}" selected`)}
+                                    </optgroup>
+                                </select>
+                                <div style="margin-left:auto; flex-shrink:0;">${delBtn}</div>
+                            </div>
+                            <div style="width:100%;">
+                                <textarea id="${inputId}" class="modern-input action-val live-formula-input" spellcheck="false" style="width:100%; box-sizing:border-box; margin:0; font-family:monospace; background:var(--bg-color) !important; color:var(--text-primary) !important; border:1px solid var(--border-color) !important; border-radius:6px !important; padding:8px; min-height:${dynamicMinHeight}; resize:vertical;" placeholder="Es: riga['Stato'] === 'Aperto' || Number(riga['Importo']) > 100" oninput="AdvancedAutomations._updateTrigger(event, ${idx}, 'value', this.value); if ((this.value.split('\\n').length) > 5) { this.style.minHeight = '140px'; }">${UI.escapeHTML(rawFormula)}</textarea>
+                            </div>
+                            <div id="${prevId}" style="width:100%; background:rgba(0,0,0,0.02); padding:8px; border-radius:4px; font-family:monospace; font-size:0.85rem; border:1px dashed var(--border-color);">
+                                <!-- Anteprima Live -->
+                            </div>
+                        </div>
+                    `;
                 } else {
                     triggersHTML += `
-                        <div style="${rowLayout} background: var(--bg-color); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color); ${tColDef && tColDef.id === 'SYS_JS_FORMULA' ? 'align-items:flex-start;' : ''}">
+                        <div style="${rowLayout} background: var(--bg-color); padding: 8px; border-radius: 6px; border: 1px solid var(--border-color);">
                             ${headerLeft}
-                            <select class="modern-input" style="${colSelectFlex} padding:6px; font-size:0.85rem; font-weight:bold; color:var(--text-primary); ${tColDef && tColDef.id === 'SYS_JS_FORMULA' ? 'margin-top:5px;' : ''}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'colId', this.value)">
+                            <select class="modern-input" style="${colSelectFlex} padding:6px; font-size:0.85rem; font-weight:bold; color:var(--text-primary);" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'colId', this.value)">
                                 <optgroup label="${I18n.t('adv_automations.group_sys_events')}">
                                     <option value="SYS_NEW_ROW" ${t.colId === 'SYS_NEW_ROW' ? 'selected' : ''}>${I18n.t('adv_automations.evt_new_row')}</option>
                                     <option value="SYS_ANY_CHANGE" ${t.colId === 'SYS_ANY_CHANGE' ? 'selected' : ''}>${I18n.t('adv_automations.evt_any_change')}</option>
@@ -579,17 +615,34 @@ Object.assign(AdvancedAutomations, {
                                     ${colOptions.replace(`value="${t.colId}"`, `value="${t.colId}" selected`)}
                                 </optgroup>
                             </select>
-                            <select class="modern-input" style="flex:1; padding:6px; font-size:0.85rem; ${tColDef && tColDef.id === 'SYS_JS_FORMULA' ? 'display:none;' : ''}" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'operator', this.value)">
+                            <select class="modern-input" style="flex:1; padding:6px; font-size:0.85rem;" onchange="AdvancedAutomations._updateTrigger(event, ${idx}, 'operator', this.value)">
                                 ${operatorOptions}
                             </select>
                             <div style="flex:2; ${isHiddenValue ? 'display:none;' : 'display:flex;'}">
                                 ${valInput}
                             </div>
-                            <div style="${tColDef && tColDef.id === 'SYS_JS_FORMULA' ? 'margin-top:5px;' : ''}">${delBtn}</div>
+                            <div>${delBtn}</div>
                         </div>
                     `;
                 }
             });
+        }
+
+        let triggerFormulaHelperHTML = '';
+        const hasFormulaTrigger = auto.triggers.some(t => t.colId === 'SYS_JS_FORMULA');
+
+        if (hasFormulaTrigger) {
+            triggerFormulaHelperHTML = `
+                <div style="background: rgba(37, 99, 235, 0.05); padding: 10px 12px; border-radius: 6px; border: 1px solid rgba(37, 99, 235, 0.2); margin-bottom: 10px; font-size: 0.8rem; display:flex; align-items:center; gap:10px;">
+                    <span style="display:inline-flex; color:var(--accent-color);">${Icons.formula}</span>
+                    <div style="flex:1; color:var(--text-secondary);">
+                        <b>${I18n.t('adv_automations.formula_mode_title')}</b> ${I18n.t('adv_automations.formula_mode_desc')}
+                    </div>
+                    <button id="btnCopyAutoAIPrompt_Cond" class="btn" style="padding: 4px 8px; font-size: 0.75rem; flex-shrink:0;" onclick="LogicEngine.copyAutomationAIPrompt(event, '${tableId}', 'btnCopyAutoAIPrompt_Cond')" title="${I18n.t('formula_editor.copy_prompt_title')}">
+                        <span style="display:inline-flex; align-items:center; gap:5px;">${Icons.clipboard} ${I18n.t('adv_automations.copy_ai_prompt')}</span>
+                    </button>
+                </div>
+            `;
         }
 
         let actionsHTML = '';
@@ -719,7 +772,7 @@ Object.assign(AdvancedAutomations, {
                     
                     const isFormula = a.type && a.type.includes('formula');
                     const inputId = `in_auto_${tableId}_${idx}`;
-                    const targetStateForInput = a.colId.includes('_PROP_') ? propsDb : state;
+                    const targetStateForInput = a.colId.includes('_PROP_') ? propsDb : stateWithId;
                     valInputHTML = LogicEngine.getActionInputHTML(aColDef, a.type, a.value, a.value2, targetStateForInput, changeCallback, { inputId: inputId });
 
                     const prevId = `prev_auto_${tableId}_${idx}`;
@@ -796,6 +849,7 @@ Object.assign(AdvancedAutomations, {
                         <h4 style="margin:0; font-size:0.95rem; color:var(--accent-color); display:flex; align-items:center; gap:6px;">${Icons.lightning} ${I18n.t('adv_automations.conditions_header')}</h4>
                         <button class="adv-icon-btn" style="background:var(--bg-color); border:1px solid var(--border-color); padding:4px 10px; border-radius:12px; color:var(--text-primary);" onclick="AdvancedAutomations._addTrigger(event, '${tableId}')">${I18n.t('adv_automations.btn_add_condition')}</button>
                     </div>
+                    ${triggerFormulaHelperHTML}
                     ${triggersHTML}
                 </div>
 

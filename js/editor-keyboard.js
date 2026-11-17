@@ -3,15 +3,11 @@
  * Sottomodulo di Editor.
  * Responsabilità: Intercettazione della digitazione pura (Auto-Close Brackets), 
  * Motore per le Scorciatoie Markdown (Markdown Shortcuts Engine) e Helper per i range.
- * FIX: Previene l'inserimento accidentale di Segnalibri nei Blocchi Codice.
- * FEAT SMART HOME: Aggiunto gestore handleHomeKey per i blocchi di codice.
- * FEAT LINK RAPIDI: Intercettazione della digitazione "[[" per evocare in modo nativo LinkManager.openInternalModal().
- * FEAT LIVE CITATION RAPIDA: Intercettazione della digitazione "![[" (Obsidian style) per evocare CitationManager.openModal().
- * FIX LINK RAPIDI INDEXSIZEERROR: Risolto crash setStart(4294967295) collassando direttamente cleanRange
- * dopo deleteContents(), garantendo il corretto ancoraggio e l'apertura immediata del Drawer.
- * FEAT VISUAL LINE HOME/END INTEGRATION: Aggancio alla navigazione e selezione per righe visive su soft-wrap.
- * FEAT CODE BLOCK SHORTCUTS: Supporto ai trigger ``` e ''' a inizio riga con neutralizzazione
- * dell'autoclose moltiplicatore degli apici singoli e corretto posizionamento in-place del widget.
+ * Previene l'inserimento accidentale di Segnalibri nei Blocchi Codice.
+ * Gestore Smart Home per i blocchi di codice (handleHomeKey).
+ * Intercettazione della digitazione "[[" per LinkManager.openInternalModal() e "![[" per CitationManager.openModal().
+ * Supporto ai trigger ``` e ''' a inizio riga con neutralizzazione dell'autoclose moltiplicatore
+ * degli apici singoli e corretto posizionamento in-place del widget codice.
  */
 
 Object.assign(Editor, {
@@ -332,7 +328,7 @@ Object.assign(Editor, {
             const isAlphanumericAfter = /[a-zA-Z0-9À-ÿ_]/.test(charAfter);
             if (isAlphanumericAfter) return; 
 
-            // FIX MOLTIPLICAZIONE APICI: Se il carattere precedente è identico (es. stiamo digitando '' consecutivi),
+            // Se il carattere precedente è identico (es. stiamo digitando '' consecutivi),
             // non generare una nuova coppia di chiusura automatica ma lascia scorrere il singolo carattere
             if (quoteChars.includes(e.key)) {
                 const isAlphanumericBefore = /[a-zA-Z0-9À-ÿ_]/.test(charBefore);
@@ -549,16 +545,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             }
 
-            // GESTIONE VISUALE RIGA HOME ED END (Con e Senza Shift per soft-wrap)
-            if (e.key === 'Home' || e.key === 'End') {
-                if (AppState.isEditMode && typeof Editor.handleHomeEndNavigation === 'function') {
-                    if (Editor.handleHomeEndNavigation(e)) {
-                        return;
-                    }
-                }
-            }
-
-            // MOTORE INTERCETTAZIONE TASTO HOME (Inizio Riga per Blocchi Codice)
+            // MOTORE INTERCETTAZIONE TASTO HOME (Inizio Riga per Blocchi Codice; Home/End su testo sono gestiti in EventsGlobal)
             if (e.key === 'Home') {
                 if (AppState.isEditMode && Editor.handleHomeKey(e)) {
                     return;

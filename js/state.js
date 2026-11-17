@@ -1,18 +1,13 @@
 /**
  * state.js
  * Variabili di stato globale dell'applicazione. Fonte assoluta della verità in RAM.
- * FIX: Logica di match potenziata per gestire *EXISTS*, *EMPTY* e ricerche testuali fluide.
- * FEAT TYPE GUARDS: Introdotti AppState.isRelationalTable e AppState.getRelationalDatabaseIds
- * per risolvere alla radice il polimorfismo spurio in AppState.databases.
- * FIX CONTRACT RESILIENCE: isRelationalTable supporta istanze in fase di inizializzazione
- * o fixture di test prima del popolamento esplicito dell'array columns.
- * FEAT EMPTY FILTER PROPERTY (*EMPTY*): Supporto a findNext/findPrevious per note senza tag/proprietà valorizzata.
- * FIX DATE RANGE & NOTE LINK MATCHING: Risoluzione simmetrica delle date intervallo e note_link nella navigazione tra riscontri.
- * FIX WHITESPACE SEARCH MATCHING: Equiparazione trasparente di \u00A0 (&nbsp;) allo spazio standard per findNext e findPrevious.
- * FIX SEARCH NAVIGATION IN DB NOTES: Inclusione completa e ordinata delle note di database (isRecordNote)
- * e relative sotto-note in _findNextNoteWithMatches per consentire alle frecce di scorrere tutti i risultati.
- * FIX EXCLUDE CITED DB FROM SEQUENCE: Riconoscimento esatto con \sid= per non catturare i data-ref-id delle citazioni.
- * FEAT STORAGE MODE: Aggiunto tracciamento esplicito di storageMode ('fsaa' | 'idb' | 'ram') e idbWorkspaceId.
+ * Logica centralizzata di valutazione filtri proprietà (AppState.matchesPropertyFilters)
+ * per *EXISTS*, *EMPTY*, booleani, array, date range e note_link.
+ * Type guard centralizzati (AppState.isRelationalTable, AppState.getRelationalDatabaseIds)
+ * per disambiguare i database relazionali da widget non-RDBMS in AppState.databases.
+ * Supporto alla navigazione di ricerca nelle record note (isRecordNote) e relative sotto-note,
+ * escludendo gli ID citati dalle scansioni e normalizzando \u00A0 in spazi standard.
+ * Tracciamento esplicito di storageMode ('fsaa' | 'idb' | 'ram') e idbWorkspaceId.
  */
 
 const AppState = {
@@ -102,6 +97,85 @@ const AppState = {
     getRelationalDatabaseIds: () => {
         if (!AppState.databases) return [];
         return Object.keys(AppState.databases).filter(id => AppState.isRelationalTable(id));
+    },
+
+    /**
+     * Valuta in modo centralizzato se una riga di proprietà (SYS_PROPERTIES_DB) soddisfa tutti i filtri attivi.
+     * Utilizzato sia dall'albero laterale che dalla navigazione riscontri Avanti/Indietro.
+     */
+    matchesPropertyFilters: (sysRow, activePropFilters) => {
+        if (!activePropFilters || activePropFilters.length === 0) return true;
+
+        return activePropFilters.every(f => {
+            const cellVal = (sysRow && sysRow.cells) ? sysRow.cells[f.colId] : undefined;
+
+            // 1. Controllo assenza (*EMPTY*): il campo non deve avere valore
+            if (f.realValue === '*EMPTY*') {
+                if (cellVal === undefined || cellVal === null || cellVal === '') return true;
+                if (Array.isArray(cellVal)) return cellVal.length === 0;
+                if (typeof cellVal === 'boolean') return false;
+                if (typeof cellVal === 'object') {
+                    if (cellVal.noteId !== undefined || cellVal.title !== undefined) {
+                        return (!cellVal.noteId || String(cellVal.noteId).trim() === '') &&
+                               (!cellVal.title || String(cellVal.title).trim() === '');
+                    }
+                    const startEmpty = !cellVal.start || String(cellVal.start).trim() === '';
+                    const endEmpty = !cellVal.end || String(cellVal.end).trim() === '';
+                    return startEmpty && endEmpty;
+                }
+                return String(cellVal).trim() === '';
+            }
+
+            if (!sysRow || !sysRow.cells) return false;
+
+            // 2. Controllo di presenza (*EXISTS*) coerente su tutti i tipi di proprietà
+            if (f.realValue === '*EXISTS*') {
+                if (cellVal === undefined || cellVal === null || cellVal === '') return false;
+                if (Array.isArray(cellVal)) return cellVal.length > 0;
+                if (typeof cellVal === 'boolean') return cellVal === true;
+                if (typeof cellVal === 'object') {
+                    if (cellVal.noteId !== undefined || cellVal.title !== undefined) {
+                        return (cellVal.noteId !== undefined && String(cellVal.noteId).trim() !== '') ||
+                               (cellVal.title !== undefined && String(cellVal.title).trim() !== '');
+                    }
+                    return (cellVal.start !== undefined && String(cellVal.start).trim() !== '') ||
+                           (cellVal.end !== undefined && String(cellVal.end).trim() !== '');
+                }
+                return String(cellVal).trim() !== '';
+            }
+
+            // 3. Booleani (Checkbox)
+            if (typeof f.realValue === 'boolean') {
+                return (cellVal === true || cellVal === 'true') === f.realValue;
+            }
+
+            // 4. Array (Multi-select o Relazioni)
+            if (Array.isArray(cellVal)) {
+                return cellVal.some(v => String(v).toLowerCase().replace(/\u00A0/g, ' ') === String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
+            }
+
+            // 5. Note Link con oggetto {noteId, title, anchor}
+            if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
+                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
+                const titleStr = (cellVal.title || '').toLowerCase().replace(/\u00A0/g, ' ');
+                if (titleStr.includes(searchLower)) return true;
+                if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
+                return false;
+            }
+
+            // 6. Date Range con oggetto {start, end}
+            if (typeof cellVal === 'object' && cellVal !== null && (cellVal.start !== undefined || cellVal.end !== undefined)) {
+                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
+                const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
+                if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
+                const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
+                const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
+                return !!(startMatch || endMatch);
+            }
+
+            // 7. Testo, Numeri e Singoli Valori
+            return String(cellVal || '').toLowerCase().replace(/\u00A0/g, ' ').includes(String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
+        });
     },
 
     findNext: () => {
@@ -212,72 +286,12 @@ const AppState = {
             const note = flatNotes[i];
             let isValidMatch = true;
 
-            // 1. Controllo Filtri Proprietà (Tag)
+            // 1. Controllo Filtri Proprietà (Tag) tramite motore unificato
             if (activePropFilters.length > 0) {
-                if (!propsDb) {
-                    isValidMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
-                } else {
-                    const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
-                    if (!sysRow) {
-                        isValidMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
-                    } else {
-                        const satisfiesAll = activePropFilters.every(f => {
-                            const cellVal = sysRow.cells[f.colId];
-                            
-                            // Keyword magica: basta che il campo non sia vuoto
-                            if (f.realValue === '*EXISTS*') {
-                                if (cellVal === undefined || cellVal === null || cellVal === '') return false;
-                                if (Array.isArray(cellVal) && cellVal.length === 0) return false;
-                                return true;
-                            }
-
-                            // Keyword magica: il campo deve essere vuoto / non valorizzato
-                            if (f.realValue === '*EMPTY*') {
-                                if (cellVal === undefined || cellVal === null || cellVal === '') return true;
-                                if (Array.isArray(cellVal)) return cellVal.length === 0;
-                                if (typeof cellVal === 'boolean') return false;
-                                if (typeof cellVal === 'object') {
-                                    return (!cellVal.start || String(cellVal.start).trim() === '') &&
-                                           (!cellVal.end || String(cellVal.end).trim() === '');
-                                }
-                                return String(cellVal).trim() === '';
-                            }
-
-                            // Booleani
-                            if (typeof f.realValue === 'boolean') {
-                                return (cellVal === true || cellVal === 'true') === f.realValue;
-                            }
-
-                            // Array (Multi-select)
-                            if (Array.isArray(cellVal)) {
-                                return cellVal.some(v => String(v).toLowerCase().replace(/\u00A0/g, ' ') === String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
-                            }
-
-                            // Date Range con oggetto {start, end}
-                            if (typeof cellVal === 'object' && cellVal !== null) {
-                                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
-                                const rangeStr = ((cellVal.start || '') + (cellVal.end ? ' ➔ ' + cellVal.end : '')).toLowerCase();
-                                if (rangeStr === searchLower || rangeStr.includes(searchLower) || searchLower.includes(rangeStr)) return true;
-                                const startMatch = cellVal.start && String(cellVal.start).toLowerCase().includes(searchLower);
-                                const endMatch = cellVal.end && String(cellVal.end).toLowerCase().includes(searchLower);
-                                return !!(startMatch || endMatch);
-                            }
-
-                            // Note Link con oggetto {noteId, title, anchor}
-                            if (typeof cellVal === 'object' && cellVal !== null && (cellVal.noteId !== undefined || cellVal.title !== undefined)) {
-                                const searchLower = String(f.realValue).toLowerCase().replace(/\u00A0/g, ' ');
-                                const titleStr = (cellVal.title || '').toLowerCase().replace(/\u00A0/g, ' ');
-                                if (titleStr.includes(searchLower)) return true;
-                                if (cellVal.noteId && String(cellVal.noteId).toLowerCase() === searchLower) return true;
-                                return false;
-                            }
-
-                            // Testo/Numero semplice
-                            return String(cellVal || '').toLowerCase().replace(/\u00A0/g, ' ').includes(String(f.realValue).toLowerCase().replace(/\u00A0/g, ' '));
-                        });
-                        if (!satisfiesAll) isValidMatch = false;
-                    }
-                }
+                const sysRow = (propsDb && Array.isArray(propsDb.rows))
+                    ? propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id)
+                    : null;
+                isValidMatch = AppState.matchesPropertyFilters(sysRow, activePropFilters);
             }
 
             // 2. Controllo Filtri Testuali e Toggles Speciali

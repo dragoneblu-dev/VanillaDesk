@@ -6,37 +6,30 @@
  * e dei metadati dei link di VanillaDesk (incluso data-link-note per la descrizione aggiuntiva).
  * Inclusione classi e attributi per segnalibri e note commentate.
  * Preservazione esplicita del tag HR nella lista dei tag consentiti dalla gomma formattazioni.
- * toggleBlockquote deterministico con unwrap e appiattimento anti-nidificazione (Single Quote Shield).
+ * toggleBlockquote deterministico con unwrap, appiattimento anti-nidificazione (Single Quote Shield)
+ * e supporto granulare alle singole righe (Shift+Invio) dentro un punto elenco (<li>).
  * Aggiornamento contestuale dinamico dell'icona, del tooltip e dello stato active-format su btnListMenu.
- * REFACTOR CENTRALIZZAZIONE: Esportazione di Editor.cleanDOMTree per condividere la logica di sanificazione
- * con l'evento di Paste, eliminando codice duplicato ed Over Engineering.
- * FIX TABELLE & STILI ALIENI: Sanificazione rigorosa del contenuto delle celle delle tabelle semplici,
+ * Esportazione di Editor.cleanDOMTree per condividere la logica di sanificazione con l'evento di Paste.
+ * Sanificazione rigorosa del contenuto delle celle delle tabelle semplici,
  * con srotolamento di tutti gli span parassiti, rimozione di classi non native e supporto alle celle selezionate.
- * ZERO-FONT UNIFICATION: Eliminazione integrale di ogni gestione del tag legacy <font> sostituito da standard W3C,
- * garantendo la preservazione assoluta delle classi di stile VanillaDesk (ff-*, fs-*, hl-c*, tx-c*).
- * WIDGET PROTECTION: Esclusione categorica di tutti i widget complessi di VanillaDesk dalla gomma formattazioni.
- * FEAT MULTI-CELL FORMATTING: Supporto a Maiuscolo/Minuscolo (toggleCase) e Carattere/Dimensione (applyTextFormat)
+ * Eliminazione integrale di ogni gestione del tag legacy <font> sostituito da standard W3C,
+ * garantendo la preservazione delle classi di stile VanillaDesk (ff-*, fs-*, hl-c*, tx-c*).
+ * Esclusione categorica di tutti i widget complessi di VanillaDesk dalla gomma formattazioni.
+ * Supporto a Maiuscolo/Minuscolo (toggleCase) e Carattere/Dimensione (applyTextFormat)
  * applicati simultaneamente a tutte le celle selezionate in TableManager con snapshot forzato per Undo/Redo immediato.
- * FIX MULTI-PARAGRAPH FONT PRESERVATION: Preservazione della selezione su paragrafi multipli tramite marker temporanei
- * post-execCommand.
- * FIX FONT INSPECTION ACCURACY: Rilevamento deterministico di font e dimensione tramite closest() sul punto di selezione,
- * prevenendo che ricerche non mirate forzino falsi positivi su font EasyReading da span non selezionati.
- * FEAT WORD-SNAP IN TOGGLE CASE: Integrazione coerente di Smart Caret Collapse in Editor.toggleCase.
- * FIX PARTIAL CELL TEXT FORMATTING & ERASER: Tutela della selezione parziale di testo all'interno di una singola cella
- * di tabella semplice, impedendo la mutazione o pulizia indiscriminata dell'intera cella.
- * FEAT FONT & SIZE PREVIEW ICONS: Mini-anteprima visiva del carattere e della grandezza accanto a ciascuna voce del menu.
- * FIX BLOCKQUOTE LIST WRAP: Supporto completo e fedele per la citazione a blocco di elenchi puntati (UL) e numerati (OL)
+ * Preservazione della selezione su paragrafi multipli tramite marker temporanei post-execCommand.
+ * Rilevamento deterministico di font e dimensione tramite closest() sul punto di selezione.
+ * Integrazione coerente di Smart Caret Collapse in Editor.toggleCase.
+ * Tutela della selezione parziale di testo all'interno di una singola cella di tabella semplice.
+ * Mini-anteprima visiva del carattere e della grandezza accanto a ciascuna voce del menu.
+ * Supporto completo per la citazione a blocco di elenchi puntati (UL) e numerati (OL)
  * insieme al testo normale, preservando l'integrità strutturale della lista all'interno del tag blockquote.
- * FIX BR NORMALIZATION (SNELLO E LINEARE): Conversione di ogni <br> che rappresenta una riga in singoli paragrafi <p><br></p>,
- * preservando tutte le righe vuote consecutive senza comprimerle né lasciare <br> nudi a livello root.
- * FIX HEADING BOLD FALSE POSITIVE: Disattivazione automatica dell'indicatore 'B' all'interno delle intestazioni H1..H6
+ * Conversione di ogni <br> che rappresenta una riga in singoli paragrafi <p><br></p>.
+ * Disattivazione automatica dell'indicatore 'B' all'interno delle intestazioni H1..H6
  * a meno che non sia presente un elemento semantico <b> o <strong> esplicito.
- * FEAT ZERO-SHIFT DYNAMIC SUBHEADING SLOT: Adattamento contestuale in-situ del secondo pulsante di titolo della toolbar
+ * Adattamento contestuale in-situ del secondo pulsante di titolo della toolbar
  * sui livelli profondi (H3..H6) con toggle-off naturale a paragrafo e zero layout shift orizzontale.
- * FIX CITAZIONI LIVE CHAPTER ID: Preservazione degli attributi ID con prefisso 'blk_' in cleanDOMTree
- * per impedire che la sanificazione cancelli gli ID delle intestazioni e dei blocchi citati.
- * FIX HEADING LEVEL TOGGLE ID PERSISTENCE (1.3): Cattura preventiva e riassegnazione automatica dell'ID blk_*
- * sul nuovo tag di intestazione durante toggleHeader, impedendo la distruzione dell'ancora citata.
+ * Preservazione degli attributi ID con prefisso 'blk_' in cleanDOMTree e riassegnazione automatica in toggleHeader.
  */
 
 Object.assign(Editor, {
@@ -367,46 +360,314 @@ Object.assign(Editor, {
             range.insertNode(marker);
 
             const parent = existingBq.parentNode;
+            const isInsideListHost = parent && (parent.tagName === 'LI' || (parent.classList && parent.classList.contains('checklist-text')));
 
-            // Se existingBq contiene blocchi strutturati (p, div, ul, ol, h1..h6, table), li estrae direttamente
-            const hasBlockChildren = Array.from(existingBq.children).some(c => 
-                ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'TABLE'].includes(c.tagName)
-            );
-
-            if (hasBlockChildren) {
-                while (existingBq.firstChild) {
-                    parent.insertBefore(existingBq.firstChild, existingBq);
-                }
-                existingBq.remove();
-            } else {
-                const paragraphs = [];
-                let currentP = document.createElement('p');
-
-                while (existingBq.firstChild) {
-                    const child = existingBq.firstChild;
-                    if (child.nodeType === 1 && child.tagName === 'BR') {
-                        child.remove();
-                        if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
-                        paragraphs.push(currentP);
-                        currentP = document.createElement('p');
-                    } else {
-                        currentP.appendChild(child);
+            if (isInsideListHost) {
+                // Riconversione pulita dentro un elemento di lista: converte i blocchi <p> in righe separate da <br>
+                const isInlineFlowNode = (n) => {
+                    if (!n) return false;
+                    if (n.nodeType === Node.TEXT_NODE) return n.nodeValue.replace(/[\u200B\uFEFF]/g, '').length > 0;
+                    if (n.nodeType === Node.ELEMENT_NODE) {
+                        return !['BR', 'P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'BLOCKQUOTE', 'TABLE', 'PRE', 'HR'].includes(n.tagName);
                     }
-                }
-                if (currentP.childNodes.length > 0) {
-                    paragraphs.push(currentP);
-                } else if (paragraphs.length === 0) {
-                    currentP.innerHTML = '<br>';
-                    paragraphs.push(currentP);
+                    return false;
+                };
+
+                const frag = document.createDocumentFragment();
+                if (isInlineFlowNode(existingBq.previousSibling)) {
+                    frag.appendChild(document.createElement('br'));
                 }
 
-                paragraphs.forEach(p => parent.insertBefore(p, existingBq));
-                existingBq.remove();
+                const bqChildren = Array.from(existingBq.childNodes);
+                let prevWasInlineLine = false;
+
+                bqChildren.forEach(child => {
+                    if (child.nodeType === Node.ELEMENT_NODE && ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(child.tagName)) {
+                        if (prevWasInlineLine) {
+                            frag.appendChild(document.createElement('br'));
+                        }
+                        const innerText = child.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                        const hasRealContent = innerText !== '' || !!child.querySelector('img, audio, iframe, input, svg');
+
+                        if (hasRealContent) {
+                            while (child.firstChild) {
+                                // Rimuove eventuali <br> segnaposto finali dentro un blocco non vuoto
+                                if (child.firstChild.nodeName === 'BR' && !child.firstChild.nextSibling && innerText !== '') {
+                                    child.firstChild.remove();
+                                } else {
+                                    frag.appendChild(child.firstChild);
+                                }
+                            }
+                        } else {
+                            // Blocco vuoto (<p><br></p>): preserva solo il marker cursore, evitando doppi <br> coi separatori
+                            const mInside = child.querySelector('#bkm-toggle-temp');
+                            if (mInside) frag.appendChild(mInside);
+                        }
+                        prevWasInlineLine = true;
+                    } else if (child.nodeType === Node.ELEMENT_NODE && ['UL', 'OL', 'TABLE', 'PRE', 'HR'].includes(child.tagName)) {
+                        frag.appendChild(child);
+                        prevWasInlineLine = false;
+                    } else {
+                        frag.appendChild(child);
+                        prevWasInlineLine = child.nodeName !== 'BR';
+                    }
+                });
+
+                if (prevWasInlineLine && isInlineFlowNode(existingBq.nextSibling)) {
+                    frag.appendChild(document.createElement('br'));
+                }
+
+                // Se il blockquote estratto era una singola riga vuota in un <li> altrimenti vuoto, garantisce un <br>
+                const fragHasVisibleContent = Array.from(frag.childNodes).some(n =>
+                    (n.nodeType === Node.TEXT_NODE && n.nodeValue.replace(/[\u200B\uFEFF]/g, '').length > 0) ||
+                    (n.nodeType === Node.ELEMENT_NODE && n.id !== 'bkm-toggle-temp')
+                );
+                if (!fragHasVisibleContent && !existingBq.previousSibling && !existingBq.nextSibling) {
+                    frag.appendChild(document.createElement('br'));
+                }
+
+                parent.replaceChild(frag, existingBq);
+            } else {
+                // Se existingBq contiene blocchi strutturati (p, div, ul, ol, h1..h6, table), li estrae direttamente
+                const hasBlockChildren = Array.from(existingBq.children).some(c => 
+                    ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'UL', 'OL', 'TABLE'].includes(c.tagName)
+                );
+
+                if (hasBlockChildren) {
+                    while (existingBq.firstChild) {
+                        parent.insertBefore(existingBq.firstChild, existingBq);
+                    }
+                    existingBq.remove();
+                } else {
+                    const paragraphs = [];
+                    let currentP = document.createElement('p');
+
+                    while (existingBq.firstChild) {
+                        const child = existingBq.firstChild;
+                        if (child.nodeType === 1 && child.tagName === 'BR') {
+                            child.remove();
+                            if (currentP.childNodes.length === 0) currentP.innerHTML = '<br>';
+                            paragraphs.push(currentP);
+                            currentP = document.createElement('p');
+                        } else {
+                            currentP.appendChild(child);
+                        }
+                    }
+                    if (currentP.childNodes.length > 0) {
+                        paragraphs.push(currentP);
+                    } else if (paragraphs.length === 0) {
+                        currentP.innerHTML = '<br>';
+                        paragraphs.push(currentP);
+                    }
+
+                    paragraphs.forEach(p => parent.insertBefore(p, existingBq));
+                    existingBq.remove();
+                }
             }
 
         } else {
-            // 2. ATTIVAZIONE / WRAP: Raggruppa i blocchi selezionati in un unico <blockquote>
+            // 2. ATTIVAZIONE / WRAP: Verifica prima se il cursore/selezione è confinato in un singolo punto elenco (<li>)
+            const startEl = (range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer);
+            const endEl = (range.endContainer.nodeType === 3 ? range.endContainer.parentNode : range.endContainer);
+            const startLi = startEl && startEl.closest ? startEl.closest('li') : null;
+            const endLi = endEl && endEl.closest ? endEl.closest('li') : null;
 
+            if (startLi && endLi && startLi === endLi && editorRoot.contains(startLi)) {
+                const hostEl = startLi.classList.contains('adv-checklist-item')
+                    ? (startLi.querySelector('.checklist-text') || startLi)
+                    : startLi;
+
+                const wasCollapsed = range.collapsed;
+                const startMarker = document.createElement('span');
+                startMarker.id = 'bkm-bq-start';
+                startMarker.style.display = 'none';
+
+                let endMarker = null;
+                if (!wasCollapsed) {
+                    endMarker = document.createElement('span');
+                    endMarker.id = 'bkm-bq-end';
+                    endMarker.style.display = 'none';
+                    const endR = range.cloneRange();
+                    endR.collapse(false);
+                    endR.insertNode(endMarker);
+                }
+
+                const startR = range.cloneRange();
+                startR.collapse(true);
+                startR.insertNode(startMarker);
+
+                // Porta tutti i <br> visibili eventualmente annidati in tag inline (es. <b>riga1<br>riga2</b>) al livello diretto di hostEl
+                const blockChildTags = ['UL', 'OL', 'BLOCKQUOTE', 'P', 'DIV', 'TABLE', 'PRE', 'HR'];
+                const findSplittableBr = (el) => {
+                    const brs = el.querySelectorAll('br');
+                    for (const b of brs) {
+                        if (!b.closest('.adv-inline-shell, .inline-note-data, .bookmark-comment-data')) return b;
+                    }
+                    return null;
+                };
+                const isEmptyInlineEl = (n) => n && n.nodeType === 1 && !n.textContent && !n.querySelector('img, audio, svg, span[id^="bkm-bq-"]');
+
+                let inlineWithBr;
+                let splitTargetBr = null;
+                while ((inlineWithBr = Array.from(hostEl.children).find(el => {
+                    if (blockChildTags.includes(el.tagName) || el.classList.contains('adv-inline-shell')) return false;
+                    splitTargetBr = findSplittableBr(el);
+                    return !!splitTargetBr;
+                }))) {
+                    const br = splitTargetBr;
+                    const afterRange = document.createRange();
+                    afterRange.setStartAfter(br);
+                    afterRange.setEndAfter(inlineWithBr);
+                    const afterFrag = afterRange.extractContents();
+                    br.remove();
+
+                    // Rimuove eventuali cloni inline vuoti prodotti sullo split del margine
+                    Array.from(afterFrag.children).forEach(c => {
+                        if (isEmptyInlineEl(c)) c.remove();
+                    });
+
+                    if (inlineWithBr.nextSibling) inlineWithBr.parentNode.insertBefore(afterFrag, inlineWithBr.nextSibling);
+                    else inlineWithBr.parentNode.appendChild(afterFrag);
+                    inlineWithBr.parentNode.insertBefore(br, inlineWithBr.nextSibling);
+
+                    if (isEmptyInlineEl(inlineWithBr)) inlineWithBr.remove();
+                }
+
+                // Suddivide i figli diretti di hostEl in blocchi strutturali e righe separate da <br>
+                const segments = [];
+                let currNodes = [];
+
+                const flushLine = (trailingBr = null) => {
+                    segments.push({ type: 'line', nodes: currNodes, trailingBr });
+                    currNodes = [];
+                };
+
+                Array.from(hostEl.childNodes).forEach(child => {
+                    if (child.nodeType === Node.ELEMENT_NODE && blockChildTags.includes(child.tagName)) {
+                        if (currNodes.length > 0) flushLine(null);
+                        segments.push({ type: 'block', node: child });
+                    } else if (child.nodeType === Node.ELEMENT_NODE && child.tagName === 'BR') {
+                        flushLine(child);
+                    } else {
+                        currNodes.push(child);
+                    }
+                });
+                if (currNodes.length > 0) {
+                    const hasContent = currNodes.some(n =>
+                        (n.nodeType === 3 && n.nodeValue.length > 0) ||
+                        (n.nodeType === 1)
+                    );
+                    if (hasContent || segments.length === 0) {
+                        flushLine(null);
+                    }
+                }
+
+                const segContainsNode = (seg, target) => {
+                    if (!target) return false;
+                    if (seg.type === 'block') return seg.node === target || seg.node.contains(target);
+                    return seg.nodes.some(n => n === target || (n.contains && n.contains(target)));
+                };
+
+                let startSegIdx = segments.findIndex(seg => segContainsNode(seg, startMarker));
+                let endSegIdx = endMarker ? segments.findIndex(seg => segContainsNode(seg, endMarker)) : startSegIdx;
+
+                if (startSegIdx !== -1 && endSegIdx !== -1) {
+                    if (startSegIdx > endSegIdx) {
+                        const tmp = startSegIdx; startSegIdx = endSegIdx; endSegIdx = tmp;
+                    }
+
+                    // Se l'estremo finale della selezione è caduto a offset 0 della riga successiva dopo un <br>, non includerla
+                    if (!wasCollapsed && endSegIdx > startSegIdx && segments[endSegIdx].type === 'line') {
+                        const endSeg = segments[endSegIdx];
+                        const mIdx = endSeg.nodes.indexOf(endMarker);
+                        if (mIdx !== -1) {
+                            let hasVisibleBefore = false;
+                            for (let k = 0; k < mIdx; k++) {
+                                const n = endSeg.nodes[k];
+                                if (n.nodeType === 3 && n.nodeValue.replace(/[\u200B\uFEFF]/g, '').length > 0) {
+                                    hasVisibleBefore = true; break;
+                                }
+                                if (n.nodeType === 1 && (n.textContent.replace(/[\u200B\uFEFF]/g, '').length > 0 || n.querySelector('img, audio, svg'))) {
+                                    hasVisibleBefore = true; break;
+                                }
+                            }
+                            if (!hasVisibleBefore) {
+                                endSegIdx--;
+                                endSeg.nodes.splice(mIdx, 1);
+                                if (segments[endSegIdx].type === 'line') {
+                                    segments[endSegIdx].nodes.push(endMarker);
+                                }
+                            }
+                        }
+                    }
+
+                    const bq = document.createElement('blockquote');
+
+                    const firstSelectedSeg = segments[startSegIdx];
+                    const insertRef = firstSelectedSeg.type === 'block'
+                        ? firstSelectedSeg.node
+                        : (firstSelectedSeg.nodes[0] || firstSelectedSeg.trailingBr);
+
+                    if (insertRef) {
+                        hostEl.insertBefore(bq, insertRef);
+                    } else {
+                        hostEl.appendChild(bq);
+                    }
+
+                    // Rimuove il <br> separatore immediatamente precedente al blockquote per evitare righe vuote extra
+                    if (startSegIdx > 0 && segments[startSegIdx - 1].type === 'line' && segments[startSegIdx - 1].trailingBr) {
+                        segments[startSegIdx - 1].trailingBr.remove();
+                    }
+
+                    for (let i = startSegIdx; i <= endSegIdx; i++) {
+                        const seg = segments[i];
+                        if (seg.type === 'line') {
+                            if (seg.trailingBr) seg.trailingBr.remove();
+                            const p = document.createElement('p');
+                            seg.nodes.forEach(n => p.appendChild(n));
+                            const cleanT = p.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                            if (!cleanT && !p.querySelector('img, audio, iframe, input, svg')) {
+                                p.appendChild(document.createElement('br'));
+                            }
+                            bq.appendChild(p);
+                        } else if (seg.type === 'block') {
+                            if (seg.node.tagName === 'BLOCKQUOTE') {
+                                while (seg.node.firstChild) bq.appendChild(seg.node.firstChild);
+                                seg.node.remove();
+                            } else {
+                                bq.appendChild(seg.node);
+                            }
+                        }
+                    }
+
+                    // Ripristina cursore o selezione esatta dentro il nuovo blockquote e rimuove i marker
+                    const newRange = document.createRange();
+                    if (!wasCollapsed && endMarker && document.body.contains(endMarker)) {
+                        newRange.setStartAfter(startMarker);
+                        newRange.setEndBefore(endMarker);
+                        startMarker.remove();
+                        endMarker.remove();
+                    } else {
+                        newRange.setStartBefore(startMarker);
+                        newRange.collapse(true);
+                        startMarker.remove();
+                        if (endMarker) endMarker.remove();
+                    }
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+
+                    Editor.healWidgetWrappers();
+                    Store.triggerAutoSave();
+                    Editor.updateToolbarFormatting();
+                    return;
+                }
+
+                // Pulizia preventiva in caso di mancata corrispondenza
+                startMarker.remove();
+                if (endMarker) endMarker.remove();
+            }
+
+            // FLUSSO STANDARD (Paragrafi, titoli o selezione che attraversa 2 o più punti elenco -> intero elenco)
             // Helper di risoluzione: individua il blocco top-level rispetto all'editor (risalendo i LI ai loro UL/OL)
             const getTopBlock = (node) => {
                 let curr = node.nodeType === 3 ? node.parentNode : node;

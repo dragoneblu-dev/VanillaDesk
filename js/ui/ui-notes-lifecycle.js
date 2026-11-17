@@ -4,17 +4,15 @@
  * Gestione essenziale del ciclo di vita della nota: Creazione, Selezione JIT su disco o IndexedDB,
  * Aggiornamento Real-time del contenuto/titolo e Cancellazione sicura nel Cestino.
  * Sincronizzazione atomica del titolo nell'header superiore su due righe (Workspace + Nota attiva).
- * FAST-PATH STESSA NOTA: Quando selectNote viene chiamata per la nota già aperta (es. tasto Apri su citazione
+ * Quando selectNote viene chiamata per la nota già aperta (es. tasto Apri su citazione
  * o link interno in-page), non distrugge il DOM ma esegue direttamente lo scroll verso l'elemento target
  * garantendo la dis-espansione degli antenati collassati.
- * AUTO-HEAL APERTURA NOTA (CASO C): Controllo mirato ultrarapido tramite regex (ZWS duplicati o intrappolati tra lettere)
- * per avviare la bonifica dei cuscinetti solo in presenza di reali anomalie, evitando scansioni inutili su widget legittimi.
- * FEAT BRANCH TRASH QUANTIFICATION (4A): Calcolo esatto delle sotto-note e dei soli database primari reali (escluse viste/pivot e citazioni).
- * FIX SUB-NOTE CLONING ROOT-CAUSE: Eliminata assegnazione prematura di currentNoteId in addNote e preservazione
- * della sincronicità contrattuale con bypass di syncWidgetsForNote sulle note bozza.
- * FEAT PER-NOTE SPELLCHECK APPLICATION: Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
- * FEAT RETURNING RECORD DISPATCH: Memorizzazione e innesco dell'evidenziazione temporanea sulla riga quando si torna indietro da una record note.
- * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
+ * Controllo mirato tramite regex all'apertura nota (ZWS duplicati o intrappolati tra lettere)
+ * per avviare la bonifica dei cuscinetti solo in presenza di reali anomalie.
+ * Calcolo esatto delle sotto-note e dei soli database primari reali (escluse viste/pivot e citazioni) su eliminazione ramo.
+ * Isolamento creazione sotto-note con bypass di syncWidgetsForNote sulle note bozza.
+ * Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
+ * Memorizzazione e innesco dell'evidenziazione temporanea sulla riga quando si torna indietro da una record note.
  */
 
 Object.assign(UI, {
@@ -236,9 +234,7 @@ Object.assign(UI, {
         if (rowSelector) rowSelector.classList.remove('visible');
 
         const contextBtn = document.getElementById('btnContextEdit');
-        const openBtn = document.getElementById('btnContextOpenLink');
         if (contextBtn) contextBtn.style.display = 'none';
-        if (openBtn) openBtn.style.display = 'none';
 
         if (typeof Editor !== 'undefined') {
             Editor.clearHistory();
@@ -425,7 +421,7 @@ Object.assign(UI, {
         if (contentEl) {
             contentEl.innerHTML = note.content || "<p><br></p>";
 
-            // CASO C: AUTO-GUARIGIONE SELETTIVA DEI CUSCINETTI ALL'APERTURA DELLA NOTA
+            // AUTO-GUARIGIONE SELETTIVA DEI CUSCINETTI ALL'APERTURA DELLA NOTA
             const rawMarkup = contentEl.innerHTML;
             if (rawMarkup && rawMarkup.includes('\u200B')) {
                 const hasZwsAnomaly = /\u200B{2,}|[a-zA-Z0-9À-ÿ]\u200B+[a-zA-Z0-9À-ÿ]/.test(rawMarkup);

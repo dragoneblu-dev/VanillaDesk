@@ -1,17 +1,39 @@
 /**
  * ui-minimap.js
  * Modulo isolato per il rendering e la gestione interattiva della Minimap Laterale.
- * FIX BUG DUPLICATE IDs: L'algoritmo di sync ora strappa via o rinomina tutti gli ID 
- * dal DOM clonato prima di agganciarlo alla minimappa, prevenendo i Warning 
- * del browser legati all'Autofill e preservando l'integrità strutturale dell'Editor primario.
- * FIX DEFENSIVO: toggle verifica la presenza degli elementi nel DOM prima di accedere a .classList.
- * FIX SYNC & DRAG PROPORTIONALITY: Risolto il disallineamento dello scorrimento e il ritardo del mouse
- * tramite calcolo cinematico unificato tra viewport visibile e scorrimento effettivo della pagina.
+ * L'algoritmo di sync converte gli ID dal DOM clonato in attributi data-mini-* prima
+ * di agganciarlo alla minimappa, prevenendo duplicazioni di ID e preservando l'Editor primario.
+ * La funzione toggle verifica la presenza degli elementi nel DOM prima di accedere a .classList.
+ * Posizionamento al click basato sul punto reale visibile sotto il puntatore e trascinamento
+ * proporzionale sullo slider esteso all'intero documento.
  */
 
 UI.Minimap = {
     scale: 0.1,
     _observer: null,
+
+    _getMetrics: (scrollArea, container) => {
+        const EH = scrollArea.scrollHeight;
+        const EV = scrollArea.clientHeight;
+        const ST = scrollArea.scrollTop;
+        const CH = container.clientHeight;
+        const scaleFactor = UI.Minimap.scale || 0.1;
+
+        const maxST = Math.max(0, EH - EV);
+        const scaledTotalHeight = EH * scaleFactor;
+        const trackHeight = CH > 0 ? Math.min(CH, scaledTotalHeight) : scaledTotalHeight;
+
+        let sliderHeight = EV * scaleFactor;
+        if (trackHeight > 0) {
+            if (sliderHeight < 24) sliderHeight = Math.min(24, trackHeight);
+            if (sliderHeight > trackHeight) sliderHeight = trackHeight;
+        }
+
+        const maxSliderTravel = Math.max(0, trackHeight - sliderHeight);
+        const maxMiniScroll = Math.max(0, scaledTotalHeight - CH);
+
+        return { EH, EV, ST, CH, scaleFactor, maxST, scaledTotalHeight, trackHeight, sliderHeight, maxSliderTravel, maxMiniScroll };
+    },
 
     toggle: () => {
         AppState.showMinimap = !AppState.showMinimap;
@@ -56,12 +78,14 @@ UI.Minimap = {
                 miniTitle.setAttribute('value', realTitle.value);
             }
             
-            // Imposta le dimensioni base 1:1 con l'editor reale
+            // Imposta le dimensioni e il layout 1:1 con l'editor reale (evita differenze di margin-collapse)
             const exactEditorWidth = editorArea.getBoundingClientRect().width || editorArea.clientWidth || 900;
             mini.style.width = exactEditorWidth + 'px';
             
             const compStyle = window.getComputedStyle(editorArea);
             mini.style.padding = compStyle.padding;
+            mini.style.display = 'flex';
+            mini.style.flexDirection = 'column';
             
             // Applica lo zoom ottico proporzionale
             const scaleFactor = container.clientWidth / exactEditorWidth;
@@ -85,50 +109,32 @@ UI.Minimap = {
         
         if (!editorScrollArea || !viewport || !container || !wrapper) return;
 
-        const scaleFactor = UI.Minimap.scale || 0.1;
-        
-        const EH = editorScrollArea.scrollHeight;
-        const EV = editorScrollArea.clientHeight;
-        const ST = editorScrollArea.scrollTop;
-        const CH = container.clientHeight;
+        const m = UI.Minimap._getMetrics(editorScrollArea, container);
 
-        const maxST = Math.max(0, EH - EV);
-
-        // Se l'editor non ha barre di scorrimento, il viewport copre l'intera altezza
-        if (maxST === 0) {
-            viewport.style.height = `${CH > 0 ? CH : Math.round(EV * scaleFactor)}px`;
+        // Se l'editor non ha barre di scorrimento, il viewport copre l'altezza reale del contenuto scalato
+        if (m.maxST === 0) {
+            viewport.style.height = `${Math.round(m.trackHeight)}px`;
             viewport.style.top = '0px';
-            wrapper.style.transform = `scale(${scaleFactor})`;
+            wrapper.style.transform = `scale(${m.scaleFactor})`;
             return;
         }
 
-        // Calcolo dell'altezza dello slider di anteprima (con guardia difensiva su CH > 0)
-        let sliderHeight = EV * scaleFactor;
-        if (CH > 0) {
-            if (sliderHeight < 24) sliderHeight = 24;
-            if (sliderHeight > CH) sliderHeight = CH;
-        }
-
-        viewport.style.height = `${Math.round(sliderHeight)}px`;
+        viewport.style.height = `${Math.round(m.sliderHeight)}px`;
 
         // Percentuale reale di scorrimento del documento (da 0 a 1)
-        const scrollPercent = ST / maxST;
+        const scrollPercent = m.ST / m.maxST;
 
-        // Corsa totale disponibile per lo slider visivo all'interno del container
         let sliderTopVis = 0;
-        if (CH > 0) {
-            const maxSliderTravel = Math.max(0, CH - sliderHeight);
-            sliderTopVis = scrollPercent * maxSliderTravel;
+        if (m.CH > 0) {
+            sliderTopVis = scrollPercent * m.maxSliderTravel;
 
             // Scorrimento del contenuto in miniatura per le pagine lunghe tramite traslazione fluida
-            const scaledTotalHeight = EH * scaleFactor;
-            const maxMiniScroll = Math.max(0, scaledTotalHeight - CH);
-            const currentMiniScroll = scrollPercent * maxMiniScroll;
-            wrapper.style.transform = `translateY(${-currentMiniScroll}px) scale(${scaleFactor})`;
+            const currentMiniScroll = scrollPercent * m.maxMiniScroll;
+            wrapper.style.transform = `translateY(${-currentMiniScroll}px) scale(${m.scaleFactor})`;
         } else {
             // Fallback lineare puro se il container non ha ancora altezza calcolata nel DOM (es. test headless)
-            sliderTopVis = ST * scaleFactor;
-            wrapper.style.transform = `scale(${scaleFactor})`;
+            sliderTopVis = m.ST * m.scaleFactor;
+            wrapper.style.transform = `scale(${m.scaleFactor})`;
         }
 
         viewport.style.top = `${Math.round(sliderTopVis)}px`;
@@ -163,38 +169,26 @@ UI.Minimap = {
             startDrag(e);
         });
 
-        // Click diretto sul container della minimappa per saltare istantaneamente alla posizione
+        // Click diretto sul container della minimappa: porta l'editor al punto reale visualizzato sotto il cursore
         container.addEventListener('mousedown', (e) => {
             if (e.target === viewport) return; 
 
-            const CH = container.clientHeight;
-            const EH = scrollArea.scrollHeight;
-            const EV = scrollArea.clientHeight;
-            const maxST = Math.max(0, EH - EV);
+            const m = UI.Minimap._getMetrics(scrollArea, container);
+            if (m.maxST <= 0) return;
 
-            if (maxST <= 0) return;
-
-            const scaleFactor = UI.Minimap.scale || 0.1;
-            let sliderHeight = EV * scaleFactor;
-            if (sliderHeight < 24) sliderHeight = 24;
-            if (sliderHeight > CH) sliderHeight = CH;
-
-            const maxSliderTravel = Math.max(0, CH - sliderHeight);
             const containerRect = container.getBoundingClientRect();
-            const clickY = e.clientY - containerRect.top;
+            const clickY = Math.max(0, Math.min(m.CH, e.clientY - containerRect.top));
 
-            // Centra il viewport sul punto cliccato
-            const targetSliderTop = clickY - (sliderHeight / 2);
-            const targetPercent = maxSliderTravel > 0 ? Math.max(0, Math.min(1, targetSliderTop / maxSliderTravel)) : 0;
+            const scrollPercent = m.ST / m.maxST;
+            const currentMiniScroll = m.CH > 0 ? scrollPercent * m.maxMiniScroll : 0;
 
-            scrollArea.scrollTop = targetPercent * maxST;
+            // Mappa il punto visibile cliccato nella minimappa alla corrispondente coordinata Y reale del documento
+            const realTargetY = (currentMiniScroll + clickY) / m.scaleFactor;
+            scrollArea.scrollTop = Math.max(0, Math.min(m.maxST, realTargetY - (m.EV / 2)));
+            UI.Minimap.updateViewport();
 
-            // Aggancia direttamente il drag continuo
-            startY = e.clientY;
-            startScrollTop = scrollArea.scrollTop;
-            isDragging = true;
-            document.body.style.cursor = 'grabbing';
-            e.preventDefault();
+            // Aggancia il trascinamento proporzionale continuo a partire dalla posizione raggiunta
+            startDrag(e);
         });
 
         // Inoltro della rotella del mouse dalla minimappa all'editor
@@ -206,25 +200,14 @@ UI.Minimap = {
         document.addEventListener('mousemove', (e) => {
             if (!isDragging) return;
 
-            const CH = container.clientHeight;
-            const EH = scrollArea.scrollHeight;
-            const EV = scrollArea.clientHeight;
-            const maxST = Math.max(0, EH - EV);
+            const m = UI.Minimap._getMetrics(scrollArea, container);
+            if (m.maxST <= 0) return;
 
-            if (maxST <= 0) return;
-
-            const scaleFactor = UI.Minimap.scale || 0.1;
-            let sliderHeight = EV * scaleFactor;
-            if (sliderHeight < 24) sliderHeight = 24;
-            if (sliderHeight > CH) sliderHeight = CH;
-
-            const maxSliderTravel = Math.max(0, CH - sliderHeight);
-
-            if (maxSliderTravel > 0) {
+            if (m.maxSliderTravel > 0) {
                 const deltaY = e.clientY - startY;
-                // Rapporto cinematico reale: muovere il mouse di N pixel muove lo slider di esattamente N pixel
-                const scrollDelta = deltaY * (maxST / maxSliderTravel);
-                scrollArea.scrollTop = Math.max(0, Math.min(maxST, startScrollTop + scrollDelta));
+                // Rapporto cinematico reale sull'intero documento: muovendo lo slider dall'inizio alla fine si scorre tutto il testo
+                const scrollDelta = deltaY * (m.maxST / m.maxSliderTravel);
+                scrollArea.scrollTop = Math.max(0, Math.min(m.maxST, startScrollTop + scrollDelta));
             }
         });
 

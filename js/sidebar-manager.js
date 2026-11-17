@@ -2,17 +2,13 @@
  * sidebar-manager.js
  * Modulo dedicato alla gestione visiva e al ridimensionamento dell'albero di navigazione.
  * Integra il motore SearchAutocomplete per filtrare le note tramite Tag e Proprietà di Pagina.
- * FEAT ROBUST QUERY HANDLING: SearchAutocomplete accetta ed elabora termini sia con prefisso '#'
- * che puri, lasciando al controller degli eventi la discrezione sull'apertura dell'overlay.
- * FEAT CSS-DRIVEN HEIGHT: L'altezza e lo scorrimento del menu a tendina sono interamente governati dal CSS
- * (.adv-filter-autocomplete { max-height: calc(100vh - 80px); }), evitando calcoli imperativi via JS.
- * FEAT FACETED CHIPS: Pillole dei filtri interattive con apertura menu a tendina sul corpo,
- * visualizzazione delle opzioni disponibili per proprietà e rimozione isolata su click della ✕.
- * FIX RELATION LABELS: Risoluzione semantica dei record collegati (nessun ID 'sys_r_*' esposto all'utente).
- * UX COMPACT PILL MENU: Spaziatura compatta ottimizzata (padding 2px 4px) per l'elenco delle opzioni a pillola.
- * FIX REATTIVITÀ PILLS: Invocazione diretta di renderPills() all'aggiunta e rimozione filtri.
- * FEAT EMPTY FILTER VALUE (*EMPTY*): Supporto al filtraggio per sole note senza tag/proprietà valorizzata.
- * FIX OBJECT OBJECT DISPLAY: Risoluzione corretta delle date con intervallo {start, end} e note_link evitando [object Object].
+ * SearchAutocomplete accetta ed elabora termini sia con prefisso '#' che puri, lasciando al
+ * controller degli eventi la discrezione sull'apertura dell'overlay.
+ * L'altezza e lo scorrimento del menu a tendina sono governati dal CSS (.adv-filter-autocomplete).
+ * Pillole dei filtri interattive con apertura menu a tendina sul corpo, visualizzazione delle
+ * opzioni disponibili per proprietà e rimozione isolata su click della ✕.
+ * Risoluzione semantica dei record collegati, date ad intervallo {start, end} e note_link.
+ * Supporto al filtraggio per sole note senza tag/proprietà valorizzata (*EMPTY*) o presenti (*EXISTS*).
  */
 
 const SidebarManager = {
@@ -72,6 +68,85 @@ const SidebarManager = {
 
     // MOTORE AUTOCOMPLETE E FILTRI A PILLOLA PER LA RICERCA LATERALE
     SearchAutocomplete: {
+
+        // Formatta valori composti di tipo Date Range o Note Link; restituisce null per altri tipi
+        _formatDateOrLinkValue: (col, val) => {
+            if (['date', 'datetime'].includes(col?.type) || (typeof val === 'object' && val !== null && (val.start !== undefined || val.end !== undefined))) {
+                if (typeof val === 'object' && val !== null) {
+                    if (val.start && val.end) return `${val.start} ➔ ${val.end}`;
+                    if (val.start) return val.start;
+                    if (val.end) return `➔ ${val.end}`;
+                    return '';
+                }
+                return String(val);
+            }
+            if (col?.type === 'note_link' || (typeof val === 'object' && val !== null && val.noteId !== undefined)) {
+                if (typeof val === 'object' && val !== null) {
+                    let linkTitle = val.title || '';
+                    if (!linkTitle && val.noteId && typeof Store !== 'undefined') {
+                        const tn = Store.getNote(val.noteId);
+                        if (tn) linkTitle = tn.title;
+                    }
+                    return linkTitle;
+                }
+                return String(val);
+            }
+            return null;
+        },
+
+        // Estrae in una Map (realValue -> displayValue) tutti i valori univoci presenti per una colonna di SYS_PROPERTIES_DB
+        _collectColumnValuesMap: (propsDb, col) => {
+            const uniqueValuesMap = new Map();
+
+            if (col.type === 'select' || col.type === 'multi-select') {
+                (propsDb.selectOptions?.[col.id] || []).forEach(v => {
+                    const sVal = String(v);
+                    uniqueValuesMap.set(sVal, sVal);
+                });
+            }
+
+            (propsDb.rows || []).forEach(r => {
+                const val = r?.cells?.[col.id];
+                if (val === undefined || val === null || val === '') return;
+
+                if (col.type === 'checkbox') {
+                    const boolLabel = val === true ? I18n.t('sidebar_filter.yes_checked') : I18n.t('sidebar_filter.no_empty');
+                    uniqueValuesMap.set(val === true, boolLabel);
+                } else if (col.type === 'relation' || col.type === 'relation_backlink') {
+                    if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.resolveRelationDetails === 'function') {
+                        AdvancedTable.resolveRelationDetails(col, val).forEach(item => {
+                            if (item.id && item.name && item.name !== 'Orfano') {
+                                uniqueValuesMap.set(item.id, item.name);
+                            }
+                        });
+                    }
+                } else {
+                    const formattedObj = SidebarManager.SearchAutocomplete._formatDateOrLinkValue(col, val);
+                    if (formattedObj !== null) {
+                        if (formattedObj) uniqueValuesMap.set(formattedObj, formattedObj);
+                    } else if (Array.isArray(val)) {
+                        val.forEach(v => {
+                            if (v !== undefined && v !== null && v !== '') {
+                                const sVal = String(v);
+                                uniqueValuesMap.set(sVal, sVal);
+                            }
+                        });
+                    } else {
+                        const sVal = String(val);
+                        uniqueValuesMap.set(sVal, sVal);
+                    }
+                }
+            });
+
+            return uniqueValuesMap;
+        },
+
+        _getOptionColorClass: (propsDb, col, realVal) => {
+            if (['select', 'multi-select'].includes(col.type) && propsDb.selectColors && propsDb.selectColors[col.id]) {
+                return propsDb.selectColors[col.id][realVal] || 'default-color';
+            }
+            return 'default-color';
+        },
         
         // Raccoglie tutte le corrispondenze presenti nel database di sistema per un determinato valore di tag
         getMatchesForTag: (cleanTag) => {
@@ -86,84 +161,17 @@ const SidebarManager = {
             propsDb.columns.forEach(col => {
                 if (col.id === 'sys_c_note') return;
 
-                let uniqueValuesMap = new Map();
-
-                if (col.type === 'select' || col.type === 'multi-select') {
-                    (propsDb.selectOptions[col.id] || []).forEach(v => {
-                        const sVal = String(v);
-                        uniqueValuesMap.set(sVal, sVal);
-                    });
-                }
-
-                propsDb.rows.forEach(r => {
-                    let val = r.cells[col.id];
-                    if (val === undefined || val === null || val === '') return;
-
-                    if (col.type === 'checkbox') {
-                        const boolLabel = val === true ? I18n.t('sidebar_filter.yes_checked') : I18n.t('sidebar_filter.no_empty');
-                        uniqueValuesMap.set(val === true, boolLabel);
-                    } else if (col.type === 'relation' || col.type === 'relation_backlink') {
-                        if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.resolveRelationDetails === 'function') {
-                            const details = AdvancedTable.resolveRelationDetails(col, val);
-                            details.forEach(item => {
-                                if (item.id && item.name && item.name !== 'Orfano') {
-                                    uniqueValuesMap.set(item.id, item.name);
-                                }
-                            });
-                        }
-                    } else if (['date', 'datetime'].includes(col.type) || (typeof val === 'object' && val !== null && (val.start !== undefined || val.end !== undefined))) {
-                        let dateDisplay = '';
-                        if (typeof val === 'object' && val !== null) {
-                            if (val.start && val.end) dateDisplay = `${val.start} ➔ ${val.end}`;
-                            else if (val.start) dateDisplay = val.start;
-                            else if (val.end) dateDisplay = `➔ ${val.end}`;
-                        } else {
-                            dateDisplay = String(val);
-                        }
-                        if (dateDisplay) {
-                            uniqueValuesMap.set(dateDisplay, dateDisplay);
-                        }
-                    } else if (col.type === 'note_link' || (typeof val === 'object' && val !== null && val.noteId)) {
-                        let linkTitle = '';
-                        if (typeof val === 'object' && val !== null) {
-                            linkTitle = val.title || '';
-                            if (!linkTitle && val.noteId && typeof Store !== 'undefined') {
-                                const tn = Store.getNote(val.noteId);
-                                if (tn) linkTitle = tn.title;
-                            }
-                        } else {
-                            linkTitle = String(val);
-                        }
-                        if (linkTitle) {
-                            uniqueValuesMap.set(linkTitle, linkTitle);
-                        }
-                    } else if (Array.isArray(val)) {
-                        val.forEach(v => {
-                            if (v !== undefined && v !== null && v !== '') {
-                                const sVal = String(v);
-                                uniqueValuesMap.set(sVal, sVal);
-                            }
-                        });
-                    } else {
-                        const sVal = String(val);
-                        uniqueValuesMap.set(sVal, sVal);
-                    }
-                });
+                const uniqueValuesMap = SidebarManager.SearchAutocomplete._collectColumnValuesMap(propsDb, col);
 
                 uniqueValuesMap.forEach((displayVal, realVal) => {
                     if (String(displayVal).toLowerCase() === lowerTag) {
-                        let colorClass = 'default-color';
-                        if (['select', 'multi-select'].includes(col.type) && propsDb.selectColors && propsDb.selectColors[col.id]) {
-                            colorClass = propsDb.selectColors[col.id][realVal] || 'default-color';
-                        }
-
                         matches.push({
                             type: 'value',
                             colId: col.id,
                             colName: col.name,
                             displayValue: displayVal,
                             realValue: realVal,
-                            colorClass: colorClass
+                            colorClass: SidebarManager.SearchAutocomplete._getOptionColorClass(propsDb, col, realVal)
                         });
                     }
                 });
@@ -193,7 +201,7 @@ const SidebarManager = {
             propsDb.columns.forEach(col => {
                 if (col.id === 'sys_c_note') return;
 
-                // 1. Ricerca sul NOME DELLA COLONNA (Filtro *EXISTS* e Filtro *EMPTY*)
+                // 1. Ricerca sul NOME DELLA COLONNA (Filtro *EXISTS*)
                 if (!lowerTerm || col.name.toLowerCase().includes(lowerTerm)) {
                     const isExistsActive = AppState.activePropertyFilters && AppState.activePropertyFilters.some(f => f.colId === col.id && f.realValue === '*EXISTS*');
                     if (!isExistsActive) {
@@ -208,84 +216,13 @@ const SidebarManager = {
                     }
                 }
 
-                // 2. Estrazione e risoluzione dei valori unici (con decodifica corretta di date e relazioni)
-                let uniqueValuesMap = new Map();
-                
-                if (col.type === 'select' || col.type === 'multi-select') {
-                    (propsDb.selectOptions[col.id] || []).forEach(v => {
-                        const sVal = String(v);
-                        uniqueValuesMap.set(sVal, sVal);
-                    });
-                }
+                // 2. Estrazione e ricerca sui valori risolti della colonna
+                const uniqueValuesMap = SidebarManager.SearchAutocomplete._collectColumnValuesMap(propsDb, col);
 
-                propsDb.rows.forEach(r => {
-                    let val = r.cells[col.id];
-                    if (val === undefined || val === null || val === '') return;
-                    
-                    if (col.type === 'checkbox') {
-                        const boolLabel = val === true ? I18n.t('sidebar_filter.yes_checked') : I18n.t('sidebar_filter.no_empty');
-                        uniqueValuesMap.set(val === true, boolLabel);
-                    } else if (col.type === 'relation' || col.type === 'relation_backlink') {
-                        // Risoluzione semantica degli ID: mostra i titoli e nasconde 'sys_r_*'
-                        if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.resolveRelationDetails === 'function') {
-                            const details = AdvancedTable.resolveRelationDetails(col, val);
-                            details.forEach(item => {
-                                if (item.id && item.name && item.name !== 'Orfano') {
-                                    uniqueValuesMap.set(item.id, item.name);
-                                }
-                            });
-                        }
-                    } else if (['date', 'datetime'].includes(col.type) || (typeof val === 'object' && val !== null && (val.start !== undefined || val.end !== undefined))) {
-                        // Riconoscimento ed estrazione semantica delle date ad intervallo
-                        let dateDisplay = '';
-                        if (typeof val === 'object' && val !== null) {
-                            if (val.start && val.end) dateDisplay = `${val.start} ➔ ${val.end}`;
-                            else if (val.start) dateDisplay = val.start;
-                            else if (val.end) dateDisplay = `➔ ${val.end}`;
-                        } else {
-                            dateDisplay = String(val);
-                        }
-                        if (dateDisplay) {
-                            uniqueValuesMap.set(dateDisplay, dateDisplay);
-                        }
-                    } else if (col.type === 'note_link' || (typeof val === 'object' && val !== null && val.noteId)) {
-                        // Riconoscimento ed estrazione semantica dei link alle note
-                        let linkTitle = '';
-                        if (typeof val === 'object' && val !== null) {
-                            linkTitle = val.title || '';
-                            if (!linkTitle && val.noteId && typeof Store !== 'undefined') {
-                                const tn = Store.getNote(val.noteId);
-                                if (tn) linkTitle = tn.title;
-                            }
-                        } else {
-                            linkTitle = String(val);
-                        }
-                        if (linkTitle) {
-                            uniqueValuesMap.set(linkTitle, linkTitle);
-                        }
-                    } else if (Array.isArray(val)) {
-                        val.forEach(v => {
-                            if (v !== undefined && v !== null && v !== '') {
-                                const sVal = String(v);
-                                uniqueValuesMap.set(sVal, sVal);
-                            }
-                        });
-                    } else {
-                        const sVal = String(val);
-                        uniqueValuesMap.set(sVal, sVal);
-                    }
-                });
-
-                // 3. Ricerca sui VALORI RISOLTI DELLA COLONNA
                 uniqueValuesMap.forEach((displayVal, realVal) => {
                     const strToSearch = String(displayVal).toLowerCase();
 
                     if (!lowerTerm || strToSearch.includes(lowerTerm)) {
-                        let colorClass = 'default-color';
-                        if (['select', 'multi-select'].includes(col.type) && propsDb.selectColors && propsDb.selectColors[col.id]) {
-                            colorClass = propsDb.selectColors[col.id][realVal] || 'default-color';
-                        }
-
                         const isAlreadyActive = AppState.activePropertyFilters && AppState.activePropertyFilters.some(f => f.colId === col.id && String(f.realValue) === String(realVal));
                         if (isAlreadyActive) return;
 
@@ -295,7 +232,7 @@ const SidebarManager = {
                             colName: col.name,
                             displayValue: displayVal,
                             realValue: realVal,
-                            colorClass: colorClass
+                            colorClass: SidebarManager.SearchAutocomplete._getOptionColorClass(propsDb, col, realVal)
                         });
                     }
                 });
@@ -330,7 +267,6 @@ const SidebarManager = {
 
             let html = `<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">${I18n.t('sidebar_filter.suggestions_title')}</div>`;
             
-            // Limitiamo a max 15 suggerimenti visivi
             suggestions.forEach((sug) => {
                 const safeDisplayValue = String(sug.displayValue).replace(/"/g, '&quot;').replace(/'/g, "\\'");
                 const safeRealValue = typeof sug.realValue === 'string' ? sug.realValue.replace(/"/g, '&quot;').replace(/'/g, "\\'") : sug.realValue;
@@ -525,7 +461,7 @@ const SidebarManager = {
                 } else {
                     options.forEach(opt => {
                         const isSelected = String(filter.realValue) === String(opt);
-                        const colorClass = propsDb.selectColors && propsDb.selectColors[col.id] ? propsDb.selectColors[col.id][opt] || 'default-color' : 'default-color';
+                        const colorClass = SidebarManager.SearchAutocomplete._getOptionColorClass(propsDb, col, opt);
                         menuItems.push({
                             label: `<span class="adv-select-pill ${colorClass}" style="margin:0; padding:2px 6px;">${String(opt).replace(/</g, '&lt;')}</span>` + (isSelected ? chk : ''),
                             onClick: () => {
@@ -594,28 +530,9 @@ const SidebarManager = {
                         let v = r.cells[filter.colId];
                         if (v === undefined || v === null || v === '') return;
 
-                        if (['date', 'datetime'].includes(col?.type) || (typeof v === 'object' && v !== null && (v.start !== undefined || v.end !== undefined))) {
-                            let dateDisplay = '';
-                            if (typeof v === 'object' && v !== null) {
-                                if (v.start && v.end) dateDisplay = `${v.start} ➔ ${v.end}`;
-                                else if (v.start) dateDisplay = v.start;
-                                else if (v.end) dateDisplay = `➔ ${v.end}`;
-                            } else {
-                                dateDisplay = String(v);
-                            }
-                            if (dateDisplay) distinctVals.set(dateDisplay, dateDisplay);
-                        } else if (col?.type === 'note_link' || (typeof v === 'object' && v !== null && v.noteId)) {
-                            let linkTitle = '';
-                            if (typeof v === 'object' && v !== null) {
-                                linkTitle = v.title || '';
-                                if (!linkTitle && v.noteId && typeof Store !== 'undefined') {
-                                    const tn = Store.getNote(v.noteId);
-                                    if (tn) linkTitle = tn.title;
-                                }
-                            } else {
-                                linkTitle = String(v);
-                            }
-                            if (linkTitle) distinctVals.set(linkTitle, linkTitle);
+                        const formattedObj = SidebarManager.SearchAutocomplete._formatDateOrLinkValue(col, v);
+                        if (formattedObj !== null) {
+                            if (formattedObj) distinctVals.set(formattedObj, formattedObj);
                         } else if (typeof v === 'object' && v !== null) {
                             const sVal = JSON.stringify(v);
                             distinctVals.set(sVal, sVal);

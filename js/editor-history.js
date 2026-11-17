@@ -2,24 +2,24 @@
  * EditorHistory.js
  * Mixin per Undo, Redo e Snapshot tracking con Tokenizzazione Immagini, Audio
  * e Re-Idratazione dello stato RAM di tutti i Widget complessi.
- * FIX UNDO/REDO CARET: Ripristino matematico e infallibile della posizione del cursore
- * per elenchi numerati, liste, blocchi di testo e intestazioni tramite marcatore di cronologia preservato.
+ * Ripristino matematico della posizione del cursore per elenchi numerati, liste, blocchi di testo,
+ * intestazioni e blocchi di codice (incluso il ripristino della posizione dopo taglio/cancellazione di selezioni estese).
  * Gestione sicura del DOM vivo: salvataggio coordinate anche per selezioni estese (drag & drop di testo)
  * con ripristino fedele del range, prevenendo il reset del cursore all'inizio della nota dopo Undo.
- * FIX DRAG & DROP UNDO: Parametro forcePush su saveSnapshot per bypassare il controllo di deduplicazione
+ * Parametro forcePush su saveSnapshot per bypassare il controllo di deduplicazione
  * durante le mutazioni asincrone da trascinamento testo, garantendo la creazione corretta del punto di ripristino.
- * FIX UNDO RECORD NOTE RESURRECTION: Al ripristino di uno snapshot di Undo/Redo, le note collegate (record_note)
+ * Al ripristino di uno snapshot di Undo/Redo, le note collegate (record_note)
  * che erano state messe nel cestino a seguito della cancellazione della riga vengono automaticamente de-archiviate
- * (rimozione di deletedAt), eliminando il paradosso dei puntatori "Pagina Orfana".
- * PERF B64 CACHING: Caching delle stringhe Base64 dei widget per evitare serializzazioni JSON e btoa() ridondanti
+ * (rimozione di deletedAt), eliminando i puntatori "Pagina Orfana".
+ * Caching delle stringhe Base64 dei widget per evitare serializzazioni JSON e btoa() ridondanti
  * durante la digitazione di testo ordinario, eliminando il micro-stuttering da Garbage Collector.
- * FIX CARET PRESERVATION: Rimozione del marcatore temporaneo con salvaguardia atomica del range attivo del browser,
+ * Rimozione del marcatore temporaneo con salvaguardia atomica del range attivo del browser,
  * prevenendo che lo snapshot automatico di inattività sposti il cursore a inizio blocco durante la navigazione.
- * FIX LIST CARET RECOVERY: Al ripristino Undo/Redo in prossimità di liste UL/OL, il cursore viene fatto atterrare
+ * Al ripristino Undo/Redo in prossimità di liste UL/OL, il cursore viene fatto atterrare
  * direttamente dentro il <li> della lista invece che su noteContent, eliminando la creazione di <p></p> parassiti da parte di Blink.
- * FIX MULTI-CELL HISTORY RESILIENCE: Depurazione automatica della classe transitoria .adv-cell-selected
+ * Depurazione automatica della classe transitoria .adv-cell-selected
  * dagli snapshot e azzeramento selettore TableManager.Selection al ripristino per garantire il funzionamento perfetto di Ctrl+Z e Ctrl+Y.
- * FIX SELECTION INTEGRITY & SMART FALLBACK: Preservazione assoluta della selezione attiva per comandi di formattazione (B, I, Colori)
+ * Preservazione assoluta della selezione attiva per comandi di formattazione (B, I, Colori)
  * e neutralizzazione del fallback a riga 1 mediante ancoraggio al blocco corrente su ripristino Undo.
  */
 Object.assign(Editor, {
@@ -253,43 +253,44 @@ Object.assign(Editor, {
 
         const sel = window.getSelection();
         if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-            // SICUREZZA DOM: Il marcatore viene inserito nel DOM vivo SOLO su cursore collassato.
-            // Quando la selezione è estesa (es. testo selezionato per grassetto o colore), non tocchiamo il DOM
-            // per preservare intatta la selezione attiva richiesta da document.execCommand e ColorManager.
-            if (sel.isCollapsed) {
-                const node = sel.anchorNode;
-                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-                
-                if (preNode) {
+            const node = sel.anchorNode;
+            const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+
+            if (preNode) {
+                // Nei blocchi codice l'offset è memorizzato come attributo sul wrapper: non modifica il DOM testuale né la selezione attiva
+                const range = sel.getRangeAt(0);
+                const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
+                const pos = Math.max(sPos, ePos);
+                activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                if (activeCodeBlockWrapper) {
+                    activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                    codeBlockCaret = true;
+                }
+            } else if (sel.isCollapsed) {
+                // SICUREZZA DOM: Il marcatore viene inserito nel DOM vivo SOLO su cursore collassato.
+                // Quando la selezione è estesa (es. testo selezionato per grassetto o colore), non tocchiamo il DOM
+                // per preservare intatta la selezione attiva richiesta da document.execCommand e ColorManager.
+                try {
                     const range = sel.getRangeAt(0);
-                    const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                    if (activeCodeBlockWrapper) {
-                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                        codeBlockCaret = true;
+                    origContainer = range.startContainer;
+                    origOffset = range.startOffset;
+
+                    const markerRange = range.cloneRange();
+                    markerRange.collapse(true);
+
+                    const marker = document.createElement('span');
+                    marker.id = 'history-undo-marker-temp';
+                    marker.style.display = 'none';
+
+                    markerRange.insertNode(marker);
+                    markerInserted = true;
+
+                    if (origContainer.nodeType === Node.TEXT_NODE) {
+                        secondPart = marker.nextSibling;
                     }
-                } else {
-                    try {
-                        const range = sel.getRangeAt(0);
-                        origContainer = range.startContainer;
-                        origOffset = range.startOffset;
-
-                        const markerRange = range.cloneRange();
-                        markerRange.collapse(true);
-
-                        const marker = document.createElement('span');
-                        marker.id = 'history-undo-marker-temp';
-                        marker.style.display = 'none';
-
-                        markerRange.insertNode(marker);
-                        markerInserted = true;
-
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
-                            secondPart = marker.nextSibling;
-                        }
-                    } catch (e) { 
-                        console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
-                    }
+                } catch (e) { 
+                    console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
                 }
             }
         }
@@ -412,7 +413,7 @@ Object.assign(Editor, {
                     if (!AppState.databases) AppState.databases = {};
                     AppState.databases[trueId] = stateObj;
 
-                    // FIX TRANSAZIONALITÀ UNDO: Ri-attivazione automatica delle note collegate soft-deleted
+                    // Ri-attivazione automatica delle note collegate soft-deleted
                     if (stateObj && Array.isArray(stateObj.columns) && Array.isArray(stateObj.rows)) {
                         const recordNoteCols = stateObj.columns.filter(c => c.type === 'record_note');
                         if (recordNoteCols.length > 0 && AppState.notes) {
@@ -606,39 +607,39 @@ Object.assign(Editor, {
 
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-                if (sel.isCollapsed) {
-                    const node = sel.anchorNode;
-                    const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-                    
-                    if (preNode) {
-                        const range = sel.getRangeAt(0);
-                        const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                        activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                        if (activeCodeBlockWrapper) {
-                            activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                            codeBlockCaret = true;
-                        }
-                    } else {
-                        try {
-                            const range = sel.getRangeAt(0);
-                            origContainer = range.startContainer;
-                            origOffset = range.startOffset;
+                const node = sel.anchorNode;
+                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
 
-                            const markerRange = range.cloneRange();
-                            markerRange.collapse(true);
-
-                            const marker = document.createElement('span');
-                            marker.id = 'history-undo-marker-temp';
-                            marker.style.display = 'none';
-
-                            markerRange.insertNode(marker);
-                            markerInserted = true;
-
-                            if (origContainer.nodeType === Node.TEXT_NODE) {
-                                secondPart = marker.nextSibling;
-                            }
-                        } catch (e) { }
+                if (preNode) {
+                    const range = sel.getRangeAt(0);
+                    const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                    const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
+                    const pos = Math.max(sPos, ePos);
+                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                    if (activeCodeBlockWrapper) {
+                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                        codeBlockCaret = true;
                     }
+                } else if (sel.isCollapsed) {
+                    try {
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
+                        const marker = document.createElement('span');
+                        marker.id = 'history-undo-marker-temp';
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
+                        markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
+                    } catch (e) { }
                 }
             }
 
@@ -712,39 +713,39 @@ Object.assign(Editor, {
 
             const sel = window.getSelection();
             if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-                if (sel.isCollapsed) {
-                    const node = sel.anchorNode;
-                    const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-                    
-                    if (preNode) {
-                        const range = sel.getRangeAt(0);
-                        const pos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                        activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                        if (activeCodeBlockWrapper) {
-                            activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                            codeBlockCaret = true;
-                        }
-                    } else {
-                        try {
-                            const range = sel.getRangeAt(0);
-                            origContainer = range.startContainer;
-                            origOffset = range.startOffset;
+                const node = sel.anchorNode;
+                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
 
-                            const markerRange = range.cloneRange();
-                            markerRange.collapse(true);
-
-                            const marker = document.createElement('span');
-                            marker.id = 'history-undo-marker-temp';
-                            marker.style.display = 'none';
-
-                            markerRange.insertNode(marker);
-                            markerInserted = true;
-
-                            if (origContainer.nodeType === Node.TEXT_NODE) {
-                                secondPart = marker.nextSibling;
-                            }
-                        } catch (e) { }
+                if (preNode) {
+                    const range = sel.getRangeAt(0);
+                    const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                    const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
+                    const pos = Math.max(sPos, ePos);
+                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                    if (activeCodeBlockWrapper) {
+                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
+                        codeBlockCaret = true;
                     }
+                } else if (sel.isCollapsed) {
+                    try {
+                        const range = sel.getRangeAt(0);
+                        origContainer = range.startContainer;
+                        origOffset = range.startOffset;
+
+                        const markerRange = range.cloneRange();
+                        markerRange.collapse(true);
+
+                        const marker = document.createElement('span');
+                        marker.id = 'history-undo-marker-temp';
+                        marker.style.display = 'none';
+
+                        markerRange.insertNode(marker);
+                        markerInserted = true;
+
+                        if (origContainer.nodeType === Node.TEXT_NODE) {
+                            secondPart = marker.nextSibling;
+                        }
+                    } catch (e) { }
                 }
             }
 

@@ -1,20 +1,14 @@
 /**
  * CodeHighlighter.js
  * Modulo per l'evidenziazione del codice e la gestione del componente Widget Code.
- * FIX SYNC: Aggiunta 'forceSyncAll' per garantire il salvataggio immediato in RAM 
- * bypassando il debounce prima che l'Editor minifichi il DOM, salvando i dati.
- * FIX CITAZIONI: Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
- * FEAT DOWNLOAD: Aggiunto pulsante nell'header per scaricare il codice in un file fisico con estensione dinamica.
- * FIX REFACTORING: Integrata la lingua "formula" per unificare l'evidenziazione sintattica dei database.
- * FEAT AUTO-DETECT & LANGUAGE CONSOLIDATION: Analizzatore euristico a punteggio (detectLanguage).
- * Al superamento della soglia minima (almeno 4 parole e un a capo), il linguaggio identificato viene
- * consolidato in modo definitivo (manualLanguage = true): il selettore si sposta sul linguaggio riconosciuto
- * e l'applicazione interrompe le scansioni continue durante la digitazione.
- * FEAT MANUAL LANGUAGE LOCK: La selezione esplicita di un linguaggio da menu (incluso Testo Semplice) blocca l'auto-rilevatore.
- * FEAT FLOATING STICKY ACTIONS & SCROLL RESTORATION: Visualizzazione automatica dei pulsanti "Copia" e icona di riduzione
- * ancorati in cima alla viewport quando l'intestazione scorre fuori vista, con riallineamento automatico della visuale
- * all'inizio del widget in caso di compressione di blocchi lunghi.
- * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
+ * Garantisce il salvataggio immediato in RAM tramite 'forceSyncAll' prima della minificazione DOM.
+ * Propagazione del blocco della modalità modifica (isEdit = false) per le citazioni.
+ * Pulsante nell'header per scaricare il codice in un file fisico con estensione dinamica.
+ * Supporto alla lingua "formula" per l'evidenziazione sintattica dei database.
+ * Analizzatore euristico a punteggio (detectLanguage): al superamento della soglia minima,
+ * il linguaggio identificato viene consolidato in modo definitivo (manualLanguage = true).
+ * La selezione esplicita di un linguaggio da menu (incluso Testo Semplice) blocca l'auto-rilevatore.
+ * Barra azioni fluttuante sticky (Copia e Riduci) con riallineamento automatico dello scroll alla compressione.
  */
 
 const CodeManager = {
@@ -343,14 +337,13 @@ const CodeManager = {
 
                 clearTimeout(CodeManager._typingTimer);
                 CodeManager._typingTimer = setTimeout(() => {
-                    if (AppState.isEditMode) {
+                    if (AppState.isEditMode && document.body.contains(e.target)) {
                         const sel = window.getSelection();
+                        const isFocusedInPre = sel && sel.rangeCount > 0 && e.target.contains(sel.anchorNode);
                         let caretPos = 0;
-                        if (sel.rangeCount > 0) {
+                        if (isFocusedInPre && typeof Editor._getCodeOffset === 'function') {
                             const range = sel.getRangeAt(0);
-                            if (typeof Editor._getCodeOffset === 'function') {
-                                caretPos = Editor._getCodeOffset(e.target, range.startContainer, range.startOffset);
-                            }
+                            caretPos = Editor._getCodeOffset(e.target, range.startContainer, range.startOffset);
                         }
 
                         // AUTO-RILEVAMENTO IN DIGITAZIONE:
@@ -380,7 +373,7 @@ const CodeManager = {
                         
                         CodeManager.highlightBlock(e.target);
                         
-                        if (typeof Editor._setCodeOffset === 'function' && caretPos > 0) {
+                        if (isFocusedInPre && typeof Editor._setCodeOffset === 'function') {
                             Editor._setCodeOffset(e.target, caretPos, caretPos);
                         }
                         Store.triggerAutoSave();

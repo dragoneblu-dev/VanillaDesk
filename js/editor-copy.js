@@ -5,10 +5,9 @@
  * - Algoritmo lineare a blocchi leaf per estrazione plainText con corrispondenza 1:1 delle righe vuote.
  * - Ricostruzione deterministica degli stili antenati (b, i, u, s, code, link e classi VanillaDesk) per selezioni parziali.
  * - Serializzazione tabulare TSV pulita per fogli di calcolo.
- * - Riconoscimento blocchi di codice per esportazione pulita senza tag parassiti.
+ * - Riconoscimento blocchi di codice per esportazione pulita senza tag parassiti e ripristino esatto del cursore su taglio.
  * - Pulizia elementi di servizio e maniglie UI nel frammento clonato.
- * - FIX CUT PARAGRAPH MERGE (2.1): Sostituzione di range.deleteContents() con comando di cancellazione controllata
- *   per fondere regolarmente i blocchi intersecati durante il taglio (Ctrl+X) senza lasciare tag <p></p> orfani.
+ * - Cancellazione controllata su taglio per fondere regolarmente i blocchi intersecati senza lasciare tag <p></p> orfani.
  */
 
 Object.assign(Editor, {
@@ -25,7 +24,7 @@ Object.assign(Editor, {
 
             const range = sel.getRangeAt(0);
             
-            // Se sto copiando dentro un blocco codice, 
+            // Se sto copiando o tagliando dentro un blocco codice, 
             // formatto come testo puro ignorando gli spazi di formattazione HTML.
             const anchorNode = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode;
             const codeBlock = anchorNode.closest('.code-content');
@@ -48,11 +47,33 @@ Object.assign(Editor, {
                 
                 e.clipboardData.setData('text/plain', plainText);
                 
-                // Rimuoviamo fisicamente se stiamo "Tagliando" (Cut)
-                if (e.type === 'cut') {
+                // Rimuoviamo fisicamente se stiamo "Tagliando" (Cut) in area editabile, preservando il cursore e la RAM
+                if (e.type === 'cut' && (typeof AppState === 'undefined' || AppState.isEditMode) && codeBlock.isContentEditable) {
+                    Editor.isTyping = false;
+                    clearTimeout(Editor.typingTimer);
                     Editor.saveSnapshot();
-                    document.execCommand('delete', false, null);
-                    if (typeof CodeManager !== 'undefined') CodeManager.highlightBlock(codeBlock, true);
+                    const sPos = Editor._getCodeOffset ? Editor._getCodeOffset(codeBlock, range.startContainer, range.startOffset) : 0;
+                    const ePos = Editor._getCodeOffset ? Editor._getCodeOffset(codeBlock, range.endContainer, range.endOffset) : 0;
+                    const startPos = Math.min(sPos, ePos);
+                    const endPos = Math.max(sPos, ePos);
+
+                    let rawText = Editor._getRawText ? Editor._getRawText(codeBlock) : (codeBlock.innerText || '');
+                    if (rawText.endsWith('\n')) rawText = rawText.slice(0, -1);
+                    const newText = rawText.substring(0, startPos) + rawText.substring(endPos);
+
+                    if (typeof CodeManager !== 'undefined') {
+                        clearTimeout(CodeManager._typingTimer);
+                        CodeManager.highlightBlock(codeBlock, true, newText);
+                        if (typeof CodeManager.forceSyncAll === 'function') {
+                            CodeManager.forceSyncAll();
+                        }
+                    } else {
+                        codeBlock.textContent = newText;
+                    }
+
+                    if (Editor._setCodeOffset) {
+                        Editor._setCodeOffset(codeBlock, Math.min(startPos, newText.length), Math.min(startPos, newText.length));
+                    }
                     Store.triggerAutoSave();
                 }
                 return;

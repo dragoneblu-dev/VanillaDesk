@@ -2,6 +2,7 @@
  * button-manager-ui.js
  * Interfaccia di configurazione dei Pulsanti Programmabili.
  * Sincronizzazione atomica degli ID database per la generazione dei Prompt AI.
+ * FEAT BUTTON COMMENT: Aggiunto campo opzionale per inserire commenti/tooltip sui pulsanti macro.
  */
 
 Object.assign(ButtonManager, {
@@ -95,6 +96,10 @@ Object.assign(ButtonManager, {
         });
         colorSwatchesHtml += `</div>`;
 
+        const safeComment = UI.escapeHTML(btnState.comment || '');
+        const commentLabel = I18n.t('buttons.btn_comment_label');
+        const commentPlaceholder = I18n.t('buttons.btn_comment_placeholder');
+
         let html = `
             <div style="display:flex; justify-content:flex-end; align-items:center; margin-bottom:5px;">
                 <button class="adv-icon-btn danger" style="background: rgba(239,68,68,0.1);" onclick="ButtonManager.deleteButtonFromBar('${barId}', '${btnId}')" title="Elimina questo pulsante">${Icons.trash} Elimina Pulsante</button>
@@ -115,6 +120,9 @@ Object.assign(ButtonManager, {
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">Etichetta Pulsante:</label>
                     <input type="text" id="btnConfigLabel" class="modern-input" style="width:100%;" value="${(btnState.label || '').replace(/"/g, '&quot;')}" placeholder="Testo visibile... (Es: Completa Ordine o =Formula)" oninput="if (ButtonManager._draftBtnState) ButtonManager._draftBtnState.label = this.value;">
                     
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); margin-top:5px;">${commentLabel}</label>
+                    <textarea id="btnConfigComment" class="modern-input" rows="2" style="width:100%; resize:vertical; min-height:50px; font-family:inherit; font-size:0.85rem;" placeholder="${commentPlaceholder}" oninput="if (ButtonManager._draftBtnState) ButtonManager._draftBtnState.comment = this.value;">${safeComment}</textarea>
+
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary); margin-top:5px;">Colore Pulsante:</label>
                     ${colorSwatchesHtml}
                     
@@ -339,6 +347,10 @@ Object.assign(ButtonManager, {
             if (labelEl && ButtonManager._draftBtnState) {
                  ButtonManager._draftBtnState.label = labelEl.value.trim();
             }
+            const commentEl = document.getElementById('btnConfigComment');
+            if (commentEl && ButtonManager._draftBtnState) {
+                 ButtonManager._draftBtnState.comment = commentEl.value;
+            }
             const barId = ButtonManager._draftBarId;
             const btnState = ButtonManager._draftBtnState;
             if (!barId || !btnState) return;
@@ -357,6 +369,9 @@ Object.assign(ButtonManager, {
         
         const labelEl = document.getElementById('btnConfigLabel');
         if (labelEl) btnState.label = labelEl.value.trim();
+
+        const commentEl = document.getElementById('btnConfigComment');
+        if (commentEl) btnState.comment = commentEl.value.trim();
 
         btnState.actionBlocks = [];
         

@@ -6,6 +6,7 @@
  * - UI Drawer di configurazione visuale blocchi, azioni SET e filtri WHERE (openButtonColConfig, _renderButtonColBuilder)
  * - Gestione campi opacità, formule ed email
  * - Sincronizzazione reattiva immediata della vista record (Drawer) a seguito dell'esecuzione macro
+ * - FEAT BUTTON COMMENT: Campo commento/tooltip opzionale posizionato tra etichetta e colore del pulsante.
  */
 
 Object.assign(AdvancedTable, {
@@ -79,6 +80,10 @@ Object.assign(AdvancedTable, {
         if (labelEl && AdvancedTable._tempColButtonConfig) {
              AdvancedTable._tempColButtonConfig.config.buttonLabel = labelEl.value;
         }
+        const commentEl = document.getElementById('btnConfigComment');
+        if (commentEl && AdvancedTable._tempColButtonConfig) {
+             AdvancedTable._tempColButtonConfig.config.buttonComment = commentEl.value;
+        }
         AdvancedTable._renderButtonColBuilder();
     },
 
@@ -112,6 +117,7 @@ Object.assign(AdvancedTable, {
         const dbList = AutomationUIBuilder.getAvailableDatabases();
         const isAestheticOpen = window._openAesthetic !== undefined ? window._openAesthetic : true;
         const labelValue = config.buttonLabel !== undefined ? config.buttonLabel : '';
+        const commentValue = config.buttonComment !== undefined ? config.buttonComment : '';
 
         const buttonColors = [
             { val: '#2563eb', name: I18n.t('adv_actions.btn_color_blue') },
@@ -150,6 +156,9 @@ Object.assign(AdvancedTable, {
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_label_label')}</label>
                     <input type="text" id="btnConfigLabel" class="modern-input" style="width:100%; margin-bottom: 10px;" value="${labelValue.replace(/"/g, '&quot;')}" placeholder="Pulsante Macro" oninput="if(AdvancedTable._tempColButtonConfig) AdvancedTable._tempColButtonConfig.config.buttonLabel = this.value;">
                     
+                    <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_comment_label')}</label>
+                    <textarea id="btnConfigComment" class="modern-input" rows="2" style="width:100%; margin-bottom: 10px; resize:vertical; min-height:50px; font-family:inherit; font-size:0.85rem;" placeholder="${I18n.t('adv_actions.btn_comment_placeholder')}" oninput="if(AdvancedTable._tempColButtonConfig) AdvancedTable._tempColButtonConfig.config.buttonComment = this.value;">${UI.escapeHTML(commentValue)}</textarea>
+
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-primary);">${I18n.t('adv_actions.btn_color_label')}</label>
                     ${colorSwatchesHtml}
                     
@@ -327,7 +336,9 @@ Object.assign(AdvancedTable, {
         let targetCol = state.columns.find(c => c.id === colId);
         if (targetCol) {
             const labelInput = document.getElementById('btnConfigLabel');
+            const commentInput = document.getElementById('btnConfigComment');
             targetCol.buttonLabel = labelInput ? labelInput.value : (config.buttonLabel !== undefined ? config.buttonLabel : '');
+            targetCol.buttonComment = commentInput ? commentInput.value.trim() : (config.buttonComment !== undefined ? String(config.buttonComment).trim() : '');
             targetCol.buttonColor = config.buttonColor || '#2563eb';
             targetCol.requireConfirm = config.requireConfirm;
             targetCol.actionBlocks = JSON.parse(JSON.stringify(config.actionBlocks));

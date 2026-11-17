@@ -9,6 +9,7 @@
  * - Motore di coordinate lineare per codice e testo con tag BR (_getCodeOffset, _setCodeOffset, _getRawText).
  * - Espulsione dalla zona morta del cuscinetto \u200B (adjustCaretAwayFromZwsDeadZone).
  * - Posizionamento O(1) post-widget inline (setCaretAfterInlineElement).
+ * - Accompagnamento visivo automatico dello scorrimento verticale durante la digitazione (ensureCaretVisible).
  */
 
 Object.assign(Editor, {
@@ -38,6 +39,55 @@ Object.assign(Editor, {
             node.classList.contains('snippet-copy-btn')
         ))
     ),
+
+    // Mantiene la riga corrente del cursore sempre visibile dentro #editorScrollContent
+    // anche durante il word-wrap automatico di frasi molto lunghe.
+    ensureCaretVisible: () => {
+        if (typeof AppState === 'undefined' || !AppState.isEditMode) return;
+        const activeEl = document.activeElement;
+        if (activeEl && ['INPUT', 'TEXTAREA', 'SELECT'].includes(activeEl.tagName)) return;
+
+        const editorEl = document.getElementById('noteContent');
+        const scrollArea = document.getElementById('editorScrollContent');
+        if (!editorEl || !scrollArea || scrollArea.scrollHeight <= scrollArea.clientHeight) return;
+
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount) return;
+
+        const focusNode = sel.focusNode;
+        const focusOffset = sel.focusOffset;
+        if (!focusNode || !editorEl.contains(focusNode)) return;
+
+        let rect = null;
+        try {
+            const r = document.createRange();
+            r.setStart(focusNode, focusOffset);
+            r.collapse(true);
+            const bRect = r.getClientRects()[0] || r.getBoundingClientRect();
+            if (bRect && bRect.height > 0 && (bRect.top !== 0 || bRect.bottom !== 0)) {
+                rect = bRect;
+            } else if (focusNode.nodeType === 3 && focusOffset > 0) {
+                const probe = document.createRange();
+                probe.setStart(focusNode, focusOffset - 1);
+                probe.setEnd(focusNode, focusOffset);
+                const pRect = probe.getBoundingClientRect();
+                if (pRect.height > 0) rect = pRect;
+            } else if (focusNode.nodeType === 1 && focusNode !== editorEl) {
+                const elRect = focusNode.getBoundingClientRect();
+                if (elRect.height > 0 && elRect.height < scrollArea.clientHeight) rect = elRect;
+            }
+        } catch (_) { return; }
+
+        if (!rect) return;
+
+        const scrollRect = scrollArea.getBoundingClientRect();
+        const margin = 28;
+        if (rect.bottom > scrollRect.bottom - margin) {
+            scrollArea.scrollTop += Math.ceil(rect.bottom - (scrollRect.bottom - margin));
+        } else if (rect.top < scrollRect.top + 20) {
+            scrollArea.scrollTop = Math.max(0, scrollArea.scrollTop - Math.ceil((scrollRect.top + 20) - rect.top));
+        }
+    },
 
     // Corregge la posizione del cursore se è intrappolato nella zona morta tra la shell inline e il suo cuscinetto \u200B
     adjustCaretAwayFromZwsDeadZone: () => {

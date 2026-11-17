@@ -33,6 +33,8 @@
  * FEAT AUTOINCREMENT: Generazione progressiva ID per addRow, duplicateRecord, createRecordAtDate e backfill per addColumn.
  * FEAT SMART RECORD NOTE DUPLICATION: Ispezione complessità note collegate (_isNoteComplexForDuplication), duplicazione
  * trasparente per note semplici con clonazione proprietà SYS_PROPERTIES_DB, e conferma con svuotamento campo per note complesse.
+ * FEAT INSTANT RENAME ON ADD COLUMN: Apertura automatica del menu colonna con focus e selezione del nome
+ * subito dopo la creazione di nuovi campi standard.
  * REFACTOR I18N: Tutte le stringhe utente, alert, menu paginazione e tipi di dato sono tradotte con I18n.
  */
 
@@ -891,6 +893,10 @@ Object.assign(AdvancedTable, {
         Store.triggerAutoSave();
         AdvancedTable.closeDropdowns(true);
 
+        if (realTableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
+            AdvancedTable.openRecordView(tableId, AdvancedTable.activeRecordId);
+        }
+
         if (type === 'relation') {
             AdvancedTable.openRelationConfig(realTableId, newColId);
         } else if (type === 'rollup') {
@@ -899,10 +905,32 @@ Object.assign(AdvancedTable, {
             AdvancedTable.editFormula(realTableId, newColId);
         } else if (type === 'button') {
             AdvancedTable.openButtonColConfig(realTableId, newColId);
-        }
-        
-        if (realTableId === 'SYS_PROPERTIES_DB' && AdvancedTable.activeRecordId) {
-            AdvancedTable.openRecordView(tableId, AdvancedTable.activeRecordId);
+        } else {
+            // Apertura differita del menu colonna con focus e selezione immediata del nome
+            // (dopo il ciclo sincrono di chiusura menu di UI.Menu)
+            setTimeout(() => {
+                if (typeof AdvancedTableColumnMenus === 'undefined') return;
+
+                let targetAnchorId = `adv-th-${tableId}-${newColId}`;
+                if (!document.getElementById(targetAnchorId)) {
+                    const drawerPropEl = document.getElementById(`drawer-prop-${newColId}`);
+                    if (drawerPropEl) {
+                        const hiddenDetails = drawerPropEl.closest('.adv-hidden-fields-details');
+                        if (hiddenDetails && !hiddenDetails.hasAttribute('open')) {
+                            hiddenDetails.setAttribute('open', 'true');
+                        }
+                        targetAnchorId = drawerPropEl.id;
+                    } else if (document.getElementById(`adv-th-add-${tableId}`)) {
+                        targetAnchorId = `adv-th-add-${tableId}`;
+                    } else if (document.getElementById(`adv-opt-btn-${tableId}`)) {
+                        targetAnchorId = `adv-opt-btn-${tableId}`;
+                    }
+                }
+
+                if (document.getElementById(targetAnchorId)) {
+                    AdvancedTableColumnMenus.openColMenu(null, tableId, newColId, true, targetAnchorId);
+                }
+            }, 30);
         }
     },
 

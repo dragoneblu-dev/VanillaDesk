@@ -2,31 +2,23 @@
  * editor-keyboard-mutations.js
  * Sottomodulo di Editor.
  * Responsabilità: Intercettazione di tasti che distruggono o creano nodi complessi
- * FIX CANCELLAZIONE WIDGET INTERNI: Aggiunto controllo di identità tra widget corrente 
- * e widget bersaglio per permettere l'uso dei tasti Canc e Backspace all'interno delle aree editabili (Es. Colonne).
- * FIX MERGE INLINE WIDGETS: Intercettazione chirurgica della fusione dei paragrafi tramite Backspace/Canc
- * utilizzando un DOM TreeWalker assoluto per scavalcare correttamente i confini delle liste (UL/OL) 
+ * Controllo di identità tra widget corrente e widget bersaglio per permettere l'uso dei tasti Canc e Backspace
+ * all'interno delle aree editabili (Es. Colonne).
+ * Intercettazione chirurgica della fusione dei paragrafi tramite Backspace/Canc
+ * utilizzando un DOM TreeWalker assoluto per scavalcare correttamente i confini delle liste (UL/OL)
  * proteggendo gli appunti inline e gli snippet copiabili dalla distruzione nativa del browser.
- * CANCELLAZIONE SNIPPET LINEARE: Eliminazione atomica e fluida dello snippet copiabile su Backspace/Canc
- * senza popup bloccanti o over-engineering, con pieno supporto al ripristino istantaneo tramite Undo (Ctrl+Z).
- * CANCELLAZIONE DIRETTA HR: Cancellazione immediata di <hr> se precede il blocco su Backspace o se segue su Canc.
- * SALVAGUARDIA WIDGET DA TASTIERA & FLASH BORDO ROSSO (500ms): Impedisce l'eliminazione accidentale dei widget
- * complessi tramite Backspace e Canc e preserva le righe vuote di separazione, mostrando un contorno rosso animato
- * sul widget protetto che scompare automaticamente dopo mezzo secondo.
- * SALVAGUARDIA BLOCCO MINIMO: Impedisce lo svuotamento totale dell'editor su cancellazione dell'ultimo blocco vuoto.
- * RESET EREDITÀ FORMATTAZIONE: Disattivazione automatica del comando bold residuo all'uscita dai titoli H1..H6 con Invio.
- * FIX AUTOSAVE DELETE/CANC: Parità operativa tra Backspace e Delete con salvataggio automatico (Store.triggerAutoSave)
- * preservando il blocco di sicurezza per i widget inline (.adv-inline-shell).
- * REFACTOR UNIFIED SELECTION DELETION: Centralizzazione della cancellazione di selezioni estese in deleteSelection(e),
- * eliminando codice duplicato e gestendo in modo omogeneo tabelle, blocchi di codice e testo normale.
- * FIX DELETE BOUNDARY (POST-RANGE): Calcolo esatto di isAtEnd tramite postRange sull'intero blocco genitore,
- * impedendo che Canc a fine di un tag inline (es. <b>) scavalchi caratteri successivi dello stesso paragrafo.
- * PREVENT LINK SPLIT ON ENTER: Riposizionamento del cursore subito dopo il tag <a> prima che l'Invio nativo
- * possa clonare il link sulla nuova riga, eliminando sdoppiamenti alla radice senza pezze a posteriori.
- * FIX CHECKLIST BACKSPACE CRASH & CARET BOUNDARY (2.2): Calcolo protetto di isAtChecklistStart con span.contains()
- * per prevenire eccezioni IndexSizeError e garantire la conversione pulita del primo elemento to-do in paragrafo.
- * FIX MEDIA DELETION GUARD: Esclusione dei blocchi contenenti immagini, audio, iframe, hr o widget inline
- * dalla rimozione automatica di righe vuote in handleBackspaceKey e handleDeleteKey.
+ * Eliminazione atomica e fluida dello snippet copiabile su Backspace/Canc con supporto Undo (Ctrl+Z).
+ * Cancellazione immediata di <hr> se precede il blocco su Backspace o se segue su Canc.
+ * Salvaguardia dei widget complessi da Backspace/Canc e flash bordo rosso (500ms).
+ * Impedisce lo svuotamento totale dell'editor su cancellazione dell'ultimo blocco vuoto.
+ * Disattivazione automatica del comando bold residuo all'uscita dai titoli H1..H6 con Invio.
+ * Parità operativa tra Backspace e Delete con salvataggio automatico.
+ * Centralizzazione della cancellazione di selezioni estese in deleteSelection(e).
+ * Calcolo esatto di isAtEnd tramite postRange sull'intero blocco genitore.
+ * Riposizionamento del cursore subito dopo il tag <a> prima che l'Invio nativo possa clonare il link.
+ * Calcolo protetto di isAtChecklistStart con span.contains() per prevenire IndexSizeError.
+ * Esclusione dei blocchi contenenti immagini, audio, iframe, hr o widget inline dalla rimozione automatica di righe vuote.
+ * Uscita pulita con Invio su riga vuota anche quando il blockquote risiede dentro un punto elenco (<li>).
  */
 
 Object.assign(Editor, {
@@ -361,7 +353,8 @@ Object.assign(Editor, {
         // --- GESTIONE INVIO SU BLOCKQUOTE: DOPPIO INVIO SU RIGA VUOTA PER USCIRE ---
         const quoteBlock = node.closest('blockquote:not(.adv-widget-shell)');
         if (quoteBlock) {
-            const currentBlock = node.closest('p, div, li') || quoteBlock;
+            const candidateBlock = node.closest('p, div');
+            const currentBlock = (candidateBlock && quoteBlock.contains(candidateBlock)) ? candidateBlock : quoteBlock;
             const isEmptyLine = currentBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' && !currentBlock.querySelector('img, audio, iframe');
 
             // Se la riga attuale è vuota, scatta l'uscita dalla citazione
@@ -369,27 +362,46 @@ Object.assign(Editor, {
                 e.preventDefault();
                 Editor.saveSnapshot();
 
-                if (currentBlock !== quoteBlock) {
+                if (currentBlock !== quoteBlock && quoteBlock.contains(currentBlock)) {
                     currentBlock.remove();
                 }
 
-                const p = document.createElement('p');
-                p.innerHTML = '<br>';
-                quoteBlock.parentNode.insertBefore(p, quoteBlock.nextSibling);
+                const parentHost = quoteBlock.parentElement;
+                const isInsideListHost = parentHost && (parentHost.tagName === 'LI' || (parentHost.classList && parentHost.classList.contains('checklist-text')));
 
-                // Se l'intero blockquote è rimasto vuoto, lo ripulisce
-                if (quoteBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' && !quoteBlock.querySelector('img, audio, iframe')) {
-                    quoteBlock.remove();
+                if (isInsideListHost) {
+                    // Se il blockquote risiede dentro un punto elenco, esce dalla citazione restando nel flusso del <li>
+                    const br = document.createElement('br');
+                    parentHost.insertBefore(br, quoteBlock.nextSibling);
+
+                    if (quoteBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' && !quoteBlock.querySelector('img, audio, iframe')) {
+                        quoteBlock.remove();
+                    }
+
+                    const newRange = document.createRange();
+                    newRange.setStartAfter(br);
+                    newRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                } else {
+                    const p = document.createElement('p');
+                    p.innerHTML = '<br>';
+                    quoteBlock.parentNode.insertBefore(p, quoteBlock.nextSibling);
+
+                    // Se l'intero blockquote è rimasto vuoto, lo ripulisce
+                    if (quoteBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() === '' && !quoteBlock.querySelector('img, audio, iframe')) {
+                        quoteBlock.remove();
+                    }
+
+                    const newRange = document.createRange();
+                    newRange.setStart(p, 0);
+                    newRange.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
                 }
 
-                const newRange = document.createRange();
-                newRange.setStart(p, 0);
-                newRange.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(newRange);
-
                 Store.triggerAutoSave();
-                Editor.updateToolbarFormatting();
+                if (typeof Editor.updateToolbarFormatting === 'function') Editor.updateToolbarFormatting();
                 return;
             }
         }
@@ -422,7 +434,7 @@ Object.assign(Editor, {
         const closestLi = node.closest('li');
         const closestList = closestLi ? closestLi.parentElement : null;
 
-        if (closestList && closestList.classList.contains('adv-checklist')) {
+        if (closestList && closestList.classList.contains('adv-checklist') && !quoteBlock) {
             e.preventDefault();
             Editor.saveSnapshot();
 
@@ -589,7 +601,7 @@ Object.assign(Editor, {
         const closestLi = container.nodeType === 3 ? container.parentNode.closest('li') : (container.closest ? container.closest('li') : null);
         const closestList = closestLi ? closestLi.parentElement : null;
 
-        // GESTIONE CHECKLIST ROBUSTA (2.2): calcolo protetto di isAtChecklistStart per prevenire IndexSizeError
+        // GESTIONE CHECKLIST ROBUSTA: calcolo protetto di isAtChecklistStart per prevenire IndexSizeError
         if (closestList && closestList.classList.contains('adv-checklist')) {
             const span = closestLi.querySelector('span.checklist-text');
             let isAtChecklistStart = false;
@@ -1048,7 +1060,7 @@ Object.assign(Editor, {
                     return;
                 }
 
-                // GUARDIA DIFENSIVA ORIGINALE INTEGRALE:
+                // GUARDIA DIFENSIVA INTEGRALE:
                 // Se il nodo successivo contiene un widget inline (come un appunto o snippet),
                 // il merge nativo del browser distruggerebbe i tag contenteditable=false. Lo uniamo manualmente!
                 if (nextNode && ['P', 'DIV', 'LI', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextNode.tagName) && nextNode.querySelector('.adv-inline-shell')) {

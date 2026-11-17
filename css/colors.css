@@ -104,7 +104,7 @@
 .btn-color-bar.tx-c9 { background-color: var(--tx-c9); }
 .btn-color-bar.tx-c10 { background-color: var(--tx-c10); }
 
-/* FIX: Freccia rimpicciolita per rubare meno spazio in Toolbar */
+/* Freccia rimpicciolita per rubare meno spazio in Toolbar */
 .btn-color-arrow {
     padding: 0;
     width: 14px; /* Dimensione ridotta e fissa */
@@ -140,7 +140,7 @@
 
 .color-dropdown-title { font-size: 0.75rem; color: var(--text-secondary); margin-bottom: 4px; }
 
-/* FIX: 5 Colonne x 2 Righe per 10 Colori */
+/* 5 Colonne x 2 Righe per 10 Colori */
 .color-palette-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; }
 
 .color-option { width: 20px; height: 20px; border-radius: 3px; border: 1px solid rgba(0,0,0,0.1); cursor: pointer; }
@@ -148,9 +148,8 @@
 
 .btn-remove-color { width: 100%; text-align: left; background: transparent; border: 1px solid var(--border-color); font-size: 0.8rem; padding: 4px; margin-top: 5px; cursor: pointer; color: var(--text-primary); }
 .btn-remove-color:hover { background: var(--item-hover); }
-.hidden { display: none !important; }
 
-/* Aggiungi questo alla fine del file per gestire il "Non Colore" sbarrato */
+/* Gestione del "Non Colore" sbarrato */
 .color-swatch.bg-none {
     position: relative;
     background-color: transparent !important;

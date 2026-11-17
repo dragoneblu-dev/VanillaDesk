@@ -4,10 +4,9 @@
  * Funzioni di supporto, formattazione, Breadcrumb e segnalibri della Nota (Utilities).
  * Integrazione del badge Cestino nel breadcrumb per le note eliminate e marcatura dirty su toggle preferiti.
  * Aggiunta voce "Modifica Sorgente HTML..." nel menu contestuale della nota.
- * FEAT BADGE CONTATORI HEADER: Calcolo e rendering pillole [N] per Proprietà (🏷️) e Backlinks (ℹ️).
- * FEAT HEADER PROPERTIES TOGGLE: Voci di menu contestuali per mostrare/nascondere le proprietà in cima alla pagina.
- * FEAT PER-NOTE SPELLCHECK TOGGLE: Gestione e sincronizzazione del controllo ortografico (spellcheck) attivabile/disattivabile per singola nota.
- * FIX GO-UP RETURNING RECORD: goUpOneLevel passa esplicitamente note.linkedRowId a jumpToWidget per evidenziare solo la riga.
+ * Calcolo e rendering pillole [N] per Proprietà (🏷️) e Backlinks (ℹ️).
+ * Voci di menu contestuali per mostrare/nascondere le proprietà in cima alla pagina.
+ * Gestione e sincronizzazione del controllo ortografico (spellcheck) attivabile/disattivabile per singola nota.
  */
 
 Object.assign(UI, {
@@ -99,24 +98,6 @@ Object.assign(UI, {
             btn.classList.remove('active');
             btn.title = I18n.t('toolbar.page_info');
         }
-    },
-
-    goUpOneLevel: () => {
-        if (!AppState.currentNoteId) return;
-        const note = Store.getNote(AppState.currentNoteId);
-        if (!note) return;
-
-        if (note.isRecordNote && note.linkedTableId) {
-            UI.jumpToWidget(note.linkedTableId, note.linkedRowId);
-            return;
-        }
-
-        if (note.parentId) {
-            UI.selectNote(note.parentId);
-            return;
-        }
-
-        UI.goHome();
     },
 
     openNoteOptionsMenu: (e, anchorId) => {
