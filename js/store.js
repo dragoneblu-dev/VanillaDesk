@@ -12,7 +12,7 @@
  * 7. Tracciamento data e ora dell'ultimo Backup JSON esportato (lastBackupAt).
  * 8. ZERO FORCED AUTO-OPEN: All'avvio l'applicazione non carica forzatamente l'ultimo workspace IDB,
  *    presentando sempre la schermata iniziale per lasciare all'utente la piena libertà di scelta.
- * 9. FIX AGGIORNAMENTO BACKUP IDB & DIFFING OVERRIDE: Ripristino forzato di tutte le note del backup
+ * 9. Aggiornamento backup IDB & diffing override: ripristino forzato di tutte le note del backup
  *    tramite marcatura _isDirty su tutte le entità e reset degli hash per prevenire il salto di note esistenti.
  * 10. RECOVERY SELETTIVO: Il pulsante "Ripristina Sessione" si mostra unicamente se era aperta una sessione volatile in sola RAM.
  * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
@@ -144,6 +144,36 @@ const Store = {
             while ((match = audRegex.exec(htmlString)) !== null) activeAudioIds.add(match[1]);
         };
 
+        // Scansiona tutti i campi testuali/HTML di uno stato widget (Database, Diari, Colonne)
+        const scanWidgetState = (state) => {
+            if (!state || typeof state !== 'object') return;
+            if (Array.isArray(state.rows)) {
+                state.rows.forEach(row => {
+                    if (row && row.cells) {
+                        Object.values(row.cells).forEach(cellVal => {
+                            if (typeof cellVal === 'string' && (cellVal.includes('data-image-ref') || cellVal.includes('data-audio-ref'))) {
+                                extractIds(cellVal);
+                            }
+                        });
+                    }
+                });
+            }
+            if (Array.isArray(state.entries)) {
+                state.entries.forEach(entry => {
+                    if (entry && typeof entry.content === 'string' && (entry.content.includes('data-image-ref') || entry.content.includes('data-audio-ref'))) {
+                        extractIds(entry.content);
+                    }
+                });
+            }
+            if (Array.isArray(state.contents)) {
+                state.contents.forEach(colHtml => {
+                    if (typeof colHtml === 'string' && (colHtml.includes('data-image-ref') || colHtml.includes('data-audio-ref'))) {
+                        extractIds(colHtml);
+                    }
+                });
+            }
+        };
+
         // 1. Scansiona Editor Visibile e tutte le Note (comprese quelle nel cestino per preservarne gli allegati)
         const editor = document.getElementById('noteContent');
         if (editor) extractIds(editor.innerHTML);
@@ -160,19 +190,7 @@ const Store = {
             AppState.templates.forEach(tpl => {
                 extractIds(tpl.content);
                 if (tpl.widgets) {
-                    Object.values(tpl.widgets).forEach(state => {
-                        if (state.rows) {
-                            state.rows.forEach(row => {
-                                if (row.cells) {
-                                    Object.values(row.cells).forEach(cellVal => {
-                                        if (typeof cellVal === 'string' && (cellVal.includes('data-image-ref') || cellVal.includes('data-audio-ref'))) {
-                                            extractIds(cellVal);
-                                        }
-                                    });
-                                }
-                            });
-                        }
-                    });
+                    Object.values(tpl.widgets).forEach(scanWidgetState);
                 }
             });
         }
@@ -240,20 +258,8 @@ const Store = {
                 }
             }
 
-            // Scansione celle dei Database in RAM per allegati multimediali
-            Object.values(AppState.databases).forEach(state => {
-                if (state.rows) {
-                    state.rows.forEach(row => {
-                        if (row.cells) {
-                            Object.values(row.cells).forEach(cellVal => {
-                                if (typeof cellVal === 'string' && (cellVal.includes('data-image-ref') || cellVal.includes('data-audio-ref'))) {
-                                    extractIds(cellVal);
-                                }
-                            });
-                        }
-                    });
-                }
-            });
+            // Scansione widget in RAM (celle Database, voci Diario, blocchi Colonne) per allegati multimediali
+            Object.values(AppState.databases).forEach(scanWidgetState);
         }
 
         return { activeDbIds, activeImageIds, activeAudioIds, validNoteIds };

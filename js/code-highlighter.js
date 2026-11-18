@@ -8,7 +8,7 @@
  * Analizzatore euristico a punteggio (detectLanguage): al superamento della soglia minima,
  * il linguaggio identificato viene consolidato in modo definitivo (manualLanguage = true).
  * La selezione esplicita di un linguaggio da menu (incluso Testo Semplice) blocca l'auto-rilevatore.
- * Barra azioni fluttuante sticky (Copia e Riduci) con riallineamento automatico dello scroll alla compressione.
+ * Barra azioni fluttuante sticky (Copia e Riduci a blocco fuori schermo) con riallineamento automatico dello scroll alla compressione.
  */
 
 const CodeManager = {
@@ -227,7 +227,7 @@ const CodeManager = {
             
             // 4. POPOLAMENTO DELLA VISTA CON I DATI IN RAM
             let rawText = state.content;
-            if (!rawText || rawText.trim() === '') {
+            if (!rawText) {
                 pre.innerHTML = '<br>';
             } else {
                 CodeManager.highlightBlock(pre, true, rawText);
@@ -339,11 +339,15 @@ const CodeManager = {
                 CodeManager._typingTimer = setTimeout(() => {
                     if (AppState.isEditMode && document.body.contains(e.target)) {
                         const sel = window.getSelection();
-                        const isFocusedInPre = sel && sel.rangeCount > 0 && e.target.contains(sel.anchorNode);
-                        let caretPos = 0;
+                        const activeRange = (sel && sel.rangeCount > 0) ? sel.getRangeAt(0) : null;
+                        const isFocusedInPre = !!(activeRange && e.target.contains(activeRange.startContainer) && e.target.contains(activeRange.endContainer));
+                        let startCaretPos = 0;
+                        let endCaretPos = 0;
                         if (isFocusedInPre && typeof Editor._getCodeOffset === 'function') {
-                            const range = sel.getRangeAt(0);
-                            caretPos = Editor._getCodeOffset(e.target, range.startContainer, range.startOffset);
+                            const sPos = Editor._getCodeOffset(e.target, activeRange.startContainer, activeRange.startOffset);
+                            const ePos = Editor._getCodeOffset(e.target, activeRange.endContainer, activeRange.endOffset);
+                            startCaretPos = Math.min(sPos, ePos);
+                            endCaretPos = Math.max(sPos, ePos);
                         }
 
                         // AUTO-RILEVAMENTO IN DIGITAZIONE:
@@ -374,7 +378,7 @@ const CodeManager = {
                         CodeManager.highlightBlock(e.target);
                         
                         if (isFocusedInPre && typeof Editor._setCodeOffset === 'function') {
-                            Editor._setCodeOffset(e.target, caretPos, caretPos);
+                            Editor._setCodeOffset(e.target, startCaretPos, endCaretPos);
                         }
                         Store.triggerAutoSave();
                     }
@@ -811,7 +815,7 @@ const CodeManager = {
 
         const lang = preElement.getAttribute('data-language') || 'none';
         
-        if (text.trim() === '') { preElement.innerHTML = '<br>'; return; }
+        if (text === '') { preElement.innerHTML = '<br>'; return; }
         
         // 2. Tokenizzazione e Protezione HTML
         let html = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

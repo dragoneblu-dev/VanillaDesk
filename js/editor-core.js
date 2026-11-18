@@ -7,8 +7,8 @@
  * - Modalità avanzata Raw HTML Source Editor a tutto schermo (openRawHtmlEditor, applyRawHtml, copyRawHtmlToClipboard).
  * - Boundary enforcement, selezione widget e smart escape dai blocchi (enforceBoundaries, handleSmartClickEscape).
  * - Ispezione del contesto di selezione per la toolbar (checkContext, editContextElement, toggleAdvancedToolbar).
- * - FIX RACE CONDITION ONERROR: Disattivazione del marcatore rotto se l'immagine possiede data-image-ref ed è in corso il recupero da IDB/disco.
- * - FEAT IDB ASSET HYDRATION CON LOG DIAGNOSTICI: Supporto alla lettura asincrona di Blob fisici da IndexedDB in modalità Browser.
+ * - Disattivazione del marcatore rotto se l'immagine possiede data-image-ref ed è in corso il recupero da IDB/disco.
+ * - Supporto alla lettura asincrona di Blob fisici da IndexedDB in modalità Browser.
  */
 
 const Editor = {
@@ -303,8 +303,10 @@ const Editor = {
             : e.clientY > rect.top + (rect.height / 2);
 
         let targetNode = isBottomOrRightHalf ? shell.nextSibling : shell.previousSibling;
+        const editorEl = document.getElementById('noteContent');
         
         if (targetNode && targetNode.nodeType === 3) {
+            if (editorEl) editorEl.focus({ preventScroll: true });
             const sel = window.getSelection();
             const range = document.createRange();
             range.setStart(targetNode, isBottomOrRightHalf ? 0 : targetNode.length);
@@ -314,6 +316,7 @@ const Editor = {
             e.preventDefault();
             e.stopPropagation();
         } else if (targetNode && targetNode.nodeType === 1 && !WidgetManager.isProtectedBlock(targetNode)) {
+            if (editorEl) editorEl.focus({ preventScroll: true });
             const sel = window.getSelection();
             const range = document.createRange();
             range.selectNodeContents(targetNode);

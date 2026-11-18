@@ -19,6 +19,7 @@
  * Calcolo protetto di isAtChecklistStart con span.contains() per prevenire IndexSizeError.
  * Esclusione dei blocchi contenenti immagini, audio, iframe, hr o widget inline dalla rimozione automatica di righe vuote.
  * Uscita pulita con Invio su riga vuota anche quando il blockquote risiede dentro un punto elenco (<li>).
+ * Confinamento di handleDeleteKey alle aree editabili interne (celle di tabelle semplici e colonne).
  */
 
 Object.assign(Editor, {
@@ -956,6 +957,13 @@ Object.assign(Editor, {
         }
 
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
+        const editableScope = node.closest ? node.closest('td, th, .col-box') : null;
+
+        // Se siamo dentro un'area editabile di un widget (es. cella di tabella semplice o colonna senza <p> interni),
+        // non trattare la shell esterna come blocco da fondere o cancellare in uscita
+        if (currentWidget && block && (block === currentWidget || !currentWidget.contains(block))) {
+            return;
+        }
 
         if (block) {
             let isAtEnd = false;
@@ -1011,6 +1019,11 @@ Object.assign(Editor, {
                             break;
                         }
                     }
+                }
+
+                // Se siamo dentro una cella di tabella semplice o una colonna, non sconfinare mai fuori dall'area editabile corrente
+                if (editableScope && (!nextNode || !editableScope.contains(nextNode))) {
+                    return;
                 }
 
                 // SALVAGUARDIA WIDGET PROTETTO CON CANC: Impedisce la distruzione della riga e del widget, mostrando il flash rosso per 500ms

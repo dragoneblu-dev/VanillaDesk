@@ -89,7 +89,7 @@
 }
 
 [data-theme="dark"] {
-    --bg-color: #212732;
+    --bg-color: #242630; 
     --sidebar-bg: #272c34;
     --box-bg: rgba(0, 0, 0, 0.01);
     --editor-bg: #252930;

@@ -13,6 +13,7 @@
  * Isolamento creazione sotto-note con bypass di syncWidgetsForNote sulle note bozza.
  * Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
  * Memorizzazione e innesco dell'evidenziazione temporanea sulla riga quando si torna indietro da una record note.
+ * Normalizzazione degli spazi multipli nel titolo differita su blur per evitare salti del cursore durante la digitazione.
  */
 
 Object.assign(UI, {
@@ -20,14 +21,16 @@ Object.assign(UI, {
     _lastHighlightedWidget: null,
 
     // Sanitizzazione preventiva del titolo: max 255 caratteri, rimozione tag HTML e caratteri invisibili
-    sanitizeNoteTitle: (rawTitle) => {
+    sanitizeNoteTitle: (rawTitle, trimConsecutiveSpaces = true) => {
         if (!rawTitle || typeof rawTitle !== 'string') return '';
-        return rawTitle
+        let res = rawTitle
             .replace(/<[^>]*>/g, '') // Rimuove tag HTML
             .replace(/[\u200B-\u200D\uFEFF]/g, '') // Rimuove Zero-Width Spaces e caratteri invisibili
-            .replace(/[\r\n\t\x00-\x1F\x7F]/g, ' ') // Converte a capo, tab e caratteri di controllo in spazi
-            .replace(/\s{2,}/g, ' ') // Comprime spazi multipli consecutivi
-            .slice(0, 255); // Limite standard di sicurezza conforme al File System (255 caratteri)
+            .replace(/[\r\n\t\x00-\x1F\x7F]/g, ' '); // Converte a capo, tab e caratteri di controllo in spazi
+        if (trimConsecutiveSpaces) {
+            res = res.replace(/\s{2,}/g, ' '); // Comprime spazi multipli consecutivi
+        }
+        return res.slice(0, 255); // Limite standard di sicurezza conforme al File System (255 caratteri)
     },
 
     addNote: (parentId = null) => {
@@ -53,7 +56,6 @@ Object.assign(UI, {
             }
             if (typeof Editor !== 'undefined') Editor.clearHistory();
             if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
-                Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(false);
             }
         }
@@ -213,7 +215,6 @@ Object.assign(UI, {
             // Salvataggio della nota precedente SOLO SE vi sono modifiche reali in sospeso
             if (typeof Editor !== 'undefined') Editor.clearHistory();
             if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
-                Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(false);
             }
         } else {
@@ -337,6 +338,23 @@ Object.assign(UI, {
         const titleInput = document.getElementById('noteTitle');
         if (titleInput) {
             titleInput.value = note.title || "";
+
+            titleInput.onblur = () => {
+                if (!AppState.isEditMode || !AppState.currentNoteId) return;
+                const curNote = Store.getNote(AppState.currentNoteId);
+                if (!curNote || curNote.deletedAt) return;
+                const normalized = UI.sanitizeNoteTitle(titleInput.value, true);
+                if (normalized !== titleInput.value) {
+                    titleInput.value = normalized;
+                }
+                if (curNote.title !== normalized) {
+                    curNote.title = normalized;
+                    curNote._isDirty = true;
+                    UI.updateHeaderTitles(AppState.fileName, curNote.title);
+                    if (typeof UI.renderTree !== 'undefined') UI.renderTree();
+                    if (typeof Store !== 'undefined') Store.triggerAutoSave();
+                }
+            };
             
             titleInput.onkeydown = (e) => {
                 if (e.key === 'Enter') {
@@ -580,11 +598,12 @@ Object.assign(UI, {
 
         const titleInput = document.getElementById('noteTitle');
         if (titleInput) {
-            // Sanitizzazione preventiva del titolo con clamp esatto a 255 caratteri
+            // Durante la digitazione non comprime spazi multipli sotto il cursore (differito su blur)
             const rawVal = titleInput.value;
-            const cleanVal = UI.sanitizeNoteTitle(rawVal);
+            const cleanVal = UI.sanitizeNoteTitle(rawVal, false);
             if (cleanVal !== rawVal) {
-                const caretPos = titleInput.selectionStart;
+                const removedCount = rawVal.length - cleanVal.length;
+                const caretPos = Math.max(0, (titleInput.selectionStart || 0) - Math.max(0, removedCount));
                 titleInput.value = cleanVal;
                 try { titleInput.setSelectionRange(caretPos, caretPos); } catch (_) {}
             }

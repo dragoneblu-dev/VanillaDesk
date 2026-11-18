@@ -172,7 +172,6 @@ Object.assign(UI, {
                 Editor.clearHistory();
             }
             if (typeof Store !== 'undefined' && currentNote && (currentNote._isDirty || Store.isDirty)) {
-                Store.executePhysicalGarbageCollection();
                 Store.triggerAutoSave(true);
             }
         }

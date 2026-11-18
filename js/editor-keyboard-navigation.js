@@ -8,15 +8,14 @@
  * Selezione estesa verticale (Shift+ArrowUp/Down) attraverso gli snippet copiabili.
  * Navigazione orizzontale (ArrowLeft/ArrowRight) priva di blocchi per entrare e uscire da snippet e inline shells.
  * Rilascio automatico della selezione widget al movimento del cursore con tasti freccia.
- * FIX CARET GLITCH: Navigazione fluida fuori dallo snippet scavalcando i cuscinetti \u200B ed esclusione
+ * Navigazione fluida fuori dallo snippet scavalcando i cuscinetti \u200B ed esclusione
  * degli inline widget dall'escape verticale su nuova riga per impedire salti del cursore.
- * FIX HORIZONTAL INLINE ENTRY: Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso qualsiasi .adv-inline-shell (snippet, note inline, segnalibri).
- * FIX FORMAT ESCAPE JUMP: Risolto salto anomalo del cursore nei testi formattati/colorati annidati,
- * vincolando l'escape con ArrowRight alla reale fine corsa del testo all'interno dell'intero blocco contenitore.
- * FEAT VISUAL LINE HOME/END: Gestione deterministica di Home, End, Shift+Home e Shift+End sulle righe visive con soft-wrap.
- * FEAT PRECISE LINE-BY-LINE SELECTION: Risoluzione del salto a inizio paragrafo su Shift+Frecce tramite raycast geometrico.
- * FIX OUTDENT SPAN SPACES: Risolta la rimozione di 4 spazi con Shift+Tab anche quando gli spazi iniziali
- * si trovano all'interno di tag inline di formattazione (span colore sfondo o testo).
+ * Scavalcamento automatico dello \u200B anche quando ci si muove dall'esterno verso qualsiasi .adv-inline-shell (snippet, note inline, segnalibri).
+ * Escape con ArrowRight vincolato alla reale fine corsa del testo all'interno dell'intero blocco contenitore.
+ * Gestione deterministica di Home, End, Shift+Home e Shift+End sulle righe visive con soft-wrap.
+ * Selezione verticale riga per riga tramite raycast geometrico.
+ * Rimozione di 4 spazi con Shift+Tab anche quando gli spazi iniziali si trovano dentro tag inline di formattazione.
+ * Esclusione delle tabelle Database (.adv-table) dalla navigazione matriciale delle Tabelle Semplici.
  */
 
 Object.assign(Editor, {
@@ -414,7 +413,7 @@ Object.assign(Editor, {
         // 1. Calcola la posizione X/Y attuale esatta
         let caretRect = range.getBoundingClientRect();
         if (caretRect.width === 0 && caretRect.height === 0) {
-            // Fix per ricavare la posizione se siamo in un punto del DOM senza bounding box apparente
+            // Ricava la posizione se siamo in un punto del DOM senza bounding box apparente
             const span = document.createElement('span');
             span.appendChild(document.createTextNode('\u200B'));
             range.insertNode(span);
@@ -503,8 +502,8 @@ Object.assign(Editor, {
 
     /**
      * GESTORE DI NAVIGAZIONE TABELLE E WIDGET (Matrice 2D e Frecce)
-     * Governa gli spostamenti geometrici tra celle, gestisce l'escape orizzontale/verticale
-     * dai widget e rilascia la selezione widget attiva.
+     * Governa gli spostamenti geometrici tra celle delle Tabelle Semplici, gestisce l'escape
+     * orizzontale/verticale dai widget e rilascia la selezione widget attiva.
      */
     handleTableNavigation: (e) => {
         if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return false;
@@ -547,6 +546,9 @@ Object.assign(Editor, {
         }
 
         if (!cell) return false;
+
+        // Le celle dei Database relazionali (.adv-table) gestiscono autonomamente il focus su .adv-cell-text
+        if (cell.closest('.adv-table')) return false;
 
         const row = cell.parentElement;
         const table = row.closest('table');
