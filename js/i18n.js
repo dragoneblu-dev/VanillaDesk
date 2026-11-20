@@ -1672,6 +1672,8 @@ table_manager: {
     copied_selection_excel: "Selezione copiata per Excel!"
 },
 onboarding: {
+    recent_browser_ws: "Recenti nel Browser",
+    btn_see_all_browser_ws: "Vedi tutti ({count})...",
     title: "Il tuo Secondo Cervello.<br>Ora con i superpoteri.",
     author: "Realizzato da dragoneblu@gmail.com",
     desc: "Non il solito blocco note. Scrivi liberamente, ed organizza con la mente di uno sviluppatore: trasforma le tue idee in <b>database relazionali</b>, <b>diagrammi di Gantt</b>, bacheche Kanban, grafici interattivi e molto altro.<br><br>Imposta le tue automazioni e goditi un workspace che gira alla velocità della luce. Zero cloud, zero abbonamenti: <b>tutto resta al sicuro, solo sul tuo computer.</b>",
@@ -3586,6 +3588,8 @@ table_manager: {
     copied_selection_excel: "Selection copied for Excel!"
 },
 onboarding: {
+    recent_browser_ws: "Recent in Browser",
+    btn_see_all_browser_ws: "See all ({count})...",
     title: "Your Second Brain.<br>Now with Superpowers.",
     author: "Created by dragoneblu@gmail.com",
     desc: "Not your ordinary notepad. Write freely, and organize with a developer mindset: transform your ideas into <b>relational databases</b>, <b>Gantt charts</b>, Kanban boards, interactive charts, and much more.<br><br>Set up your automations and enjoy a workspace that runs at lightning speed. Zero cloud, zero subscriptions: <b>everything stays secure, exclusively on your computer.</b>",
@@ -5500,6 +5504,8 @@ table_manager: {
     copied_selection_excel: "¡Selección copiada para Excel!"
 },
 onboarding: {
+    recent_browser_ws: "Recientes en el Navegador",
+    btn_see_all_browser_ws: "Ver todos ({count})...",
     title: "Tu Segundo Cerebro.<br>Ahora con superpoderes.",
     author: "Realizado por dragoneblu@gmail.com",
     desc: "No es el típico bloc de notas. Escribe con libertad y organiza con mentalidad de desarrollador: transforma tus ideas en <b>bases de datos relacionales</b>, <b>diagramas de Gantt</b>, tableros Kanban, gráficos interactivos y mucho más.<br><br>Configura tus automatizaciones y disfruta de un espacio de trabajo que funciona a la velocidad de la luz. Cero nube, cero suscripciones: <b>todo permanece seguro, exclusivamente en tu ordenador.</b>",
@@ -7414,6 +7420,8 @@ table_manager: {
     copied_selection_excel: "Auswahl für Excel kopiert!"
 },
 onboarding: {
+    recent_browser_ws: "Zuletzt im Browser",
+    btn_see_all_browser_ws: "Alle anzeigen ({count})...",
     title: "Dein zweites Gehirn.<br>Jetzt mit Superkräften.",
     author: "Entwickelt von dragoneblu@gmail.com",
     desc: "Kein gewöhnlicher Notizblock. Schreibe frei und organisiere mit der Denkweise eines Entwicklers: Verwandle deine Ideen in <b>relationale Datenbanken</b>, <b>Gantt-Diagramme</b>, Kanban-Boards, interaktive Grafiken und vieles mehr.<br><br>Richte deine Automatisierungen ein und genieße einen Workspace, der blitzschnell läuft. Keine Cloud, keine Abonnements: <b>alles bleibt sicher, ausschließlich auf deinem Computer.</b>",

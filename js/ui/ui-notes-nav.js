@@ -7,6 +7,8 @@
  * FEEDFORWARD TOOLTIPS: Mostra nel tooltip delle frecce Indietro/Avanti il titolo esatto della nota di destinazione.
  * RETURNING RECORD ANCHOR: Evidenziazione visiva e centratura temporanea (pulse di 1.2s)
  * confinata alla riga/card di partenza (stili definiti in css/advanced-table.css).
+ * HISTORY CONTEXT MENU: Pressione prolungata (con drag-and-release) e tasto destro su Indietro/Avanti
+ * per selezionare direttamente qualsiasi nota nella cronologia senza occupare spazio extra.
  */
 
 Object.assign(UI, {
@@ -76,6 +78,34 @@ Object.assign(UI, {
                 btnUp.style.opacity = '0.3';
                 btnUp.style.cursor = 'default';
             }
+        }
+    },
+
+    jumpToNavHistoryIndex: (targetIdx) => {
+        if (targetIdx < 0 || targetIdx >= UI._navHistory.length) return;
+        UI._navHistoryIndex = targetIdx;
+        const targetId = UI._navHistory[targetIdx];
+        if (targetId === null) UI.goHome(true);
+        else UI.selectNote(targetId, null, null, false, true);
+    },
+
+    openNavHistoryMenu: (anchorId, direction) => {
+        const items = [];
+        let idx = UI._navHistoryIndex + direction;
+        while (idx >= 0 && idx < UI._navHistory.length && items.length < 15) {
+            const targetIdx = idx;
+            const id = UI._navHistory[targetIdx];
+            const note = id !== null ? Store.getNote(id) : null;
+            if (id === null || (note && !note.deletedAt)) {
+                const rawTitle = id === null ? I18n.t('home_dashboard.title') : (note.title || I18n.t('editor.untitled'));
+                const label = rawTitle.length > 45 ? rawTitle.slice(0, 42) + '...' : rawTitle;
+                const icon = id === null ? (Icons.book || Icons.file) : (note.isRecordNote ? Icons.recordPage : Icons.file);
+                items.push({ icon, label: UI.escapeHTML(label), onClick: () => UI.jumpToNavHistoryIndex(targetIdx) });
+            }
+            idx += direction;
+        }
+        if (items.length > 0 && typeof UI.Menu !== 'undefined') {
+            UI.Menu.buildContextMenu(anchorId, items);
         }
     },
 
@@ -433,9 +463,33 @@ Object.assign(UI, {
     }
 });
 
-// Sincronizzazione atomica iniziale all'avvio dell'applicazione
+// Sincronizzazione atomica iniziale e binding menu cronologia (Long Press + Tasto Destro)
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof UI !== 'undefined' && typeof UI.updateNavHistoryUI === 'function') {
         UI.updateNavHistoryUI();
     }
+    [['navBackBtn', -1], ['navForwardBtn', 1]].forEach(([id, dir]) => {
+        const btn = document.getElementById(id);
+        if (!btn) return;
+        let timer = null, opened = false;
+        btn.addEventListener('contextmenu', (e) => { if (!btn.disabled) { e.preventDefault(); UI.openNavHistoryMenu(id, dir); } });
+        btn.addEventListener('pointercancel', () => clearTimeout(timer));
+        btn.addEventListener('click', (e) => { if (btn._skipClick) { btn._skipClick = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+        btn.addEventListener('pointerdown', (e) => {
+            if (e.button !== 0 || btn.disabled) return;
+            opened = false;
+            timer = setTimeout(() => {
+                opened = true; btn._skipClick = true;
+                if (UI.Menu) UI.Menu._preventClose = true;
+                UI.openNavHistoryMenu(id, dir);
+            }, 350);
+            window.addEventListener('pointerup', (upEv) => {
+                clearTimeout(timer);
+                if (!opened) return;
+                const item = upEv.target && upEv.target.closest ? upEv.target.closest('.adv-menu-item') : null;
+                setTimeout(() => { btn._skipClick = false; if (UI.Menu) UI.Menu._preventClose = false; }, 0);
+                if (item) { btn._skipClick = false; item.click(); }
+            }, { once: true });
+        });
+    });
 });
