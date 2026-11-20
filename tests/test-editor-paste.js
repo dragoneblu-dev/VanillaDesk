@@ -1,13 +1,13 @@
 /**
  * tests/test-editor-paste.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
- * Moduli testati: editor-paste-parser.js, editor-paste.js, editor-copy.js, editor-core.js, editor-format-text.js
- * Conteggio test case: 58
+ * Moduli testati: editor-paste-parser.js, editor-paste-html.js, editor-paste.js, editor-copy.js, editor-core.js, editor-format-text.js
+ * Conteggio test case: 64
  * NOTA ARCHITETTURALE: Tutti i test case invocano ESCLUSIVAMENTE le funzioni reali
  * esposte dai moduli dell'applicazione (senza duplicazione locale della logica di business).
  */
 
-describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
+describe("EditorPaste, EditorCopy & PasteParser (64 Test)", () => {
 
     // =========================================================================
     // 1. FORMATTAZIONE TESTO PIANO (Editor._formatPlainTextForHTML)
@@ -488,7 +488,7 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
     });
 
     // =========================================================================
-    // 9. NUOVI TEST CASE: GESTIONE LINK ANCORATI A IMMAGINI & NESTING W3C
+    // 9. GESTIONE LINK ANCORATI A IMMAGINI & NESTING W3C
     // =========================================================================
 
     test("PasteParser: tag <a> con immagini non vengono eliminati e mantengono href originario", () => {
@@ -514,7 +514,7 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
         `;
         const doc = new DOMParser().parseFromString(rawHTML, 'text/html');
 
-        // Replica la pulizia selettiva dei link vuoti di editor-paste.js
+        // Replica la pulizia selettiva dei link vuoti di editor-paste-html.js
         doc.querySelectorAll('a').forEach(aEl => {
             if (aEl.classList.contains('internal-link') || aEl.classList.contains('file-link')) return;
             const text = (aEl.textContent || '').replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
@@ -530,7 +530,6 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
     });
 
     test("PasteParser: inversione semantica blocchi <p> dentro <a> per prevenire nesting illegale W3C", () => {
-        // Un tag <a> che contiene <p> deve essere invertito in <p><a>...</a></p>
         const rawHTML = `<a href="https://site.com/art"><p>Primo paragrafo</p><p>Secondo paragrafo</p></a>`;
         const doc = new DOMParser().parseFromString(rawHTML, 'text/html');
 
@@ -566,7 +565,6 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
     });
 
     test("PasteParser: tag <a> con sole immagini non viene scartato da flushInlineBuffer nel Caso B", () => {
-        // Collauda la condizione hasRealContent su tag <a> privi di testo diretto ma contenenti <img>
         const div = document.createElement('div');
         const a = document.createElement('a');
         a.href = "https://source.com";
@@ -605,7 +603,6 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
         const editorRoot = document.createElement('div');
         editorRoot.id = 'noteContent';
         
-        // Simula iniezione accidentale di elementi inline direttamente a livello radice
         const nakedImg = document.createElement('img');
         nakedImg.src = "blob:http://127.0.0.1/test";
         const nakedLink = document.createElement('a');
@@ -638,7 +635,6 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
     });
 
     test("Paste: estrazione immagini RTF Word gestisce stream multipli senza duplicazioni", () => {
-        // Simula uno stream RTF valido con due immagini binarie JPEG/PNG
         const fakeRtf = `{\\rtf1\\ansi {\\pict\\jpegblip ffd8ff00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000} Paragrafo {\\pict\\pngblip 89504e47000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000}}`;
         const extracted = Editor._extractImagesFromWordRTF(fakeRtf);
 
@@ -653,6 +649,178 @@ describe("EditorPaste, EditorCopy & PasteParser (58 Test)", () => {
 
         const resultNotImage = await Editor.saveImageSource("not_an_image_url");
         Assert.isNull(resultNotImage);
+    });
+
+    // =========================================================================
+    // 10. TEST MODULI SPLITTATI & PRESERVAZIONE SPAZIO SU INCOLLA
+    // =========================================================================
+
+    test("PasteParser: _formatTextToInlineHTML converte tab, spazi multipli, newline ed escape HTML", () => {
+        const res = Editor._formatTextToInlineHTML("<b>a</b>\t  x\ny");
+        Assert.strictEqual(res, "&lt;b&gt;a&lt;/b&gt;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x<br>y");
+    });
+
+    test("Paste: _insertInlineHTMLAndCollapse inserisce al range e collassa il cursore alla fine", () => {
+        const editor = document.getElementById('noteContent');
+        const prevHtml = editor.innerHTML;
+        try {
+            editor.innerHTML = '<p>ciao </p>';
+            const p = editor.querySelector('p');
+            const textNode = p.firstChild;
+
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.setStart(textNode, textNode.nodeValue.length);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+
+            Editor._insertInlineHTMLAndCollapse("mondo", sel.getRangeAt(0), sel);
+
+            Assert.strictEqual(p.textContent, "ciao mondo");
+            Assert.strictEqual(sel.isCollapsed, true);
+            Assert.strictEqual(sel.anchorNode.nodeValue, "mondo");
+            Assert.strictEqual(sel.anchorOffset, 5);
+        } finally {
+            editor.innerHTML = prevHtml;
+        }
+    });
+
+    test("Paste: handlePaste plain-text dopo singolo spazio preserva esattamente lo spazio precedente", () => {
+        const editor = document.getElementById('noteContent');
+        const prevHtml = editor.innerHTML;
+        const prevEditMode = AppState.isEditMode;
+        try {
+            AppState.isEditMode = true;
+            editor.innerHTML = '<p>ciao </p>';
+            const p = editor.querySelector('p');
+            const textNode = p.firstChild;
+
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.setStart(textNode, 5);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+
+            const fakeEvent = {
+                target: p,
+                preventDefault: () => {},
+                clipboardData: {
+                    getData: (type) => (type === 'text/plain' ? 'mondo' : ''),
+                    items: []
+                }
+            };
+
+            Editor.handlePaste(fakeEvent);
+
+            Assert.strictEqual(p.textContent, "ciao mondo");
+            Assert.strictEqual(sel.isCollapsed, true);
+            Assert.strictEqual(sel.anchorNode.textContent, "mondo");
+            Assert.strictEqual(sel.anchorOffset, 5);
+        } finally {
+            clearTimeout(Store.debounceTimer);
+            Store.isDirty = false;
+            AppState.isEditMode = prevEditMode;
+            editor.innerHTML = prevHtml;
+        }
+    });
+
+    test("Paste: handlePaste plain-text dentro cella <td> dopo spazio preserva lo spazio", () => {
+        const editor = document.getElementById('noteContent');
+        const prevHtml = editor.innerHTML;
+        const prevEditMode = AppState.isEditMode;
+        try {
+            AppState.isEditMode = true;
+            editor.innerHTML = '<div class="adv-widget-shell simple-table-wrapper" data-widget-type="simple-table"><table><tbody><tr><td contenteditable="true">valore </td></tr></tbody></table></div>';
+            const td = editor.querySelector('td');
+            const textNode = td.firstChild;
+
+            const sel = window.getSelection();
+            const range = document.createRange();
+            range.setStart(textNode, 7);
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+
+            const fakeEvent = {
+                target: td,
+                preventDefault: () => {},
+                clipboardData: {
+                    getData: (type) => (type === 'text/plain' ? 'aggiunto' : ''),
+                    items: []
+                }
+            };
+
+            Editor.handlePaste(fakeEvent);
+
+            Assert.strictEqual(td.textContent, "valore aggiunto");
+        } finally {
+            clearTimeout(Store.debounceTimer);
+            Store.isDirty = false;
+            AppState.isEditMode = prevEditMode;
+            editor.innerHTML = prevHtml;
+        }
+    });
+
+    test("PasteHTML: _sanitizePastedHTML ripulisce HTML Office/Web, converte stili e inverte link con blocchi", async () => {
+        const dirtyHTML = `
+            <div>
+                <o:p></o:p>
+                <p style="margin:0;"><span style="font-weight:bold;">Grassetto</span> e <span style="text-decoration:underline;">Sottolineato</span></p>
+                <a href="https://ghost.org">   </a>
+                <a href="https://article.org"><p>Paragrafo nel link</p></a>
+            </div>
+        `;
+        const res = await Editor._sanitizePastedHTML(dirtyHTML, "Grassetto e Sottolineato\nParagrafo nel link", [], "");
+
+        Assert.isFalse(res.includes("<o:p>"));
+        Assert.isFalse(res.includes("https://ghost.org"));
+        Assert.isTrue(res.includes("<b>Grassetto</b>"));
+        Assert.isTrue(res.includes("<u>Sottolineato</u>"));
+        Assert.isTrue(res.includes('<p><a href="https://article.org">Paragrafo nel link</a></p>'));
+    });
+
+    test("PasteHTML: _insertCleanedHTML (Caso A inline) preserva lo spazio precedente al marker", () => {
+        const editor = document.getElementById('noteContent');
+        const prevHtml = editor.innerHTML;
+        try {
+            editor.innerHTML = '<p>ciao <span id="paste-anchor-temp-test" style="display:none"></span></p>';
+            const p = editor.querySelector('p');
+            const marker = document.getElementById('paste-anchor-temp-test');
+            const sel = window.getSelection();
+
+            Editor._insertCleanedHTML('<b>mondo</b>', sel, editor, marker);
+
+            Assert.strictEqual(p.textContent, "ciao mondo");
+            Assert.isNotNull(p.querySelector('b'));
+            Assert.isNull(document.getElementById('paste-anchor-temp-test'));
+        } finally {
+            clearTimeout(Store.debounceTimer);
+            Store.isDirty = false;
+            editor.innerHTML = prevHtml;
+        }
+    });
+
+    test("PasteHTML: _insertCleanedHTML (Caso B multi-blocco) fonde testa e coda preservando gli spazi", () => {
+        const editor = document.getElementById('noteContent');
+        const prevHtml = editor.innerHTML;
+        try {
+            editor.innerHTML = '<p>inizio <span id="paste-anchor-temp-test" style="display:none"></span> fine</p>';
+            const marker = document.getElementById('paste-anchor-temp-test');
+            const sel = window.getSelection();
+
+            Editor._insertCleanedHTML('<p>A</p><p>B</p>', sel, editor, marker);
+
+            const ps = editor.querySelectorAll('p');
+            Assert.strictEqual(ps.length, 2);
+            Assert.strictEqual(ps[0].textContent, "inizio A");
+            Assert.strictEqual(ps[1].textContent, "B fine");
+        } finally {
+            clearTimeout(Store.debounceTimer);
+            Store.isDirty = false;
+            editor.innerHTML = prevHtml;
+        }
     });
 
 });

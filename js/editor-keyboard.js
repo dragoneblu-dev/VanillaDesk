@@ -8,6 +8,7 @@
  * Intercettazione della digitazione "[[" per LinkManager.openInternalModal() e "![[" per CitationManager.openModal().
  * Supporto ai trigger ``` e ''' a inizio riga con neutralizzazione dell'autoclose moltiplicatore
  * degli apici singoli e corretto posizionamento in-place del widget codice.
+ * Calcolo offset tramite _getCodeOffset/_setCodeOffset nei blocchi <pre> per evitare sfasamenti su <br>.
  */
 
 Object.assign(Editor, {
@@ -84,12 +85,31 @@ Object.assign(Editor, {
         const closeChars = [')', '}', '"', "'"];
         const quoteChars = ['"', "'"];
 
+        const getBlockCaretPos = (block, range) => {
+            const isCodePre = block.tagName === 'PRE' || (block.classList && block.classList.contains('code-content'));
+            if (isCodePre && typeof Editor._getCodeOffset === 'function') {
+                return Editor._getCodeOffset(block, range.startContainer, range.startOffset);
+            }
+            return Editor._getAbsoluteCaretPosition(block, true);
+        };
+
+        const setBlockCaretPos = (block, pos) => {
+            const isCodePre = block.tagName === 'PRE' || (block.classList && block.classList.contains('code-content'));
+            if (isCodePre && typeof Editor._setCodeOffset === 'function') {
+                Editor._setCodeOffset(block, pos, pos);
+            } else {
+                Editor._setAbsoluteCaretPosition(block, pos, pos);
+            }
+        };
+
         // ==============================================================
         // INNESCO MAGICO: COLLEGAMENTI ("[[") E CITAZIONI LIVE ("![[")
         // ==============================================================
         if (e.key === '[') {
             const sel = window.getSelection();
-            if (sel.rangeCount && sel.isCollapsed) {
+            if (!sel.rangeCount) return;
+
+            if (sel.isCollapsed) {
                 const range = sel.getRangeAt(0);
                 const node = range.startContainer;
                 
@@ -164,9 +184,9 @@ Object.assign(Editor, {
                 if (block) {
                     e.preventDefault();
                     Editor.saveSnapshot();
-                    const currentAbs = Editor._getAbsoluteCaretPosition(block, true);
+                    const currentPos = getBlockCaretPos(block, range);
                     document.execCommand('insertText', false, '[]');
-                    Editor._setAbsoluteCaretPosition(block, currentAbs + 1, currentAbs + 1);
+                    setBlockCaretPos(block, currentPos + 1);
                 }
             }
             return;
@@ -187,8 +207,8 @@ Object.assign(Editor, {
                     
                     if (charAfter === ']') {
                         e.preventDefault();
-                        const currentAbs = Editor._getAbsoluteCaretPosition(block, true);
-                        Editor._setAbsoluteCaretPosition(block, currentAbs + 1, currentAbs + 1);
+                        const currentPos = getBlockCaretPos(block, range);
+                        setBlockCaretPos(block, currentPos + 1);
                         return;
                     }
                 }
@@ -318,8 +338,8 @@ Object.assign(Editor, {
         if (closeChars.includes(e.key) || quoteChars.includes(e.key)) {
             if (charAfter === e.key) {
                 e.preventDefault();
-                const currentAbs = Editor._getAbsoluteCaretPosition(block, true);
-                Editor._setAbsoluteCaretPosition(block, currentAbs + 1, currentAbs + 1);
+                const currentPos = getBlockCaretPos(block, range);
+                setBlockCaretPos(block, currentPos + 1);
                 return;
             }
         }
@@ -339,10 +359,10 @@ Object.assign(Editor, {
             Editor.saveSnapshot();
             
             const closeChar = openPairs[e.key];
-            const currentAbs = Editor._getAbsoluteCaretPosition(block, true);
+            const currentPos = getBlockCaretPos(block, range);
             
             document.execCommand('insertText', false, e.key + closeChar);
-            Editor._setAbsoluteCaretPosition(block, currentAbs + 1, currentAbs + 1);
+            setBlockCaretPos(block, currentPos + 1);
             return;
         }
     },

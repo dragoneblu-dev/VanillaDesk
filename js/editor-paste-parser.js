@@ -1,14 +1,176 @@
 /**
  * editor-paste-parser.js
  * Sottomodulo di Editor.
- * Parser e convertitori specializzati per la gestione dell'Incolla:
+ * Parser, convertitori di formato e acquisizione binari/RTF per la gestione dell'Incolla:
  * - Riconoscimento tabelle Excel / Google Sheets isolate (_isExcelOrSpreadsheetPaste).
  * - Generazione tabella nativa VanillaDesk da dati tabulari (_createSimpleTableFromExcel).
- * - Formattazione e strutturazione a blocchi/elenchi di Plain Text (_formatPlainTextForHTML).
+ * - Formattazione e strutturazione a blocchi/elenchi di Plain Text (_formatPlainTextForHTML, _formatTextToInlineHTML).
  * - Conversione semantica elenchi Word MsoList in <ol>/<ul> (_convertWordListsToHTML).
+ * - Acquisizione, resize/compressione WebP e salvataggio immagini su disco o IndexedDB (saveImageSource).
+ * - Estrazione immagini esadecimali da payload RTF di Word desktop (_extractImagesFromWordRTF).
  */
 
 Object.assign(Editor, {
+
+    // Helper per convertire testo puro in HTML inline preservando spaziature, tab e ritorni a capo
+    _formatTextToInlineHTML: (text) => {
+        if (!text) return "";
+        return text.replace(/&/g, '&amp;')
+                   .replace(/</g, '&lt;')
+                   .replace(/>/g, '&gt;')
+                   .replace(/\t/g, '&nbsp;&nbsp;&nbsp;&nbsp;')
+                   .replace(/ {2,}/g, (match) => '&nbsp;'.repeat(match.length))
+                   .replace(/\r\n|\n|\r/g, '<br>');
+    },
+
+    // Procedura snella per acquisire, comprimere e salvare un'immagine su disco (assets/) o in IndexedDB (idb_assets)
+    saveImageSource: async (source) => {
+        if (!source) return null;
+
+        try {
+            let blob = null;
+
+            if (typeof source === 'string') {
+                if (source.startsWith('data:image/')) {
+                    const res = await fetch(source);
+                    if (res.ok) blob = await res.blob();
+                } else if (source.startsWith('http://') || source.startsWith('https://')) {
+                    const res = await fetch(source);
+                    if (res.ok) blob = await res.blob();
+                }
+            } else if (source instanceof Blob) {
+                blob = source;
+            }
+
+            if (!blob || !blob.type || !blob.type.startsWith('image/')) {
+                return null;
+            }
+
+            return await new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const img = new Image();
+                    img.onload = async () => {
+                        const MAX_WIDTH = 1600;
+                        let width = img.width;
+                        let height = img.height;
+                        if (width > MAX_WIDTH) {
+                            height = Math.round((height * MAX_WIDTH) / width);
+                            width = MAX_WIDTH;
+                        }
+                        const canvas = document.createElement('canvas');
+                        canvas.width = width;
+                        canvas.height = height;
+                        const ctx = canvas.getContext('2d');
+                        ctx.drawImage(img, 0, 0, width, height);
+
+                        canvas.toBlob(async (compressedBlob) => {
+                            const finalBlob = compressedBlob || blob;
+                            let fileName = null;
+                            let blobUrl = null;
+
+                            // SALVATAGGIO PERSISTENTE: Sia su cartella disco (FSAA) che in IndexedDB (Browser Mode)
+                            const isFSAA = AppState.assetsHandle && typeof Store !== 'undefined' && typeof Store.saveAsset === 'function';
+                            const isIDB = AppState.storageMode === 'idb' && AppState.workspaceId && typeof Store !== 'undefined' && typeof Store.saveAsset === 'function';
+
+                            if (isFSAA || isIDB) {
+                                const ext = finalBlob.type === 'image/webp' ? 'webp' : 'png';
+                                const file = new File([finalBlob], `img_${Date.now()}.${ext}`, { type: finalBlob.type });
+                                fileName = await Store.saveAsset(file, 'img');
+                                if (fileName && Editor.imageCache && Editor.imageCache[fileName]) {
+                                    blobUrl = Editor.imageCache[fileName];
+                                }
+                                console.log(`[Image Persistence] Salvata immagine ${fileName} via ${isIDB ? 'IndexedDB' : 'Cartella Disco'}.`);
+                            }
+
+                            // Fallback per sessione temporanea in sola RAM
+                            if (!fileName) {
+                                fileName = 'img_' + (typeof Store !== 'undefined' ? Store.generateId() : Date.now()) + '.webp';
+                                blobUrl = URL.createObjectURL(finalBlob);
+                                if (!Editor.imageCache) Editor.imageCache = {};
+                                Editor.imageCache[fileName] = blobUrl;
+                            }
+
+                            resolve({ fileName, blobUrl });
+                        }, 'image/webp', 0.85);
+                    };
+                    img.onerror = () => resolve(null);
+                    img.src = ev.target.result;
+                };
+                reader.onerror = () => resolve(null);
+                reader.readAsDataURL(blob);
+            });
+        } catch (e) {
+            console.warn("[saveImageSource] Errore elaborazione:", e);
+            return null;
+        }
+    },
+
+    _extractImagesFromWordRTF: (rtfText) => {
+        if (!rtfText || typeof rtfText !== 'string' || !rtfText.includes('\\pict')) return [];
+        const extractedBlobs = [];
+
+        let searchIndex = 0;
+        while ((searchIndex = rtfText.indexOf('\\pict', searchIndex)) !== -1) {
+            let depth = 1;
+            let startPos = searchIndex;
+            let endPos = -1;
+
+            let openBracePos = rtfText.lastIndexOf('{', searchIndex);
+            let scanStart = openBracePos !== -1 ? openBracePos + 1 : searchIndex + 5;
+
+            for (let i = scanStart; i < rtfText.length; i++) {
+                const char = rtfText.charAt(i);
+                if (char === '{') depth++;
+                else if (char === '}') {
+                    depth--;
+                    if (depth === 0) {
+                        endPos = i;
+                        break;
+                    }
+                }
+            }
+
+            if (endPos === -1) endPos = Math.min(rtfText.length, searchIndex + 2000000);
+            const pictBlock = rtfText.substring(startPos, endPos);
+            searchIndex = endPos;
+
+            const lowerPict = pictBlock.toLowerCase();
+            let isPng = lowerPict.includes('pngblip') || lowerPict.includes('89504e47');
+            let isJpeg = lowerPict.includes('jpegblip') || lowerPict.includes('jpgblip') || lowerPict.includes('ffd8ff');
+
+            if (!isPng && !isJpeg) continue;
+
+            const mimeType = isPng ? 'image/png' : 'image/jpeg';
+            const magicHeader = isPng ? '89504e47' : 'ffd8ff';
+            let hexStart = lowerPict.indexOf(magicHeader);
+
+            if (hexStart === -1) {
+                const matchFallback = lowerPict.match(/[\r\n\s]([0-9a-f]{32,})/i);
+                if (matchFallback) {
+                    hexStart = lowerPict.indexOf(matchFallback[1]);
+                }
+            }
+
+            if (hexStart === -1) continue;
+
+            const hexRaw = pictBlock.substring(hexStart);
+            const cleanHex = hexRaw.replace(/[^0-9a-fA-F]/g, '');
+
+            if (cleanHex.length >= 64) {
+                try {
+                    const byteLen = Math.floor(cleanHex.length / 2);
+                    const bytes = new Uint8Array(byteLen);
+                    for (let b = 0; b < byteLen; b++) {
+                        bytes[b] = parseInt(cleanHex.substr(b * 2, 2), 16);
+                    }
+                    extractedBlobs.push(new Blob([bytes], { type: mimeType }));
+                } catch (_) {}
+            }
+        }
+
+        return extractedBlobs;
+    },
 
     // Helper per verificare se i dati negli appunti provengono da un foglio di calcolo isolato (e non da un documento Word/Docs)
     _isExcelOrSpreadsheetPaste: (pastedHTML, pastedText) => {

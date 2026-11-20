@@ -45,7 +45,7 @@ Object.assign(Store, {
         }
 
         Store._openingPromise = new Promise((resolve, reject) => {
-            console.log(`[IDB Storage] Apertura IndexedDB "${Store.DB_NAME}" versione ${Store.DB_VERSION}...`);
+            //console.log(`[IDB Storage] Apertura IndexedDB "${Store.DB_NAME}" versione ${Store.DB_VERSION}...`);
 
             let isSettled = false;
             const openTimeout = setTimeout(() => {
@@ -104,7 +104,7 @@ Object.assign(Store, {
                         Store._openingPromise = null;
                     };
 
-                    console.log(`[IDB Storage] Connessione a IndexedDB stabilita con successo (v${db.version}).`);
+                    //console.log(`[IDB Storage] Connessione a IndexedDB stabilita con successo (v${db.version}).`);
                     resolve(db);
                 };
 
@@ -416,7 +416,7 @@ Object.assign(Store, {
         Store._isSavingFile = true;
         try {
             UI.showStatus("saving");
-            console.log(`[IDB Storage] Inizio salvataggio atomico su IndexedDB per workspace "${AppState.fileName}" (${AppState.workspaceId})...`);
+            //console.log(`[IDB Storage] Inizio salvataggio atomico su IndexedDB per workspace "${AppState.fileName}" (${AppState.workspaceId})...`);
 
             if (AppState.currentNoteId && AppState.isEditMode && !AppState.isSwitchingNote) {
                 const currentNote = Store.getNote(AppState.currentNoteId);
@@ -678,7 +678,7 @@ Object.assign(Store, {
                 }
             }
 
-            console.log(`[IDB Storage] Salvataggio completato con successo per "${AppState.fileName}".`);
+            //console.log(`[IDB Storage] Salvataggio completato con successo per "${AppState.fileName}".`);
 
         } catch (err) {
             Store.isDirty = true;
@@ -702,18 +702,18 @@ Object.assign(Store, {
             }
         }
 
-        console.log("[IDB Storage] Avvio creazione nuovo workspace nel browser...");
+        //console.log("[IDB Storage] Avvio creazione nuovo workspace nel browser...");
         
         if (navigator.storage && navigator.storage.persist) {
             try { 
                 const isPersisted = await navigator.storage.persist(); 
-                console.log(`[IDB Storage] Quota storage persistita dal browser: ${isPersisted}`);
+                //console.log(`[IDB Storage] Quota storage persistita dal browser: ${isPersisted}`);
             } catch (_) {}
         }
 
         const name = (customName || prompt(I18n.t('idb_storage.prompt_choose_name'), I18n.t('idb_storage.default_new_name')) || "").trim();
         if (!name) {
-            console.log("[IDB Storage] Creazione annullata dall'utente (nome vuoto o cancel).");
+            //console.log("[IDB Storage] Creazione annullata dall'utente (nome vuoto o cancel).");
             return;
         }
 
@@ -800,7 +800,7 @@ Object.assign(Store, {
                 }
             }
 
-            console.log(`[IDB Storage] Apertura workspace IDB: ${workspaceId}...`);
+            //console.log(`[IDB Storage] Apertura workspace IDB: ${workspaceId}...`);
             const db = await Store.initDB();
             
             const wsMeta = await new Promise((resolve) => {
@@ -963,7 +963,7 @@ Object.assign(Store, {
                 UI.selectNote(AppState.notes[0].id);
             }
 
-            console.log(`[IDB Storage] Workspace "${AppState.fileName}" caricato in RAM con ${AppState.notes.length} note.`);
+            //console.log(`[IDB Storage] Workspace "${AppState.fileName}" caricato in RAM con ${AppState.notes.length} note.`);
             return true;
         } catch (e) {
             console.error("[IDB Storage] Errore apertura workspace da IndexedDB:", e);

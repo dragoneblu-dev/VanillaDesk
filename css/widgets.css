@@ -166,8 +166,9 @@ blockquote.block-citation:not(.adv-widget-shell) .citation-body { padding: 15px;
 
 /* --- CHECKLISTS --- */
 .editor-content ul.adv-checklist { list-style: none; padding-left: 4px; margin: 5px 0; width: 100%; }
+.editor-content ul.adv-checklist ul.adv-checklist { padding-left: 24px; margin: 4px 0 0 0; }
 .adv-checklist-item { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 8px; margin-bottom: 4px; }
-.adv-checklist-cb { margin-top: 4px; cursor: pointer; width: 16px; height: 16px; flex-shrink: 0; }
+.adv-checklist-cb { margin-top: 4px; cursor: pointer; width: 16px; height: 16px; flex-shrink: 0; user-select: none; }
 .checklist-text { flex: 1 1 0%; outline: none; min-width: 50px; }
 
 /* --- SEGNALIBRI (BOOKMARKS) --- */

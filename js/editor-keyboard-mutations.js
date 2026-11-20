@@ -8,7 +8,7 @@
  * utilizzando un DOM TreeWalker assoluto per scavalcare correttamente i confini delle liste (UL/OL)
  * proteggendo gli appunti inline e gli snippet copiabili dalla distruzione nativa del browser.
  * Eliminazione atomica e fluida dello snippet copiabile su Backspace/Canc con supporto Undo (Ctrl+Z).
- * Cancellazione immediata di <hr> se precede il blocco su Backspace o se segue su Canc.
+ * Cancellazione immediata di <hr> e <img> adiacenti su Backspace/Canc mantenendo il cursore in posizione.
  * Salvaguardia dei widget complessi da Backspace/Canc e flash bordo rosso (500ms).
  * Impedisce lo svuotamento totale dell'editor su cancellazione dell'ultimo blocco vuoto.
  * Disattivazione automatica del comando bold residuo all'uscita dai titoli H1..H6 con Invio.
@@ -16,7 +16,8 @@
  * Centralizzazione della cancellazione di selezioni estese in deleteSelection(e).
  * Calcolo esatto di isAtEnd tramite postRange sull'intero blocco genitore.
  * Riposizionamento del cursore subito dopo il tag <a> prima che l'Invio nativo possa clonare il link.
- * Calcolo protetto di isAtChecklistStart con span.contains() per prevenire IndexSizeError.
+ * Gestione completa delle liste To-Do (adv-checklist) su Invio (split al cursore, outdent o uscita spezzando la lista),
+ * Backspace, Delete e selezioni multi-voce.
  * Esclusione dei blocchi contenenti immagini, audio, iframe, hr o widget inline dalla rimozione automatica di righe vuote.
  * Uscita pulita con Invio su riga vuota anche quando il blockquote risiede dentro un punto elenco (<li>).
  * Confinamento di handleDeleteKey alle aree editabili interne (celle di tabelle semplici e colonne).
@@ -141,6 +142,117 @@ Object.assign(Editor, {
         return true;
     },
 
+    // Fonde sourceSpan (e l'eventuale sotto-lista di sourceLi) in targetSpan lasciando il cursore al punto di giunzione
+    _mergeChecklistSpans: (targetSpan, sourceSpan, sourceLi) => {
+        if (!targetSpan || !sourceLi) return;
+        const targetLi = targetSpan.closest('li.adv-checklist-item');
+        const sourceNestedUl = Editor._getChecklistNestedList(sourceLi);
+        const sourceParentUl = sourceLi.parentNode;
+
+        if (Editor._isChecklistSpanEmpty(targetSpan)) targetSpan.innerHTML = '';
+
+        const marker = document.createElement('span');
+        marker.id = 'chk-merge-marker';
+        marker.style.display = 'none';
+        targetSpan.appendChild(marker);
+
+        if (sourceSpan && !Editor._isChecklistSpanEmpty(sourceSpan)) {
+            while (sourceSpan.firstChild) {
+                const ch = sourceSpan.firstChild;
+                if (ch.nodeType === 3 && ch.nodeValue === '\u200B') ch.remove();
+                else targetSpan.appendChild(ch);
+            }
+        }
+
+        if (sourceNestedUl && sourceNestedUl.children.length > 0 && targetLi) {
+            let ownNested = Editor._getChecklistNestedList(targetLi);
+            if (!ownNested) {
+                ownNested = document.createElement('ul');
+                ownNested.className = 'adv-checklist';
+                targetLi.appendChild(ownNested);
+            }
+            if (sourceParentUl === ownNested) {
+                while (sourceNestedUl.firstElementChild) ownNested.insertBefore(sourceNestedUl.firstElementChild, sourceLi);
+            } else {
+                while (sourceNestedUl.firstElementChild) ownNested.appendChild(sourceNestedUl.firstElementChild);
+            }
+        }
+
+        sourceLi.remove();
+        if (sourceParentUl && sourceParentUl.parentElement && sourceParentUl.parentElement.closest('li.adv-checklist-item') && sourceParentUl.children.length === 0) {
+            sourceParentUl.remove();
+        }
+
+        const sel = window.getSelection();
+        if (Editor._isChecklistSpanEmpty(targetSpan)) {
+            marker.remove();
+            Editor._placeCaretInChecklistSpan(targetSpan, false);
+        } else if (sel) {
+            const newRange = document.createRange();
+            if (marker.previousSibling && marker.previousSibling.nodeType === 3) {
+                newRange.setStart(marker.previousSibling, marker.previousSibling.nodeValue.length);
+            } else if (marker.nextSibling && marker.nextSibling.nodeType === 3) {
+                newRange.setStart(marker.nextSibling, 0);
+            } else {
+                newRange.setStartBefore(marker);
+            }
+            newRange.collapse(true);
+            marker.remove();
+            sel.removeAllRanges();
+            sel.addRange(newRange);
+            Editor.savedRange = newRange.cloneRange();
+        }
+    },
+
+    // Fonde una selezione multi-voce dentro una checklist mantenendo intatto il markup
+    _mergeChecklistRange: (range, startLi, endLi) => {
+        const startSpan = Editor._getChecklistTextSpan(startLi);
+        const endSpan = Editor._getChecklistTextSpan(endLi);
+        if (!startSpan || !endSpan) return startLi;
+
+        let rootUl = startLi.closest('ul.adv-checklist');
+        while (rootUl && rootUl.parentElement && rootUl.parentElement.closest('ul.adv-checklist')) {
+            rootUl = rootUl.parentElement.closest('ul.adv-checklist');
+        }
+
+        // 1. Mantiene in endSpan solo la coda dopo la selezione e cancella la porzione selezionata in startSpan
+        if (endSpan.contains(range.endContainer)) {
+            const preEndRange = document.createRange();
+            preEndRange.setStart(endSpan, 0);
+            preEndRange.setEnd(range.endContainer, range.endOffset);
+            preEndRange.deleteContents();
+        } else {
+            endSpan.innerHTML = '';
+        }
+
+        if (startSpan.contains(range.startContainer)) {
+            const postStartRange = document.createRange();
+            postStartRange.setStart(range.startContainer, range.startOffset);
+            postStartRange.setEnd(startSpan, startSpan.childNodes.length);
+            postStartRange.deleteContents();
+        } else {
+            startSpan.innerHTML = '';
+        }
+
+        // 2. Rimuove le voci intermedie tra startLi ed endLi (lasciando endLi al merge finale per preservarne eventuali sotto-liste)
+        const allItems = rootUl ? Array.from(rootUl.querySelectorAll('li.adv-checklist-item')) : [];
+        const startIdx = allItems.indexOf(startLi);
+        const endIdx = allItems.indexOf(endLi);
+        if (startIdx !== -1 && endIdx > startIdx + 1) {
+            allItems.slice(startIdx + 1, endIdx).forEach(li => {
+                if (!li.contains(startLi) && !li.contains(endLi) && li.parentNode) li.remove();
+            });
+        }
+        if (rootUl) {
+            rootUl.querySelectorAll('ul.adv-checklist').forEach(sub => {
+                if (sub.children.length === 0) sub.remove();
+            });
+        }
+
+        Editor._mergeChecklistSpans(startSpan, endSpan, endLi);
+        return startLi;
+    },
+
     /**
      * GESTORE UNIFICATO CANCELLAZIONE SELEZIONI ESTESE (!isCollapsed)
      * Condiviso in modo omogeneo da Backspace, CANC (Delete) e typing su selezione.
@@ -197,6 +309,33 @@ Object.assign(Editor, {
         // 3. Salvaguardia Widget Complessi nel testo normale (Database, Diari, ecc.)
         if (!Editor.handleBulkWidgetDeletion()) {
             e.preventDefault();
+            return;
+        }
+
+        // 3b. Selezioni multi-voce dentro una checklist
+        const startEl = range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer;
+        const endEl = range.endContainer.nodeType === 3 ? range.endContainer.parentNode : range.endContainer;
+        const startCheckLi = startEl && startEl.closest ? startEl.closest('li.adv-checklist-item') : null;
+        const endCheckLi = endEl && endEl.closest ? endEl.closest('li.adv-checklist-item') : null;
+
+        if (startCheckLi && endCheckLi) {
+            e.preventDefault();
+            Editor.saveSnapshot();
+
+            if (startCheckLi === endCheckLi) {
+                const spanText = Editor._getChecklistTextSpan(startCheckLi);
+                range.deleteContents();
+                if (spanText && Editor._isChecklistSpanEmpty(spanText)) {
+                    Editor._placeCaretInChecklistSpan(spanText, false);
+                } else {
+                    range.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(range);
+                }
+            } else {
+                Editor._mergeChecklistRange(range, startCheckLi, endCheckLi);
+            }
+            Store.triggerAutoSave();
             return;
         }
 
@@ -407,6 +546,93 @@ Object.assign(Editor, {
             }
         }
 
+        // --- GESTIONE INVIO SU CHECKLIST (TO-DO LIST) ---
+        const closestChecklistUl = node.closest('ul.adv-checklist');
+        if (closestChecklistUl && !quoteBlock) {
+            e.preventDefault();
+            Editor.saveSnapshot();
+
+            let targetLi = node.closest('li.adv-checklist-item');
+
+            if (!selection.isCollapsed) {
+                const range = selection.getRangeAt(0);
+                const startEl = range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer;
+                const endEl = range.endContainer.nodeType === 3 ? range.endContainer.parentNode : range.endContainer;
+                const startLi = startEl && startEl.closest ? startEl.closest('li.adv-checklist-item') : null;
+                const endLi = endEl && endEl.closest ? endEl.closest('li.adv-checklist-item') : null;
+
+                if (startLi && endLi) {
+                    if (startLi === endLi) {
+                        range.deleteContents();
+                        range.collapse(true);
+                        targetLi = startLi;
+                    } else {
+                        targetLi = Editor._mergeChecklistRange(range, startLi, endLi);
+                    }
+                }
+            }
+
+            if (!targetLi) return;
+
+            const spanText = Editor._getChecklistTextSpan(targetLi);
+            const isEmpty = Editor._isChecklistSpanEmpty(spanText);
+
+            if (isEmpty) {
+                const resultNode = Editor.outdentChecklistLine(targetLi);
+                if (resultNode && resultNode.classList && resultNode.classList.contains('adv-checklist-item')) {
+                    Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(resultNode), false);
+                } else if (resultNode) {
+                    const r = document.createRange();
+                    r.setStart(resultNode, 0);
+                    r.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(r);
+                    Editor.savedRange = r.cloneRange();
+                }
+            } else {
+                const curSel = window.getSelection();
+                let range = curSel.rangeCount > 0 ? curSel.getRangeAt(0) : null;
+                if (!range || !spanText.contains(range.startContainer)) {
+                    Editor._placeCaretInChecklistSpan(spanText, true);
+                    range = curSel.getRangeAt(0);
+                }
+
+                // Spezza spanText esattamente al punto del cursore mantenendo eventuali tag inline
+                const tailRange = document.createRange();
+                tailRange.setStart(range.startContainer, range.startOffset);
+                tailRange.setEnd(spanText, spanText.childNodes.length);
+                const tailFrag = tailRange.extractContents();
+
+                const newLi = Editor._createChecklistItem('', false);
+                const newSpan = Editor._getChecklistTextSpan(newLi);
+
+                const tmpDiv = document.createElement('div');
+                tmpDiv.appendChild(tailFrag);
+                if (!Editor._isChecklistSpanEmpty(tmpDiv)) {
+                    newSpan.innerHTML = '';
+                    while (tmpDiv.firstChild) {
+                        const ch = tmpDiv.firstChild;
+                        if (ch.nodeType === 3 && ch.nodeValue === '\u200B' && !ch.nextSibling && !ch.previousSibling) ch.remove();
+                        else newSpan.appendChild(ch);
+                    }
+                }
+
+                if (Editor._isChecklistSpanEmpty(spanText)) {
+                    spanText.innerHTML = '';
+                    spanText.appendChild(document.createTextNode('\u200B'));
+                    const nestedUl = Editor._getChecklistNestedList(targetLi);
+                    if (nestedUl) newLi.appendChild(nestedUl);
+                }
+
+                targetLi.parentNode.insertBefore(newLi, targetLi.nextSibling);
+                Editor._placeCaretInChecklistSpan(newSpan, false);
+            }
+
+            Store.triggerAutoSave();
+            if (typeof Editor.ensureCaretVisible === 'function') Editor.ensureCaretVisible();
+            return;
+        }
+
         // --- GESTIONE INVIO A FINE LINK (<a>): ESTRAZIONE PREVENTIVA DEL CURSORE ---
         // Se il cursore si trova alla fine del link, lo posizioniamo subito dopo nel testo neutro
         // prima che l'Invio del browser sdoppi il tag <a> creando link fantasma sulla nuova riga
@@ -430,69 +656,6 @@ Object.assign(Editor, {
                 selection.addRange(newRange);
                 // Nessun e.preventDefault(): il browser crea nativamente il nuovo paragrafo privo del link
             }
-        }
-
-        const closestLi = node.closest('li');
-        const closestList = closestLi ? closestLi.parentElement : null;
-
-        if (closestList && closestList.classList.contains('adv-checklist') && !quoteBlock) {
-            e.preventDefault();
-            Editor.saveSnapshot();
-
-            const spanText = closestLi.querySelector('span.checklist-text');
-            const isEmpty = !spanText || spanText.innerText.replace(/\u200B/g, '').trim() === '';
-
-            if (isEmpty) {
-                const parentUl = closestLi.parentNode;
-                const grandParentLi = parentUl.closest('li');
-                closestLi.remove();
-
-                let breakNode;
-                if (grandParentLi) {
-                    breakNode = document.createElement('li');
-                    breakNode.innerHTML = '<br>';
-                    breakNode.style.display = 'flex';
-                    breakNode.style.flexWrap = 'wrap';
-                    grandParentLi.parentNode.insertBefore(breakNode, grandParentLi.nextSibling);
-                } else {
-                    breakNode = document.createElement('p');
-                    breakNode.innerHTML = '<br>';
-                    parentUl.parentNode.insertBefore(breakNode, parentUl.nextSibling);
-                }
-
-                if (parentUl.children.length === 0) parentUl.remove();
-
-                const newRange = document.createRange();
-                newRange.setStart(breakNode, 0);
-                newRange.collapse(true);
-                selection.removeAllRanges();
-                selection.addRange(newRange);
-            } else {
-                const newLi = document.createElement('li');
-                newLi.className = 'adv-checklist-item';
-
-                const cb = document.createElement('input');
-                cb.type = 'checkbox';
-                cb.className = 'adv-checklist-cb';
-                cb.setAttribute('contenteditable', 'false');
-
-                const span = document.createElement('span');
-                span.className = 'checklist-text';
-                span.contentEditable = 'true';
-                span.appendChild(document.createTextNode('\u200B'));
-
-                newLi.appendChild(cb);
-                newLi.appendChild(span);
-
-                closestLi.parentNode.insertBefore(newLi, closestLi.nextSibling);
-
-                const newRange = document.createRange();
-                newRange.selectNodeContents(span);
-                newRange.collapse(false);
-                selection.removeAllRanges();
-                selection.addRange(newRange);
-            }
-            return;
         }
     },
 
@@ -528,13 +691,30 @@ Object.assign(Editor, {
             return;
         }
 
-        // CANCELLAZIONE SEPARATORE <HR> CON BACKSPACE (Quando il cursore è direttamente nel root editor prima/dopo <hr>)
+        // CANCELLAZIONE SEPARATORE <HR> O <IMG> CON BACKSPACE (Quando il cursore è direttamente nel root editor prima/dopo l'elemento)
         if (container === editorRoot && range.startOffset > 0) {
             const nodeBefore = editorRoot.childNodes[range.startOffset - 1];
-            if (nodeBefore && nodeBefore.tagName === 'HR') {
+            if (nodeBefore && (nodeBefore.tagName === 'HR' || nodeBefore.tagName === 'IMG')) {
                 e.preventDefault();
                 Editor.saveSnapshot();
+                const wasImg = nodeBefore.tagName === 'IMG';
+                const nextNode = nodeBefore.nextSibling;
                 nodeBefore.remove();
+                if (wasImg) {
+                    const isEmptyNextP = nextNode && nextNode.nodeType === 1 && nextNode.tagName === 'P' &&
+                        nextNode.innerText.trim() === '' &&
+                        !nextNode.querySelector('img, audio, iframe, hr, .adv-widget-shell');
+                    const p = isEmptyNextP ? nextNode : document.createElement('p');
+                    if (!p.parentNode) {
+                        p.innerHTML = '<br>';
+                        editorRoot.insertBefore(p, nextNode);
+                    }
+                    const r = document.createRange();
+                    r.setStart(p, 0);
+                    r.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(r);
+                }
                 Store.triggerAutoSave();
                 return;
             }
@@ -602,9 +782,9 @@ Object.assign(Editor, {
         const closestLi = container.nodeType === 3 ? container.parentNode.closest('li') : (container.closest ? container.closest('li') : null);
         const closestList = closestLi ? closestLi.parentElement : null;
 
-        // GESTIONE CHECKLIST ROBUSTA: calcolo protetto di isAtChecklistStart per prevenire IndexSizeError
+        // GESTIONE CHECKLIST ROBUSTA: calcolo protetto di isAtChecklistStart con outdent / merge / promozione
         if (closestList && closestList.classList.contains('adv-checklist')) {
-            const span = closestLi.querySelector('span.checklist-text');
+            const span = Editor._getChecklistTextSpan(closestLi);
             let isAtChecklistStart = false;
 
             if (span && span.contains(range.startContainer)) {
@@ -612,61 +792,38 @@ Object.assign(Editor, {
                     const preCaretRange = range.cloneRange();
                     preCaretRange.selectNodeContents(span);
                     preCaretRange.setEnd(range.startContainer, range.startOffset);
-                    isAtChecklistStart = (preCaretRange.toString().length === 0);
+                    isAtChecklistStart = preCaretRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0 &&
+                                         !preCaretRange.cloneContents().querySelector('img, audio, iframe, svg, .adv-inline-shell');
                 } catch (_) {
                     isAtChecklistStart = false;
                 }
             } else if (span) {
-                // Il cursore si trova nell'LI a monte dello span: consideralo all'inizio ed evita crash DOM
                 isAtChecklistStart = true;
             }
 
             if (isAtChecklistStart) {
                 e.preventDefault();
                 Editor.saveSnapshot();
-                const isEmpty = !span || span.innerText.replace(/\u200B/g, '').trim() === '';
 
-                if (isEmpty) {
-                    const parentUl = closestLi.parentNode;
-                    const grandParentLi = parentUl.closest('li');
-                    closestLi.remove();
+                const parentUl = closestLi.parentNode;
+                const grandParentLi = (parentUl && parentUl.parentElement) ? parentUl.parentElement.closest('li.adv-checklist-item') : null;
 
-                    let breakNode = grandParentLi ? document.createElement('li') : document.createElement('p');
-                    breakNode.innerHTML = '<br>';
-                    if (grandParentLi) {
-                        breakNode.style.display = 'flex'; breakNode.style.flexWrap = 'wrap';
-                        grandParentLi.parentNode.insertBefore(breakNode, grandParentLi.nextSibling);
-                    } else parentUl.parentNode.insertBefore(breakNode, parentUl.nextSibling);
-
-                    if (parentUl.children.length === 0) parentUl.remove();
-
-                    const newRange = document.createRange();
-                    newRange.setStart(breakNode, 0);
-                    newRange.collapse(true);
-                    selection.removeAllRanges();
-                    selection.addRange(newRange);
+                if (grandParentLi) {
+                    Editor.outdentChecklistLine(closestLi);
+                    if (span) Editor._placeCaretInChecklistSpan(span, false);
                 } else {
                     const prevLi = closestLi.previousElementSibling;
-                    if (prevLi) {
-                        const prevSpan = prevLi.querySelector('span.checklist-text');
-                        if (prevSpan && span) {
-                            const zws = document.createTextNode('\u200B');
-                            prevSpan.appendChild(zws);
-                            while (span.firstChild) prevSpan.appendChild(span.firstChild);
-                            closestLi.remove();
-                            
-                            const newRange = document.createRange();
-                            newRange.setStart(zws, 1);
-                            newRange.collapse(true);
-                            selection.removeAllRanges();
-                            selection.addRange(newRange);
-                        }
-                    } else {
-                        // Prima voce della checklist: Backspace a inizio riga la converte in paragrafo standard
-                        const parentUl = closestLi.parentNode;
+                    if (!prevLi) {
+                        // Prima voce della checklist radice: riconverte in paragrafo preservando eventuali sotto-liste
+                        const nestedUl = Editor._getChecklistNestedList(closestLi);
                         const p = document.createElement('p');
-                        p.innerHTML = span.innerHTML || '<br>';
+                        if (span) while (span.firstChild) p.appendChild(span.firstChild);
+                        if (Editor._isChecklistSpanEmpty(p)) p.innerHTML = '<br>';
+
                         parentUl.parentNode.insertBefore(p, parentUl);
+                        if (nestedUl) {
+                            while (nestedUl.lastElementChild) parentUl.insertBefore(nestedUl.lastElementChild, closestLi.nextSibling);
+                        }
                         closestLi.remove();
                         if (parentUl.children.length === 0) parentUl.remove();
 
@@ -675,6 +832,17 @@ Object.assign(Editor, {
                         newRange.collapse(true);
                         selection.removeAllRanges();
                         selection.addRange(newRange);
+                    } else {
+                        // Trova l'ultima voce visibile precedente (anche se annidata)
+                        let targetPrevLi = prevLi;
+                        while (true) {
+                            const sub = Editor._getChecklistNestedList(targetPrevLi);
+                            if (sub && sub.lastElementChild && sub.lastElementChild.classList.contains('adv-checklist-item')) {
+                                targetPrevLi = sub.lastElementChild;
+                            } else break;
+                        }
+                        const prevSpan = Editor._getChecklistTextSpan(targetPrevLi);
+                        if (prevSpan) Editor._mergeChecklistSpans(prevSpan, span, closestLi);
                     }
                 }
                 Store.triggerAutoSave();
@@ -713,9 +881,10 @@ Object.assign(Editor, {
                 return;
             }
 
-            // GESTIONE MINIMALE HR CON BACKSPACE: Se il blocco precedente è un separatore <hr>, rimuovilo
+            // GESTIONE MINIMALE HR O IMG CON BACKSPACE: Se il blocco precedente è <hr> o <img> diretto, rimuovilo
+            // lasciando il cursore nel blocco corrente esattamente dove si trovava l'elemento
             const prevSibling = block.previousElementSibling;
-            if (prevSibling && prevSibling.tagName === 'HR') {
+            if (prevSibling && (prevSibling.tagName === 'HR' || prevSibling.tagName === 'IMG')) {
                 e.preventDefault();
                 Editor.saveSnapshot();
                 prevSibling.remove();
@@ -787,13 +956,19 @@ Object.assign(Editor, {
                 e.preventDefault();
                 Editor.saveSnapshot();
 
-                const newRange = document.createRange();
-                newRange.selectNodeContents(prevNode);
-                newRange.collapse(false);
+                if (prevNode.classList && prevNode.classList.contains('adv-checklist-item')) {
+                    const prevSpan = Editor._getChecklistTextSpan(prevNode);
+                    block.remove();
+                    if (prevSpan) Editor._placeCaretInChecklistSpan(prevSpan, true);
+                } else {
+                    const newRange = document.createRange();
+                    newRange.selectNodeContents(prevNode);
+                    newRange.collapse(false);
 
-                block.remove();
-                selection.removeAllRanges();
-                selection.addRange(newRange);
+                    block.remove();
+                    selection.removeAllRanges();
+                    selection.addRange(newRange);
+                }
                 Store.triggerAutoSave();
                 return;
             }
@@ -890,13 +1065,30 @@ Object.assign(Editor, {
             return;
         }
 
-        // CANCELLAZIONE SEPARATORE <HR> CON CANC/DELETE (Quando il cursore è direttamente nel root editor prima di <hr>)
+        // CANCELLAZIONE SEPARATORE <HR> O <IMG> CON CANC/DELETE (Quando il cursore è direttamente nel root editor prima dell'elemento)
         if (container === editorRoot && range.startOffset < editorRoot.childNodes.length) {
             const nodeAfter = editorRoot.childNodes[range.startOffset];
-            if (nodeAfter && nodeAfter.tagName === 'HR') {
+            if (nodeAfter && (nodeAfter.tagName === 'HR' || nodeAfter.tagName === 'IMG')) {
                 e.preventDefault();
                 Editor.saveSnapshot();
+                const wasImg = nodeAfter.tagName === 'IMG';
+                const nextNode = nodeAfter.nextSibling;
                 nodeAfter.remove();
+                if (wasImg) {
+                    const isEmptyNextP = nextNode && nextNode.nodeType === 1 && nextNode.tagName === 'P' &&
+                        nextNode.innerText.trim() === '' &&
+                        !nextNode.querySelector('img, audio, iframe, hr, .adv-widget-shell');
+                    const p = isEmptyNextP ? nextNode : document.createElement('p');
+                    if (!p.parentNode) {
+                        p.innerHTML = '<br>';
+                        editorRoot.insertBefore(p, nextNode);
+                    }
+                    const r = document.createRange();
+                    r.setStart(p, 0);
+                    r.collapse(true);
+                    selection.removeAllRanges();
+                    selection.addRange(r);
+                }
                 Store.triggerAutoSave();
                 return;
             }
@@ -956,6 +1148,52 @@ Object.assign(Editor, {
             return;
         }
 
+        // GESTIONE DELETE A FINE VOCE CHECKLIST (Fusione con la voce o il blocco successivo)
+        const closestCheckLi = node.closest ? node.closest('li.adv-checklist-item') : null;
+        if (closestCheckLi) {
+            const span = Editor._getChecklistTextSpan(closestCheckLi);
+            let isAtChecklistEnd = Editor._isChecklistSpanEmpty(span);
+
+            if (!isAtChecklistEnd && span && span.contains(range.endContainer)) {
+                try {
+                    const postRange = range.cloneRange();
+                    postRange.selectNodeContents(span);
+                    postRange.setStart(range.endContainer, range.endOffset);
+                    isAtChecklistEnd = postRange.toString().replace(/[\u200B\uFEFF]/g, '').length === 0 &&
+                                       !postRange.cloneContents().querySelector('img, audio, iframe, svg, .adv-inline-shell, br');
+                } catch (_) {}
+            }
+
+            if (isAtChecklistEnd && span) {
+                e.preventDefault();
+                Editor.saveSnapshot();
+
+                let rootUl = closestCheckLi.closest('ul.adv-checklist');
+                while (rootUl && rootUl.parentElement && rootUl.parentElement.closest('ul.adv-checklist')) {
+                    rootUl = rootUl.parentElement.closest('ul.adv-checklist');
+                }
+                const allItems = rootUl ? Array.from(rootUl.querySelectorAll('li.adv-checklist-item')) : [];
+                const curIdx = allItems.indexOf(closestCheckLi);
+                const nextCheckLi = (curIdx !== -1 && curIdx < allItems.length - 1) ? allItems[curIdx + 1] : null;
+
+                if (nextCheckLi) {
+                    const nextSpan = Editor._getChecklistTextSpan(nextCheckLi);
+                    Editor._mergeChecklistSpans(span, nextSpan, nextCheckLi);
+                } else if (rootUl && rootUl.nextElementSibling) {
+                    const nextBlk = rootUl.nextElementSibling;
+                    if (WidgetManager.isProtectedBlock(nextBlk)) {
+                        Editor.flashWidgetProtectedBorder(nextBlk);
+                        return;
+                    }
+                    if (['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(nextBlk.tagName)) {
+                        Editor._mergeChecklistSpans(span, nextBlk, nextBlk);
+                    }
+                }
+                Store.triggerAutoSave();
+                return;
+            }
+        }
+
         const currentWidget = container.nodeType === 3 ? container.parentNode.closest('.adv-widget-shell') : container.closest('.adv-widget-shell');
         const editableScope = node.closest ? node.closest('td, th, .col-box') : null;
 
@@ -997,9 +1235,10 @@ Object.assign(Editor, {
             }
 
             if (isAtEnd) {
-                // GESTIONE MINIMALE HR CON CANC: Se l'elemento successivo è un <hr>, eliminalo
+                // GESTIONE MINIMALE HR O IMG CON CANC: Se l'elemento successivo è <hr> o <img> diretto, eliminalo
+                // lasciando il cursore esattamente dove si trova
                 const nextSibling = block.nextElementSibling;
-                if (nextSibling && nextSibling.tagName === 'HR') {
+                if (nextSibling && (nextSibling.tagName === 'HR' || nextSibling.tagName === 'IMG')) {
                     e.preventDefault();
                     Editor.saveSnapshot();
                     nextSibling.remove();
@@ -1062,13 +1301,19 @@ Object.assign(Editor, {
                     e.preventDefault();
                     Editor.saveSnapshot();
 
-                    const newRange = document.createRange();
-                    newRange.selectNodeContents(nextNode);
-                    newRange.collapse(true);
+                    if (nextNode.classList && nextNode.classList.contains('adv-checklist-item')) {
+                        const nextSpan = Editor._getChecklistTextSpan(nextNode);
+                        block.remove();
+                        if (nextSpan) Editor._placeCaretInChecklistSpan(nextSpan, false);
+                    } else {
+                        const newRange = document.createRange();
+                        newRange.selectNodeContents(nextNode);
+                        newRange.collapse(true);
 
-                    block.remove();
-                    selection.removeAllRanges();
-                    selection.addRange(newRange);
+                        block.remove();
+                        selection.removeAllRanges();
+                        selection.addRange(newRange);
+                    }
                     Store.triggerAutoSave();
                     return;
                 }

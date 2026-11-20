@@ -396,6 +396,9 @@ Object.assign(UI, {
                 if (onboardingView) onboardingView.classList.remove('hidden');
                 if (readModeView) readModeView.classList.add('hidden');
                 if (homeDocView) homeDocView.classList.add('hidden');
+                if (typeof UI.renderOnboardingBrowserWorkspaces === 'function') {
+                    UI.renderOnboardingBrowserWorkspaces();
+                }
             } else {
                 if (emptyState) emptyState.classList.remove('onboarding-state');
                 if (emptyState) emptyState.classList.add('home-dashboard-state');

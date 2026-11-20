@@ -4,20 +4,72 @@
  * Gestione strutturale delle Liste e delle Checklist (Indent/Outdent).
  * Gestione avanzata degli Elenchi Numerati: valore di partenza (start),
  * continuazione della numerazione e unione fisica tra elenchi separati.
- * FEAT STATEFUL SPLIT-BUTTON: Memorizzazione ultimo tipo elenco e toggle attivo con un click (toggleActiveList).
- * BINDING DI SICUREZZA: Assegnazione esplicita e certa dell'handler onclick al pulsante btnListMenu all'avvio.
- * FEAT MULTI-BLOCK CHECKLIST CONVERSION: Conversione fedele e non distruttiva di selezioni multiple di paragrafi,
- * titoli o elenchi ordinati/puntati esistenti in To-Do List senza perdita di testo.
- * FIX REVERSIBLE CONVERSION: Riconversione pulita e bidirezionale da To-Do List (adv-checklist) verso elenchi standard (UL/OL)
- * ed elenchi di testo senza frammentazioni o stili parassiti inline.
- * FIX CARET POSITION ON LIST INSERT: Inserimento atomico dell'elenco su blocco vuoto e posizionamento immediato del cursore
- * all'interno del <li> a offset 0, eliminando salti del cursore o srotolamenti anomali.
- * FIX CHECKLIST CARET CONTAINMENT (2.2): Assegnazione di contenteditable="false" alla casella checkbox
+ * Memorizzazione ultimo tipo elenco e toggle attivo con un click (toggleActiveList).
+ * Conversione fedele e non distruttiva di selezioni multiple di paragrafi,
+ * titoli o elenchi ordinati/puntati esistenti in To-Do List e riconversione bidirezionale
+ * mantenendo l'ordine esatto nella pagina.
+ * Assegnazione di contenteditable="false" alla casella checkbox
  * per impedire al cursore di collocarsi a sinistra di essa e prevenire la distruzione del blocco su Backspace.
  */
 
 Object.assign(Editor, {
     lastListType: 'ul',
+
+    _getChecklistTextSpan: (liNode) => {
+        if (!liNode || !liNode.children) return null;
+        return Array.from(liNode.children).find(c => c.classList && c.classList.contains('checklist-text')) || null;
+    },
+
+    _getChecklistNestedList: (liNode) => {
+        if (!liNode || !liNode.children) return null;
+        return Array.from(liNode.children).find(c => c.tagName === 'UL' && c.classList && c.classList.contains('adv-checklist')) || null;
+    },
+
+    _isChecklistSpanEmpty: (spanText) => {
+        if (!spanText) return true;
+        const cleanText = (spanText.textContent || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+        return cleanText === '' && !spanText.querySelector('img, audio, iframe, svg, .adv-inline-shell');
+    },
+
+    _placeCaretInChecklistSpan: (spanText, atEnd = false) => {
+        if (!spanText) return;
+        const sel = window.getSelection();
+        if (!sel) return;
+        const range = document.createRange();
+
+        if (Editor._isChecklistSpanEmpty(spanText)) {
+            if (!spanText.firstChild || spanText.firstChild.nodeType !== Node.TEXT_NODE) {
+                spanText.innerHTML = '';
+                spanText.appendChild(document.createTextNode('\u200B'));
+            }
+            range.setStart(spanText.firstChild, 1);
+            range.collapse(true);
+        } else if (atEnd) {
+            range.selectNodeContents(spanText);
+            range.collapse(false);
+        } else {
+            const walker = document.createTreeWalker(spanText, NodeFilter.SHOW_TEXT, null, false);
+            let firstText = null;
+            let t;
+            while ((t = walker.nextNode())) {
+                if (t.parentNode && t.parentNode.closest && t.parentNode.closest('.adv-inline-shell, .inline-note-data, .bookmark-comment-data')) continue;
+                if (t.nodeValue && t.nodeValue.replace(/[\u200B\uFEFF]/g, '').length > 0) {
+                    firstText = t;
+                    break;
+                }
+            }
+            if (firstText) {
+                range.setStart(firstText, firstText.nodeValue.startsWith('\u200B') ? 1 : 0);
+            } else {
+                range.setStart(spanText, 0);
+            }
+            range.collapse(true);
+        }
+
+        sel.removeAllRanges();
+        sel.addRange(range);
+        Editor.savedRange = range.cloneRange();
+    },
 
     toggleActiveList: (e) => {
         if (e) {
@@ -47,7 +99,7 @@ Object.assign(Editor, {
         const ol = node.closest('ol');
         const ul = node.closest('ul:not(.adv-checklist)');
 
-        // 1. Se siamo in una Checklist attiva: disattiva e converti gli elementi selezionati in normali paragrafi
+        // 1. Se siamo in una Checklist attiva: disattiva e converti gli elementi selezionati in normali paragrafi nella loro posizione
         if (checklistLi || checklistUl) {
             const range = sel.getRangeAt(0);
             let itemsToConvert = [];
@@ -57,25 +109,67 @@ Object.assign(Editor, {
             }
             if (itemsToConvert.length === 0) {
                 if (checklistLi) itemsToConvert = [checklistLi];
-                else if (checklistUl) itemsToConvert = Array.from(checklistUl.querySelectorAll('.adv-checklist-item'));
+                else if (checklistUl) itemsToConvert = Array.from(checklistUl.querySelectorAll('li.adv-checklist-item'));
             }
 
             if (itemsToConvert.length > 0) {
-                const targetUl = itemsToConvert[0].closest('ul.adv-checklist') || checklistUl;
-                const frag = document.createDocumentFragment();
+                let lastP = null;
+                let rootUl = itemsToConvert[0].closest('ul.adv-checklist');
+                while (rootUl && rootUl.parentElement && rootUl.parentElement.closest('ul.adv-checklist')) {
+                    rootUl = rootUl.parentElement.closest('ul.adv-checklist');
+                }
 
-                itemsToConvert.forEach(item => {
-                    const spanText = item.querySelector('.checklist-text');
-                    const textHtml = spanText ? spanText.innerHTML : '<br>';
-                    const p = document.createElement('p');
-                    p.innerHTML = textHtml || '<br>';
-                    frag.appendChild(p);
-                    item.remove();
-                });
+                if (rootUl && itemsToConvert.every(it => it.parentElement === rootUl)) {
+                    const itemsSet = new Set(itemsToConvert);
+                    const frag = document.createDocumentFragment();
+                    let curChecklist = null;
 
-                if (targetUl) {
-                    targetUl.parentNode.insertBefore(frag, targetUl.nextSibling);
-                    if (targetUl.children.length === 0) targetUl.remove();
+                    Array.from(rootUl.children).forEach(item => {
+                        if (item.tagName !== 'LI') return;
+                        if (itemsSet.has(item)) {
+                            if (curChecklist) { frag.appendChild(curChecklist); curChecklist = null; }
+                            const spanText = Editor._getChecklistTextSpan(item);
+                            const nestedUl = Editor._getChecklistNestedList(item);
+                            const p = document.createElement('p');
+                            const htmlClean = spanText ? spanText.innerHTML.replace(/\u200B/g, '') : '';
+                            p.innerHTML = htmlClean && !Editor._isChecklistSpanEmpty(spanText) ? htmlClean : '<br>';
+                            frag.appendChild(p);
+                            lastP = p;
+                            if (nestedUl) {
+                                Array.from(nestedUl.children).forEach(sub => {
+                                    if (!curChecklist) {
+                                        curChecklist = document.createElement('ul');
+                                        curChecklist.className = 'adv-checklist';
+                                    }
+                                    curChecklist.appendChild(sub);
+                                });
+                            }
+                        } else {
+                            if (!curChecklist) {
+                                curChecklist = document.createElement('ul');
+                                curChecklist.className = 'adv-checklist';
+                            }
+                            curChecklist.appendChild(item);
+                        }
+                    });
+                    if (curChecklist) frag.appendChild(curChecklist);
+                    rootUl.parentNode.replaceChild(frag, rootUl);
+                } else {
+                    itemsToConvert.forEach(item => {
+                        while (item.parentElement && item.parentElement.parentElement && item.parentElement.parentElement.closest('li.adv-checklist-item')) {
+                            Editor.outdentChecklistLine(item);
+                        }
+                        lastP = Editor.outdentChecklistLine(item) || lastP;
+                    });
+                }
+
+                if (lastP) {
+                    const r = document.createRange();
+                    r.selectNodeContents(lastP);
+                    r.collapse(false);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                    Editor.savedRange = r.cloneRange();
                 }
 
                 Store.triggerAutoSave();
@@ -341,33 +435,44 @@ Object.assign(Editor, {
             }
             if (itemsToConvert.length === 0) {
                 if (checklistLi) itemsToConvert = [checklistLi];
-                else if (checklistUl) itemsToConvert = Array.from(checklistUl.querySelectorAll('.adv-checklist-item'));
+                else if (checklistUl) itemsToConvert = Array.from(checklistUl.querySelectorAll('li.adv-checklist-item'));
             }
 
             if (itemsToConvert.length > 0) {
                 const targetUl = itemsToConvert[0].closest('ul.adv-checklist') || checklistUl;
-                const newList = document.createElement(type);
-                if (style && type === 'ol') newList.setAttribute('type', style);
-
+                const itemsSet = new Set(itemsToConvert);
+                const frag = document.createDocumentFragment();
+                let curCheckUl = null;
+                let curStdList = null;
                 let firstNewLi = null;
 
-                itemsToConvert.forEach(item => {
-                    const spanText = item.querySelector('.checklist-text');
-                    const textHtml = spanText ? spanText.innerHTML : item.innerHTML;
-                    const cleanHtml = textHtml.replace(/^<input[^>]*>/i, '').trim();
-
-                    const newLi = document.createElement('li');
-                    newLi.innerHTML = cleanHtml || '<br>';
-                    newList.appendChild(newLi);
-
-                    if (!firstNewLi) firstNewLi = newLi;
-                    item.remove();
+                Array.from(targetUl.children).forEach(item => {
+                    if (item.tagName !== 'LI') return;
+                    if (itemsSet.has(item)) {
+                        if (curCheckUl) { frag.appendChild(curCheckUl); curCheckUl = null; }
+                        if (!curStdList) {
+                            curStdList = document.createElement(type);
+                            if (style && type === 'ol') curStdList.setAttribute('type', style);
+                        }
+                        const spanText = Editor._getChecklistTextSpan(item);
+                        const cleanHtml = spanText ? spanText.innerHTML.replace(/\u200B/g, '').trim() : '';
+                        const newLi = document.createElement('li');
+                        newLi.innerHTML = cleanHtml || '<br>';
+                        curStdList.appendChild(newLi);
+                        if (!firstNewLi) firstNewLi = newLi;
+                    } else {
+                        if (curStdList) { frag.appendChild(curStdList); curStdList = null; }
+                        if (!curCheckUl) {
+                            curCheckUl = document.createElement('ul');
+                            curCheckUl.className = 'adv-checklist';
+                        }
+                        curCheckUl.appendChild(item);
+                    }
                 });
+                if (curCheckUl) frag.appendChild(curCheckUl);
+                if (curStdList) frag.appendChild(curStdList);
 
-                if (targetUl) {
-                    targetUl.parentNode.insertBefore(newList, targetUl.nextSibling);
-                    if (targetUl.children.length === 0) targetUl.remove();
-                }
+                targetUl.parentNode.replaceChild(frag, targetUl);
 
                 if (firstNewLi) {
                     const newRange = document.createRange();
@@ -464,7 +569,7 @@ Object.assign(Editor, {
 
         // Se il testo è vuoto o solo <br> o ZWS, garantisce il cuscinetto per il cursore
         const cleanText = inner.replace(/[\u200B\uFEFF]/g, '').replace(/<br\s*[\/]?>/gi, '').trim();
-        if (!cleanText) {
+        if (!cleanText && !/<(img|audio|iframe|svg)\b/i.test(inner)) {
             span.appendChild(document.createTextNode('\u200B'));
         } else {
             span.innerHTML = inner;
@@ -484,17 +589,23 @@ Object.assign(Editor, {
             Editor.savedRange = selection.getRangeAt(0).cloneRange();
         }
 
-        Editor.saveSnapshot();
-        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
-
         const sel = window.getSelection();
         if (!sel.rangeCount) return;
-
-        Editor.lastListType = 'checklist';
 
         const range = sel.getRangeAt(0);
         let node = range.commonAncestorContainer;
         if (node.nodeType === 3) node = node.parentNode;
+
+        // Se siamo già all'interno di una checklist attiva, disattivala convertendo in paragrafi (coerente con ul/ol)
+        if (node.closest('ul.adv-checklist, li.adv-checklist-item')) {
+            Editor.toggleActiveList();
+            return;
+        }
+
+        Editor.saveSnapshot();
+        if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
+
+        Editor.lastListType = 'checklist';
 
         // =========================================================================
         // SCENARIO 1: SELEZIONE ESTESA (Conversione multi-riga / multi-blocco)
@@ -515,7 +626,6 @@ Object.assign(Editor, {
                 const checklistUl = document.createElement('ul');
                 checklistUl.className = 'adv-checklist';
 
-                // Posiziona il nuovo contenitore prima del primo blocco selezionato
                 if (firstBlock.tagName === 'LI') {
                     const parentList = firstBlock.closest('ul, ol');
                     if (parentList) {
@@ -532,31 +642,19 @@ Object.assign(Editor, {
 
                 blocks.forEach(b => {
                     let contentHtml = '';
-                    let isChecked = false;
-
-                    // Se è già un elemento checklist, preserva lo stato del checkbox e il testo dello span
-                    if (b.classList.contains('adv-checklist-item')) {
-                        const cb = b.querySelector('.adv-checklist-cb');
-                        if (cb) isChecked = cb.checked;
-                        const span = b.querySelector('.checklist-text');
-                        contentHtml = span ? span.innerHTML : b.innerHTML;
-                    } 
-                    // Se è un LI di un elenco standard, estrae il testo escludendo eventuali sotto-liste annidate
-                    else if (b.tagName === 'LI') {
+                    if (b.tagName === 'LI') {
                         const clone = b.cloneNode(true);
                         clone.querySelectorAll('ul, ol').forEach(nested => nested.remove());
                         contentHtml = clone.innerHTML;
-                    } 
-                    // Se è un blocco di testo (P, H1..H6, BLOCKQUOTE, ecc.)
-                    else {
+                    } else {
                         contentHtml = b.innerHTML;
                     }
 
-                    const checkLi = Editor._createChecklistItem(contentHtml, isChecked);
+                    const checkLi = Editor._createChecklistItem(contentHtml, false);
                     checklistUl.appendChild(checkLi);
 
                     if (!firstChecklistSpan) {
-                        firstChecklistSpan = checkLi.querySelector('.checklist-text');
+                        firstChecklistSpan = Editor._getChecklistTextSpan(checkLi);
                     }
 
                     if (b.parentNode) {
@@ -565,20 +663,14 @@ Object.assign(Editor, {
                     }
                 });
 
-                // Pulizia dei contenitori genitore rimasti vuoti (es. elenchi precedenti svuotati)
                 parentsToCheck.forEach(parentEl => {
                     if (parentEl && parentEl.children && parentEl.children.length === 0 && ['UL', 'OL', 'BLOCKQUOTE'].includes(parentEl.tagName)) {
                         parentEl.remove();
                     }
                 });
 
-                // Posiziona il cursore sul primo elemento della checklist convertita
                 if (firstChecklistSpan) {
-                    const newRange = document.createRange();
-                    newRange.selectNodeContents(firstChecklistSpan);
-                    newRange.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(newRange);
+                    Editor._placeCaretInChecklistSpan(firstChecklistSpan, false);
                 }
 
                 Store.triggerAutoSave();
@@ -592,40 +684,45 @@ Object.assign(Editor, {
         // =========================================================================
         let currentBlock = node.closest('p, div, li, h1, h2, h3, h4, h5, h6');
 
-        // Se siamo già all'interno di una checklist attiva, non duplicarla
-        if (node.closest('li.adv-checklist-item')) {
-            return;
-        }
-
-        // Se siamo su un elemento LI di un elenco standard (ul/ol)
+        // Se siamo su un elemento LI di un elenco standard (ul/ol), spezza la lista nella posizione corrente
         if (currentBlock && currentBlock.tagName === 'LI') {
-            const parentList = currentBlock.closest('ul, ol');
+            const parentList = currentBlock.parentElement;
             const clone = currentBlock.cloneNode(true);
             clone.querySelectorAll('ul, ol').forEach(nested => nested.remove());
-            const contentHtml = clone.innerHTML;
 
             const checklistUl = document.createElement('ul');
             checklistUl.className = 'adv-checklist';
-            const checkLi = Editor._createChecklistItem(contentHtml);
+            const checkLi = Editor._createChecklistItem(clone.innerHTML, false);
             checklistUl.appendChild(checkLi);
 
-            if (parentList) {
-                parentList.parentNode.insertBefore(checklistUl, parentList.nextSibling);
+            if (parentList && (parentList.tagName === 'UL' || parentList.tagName === 'OL')) {
+                const nextLis = [];
+                let sib = currentBlock.nextElementSibling;
+                while (sib) {
+                    if (sib.tagName === 'LI') nextLis.push(sib);
+                    sib = sib.nextElementSibling;
+                }
+                currentBlock.remove();
+
+                if (parentList.children.length === 0) {
+                    parentList.parentNode.replaceChild(checklistUl, parentList);
+                } else {
+                    parentList.parentNode.insertBefore(checklistUl, parentList.nextSibling);
+                }
+
+                if (nextLis.length > 0) {
+                    const afterList = document.createElement(parentList.tagName);
+                    if (parentList.tagName === 'OL' && parentList.getAttribute('type')) {
+                        afterList.setAttribute('type', parentList.getAttribute('type'));
+                    }
+                    nextLis.forEach(nli => afterList.appendChild(nli));
+                    checklistUl.parentNode.insertBefore(afterList, checklistUl.nextSibling);
+                }
             } else {
-                currentBlock.parentNode.insertBefore(checklistUl, currentBlock.nextSibling);
+                currentBlock.parentNode.replaceChild(checklistUl, currentBlock);
             }
 
-            const oldParent = currentBlock.parentNode;
-            currentBlock.remove();
-            if (oldParent && oldParent.children.length === 0) oldParent.remove();
-
-            const span = checkLi.querySelector('.checklist-text');
-            const newRange = document.createRange();
-            newRange.selectNodeContents(span);
-            newRange.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-
+            Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(checkLi), true);
             Store.triggerAutoSave();
             Editor.updateToolbarFormatting();
             return;
@@ -641,13 +738,7 @@ Object.assign(Editor, {
 
             currentBlock.parentNode.replaceChild(checklistUl, currentBlock);
 
-            const span = checkLi.querySelector('.checklist-text');
-            const newRange = document.createRange();
-            newRange.selectNodeContents(span);
-            newRange.collapse(false);
-            sel.removeAllRanges();
-            sel.addRange(newRange);
-
+            Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(checkLi), true);
             Store.triggerAutoSave();
             Editor.updateToolbarFormatting();
             return;
@@ -666,21 +757,15 @@ Object.assign(Editor, {
             range.insertNode(ul);
         }
 
-        const span = li.querySelector('.checklist-text');
-        const newRange = document.createRange();
-        newRange.selectNodeContents(span);
-        newRange.collapse(false);
-        sel.removeAllRanges();
-        sel.addRange(newRange);
-
+        Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(li), false);
         Store.triggerAutoSave();
         Editor.updateToolbarFormatting();
     },
 
     indentChecklistLine: (liNode) => {
-        const prevLi = liNode.previousElementSibling;
+        const prevLi = liNode ? liNode.previousElementSibling : null;
         if (!prevLi) return; 
-        let nestedUl = prevLi.querySelector('ul.adv-checklist');
+        let nestedUl = Editor._getChecklistNestedList(prevLi);
         if (!nestedUl) {
             nestedUl = document.createElement('ul');
             nestedUl.className = 'adv-checklist';
@@ -691,12 +776,85 @@ Object.assign(Editor, {
     },
 
     outdentChecklistLine: (liNode) => {
-        const parentUl = liNode.parentNode;
-        if (!parentUl || !parentUl.classList.contains('adv-checklist')) return;
-        const grandParentLi = parentUl.closest('li');
-        if (!grandParentLi) return; 
-        grandParentLi.parentNode.insertBefore(liNode, grandParentLi.nextSibling);
-        if (parentUl.children.length === 0) parentUl.remove();
+        const parentUl = liNode ? liNode.parentNode : null;
+        if (!parentUl || !parentUl.classList || !parentUl.classList.contains('adv-checklist')) return null;
+
+        const grandParentLi = parentUl.parentNode ? parentUl.parentNode.closest('li.adv-checklist-item') : null;
+        if (grandParentLi) {
+            // Sposta eventuali fratelli successivi in una sotto-lista di liNode per preservare l'ordine visivo
+            const nextSiblings = [];
+            let sib = liNode.nextElementSibling;
+            while (sib) {
+                nextSiblings.push(sib);
+                sib = sib.nextElementSibling;
+            }
+
+            grandParentLi.parentNode.insertBefore(liNode, grandParentLi.nextSibling);
+
+            if (nextSiblings.length > 0) {
+                let ownNested = Editor._getChecklistNestedList(liNode);
+                if (!ownNested) {
+                    ownNested = document.createElement('ul');
+                    ownNested.className = 'adv-checklist';
+                    ownNested.style.listStyle = 'none';
+                    ownNested.style.paddingLeft = '20px';
+                    ownNested.style.margin = '5px 0';
+                    ownNested.style.width = '100%';
+                    liNode.style.flexWrap = 'wrap';
+                    liNode.appendChild(ownNested);
+                }
+                nextSiblings.forEach(s => ownNested.appendChild(s));
+            }
+
+            if (parentUl.children.length === 0) parentUl.remove();
+            return liNode;
+        }
+
+        // Livello radice: trasforma la voce in paragrafo <p> spezzando la checklist nel punto corrente
+        const nextSiblings = [];
+        let sib = liNode.nextElementSibling;
+        while (sib) {
+            nextSiblings.push(sib);
+            sib = sib.nextElementSibling;
+        }
+
+        const spanText = Editor._getChecklistTextSpan(liNode);
+        const nestedUl = Editor._getChecklistNestedList(liNode);
+
+        const p = document.createElement('p');
+        if (spanText) {
+            while (spanText.firstChild) p.appendChild(spanText.firstChild);
+        }
+        const cleanPText = (p.textContent || '').replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+        if (!cleanPText && !p.querySelector('img, audio, iframe, svg, .adv-inline-shell')) {
+            if (!p.querySelector('[id^="tab-start-"], [id^="tab-end-"]')) p.innerHTML = '<br>';
+            else p.appendChild(document.createElement('br'));
+        }
+
+        liNode.remove();
+
+        const parentContainer = parentUl.parentNode;
+        const insertRef = parentUl.nextSibling;
+
+        if (parentUl.children.length === 0) {
+            parentContainer.replaceChild(p, parentUl);
+        } else {
+            parentContainer.insertBefore(p, insertRef);
+        }
+
+        if ((nestedUl && nestedUl.children.length > 0) || nextSiblings.length > 0) {
+            const afterUl = document.createElement('ul');
+            afterUl.className = 'adv-checklist';
+            if (nestedUl) {
+                while (nestedUl.firstChild) afterUl.appendChild(nestedUl.firstChild);
+            }
+            nextSiblings.forEach(s => afterUl.appendChild(s));
+            if (afterUl.children.length > 0) {
+                parentContainer.insertBefore(afterUl, p.nextSibling);
+            }
+        }
+
+        return p;
     },
 
     outdentStandardListItem: (liNode) => {

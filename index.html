@@ -353,6 +353,7 @@
                                     <script>document.write(I18n.t('onboarding.browser_mode_desc'));</script>
                                 </div>
                             </div>
+                            <div id="onboardingBrowserRecentContainer" style="display:none; flex-direction:column; gap:6px;"></div>
                             <div class="onboarding-storage-card-actions">
                                 <button class="btn" id="btnBrowserCreateWs" style="flex:1; justify-content:center; padding:10px 14px; font-size:0.88rem; font-weight:600; color:var(--col_memBro); border-color:var(--col_memBro);" onclick="Store.createBrowserWorkspace()">
                                     <span><script>document.write(I18n.t('onboarding.btn_new_browser_ws')); document.getElementById('btnBrowserCreateWs').title = I18n.t('onboarding.browser_btn_create_title');</script></span>
@@ -698,6 +699,7 @@
     <script src="js/editor-inline-notes.js"></script>
     <script src="js/editor-copy.js"></script>
     <script src="js/editor-paste-parser.js"></script>
+    <script src="js/editor-paste-html.js"></script>
     <script src="js/editor-paste.js"></script> 
     <script src="js/code-highlighter.js"></script>
     <script src="js/journal-manager.js"></script>
@@ -806,7 +808,7 @@
 
     <!-- Logica di commutazione Onboarding: Segmented Switcher a schede con gestione automatica del supporto browser -->
     <script>
-        function switchOnboardingMode(mode) {
+        function switchOnboardingMode(mode, skipRefresh = false) {
             const btnFolder = document.getElementById('btnTabFolder');
             const btnBrowser = document.getElementById('btnTabBrowser');
             const cardFolder = document.getElementById('cardFolderStorage');
@@ -822,6 +824,9 @@
                 if (btnFolder) btnFolder.classList.remove('active');
                 if (cardBrowser) cardBrowser.style.display = 'flex';
                 if (cardFolder) cardFolder.style.display = 'none';
+                if (!skipRefresh && typeof UI !== 'undefined' && typeof UI.renderOnboardingBrowserWorkspaces === 'function') {
+                    UI.renderOnboardingBrowserWorkspaces();
+                }
             }
         }
 
@@ -835,7 +840,7 @@
                 // Su browser privi di FSAA disattiva la scheda cartella fisica e posiziona direttamente su Browser Storage
                 if (btnFolder) btnFolder.style.display = 'none';
                 if (cardFolder) cardFolder.style.display = 'none';
-                switchOnboardingMode('browser');
+                switchOnboardingMode('browser', true);
             }
         })();
     </script>

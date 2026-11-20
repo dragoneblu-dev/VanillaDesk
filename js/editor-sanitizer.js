@@ -4,7 +4,7 @@
  * Sottomodulo di Editor.
  * Include:
  * - Sanificazione centralizzata per testi brevi (sanitizeMiniText).
- * - Auto-riparazione degli span parassiti con font-size inline (healFontArtifacts).
+ * - Auto-riparazione degli span parassiti con font-size inline (healFontArtifacts) con preservazione del cursore attivo.
  * - Ripristino ed estirpazione cuscinetti ZWS attorno ai widget inline (ensureInlineWidgetBuffers).
  * - Normalizzazione dei blocchi vuoti (_normalizeEmptyBlocks), con conversione dei blocchi con <br> multipli in <p><br></p> e bonifica dei <br> orfani a livello root.
  * - Minificazione e serializzazione protetta per il salvataggio (minifyHTMLForStorage, getCleanHTML, sanitizeContent).
@@ -139,11 +139,33 @@ Object.assign(Editor, {
     healFontArtifacts: (container) => {
         if (!container) return;
         const badSpans = container.querySelectorAll('h1 span[style*="font-size"], h2 span[style*="font-size"], h3 span[style*="font-size"], h4 span[style*="font-size"], h5 span[style*="font-size"], h6 span[style*="font-size"], p > span[style*="font-size"]');
-        
+        if (badSpans.length === 0) return;
+
+        // Salva la posizione del cursore nel blocco attivo prima che normalize() fonda i nodi di testo
+        const sel = window.getSelection();
+        const editorEl = document.getElementById('noteContent');
+        const hasLiveCaret = !!(sel && sel.rangeCount > 0 && sel.isCollapsed && editorEl && container === editorEl && editorEl.contains(sel.anchorNode));
+        let activeBlock = null;
+        let savedAbsOffset = 0;
+
+        if (hasLiveCaret) {
+            const anchorEl = sel.anchorNode.nodeType === 3 ? sel.anchorNode.parentNode : sel.anchorNode;
+            activeBlock = anchorEl && anchorEl.closest ? anchorEl.closest('h1, h2, h3, h4, h5, h6, p') : null;
+            if (activeBlock && typeof Editor._getAbsoluteCaretPosition === 'function') {
+                savedAbsOffset = Editor._getAbsoluteCaretPosition(activeBlock, true);
+            } else {
+                activeBlock = null;
+            }
+        }
+
+        let activeBlockMutated = false;
         badSpans.forEach(span => {
             // VanillaDesk usa solo classi (fs-small, fs-large); qualsiasi style.fontSize inline puro è un artefatto del browser
             if (!span.className && span.style.fontSize) {
                 const parent = span.parentNode;
+                if (activeBlock && (parent === activeBlock || activeBlock.contains(parent))) {
+                    activeBlockMutated = true;
+                }
                 while (span.firstChild) {
                     parent.insertBefore(span.firstChild, span);
                 }
@@ -151,6 +173,20 @@ Object.assign(Editor, {
                 if (parent) parent.normalize();
             }
         });
+
+        if (activeBlockMutated && activeBlock && document.body.contains(activeBlock)) {
+            if (activeBlock.textContent === '') {
+                try {
+                    const r = document.createRange();
+                    r.setStart(activeBlock, 0);
+                    r.collapse(true);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                } catch (_) {}
+            } else if (typeof Editor._setAbsoluteCaretPosition === 'function') {
+                Editor._setAbsoluteCaretPosition(activeBlock, savedAbsOffset, savedAbsOffset);
+            }
+        }
     },
 
     // Ripristino deterministico dei cuscinetti \u200B attorno ai widget inline ed eliminazione orfani
@@ -178,13 +214,12 @@ Object.assign(Editor, {
             }
         });
 
-        // 2. Garanzia cuscinetto minimo per checklist e snippet vuoti (o rimozione se contengono testo reale)
+        // 2. Garanzia cuscinetto minimo per checklist e snippet vuoti (preservando la formattazione HTML interna)
         container.querySelectorAll('.checklist-text, .snippet-text').forEach(el => {
             const clean = el.textContent.replace(/[\u200B\uFEFF]/g, '').trim();
-            if (clean === '') {
+            const hasMedia = !!el.querySelector('img, audio, svg, .adv-inline-shell, br');
+            if (clean === '' && !hasMedia) {
                 if (el.textContent !== '\u200B') el.textContent = '\u200B';
-            } else if (el.textContent.includes('\u200B')) {
-                el.textContent = el.textContent.replace(/\u200B/g, '');
             }
         });
 
@@ -205,9 +240,17 @@ Object.assign(Editor, {
             if (!val.includes('\u200B') && !val.includes('\uFEFF')) continue;
 
             const parent = textNode.parentNode;
-            // AUDIT DIFENSIVO: Protegge i nodi di layout interni a snippet, note inline e checklist
-            if (parent && (parent.closest('.adv-inline-shell') || parent.classList.contains('checklist-text') || parent.classList.contains('snippet-text'))) {
-                continue;
+            // Protegge le shell inline e mantiene il cuscinetto minimo nelle checklist/snippet vuoti
+            if (parent) {
+                if (parent.closest('.adv-inline-shell')) continue;
+                const editableBox = parent.closest('.checklist-text, .snippet-text');
+                if (editableBox) {
+                    const boxClean = editableBox.textContent.replace(/[\u200B\uFEFF]/g, '').trim();
+                    const boxHasMedia = !!editableBox.querySelector('img, audio, svg, .adv-inline-shell, br');
+                    if (boxClean === '' && !boxHasMedia) {
+                        continue;
+                    }
+                }
             }
 
             // REGOLA A: Rimuove all'origine qualsiasi ZWS intrappolato tra lettere alfanumeriche di parole

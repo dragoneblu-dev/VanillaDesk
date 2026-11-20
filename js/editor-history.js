@@ -4,8 +4,8 @@
  * e Re-Idratazione dello stato RAM di tutti i Widget complessi.
  * Ripristino matematico della posizione del cursore per elenchi numerati, liste, blocchi di testo,
  * intestazioni e blocchi di codice (incluso il ripristino della posizione dopo taglio/cancellazione di selezioni estese).
- * Gestione sicura del DOM vivo: salvataggio coordinate anche per selezioni estese (drag & drop di testo)
- * con ripristino fedele del range, prevenendo il reset del cursore all'inizio della nota dopo Undo.
+ * Cattura dello snapshot e inserimento del marcatore cursore eseguiti interamente off-DOM su cloneNode(true),
+ * lasciando intatti i nodi di testo, la Selection attiva e la composizione durante la digitazione.
  * Parametro forcePush su saveSnapshot per bypassare il controllo di deduplicazione
  * durante le mutazioni asincrone da trascinamento testo, garantendo la creazione corretta del punto di ripristino.
  * Al ripristino di uno snapshot di Undo/Redo, le note collegate (record_note)
@@ -13,8 +13,6 @@
  * (rimozione di deletedAt), eliminando i puntatori "Pagina Orfana".
  * Caching delle stringhe Base64 dei widget per evitare serializzazioni JSON e btoa() ridondanti
  * durante la digitazione di testo ordinario, eliminando il micro-stuttering da Garbage Collector.
- * Rimozione del marcatore temporaneo con salvaguardia atomica del range attivo del browser,
- * prevenendo che lo snapshot automatico di inattività sposti il cursore a inizio blocco durante la navigazione.
  * Al ripristino Undo/Redo in prossimità di liste UL/OL, il cursore viene fatto atterrare
  * direttamente dentro il <li> della lista invece che su noteContent, eliminando la creazione di <p></p> parassiti da parte di Blink.
  * Depurazione automatica della classe transitoria .adv-cell-selected
@@ -126,10 +124,86 @@ Object.assign(Editor, {
         return null;
     },
 
-    // Funzione centralizzata per l'estrazione sicura del DOM per l'History
+    // Estrazione sicura off-DOM per la cronologia: registra le coordinate del cursore in sola lettura
+    // e inietta il marcatore esclusivamente sul nodo clonato, senza mai mutare il DOM vivo dell'editor.
     _buildHistorySnapshot: (liveEditorElement) => {
-        const tempDiv = document.createElement('div');
-        tempDiv.innerHTML = liveEditorElement.innerHTML;
+        let codeWrapperId = null;
+        let codeCaretPos = null;
+        let caretPath = null;
+        let caretOffset = 0;
+
+        const sel = window.getSelection();
+        if (sel && sel.rangeCount > 0 && liveEditorElement.contains(sel.anchorNode)) {
+            const node = sel.anchorNode;
+            const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
+
+            if (preNode) {
+                const range = sel.getRangeAt(0);
+                const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
+                const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
+                const activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
+                if (activeCodeBlockWrapper && activeCodeBlockWrapper.id) {
+                    codeWrapperId = activeCodeBlockWrapper.id;
+                    codeCaretPos = Math.max(sPos, ePos);
+                }
+            } else if (sel.isCollapsed) {
+                const range = sel.getRangeAt(0);
+                const path = [];
+                let curr = range.startContainer;
+                while (curr && curr !== liveEditorElement) {
+                    const p = curr.parentNode;
+                    if (!p) break;
+                    path.unshift(Array.prototype.indexOf.call(p.childNodes, curr));
+                    curr = p;
+                }
+                if (curr === liveEditorElement) {
+                    caretPath = path;
+                    caretOffset = range.startOffset;
+                }
+            }
+        }
+
+        // Clonazione profonda 1:1 per preservare esattamente la struttura childNodes/TextNode
+        const tempDiv = liveEditorElement.cloneNode(true);
+
+        // Iniezione del marker di cronologia esclusivamente nel clone off-DOM
+        if (caretPath !== null) {
+            let targetNode = tempDiv;
+            for (let i = 0; i < caretPath.length; i++) {
+                const idx = caretPath[i];
+                if (!targetNode || !targetNode.childNodes || idx < 0 || idx >= targetNode.childNodes.length) {
+                    targetNode = null;
+                    break;
+                }
+                targetNode = targetNode.childNodes[idx];
+            }
+
+            if (targetNode) {
+                const marker = document.createElement('span');
+                marker.id = 'history-undo-marker-temp';
+                marker.style.display = 'none';
+
+                if (targetNode.nodeType === Node.TEXT_NODE) {
+                    const len = targetNode.nodeValue ? targetNode.nodeValue.length : 0;
+                    const safeOffset = Math.min(Math.max(0, caretOffset), len);
+                    const parent = targetNode.parentNode;
+                    if (parent) {
+                        if (safeOffset === 0) {
+                            parent.insertBefore(marker, targetNode);
+                        } else if (safeOffset >= len) {
+                            parent.insertBefore(marker, targetNode.nextSibling);
+                        } else {
+                            const afterText = targetNode.splitText(safeOffset);
+                            parent.insertBefore(marker, afterText);
+                        }
+                    }
+                } else if (targetNode.nodeType === Node.ELEMENT_NODE) {
+                    const safeIdx = Math.min(Math.max(0, caretOffset), targetNode.childNodes.length);
+                    const refChild = targetNode.childNodes[safeIdx] || null;
+                    targetNode.insertBefore(marker, refChild);
+                }
+            }
+        }
 
         // Pulizia della classe temporanea di selezione multicella per non inquinare lo snapshot storico
         tempDiv.querySelectorAll('.adv-cell-selected').forEach(c => c.classList.remove('adv-cell-selected'));
@@ -199,6 +273,10 @@ Object.assign(Editor, {
             const cloneWidget = cloneWidgets[i];
             if (!cloneWidget) continue;
 
+            if (codeWrapperId && codeCaretPos !== null && liveWidget.id === codeWrapperId) {
+                cloneWidget.setAttribute('data-undo-caret', codeCaretPos);
+            }
+
             const trueId = liveWidget.id.split('_cited_')[0];
             if (!trueId) continue;
 
@@ -244,89 +322,7 @@ Object.assign(Editor, {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
 
-        let markerInserted = false;
-        let codeBlockCaret = false;
-        let activeCodeBlockWrapper = null;
-        let origContainer = null;
-        let origOffset = 0;
-        let secondPart = null;
-
-        const sel = window.getSelection();
-        if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-            const node = sel.anchorNode;
-            const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-
-            if (preNode) {
-                // Nei blocchi codice l'offset è memorizzato come attributo sul wrapper: non modifica il DOM testuale né la selezione attiva
-                const range = sel.getRangeAt(0);
-                const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
-                const pos = Math.max(sPos, ePos);
-                activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                if (activeCodeBlockWrapper) {
-                    activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                    codeBlockCaret = true;
-                }
-            } else if (sel.isCollapsed) {
-                // SICUREZZA DOM: Il marcatore viene inserito nel DOM vivo SOLO su cursore collassato.
-                // Quando la selezione è estesa (es. testo selezionato per grassetto o colore), non tocchiamo il DOM
-                // per preservare intatta la selezione attiva richiesta da document.execCommand e ColorManager.
-                try {
-                    const range = sel.getRangeAt(0);
-                    origContainer = range.startContainer;
-                    origOffset = range.startOffset;
-
-                    const markerRange = range.cloneRange();
-                    markerRange.collapse(true);
-
-                    const marker = document.createElement('span');
-                    marker.id = 'history-undo-marker-temp';
-                    marker.style.display = 'none';
-
-                    markerRange.insertNode(marker);
-                    markerInserted = true;
-
-                    if (origContainer.nodeType === Node.TEXT_NODE) {
-                        secondPart = marker.nextSibling;
-                    }
-                } catch (e) { 
-                    console.error("[DEBUG-HISTORY] Errore iniezione marker:", e);
-                }
-            }
-        }
-
         const htmlToSave = Editor._buildHistorySnapshot(editor);
-
-        // Nel DOM vivo: rimuoviamo il marker e ricongiungiamo i nodi di testo ripristinando la selezione integra
-        if (markerInserted) {
-            const startM = document.getElementById('history-undo-marker-temp');
-            if (startM) startM.remove();
-
-            if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
-                origContainer.nodeValue += secondPart.nodeValue;
-                secondPart.remove();
-            }
-
-            try {
-                if (origContainer && document.body.contains(origContainer)) {
-                    const currentSel = window.getSelection();
-                    const isStillFocused = currentSel.rangeCount > 0 && editor.contains(currentSel.anchorNode);
-                    
-                    if (!isStillFocused || currentSel.anchorNode === origContainer) {
-                        const restoreRange = document.createRange();
-                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                        restoreRange.setStart(origContainer, safeOffset);
-                        restoreRange.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(restoreRange);
-                    }
-                }
-            } catch(err) {}
-        }
-        
-        if (codeBlockCaret && activeCodeBlockWrapper) {
-            activeCodeBlockWrapper.removeAttribute('data-undo-caret');
-        }
 
         // Evita duplicazioni di snapshot identici nel contenuto a meno che non sia forzato (es. Drag & Drop atomico)
         if (!forcePush && Editor.undoStack.length > 0) {
@@ -598,77 +594,8 @@ Object.assign(Editor, {
         if (Editor.undoStack.length > 0) {
             const editor = document.getElementById('noteContent');
 
-            let markerInserted = false;
-            let codeBlockCaret = false;
-            let activeCodeBlockWrapper = null;
-            let origContainer = null;
-            let origOffset = 0;
-            let secondPart = null;
-
-            const sel = window.getSelection();
-            if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-                const node = sel.anchorNode;
-                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-
-                if (preNode) {
-                    const range = sel.getRangeAt(0);
-                    const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                    const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
-                    const pos = Math.max(sPos, ePos);
-                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                    if (activeCodeBlockWrapper) {
-                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                        codeBlockCaret = true;
-                    }
-                } else if (sel.isCollapsed) {
-                    try {
-                        const range = sel.getRangeAt(0);
-                        origContainer = range.startContainer;
-                        origOffset = range.startOffset;
-
-                        const markerRange = range.cloneRange();
-                        markerRange.collapse(true);
-
-                        const marker = document.createElement('span');
-                        marker.id = 'history-undo-marker-temp';
-                        marker.style.display = 'none';
-
-                        markerRange.insertNode(marker);
-                        markerInserted = true;
-
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
-                            secondPart = marker.nextSibling;
-                        }
-                    } catch (e) { }
-                }
-            }
-
             const htmlToSaveForRedo = Editor._buildHistorySnapshot(editor);
             Editor.redoStack.push(htmlToSaveForRedo);
-
-            if (markerInserted) {
-                const startM = document.getElementById('history-undo-marker-temp');
-                if (startM) startM.remove();
-
-                if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
-                    origContainer.nodeValue += secondPart.nodeValue;
-                    secondPart.remove();
-                }
-
-                try {
-                    if (origContainer && document.body.contains(origContainer)) {
-                        const restoreRange = document.createRange();
-                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                        restoreRange.setStart(origContainer, safeOffset);
-                        restoreRange.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(restoreRange);
-                    }
-                } catch(err) {}
-            }
-            if (codeBlockCaret && activeCodeBlockWrapper) {
-                activeCodeBlockWrapper.removeAttribute('data-undo-caret');
-            }
 
             let snap = Editor.undoStack.pop();
             
@@ -680,7 +607,7 @@ Object.assign(Editor, {
                            .replace(/ data-undo-caret="[^"]*"/g, '');
             };
 
-            const currentHtmlClean = cleanForComparison(Editor._buildHistorySnapshot(editor));
+            const currentHtmlClean = cleanForComparison(htmlToSaveForRedo);
             const snapHtmlClean = cleanForComparison(snap);
             
             if (currentHtmlClean === snapHtmlClean && Editor.undoStack.length > 0) {
@@ -704,77 +631,8 @@ Object.assign(Editor, {
         if (Editor.redoStack.length > 0) {
             const editor = document.getElementById('noteContent');
 
-            let markerInserted = false;
-            let codeBlockCaret = false;
-            let activeCodeBlockWrapper = null;
-            let origContainer = null;
-            let origOffset = 0;
-            let secondPart = null;
-
-            const sel = window.getSelection();
-            if (sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
-                const node = sel.anchorNode;
-                const preNode = node.nodeType === 3 ? node.parentNode.closest('.code-content') : (node.closest ? node.closest('.code-content') : null);
-
-                if (preNode) {
-                    const range = sel.getRangeAt(0);
-                    const sPos = Editor._getCodeOffset(preNode, range.startContainer, range.startOffset);
-                    const ePos = Editor._getCodeOffset(preNode, range.endContainer, range.endOffset);
-                    const pos = Math.max(sPos, ePos);
-                    activeCodeBlockWrapper = preNode.closest('.code-wrapper, [data-widget-type="code"]');
-                    if (activeCodeBlockWrapper) {
-                        activeCodeBlockWrapper.setAttribute('data-undo-caret', pos);
-                        codeBlockCaret = true;
-                    }
-                } else if (sel.isCollapsed) {
-                    try {
-                        const range = sel.getRangeAt(0);
-                        origContainer = range.startContainer;
-                        origOffset = range.startOffset;
-
-                        const markerRange = range.cloneRange();
-                        markerRange.collapse(true);
-
-                        const marker = document.createElement('span');
-                        marker.id = 'history-undo-marker-temp';
-                        marker.style.display = 'none';
-
-                        markerRange.insertNode(marker);
-                        markerInserted = true;
-
-                        if (origContainer.nodeType === Node.TEXT_NODE) {
-                            secondPart = marker.nextSibling;
-                        }
-                    } catch (e) { }
-                }
-            }
-
             const htmlToSaveForUndo = Editor._buildHistorySnapshot(editor);
             Editor.undoStack.push(htmlToSaveForUndo);
-
-            if (markerInserted) {
-                const startM = document.getElementById('history-undo-marker-temp');
-                if (startM) startM.remove();
-
-                if (origContainer && origContainer.nodeType === Node.TEXT_NODE && secondPart && secondPart.parentNode === origContainer.parentNode) {
-                    origContainer.nodeValue += secondPart.nodeValue;
-                    secondPart.remove();
-                }
-
-                try {
-                    if (origContainer && document.body.contains(origContainer)) {
-                        const restoreRange = document.createRange();
-                        const safeOffset = Math.min(origOffset, origContainer.nodeValue.length);
-                        restoreRange.setStart(origContainer, safeOffset);
-                        restoreRange.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(restoreRange);
-                    }
-                } catch(err) {}
-            }
-            if (codeBlockCaret && activeCodeBlockWrapper) {
-                activeCodeBlockWrapper.removeAttribute('data-undo-caret');
-            }
 
             const snap = Editor.redoStack.pop();
             Editor._restoreSnapshotWithCursor(snap);

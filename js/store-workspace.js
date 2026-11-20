@@ -849,7 +849,7 @@ Object.assign(Store, {
             if (hasWriteErrors) {
                 Store.isDirty = true;
                 UI.showStatus("error");
-                console.error("[STORE] Salvataggio completato con errori di I/O.");
+                //console.error("[STORE] Salvataggio completato con errori di I/O.");
             } else {
                 if (Store._needsPhysicalGC) {
                     await Store.executePhysicalGarbageCollection(onProgress);

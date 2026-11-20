@@ -6,7 +6,7 @@
  * Gestione della navigazione a celle basata su matrice 2D: spostamento perpendicolare affidabile
  * tra celle, con pieno supporto alla navigazione multilinea interna prima del cambio cella.
  * Selezione estesa verticale (Shift+ArrowUp/Down) attraverso gli snippet copiabili.
- * Navigazione orizzontale (ArrowLeft/ArrowRight) priva di blocchi per entrare e uscire da snippet e inline shells.
+ * Navigazione orizzontale (ArrowLeft/ArrowRight) priva di blocchi per entrare e uscire da snippet, inline shells e voci To-Do.
  * Rilascio automatico della selezione widget al movimento del cursore con tasti freccia.
  * Navigazione fluida fuori dallo snippet scavalcando i cuscinetti \u200B ed esclusione
  * degli inline widget dall'escape verticale su nuova riga per impedire salti del cursore.
@@ -501,6 +501,53 @@ Object.assign(Editor, {
     },
 
     /**
+     * Scavalcamento orizzontale dei checkbox non editabili nelle voci To-Do (ArrowLeft / ArrowRight ai bordi)
+     */
+    _handleChecklistHorizontalEscape: (e) => {
+        if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return false;
+        if (e.shiftKey || e.ctrlKey || e.metaKey || e.altKey) return false;
+
+        const sel = window.getSelection();
+        if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
+
+        const range = sel.getRangeAt(0);
+        const el = range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer;
+        const liNode = el && el.closest ? el.closest('li.adv-checklist-item') : null;
+        if (!liNode || !Editor._getChecklistTextSpan) return false;
+
+        const spanText = Editor._getChecklistTextSpan(liNode);
+        if (!spanText) return false;
+
+        let rootUl = liNode.closest('ul.adv-checklist');
+        while (rootUl && rootUl.parentElement && rootUl.parentElement.closest('ul.adv-checklist')) {
+            rootUl = rootUl.parentElement.closest('ul.adv-checklist');
+        }
+        const allItems = rootUl ? Array.from(rootUl.querySelectorAll('li.adv-checklist-item')) : [liNode];
+        const idx = allItems.indexOf(liNode);
+
+        if (e.key === 'ArrowLeft' && spanText.contains(range.startContainer)) {
+            const pre = range.cloneRange();
+            pre.selectNodeContents(spanText);
+            pre.setEnd(range.startContainer, range.startOffset);
+            if (pre.toString().replace(/[\u200B\uFEFF]/g, '').length === 0 && idx > 0) {
+                e.preventDefault();
+                Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(allItems[idx - 1]), true);
+                return true;
+            }
+        } else if (e.key === 'ArrowRight' && spanText.contains(range.endContainer)) {
+            const post = range.cloneRange();
+            post.selectNodeContents(spanText);
+            post.setStart(range.endContainer, range.endOffset);
+            if (post.toString().replace(/[\u200B\uFEFF]/g, '').length === 0 && !post.cloneContents().querySelector('br') && idx !== -1 && idx < allItems.length - 1) {
+                e.preventDefault();
+                Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(allItems[idx + 1]), false);
+                return true;
+            }
+        }
+        return false;
+    },
+
+    /**
      * GESTORE DI NAVIGAZIONE TABELLE E WIDGET (Matrice 2D e Frecce)
      * Governa gli spostamenti geometrici tra celle delle Tabelle Semplici, gestisce l'escape
      * orizzontale/verticale dai widget e rilascia la selezione widget attiva.
@@ -519,9 +566,10 @@ Object.assign(Editor, {
             Editor.clearWidgetSelection();
         }
 
-        // Gestione escape orizzontale dagli snippet e inline shell
+        // Gestione escape orizzontale dagli snippet, inline shell e voci To-Do
         if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
             if (Editor._handleSnippetHorizontalEscape(e)) return true;
+            if (Editor._handleChecklistHorizontalEscape(e)) return true;
         }
 
         // Gestione escape verticale dagli snippet
@@ -847,7 +895,10 @@ Object.assign(Editor, {
             // Ordina i blocchi seguendo la gerarchia DOM dall'alto verso il basso
             blocks.sort((a,b) => (a === b) ? 0 : (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1));
 
-            blocks.forEach(block => {
+            const filteredBlocks = blocks.filter(b => !blocks.some(other => other !== b && other.tagName === 'LI' && other.contains(b)));
+            const orderedBlocks = e.shiftKey ? [...filteredBlocks].reverse() : filteredBlocks;
+
+            orderedBlocks.forEach(block => {
                 if (block.tagName === 'LI') {
                     const ulNode = block.parentNode;
                     // Indentazione specifica per le Checklist avanzate o per l'elenco puntato nativo

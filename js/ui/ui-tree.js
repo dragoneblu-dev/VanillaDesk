@@ -6,8 +6,9 @@
  * Include:
  * - Navigazione schede (Note, Preferiti, Segnalibri, Database).
  * - Rendering gerarchico delle note standard e record note (renderTree, buildTreeElement).
+ * - Iniezione contestuale del Database e della Record Note attiva direttamente dentro la nota ospite nella scheda "Note".
  * - Matching delle proprietà della pagina delegato al motore centrale AppState.matchesPropertyFilters.
- * - Estrazione testo indicizzabile da note e blocchi codice (extractSearchableText).
+ * - Estrazione testo indicizzabile da note, blocchi codice, URL dei link (href / data-file-path) e diari (extractSearchableText).
  * - TOC dinamico per capitoli H1, H2, H3 (scrollToHeader).
  * - Evidenziazione del nodo attivo nella sidebar (highlightTreeNode).
  * - Feedback esplicito e pulsanti di reset quando ricerca e filtri tag non producono riscontri.
@@ -17,6 +18,42 @@
  */
 
 Object.assign(UI, {
+    _activeRecordDbIds: null,
+    _activeRecordHostNoteIds: null,
+    _activeRecordDbInjected: false,
+
+    _getRecordDbHostChain: (noteId) => {
+        const dbIds = new Set();
+        const hostNotes = [];
+        const visitedNotes = new Set();
+
+        let curr = noteId && typeof Store !== 'undefined' ? Store.getNote(noteId) : null;
+        while (curr && !visitedNotes.has(curr.id)) {
+            visitedNotes.add(curr.id);
+            if (curr.isRecordNote && curr.linkedTableId && curr.linkedTableId !== 'SYS_PROPERTIES_DB') {
+                let dbId = curr.linkedTableId;
+                const linkedDb = AppState.databases ? AppState.databases[dbId] : null;
+                if (linkedDb && linkedDb.isLinkedView && linkedDb.sourceTableId) {
+                    dbId = linkedDb.sourceTableId;
+                }
+                dbIds.add(dbId);
+
+                // Individua la nota ospite attiva che contiene il widget reale (escludendo le citazioni)
+                const hostRegex = new RegExp(`\\sid=["']${dbId}["']`);
+                const hostNote = (AppState.notes || []).find(n =>
+                    !n.deletedAt && n.content && n.content.includes(dbId) && hostRegex.test(n.content)
+                );
+                if (hostNote) {
+                    hostNotes.push(hostNote);
+                    curr = hostNote;
+                    continue;
+                }
+                break;
+            }
+            curr = curr.parentId ? Store.getNote(curr.parentId) : null;
+        }
+        return { dbIds, hostNotes };
+    },
 
     _updateTabsUI: (mode) => {
         ['notes', 'favorites', 'bookmarks', 'databases'].forEach(t => {
@@ -152,32 +189,47 @@ Object.assign(UI, {
         } 
         // 2. Modalità Struttura Classica (Tab Note)
         else {
-            const roots = Store.getChildren(null).filter(n => !n.isRecordNote);
-            roots.forEach(node => { 
-                const el = UI.buildTreeElement(node); 
-                if (el) container.appendChild(el); 
-            });
+            UI._activeRecordDbIds = null;
+            UI._activeRecordHostNoteIds = null;
+            UI._activeRecordDbInjected = false;
 
-            if (!isFiltering) {
-                let forceDbRenderId = null;
-                if (AppState.currentNoteId) {
-                    let n = Store.getNote(AppState.currentNoteId);
-                    while (n) {
-                        if (n.isRecordNote && n.linkedTableId && n.linkedTableId !== 'SYS_PROPERTIES_DB') {
-                            forceDbRenderId = n.linkedTableId;
+            let activeRecordRootDbId = null;
+            if (!isFiltering && AppState.currentNoteId) {
+                const hostChain = UI._getRecordDbHostChain(AppState.currentNoteId);
+                if (hostChain.dbIds.size > 0) {
+                    UI._activeRecordDbIds = hostChain.dbIds;
+                    UI._activeRecordHostNoteIds = new Set(hostChain.hostNotes.map(n => n.id));
+                    let curr = Store.getNote(AppState.currentNoteId);
+                    while (curr) {
+                        if (curr.isRecordNote && curr.linkedTableId && curr.linkedTableId !== 'SYS_PROPERTIES_DB') {
+                            let dbId = curr.linkedTableId;
+                            const linkedDb = AppState.databases ? AppState.databases[dbId] : null;
+                            if (linkedDb && linkedDb.isLinkedView && linkedDb.sourceTableId) {
+                                dbId = linkedDb.sourceTableId;
+                            }
+                            activeRecordRootDbId = dbId;
                             break;
                         }
-                        n = n.parentId ? Store.getNote(n.parentId) : null;
+                        curr = curr.parentId ? Store.getNote(curr.parentId) : null;
                     }
                 }
+            }
 
-                if (forceDbRenderId && AppState.databases[forceDbRenderId]) {
-                    const dbState = AppState.databases[forceDbRenderId];
+            try {
+                const roots = Store.getChildren(null).filter(n => !n.isRecordNote);
+                roots.forEach(node => { 
+                    const el = UI.buildTreeElement(node); 
+                    if (el) container.appendChild(el); 
+                });
+
+                // Fallback esclusivamente se il database del record attivo è orfano o contenuto in una nota nel Cestino
+                if (!isFiltering && activeRecordRootDbId && !UI._activeRecordDbInjected && AppState.databases && AppState.databases[activeRecordRootDbId]) {
+                    const dbState = AppState.databases[activeRecordRootDbId];
                     const dbNotes = AppState.notes
-                        .filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === forceDbRenderId)
+                        .filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === activeRecordRootDbId)
                         .sort((a, b) => (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' }));
                     
-                    const el = UI.buildDatabaseVirtualTreeElement(forceDbRenderId, dbState, dbNotes, true, false);
+                    const el = UI.buildDatabaseVirtualTreeElement(activeRecordRootDbId, dbState, dbNotes, true, false);
                     if (el) {
                         const sep = document.createElement('div');
                         sep.style.cssText = "height: 1px; background: var(--border-color); margin: 15px 10px; opacity: 0.5;";
@@ -185,6 +237,10 @@ Object.assign(UI, {
                         container.appendChild(el);
                     }
                 }
+            } finally {
+                UI._activeRecordDbIds = null;
+                UI._activeRecordHostNoteIds = null;
+                UI._activeRecordDbInjected = false;
             }
         }
 
@@ -270,6 +326,19 @@ Object.assign(UI, {
             pureText += " " + (el.getAttribute('data-link-note') || "");
         });
 
+        // Estrazione degli URL reali e dei percorsi file dai link (evitando duplicazioni se già uguali al testo visibile)
+        temp.querySelectorAll('a').forEach(el => {
+            const linkText = (el.textContent || '').trim();
+            const href = el.getAttribute('href');
+            if (href && href !== '#' && !href.startsWith('javascript:') && !linkText.includes(href)) {
+                pureText += " " + href;
+            }
+            const filePath = el.getAttribute('data-file-path');
+            if (filePath && !linkText.includes(filePath)) {
+                pureText += " " + filePath;
+            }
+        });
+
         // ESTRAZIONE CONTENUTO BLOCCHI DI CODICE (Sia montati che deidratati in AppState.databases)
         temp.querySelectorAll('[id^="adv_code_"], .code-wrapper, [data-widget-type="code"]').forEach(el => {
             const pre = el.querySelector('pre');
@@ -312,6 +381,16 @@ Object.assign(UI, {
                     jState.entries.forEach(entry => {
                         if (entry.content) {
                             pureText += " " + entry.content.replace(/<[^>]*>?/gm, '');
+                            if (entry.content.includes('href=') || entry.content.includes('data-file-path=')) {
+                                const attrRegex = /(?:href|data-file-path)=["']([^"']+)["']/gi;
+                                let attrMatch;
+                                while ((attrMatch = attrRegex.exec(entry.content)) !== null) {
+                                    const val = attrMatch[1];
+                                    if (val && val !== '#' && !val.startsWith('javascript:')) {
+                                        pureText += " " + val;
+                                    }
+                                }
+                            }
                         }
                     });
                 }
@@ -333,7 +412,9 @@ Object.assign(UI, {
         const isDbBranchNode = Boolean(node.isRecordNote || isDbBranch);
 
         if (node.isRecordNote && !forceRender) {
-            const isActivePath = AppState.currentNoteId === node.id || UI.isDescendant(node.id, AppState.currentNoteId);
+            const isActivePath = AppState.currentNoteId === node.id ||
+                UI.isDescendant(node.id, AppState.currentNoteId) ||
+                (UI._activeRecordHostNoteIds && UI._activeRecordHostNoteIds.has(node.id));
             if (!isActivePath) return null;
         }
 
@@ -367,7 +448,7 @@ Object.assign(UI, {
                     let idx = normTitle.indexOf(filter);
                     while (idx !== -1) { 
                         noteMatchCount++;
-                        if (!forceRender) AppState._globalHighlights++; 
+                        AppState._globalHighlights++; 
                         idx = normTitle.indexOf(filter, idx + filter.length); 
                     }
                 }
@@ -375,7 +456,7 @@ Object.assign(UI, {
                     let idx = normContent.indexOf(filter);
                     while (idx !== -1) { 
                         noteMatchCount++;
-                        if (!forceRender) AppState._globalHighlights++; 
+                        AppState._globalHighlights++; 
                         idx = normContent.indexOf(filter, idx + filter.length); 
                     }
                 }
@@ -401,23 +482,37 @@ Object.assign(UI, {
 
         let dbElementsToInject = [];
         let hasMatchDbChild = false;
-        
-        if (!AppState.showDbNotesInTree && !isDefaultView && node.content) {
+
+        const shouldCheckActiveDb = isDefaultView && UI._activeRecordDbIds && UI._activeRecordDbIds.size > 0;
+        if (!AppState.showDbNotesInTree && (!isDefaultView || shouldCheckActiveDb) && node.content) {
             // Isolamento rigoroso: lo spazio iniziale \s esclude data-ref-id delle citazioni senza manipolare il DOM
             const dbRegex = /\sid=["'](adv_tbl_[a-zA-Z0-9_]+|adv_pivot_[a-zA-Z0-9_]+|adv_journal_[a-zA-Z0-9_]+)["']/g;
+            const seenDbIdsInNote = new Set();
             let match;
             while ((match = dbRegex.exec(node.content)) !== null) {
                 if (match[1].includes('_cited_')) continue;
 
                 const dbId = match[1];
+                if (seenDbIdsInNote.has(dbId)) continue;
+                seenDbIdsInNote.add(dbId);
+
+                // In vista predefinita, inietta esclusivamente il DB lungo il percorso della record note attiva
+                if (isDefaultView && (!UI._activeRecordDbIds || !UI._activeRecordDbIds.has(dbId))) {
+                    continue;
+                }
+
                 if (AppState.databases && AppState.databases[dbId]) {
                     const dbState = AppState.databases[dbId];
                     if (!dbState.isPivot && !dbState.isLinkedView && dbId !== 'SYS_PROPERTIES_DB') {
                         const dbNotes = AppState.notes.filter(n => !n.deletedAt && n.isRecordNote && n.linkedTableId === dbId);
-                        const dbEl = UI.buildDatabaseVirtualTreeElement(dbId, dbState, dbNotes, AppState.currentNoteId === node.id, false);
+                        const forceExpandDb = AppState.currentNoteId === node.id || (isDefaultView && UI._activeRecordDbIds && UI._activeRecordDbIds.has(dbId));
+                        const dbEl = UI.buildDatabaseVirtualTreeElement(dbId, dbState, dbNotes, forceExpandDb, false);
                         if (dbEl) {
                             dbElementsToInject.push(dbEl);
                             hasMatchDbChild = true;
+                            if (isDefaultView && UI._activeRecordDbIds && UI._activeRecordDbIds.has(dbId)) {
+                                UI._activeRecordDbInjected = true;
+                            }
                         }
                     }
                 }
@@ -497,7 +592,7 @@ Object.assign(UI, {
         if (isCurrentActive && hasOnlyToc) {
             isExpanded = node._tocCollapsed !== true;
         } else {
-            isExpanded = node.expanded !== false || !isDefaultView || dbElementsToInject.length > 0;
+            isExpanded = node.expanded !== false || !isDefaultView;
             if (isCurrentActive && node._tocCollapsed === true && !hasSubNotes) {
                 isExpanded = false;
             }

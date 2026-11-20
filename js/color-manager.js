@@ -2,40 +2,28 @@
  * ColorManager.js
  * Gestisce l'applicazione dei colori (Testo ed Evidenziatore) tramite Menu Standardizzato.
  * Algoritmo di Appiattimento Nativo (Evita annidamenti di span).
- * FIX ARCHITETTURA: Usa buildContextMenu per i color picker (Niente più div hardcodati).
- * FIX ANTEPRIMA: Calcola il background/color corrente della selezione e li incrocia nei riquadri del menù.
- * FIX DOM (ExecCommand): Lo scraper ora analizza tutti i nodi (*) proteggendo però i Widget tramite Firewall.
- * FIX EREDITÀ COLORI: Risalita DOM per identificare il vero colore di sfondo tra span nidificati.
- * FIX TOGGLE: Il tasto principale ora agisce come interruttore (ON/OFF) se il colore selezionato è già attivo.
- * FEAT MULTI-CELL COLORING: Quando sono selezionate più celle di una tabella semplice (TableManager.Selection),
+ * Usa buildContextMenu per i color picker.
+ * Calcola il background/color corrente della selezione e li incrocia nei riquadri del menù.
+ * Lo scraper analizza tutti i nodi (*) proteggendo però i Widget tramite Firewall.
+ * Risalita DOM per identificare il vero colore di sfondo tra span nidificati.
+ * Il tasto principale agisce come interruttore (ON/OFF) se il colore selezionato è già attivo.
+ * Quando sono selezionate più celle di una tabella semplice (TableManager.Selection),
  * l'applicazione del colore testo ed evidenziatore agisce direttamente e simultaneamente su tutte le celle,
  * con salvataggio atomico della cronologia di Undo (Ctrl+Z) e Redo (Ctrl+Y).
- * FEAT PERSISTENCE: Memorizzazione persistente in localStorage degli ultimi colori usati (pronotes_last_hl, pronotes_last_tx).
- * FIX KEYBOARD SHORTCUT SELECTION: Preserva la selezione attiva del browser senza collassarla all'invocazione da tastiera.
- * FIX TEXT COLOR TOGGLE UNWRAP: Risolto annidamento genitore su foreColor neutro azzerando il colore temporaneo del genitore.
- * FEAT COLORED UNDERLINE: Supporto alle sottolineature colorate (hl-u-c1..hl-u-c10) all'interno del menù evidenziatore.
- * FIX PREVIEW HIGHLIGHT EXCLUSIVITY: Anteprima fedele a sfondo neutro per i campioni di sottolineatura onde evitare false aspettative visive.
- * FEAT WORD-SNAP AUTO EXPANSION: Selezione automatica dell'intera parola sotto cursore se non vi è selezione manuale attiva.
- * FIX WORD-SNAP BOUNDARIES: Verifica rigorosa dei confini di editabilità e validità del nodo di testo in expandSelectionToWord.
- * FIX ATOMIC REVERSION (TRY-FINALLY): Riconversione garantita dei colori magici temporanei (rgb 252,5,5) in classi CSS
- * anche in caso di eccezioni intermedie, con routine di auto-guarigione (healMagicColors) al caricamento.
- * FEAT SMART CARET COLLAPSE: Collassa automaticamente la selezione a fine parola dopo l'auto-espansione (Word-Snap),
- * impedendo che la digitazione del carattere successivo sovrascriva accidentalmente la parola evidenziata.
- * FEAT SMART FORMATTING ESCAPE ON SPACES: Se il cursore si trova su spazi vuoti o a fine span senza parole selezionate,
- * la pressione dell'evidenziatore o del colore testo estrae il cursore dallo span formattato (trasferendo gli spazi all'esterno)
- * consentendo all'utente di riprendere a scrivere all'istante in testo neutro non colorato.
- * FIX PARTIAL CELL TEXT COLORING: Se l'utente seleziona solo una porzione di testo dentro una cella di tabella semplice,
- * la formattazione viene applicata esclusivamente alla porzione selezionata preservando lo sfondo e la struttura della cella.
- * FIX ZERO-FONT & UNWRAP DEFINITIVO: Rimossa ogni gestione del tag legacy <font> e introdotto lo srotolamento
- * ricorsivo a tappeto di qualsiasi span rimasto privo di classi (anche con attributi vuoti come class="").
- * FIX TOGGLE OFF CELLA & MULTI-CELLA: Riconoscimento universale della rimozione colore quando una o più celle hanno già una formattazione attiva.
- * FIX RACE CONDITION SELECT COLOR: Esecuzione di applyColor prima della chiusura del menu per prevenire lo svuotamento della selezione celle.
- * FIX CELL BACKGROUND PRESERVATION: L'applicazione o rimozione dell'evidenziatore di testo all'interno di tabelle semplici
- * opera esclusivamente sul testo (span interni), preservando integralmente le classi di sfondo e gli stili del tag TD/TH.
- * FIX ISOLATED TOGGLE DETECTION: Risolto bug di mancata evidenziazione eliminando il falso positivo di querySelector
- * sul paragrafo genitore comune e introdotto fallback affidabile tra hiliteColor e backColor.
- * FEAT SELECTION RANGE TRIMMING: Esclusione automatica degli spazi bianchi esterni (\u0020, \u00A0, tab, a capo, ZWS)
- * prima di applicare colore o evidenziatore, garantendo che lo stile si applichi solo al testo effettivo come un trim programmatico.
+ * Memorizzazione persistente in localStorage degli ultimi colori usati (pronotes_last_hl, pronotes_last_tx).
+ * Preserva la selezione attiva del browser senza collassarla all'invocazione da tastiera.
+ * Supporto alle sottolineature colorate (hl-u-c1..hl-u-c10) all'interno del menù evidenziatore.
+ * Anteprima fedele a sfondo neutro per i campioni di sottolineatura onde evitare false aspettative visive.
+ * Selezione automatica dell'intera parola sotto cursore se non vi è selezione manuale attiva (Word-Snap)
+ * con collasso del cursore dentro l'ultimo nodo testo della parola per consentire il toggle immediato.
+ * Isolamento dei canali colore prima di execCommand quando uno span condivide più classi (es. tx-* + hl-*),
+ * consentendo al browser di tagliare e rimuovere i colori anche su selezioni parziali e sugli spazi.
+ * Riconversione garantita dei colori magici temporanei (rgb 252,5,5) in classi CSS tramite try-finally.
+ * Gestione intelligente del cursore su spazi o in uscita da span formattati, con supporto completo
+ * per la colorazione e rimozione su selezioni che includono o consistono di soli spazi e su righe vuote dopo Invio.
+ * Se l'utente seleziona solo una porzione di testo dentro una cella di tabella semplice,
+ * la formattazione viene applicata esclusivamente alla porzione selezionata preservando lo sfondo della cella.
+ * Srotolamento ricorsivo di qualsiasi span rimasto privo di classi (anche con attributi vuoti come class="").
  */
 
 const ColorManager = {
@@ -82,65 +70,6 @@ const ColorManager = {
         ColorManager.updateToolbarIcon('text', ColorManager.lastText);
     },
 
-    /**
-     * Trim programmatico della selezione: esclude gli spazi esterni (\u0020, \u00A0, tab, a capo, ZWS)
-     * restringendo direttamente gli estremi di testo del Range attivo nel DOM.
-     */
-    trimSelection: () => {
-        const sel = window.getSelection();
-        if (!sel || !sel.rangeCount || sel.isCollapsed) return;
-
-        const range = sel.getRangeAt(0);
-
-        // Risoluzione difensiva dei nodi di testo estremi se il range punta a contenitori element
-        let startNode = range.startContainer;
-        let startOffset = range.startOffset;
-        if (startNode.nodeType === Node.ELEMENT_NODE && startNode.childNodes && startNode.childNodes[startOffset]) {
-            const candidate = startNode.childNodes[startOffset];
-            if (candidate.nodeType === Node.TEXT_NODE) {
-                startNode = candidate;
-                startOffset = 0;
-            }
-        }
-
-        let endNode = range.endContainer;
-        let endOffset = range.endOffset;
-        if (endNode.nodeType === Node.ELEMENT_NODE && endOffset > 0 && endNode.childNodes && endNode.childNodes[endOffset - 1]) {
-            const candidate = endNode.childNodes[endOffset - 1];
-            if (candidate.nodeType === Node.TEXT_NODE) {
-                endNode = candidate;
-                endOffset = candidate.nodeValue.length;
-            }
-        }
-
-        // 1. Trim all'inizio (start) se comincia su spazi
-        if (startNode.nodeType === Node.TEXT_NODE) {
-            const textAfter = startNode.nodeValue.substring(startOffset);
-            const leadMatch = textAfter.match(/^[ \t\u00A0\r\n\u200B\uFEFF]+/);
-            if (leadMatch) {
-                range.setStart(startNode, startOffset + leadMatch[0].length);
-            }
-        }
-
-        // 2. Trim alla fine (end) se termina su spazi
-        if (endNode.nodeType === Node.TEXT_NODE) {
-            const textBefore = endNode.nodeValue.substring(0, endOffset);
-            const trailMatch = textBefore.match(/[ \t\u00A0\r\n\u200B\uFEFF]+$/);
-            if (trailMatch) {
-                range.setEnd(endNode, endOffset - trailMatch[0].length);
-            }
-        }
-
-        // Se dopo il trim la selezione si è collassata (erano presenti unicamente spazi vuoti), esci
-        if (range.collapsed) return;
-
-        sel.removeAllRanges();
-        sel.addRange(range);
-        if (typeof Editor !== 'undefined') {
-            Editor.savedRange = range.cloneRange();
-        }
-    },
-
     // Espansione automatica intelligente sulla parola sotto cursore (Word-Snap)
     expandSelectionToWord: (sel) => {
         if (!sel || !sel.rangeCount || !sel.isCollapsed) return false;
@@ -154,14 +83,35 @@ const ColorManager = {
         if (!checkEl) return false;
         if (checkEl.closest && checkEl.closest('input, textarea, select')) return false;
 
+        const isWordChar = (char) => /[a-zA-Z0-9À-ÿ_\-]/.test(char);
+
         // Se il cursore si trova su un nodo elemento (es. fine paragrafo o bordo span), scende al rispettivo nodo di testo
         if (node.nodeType === Node.ELEMENT_NODE) {
             if (node.childNodes && node.childNodes[offset] && node.childNodes[offset].nodeType === Node.TEXT_NODE) {
                 node = node.childNodes[offset];
                 offset = 0;
-            } else if (node.childNodes && offset > 0 && node.childNodes[offset - 1] && node.childNodes[offset - 1].nodeType === Node.TEXT_NODE) {
-                node = node.childNodes[offset - 1];
-                offset = node.nodeValue ? node.nodeValue.length : 0;
+            } else if (node.childNodes && offset > 0 && node.childNodes[offset - 1]) {
+                let prevChild = node.childNodes[offset - 1];
+                while (prevChild && prevChild.nodeType === Node.ELEMENT_NODE && (!prevChild.classList || !prevChild.classList.contains('adv-inline-shell'))) {
+                    prevChild = prevChild.lastChild;
+                }
+                if (prevChild && prevChild.nodeType === Node.TEXT_NODE) {
+                    node = prevChild;
+                    offset = node.nodeValue ? node.nodeValue.length : 0;
+                }
+            }
+        }
+
+        // Se il browser ha appoggiato il cursore a offset 0 del TextNode subito dopo uno span formattato
+        // (es. <span class="tx-c6">ciao</span>| mondo), rientra nella parola dello span adiacente
+        if (node && node.nodeType === Node.TEXT_NODE && offset === 0 && !isWordChar((node.nodeValue || '').charAt(0))) {
+            let prev = node.previousSibling;
+            while (prev && prev.nodeType === Node.ELEMENT_NODE && (!prev.classList || !prev.classList.contains('adv-inline-shell')) && prev.tagName !== 'BR' && prev.tagName !== 'IMG') {
+                prev = prev.lastChild;
+            }
+            if (prev && prev.nodeType === Node.TEXT_NODE && prev.nodeValue && isWordChar(prev.nodeValue.charAt(prev.nodeValue.length - 1))) {
+                node = prev;
+                offset = prev.nodeValue.length;
             }
         }
 
@@ -169,8 +119,6 @@ const ColorManager = {
 
         const text = node.nodeValue || '';
         if (!text || offset < 0 || offset > text.length) return false;
-
-        const isWordChar = (char) => /[a-zA-Z0-9À-ÿ_\-]/.test(char);
 
         // Identifica se il punto di inserimento tocca un carattere appartenente a una parola
         let start = offset;
@@ -219,10 +167,9 @@ const ColorManager = {
 
     /**
      * SMART FORMATTING ESCAPE: Gestione intelligente del cursore su spazi o a confine di span formattati.
-     * Quando l'utente preme il pulsante dell'evidenziatore o del colore testo senza una parola selezionata,
-     * verifica se il cursore si trova dentro o subito adiacente a uno span formattato (es. dopo uno spazio).
-     * Se sì, sposta gli spazi all'esterno e colloca il cursore nel testo normale, consentendo di proseguire
-     * la scrittura senza rimanere intrappolati nello stile.
+     * Quando l'utente preme il pulsante dell'evidenziatore o del colore testo su una riga con testo ma senza
+     * alcuna parola sotto il cursore, sposta eventuali spazi di coda all'esterno dello span per riprendere
+     * a scrivere in testo neutro. Non interviene su blocchi vuoti (gestiti direttamente da applyColor).
      */
     escapeFormattingSpan: (type, sel, editor) => {
         if (!sel || !sel.rangeCount || !sel.isCollapsed || !editor) return false;
@@ -246,15 +193,19 @@ const ColorManager = {
             }
         };
 
-        // SCENARIO 1: Il cursore si trova DENTRO lo span formattato (a fine testo o su spazi in coda)
+        // SCENARIO 1: Il cursore si trova DENTRO lo span formattato (dopo del testo o su spazi in coda)
         let formatSpan = parentEl.closest('span');
         while (formatSpan && formatSpan !== editor && !isTargetSpan(formatSpan)) {
             formatSpan = formatSpan.parentNode ? formatSpan.parentNode.closest('span') : null;
         }
 
         if (formatSpan && isTargetSpan(formatSpan)) {
-            // Verifica se il cursore è verso la fine del testo dello span (dopo l'ultima parola o su spazi)
             const spanText = formatSpan.textContent || '';
+            // Se lo span è vuoto (es. nuova riga dopo Invio: <span class="..."><br></span>), lascia rimuovere/aggiornare lo span ad applyColor
+            if (spanText.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '') === '') {
+                return false;
+            }
+
             const preRange = range.cloneRange();
             preRange.selectNodeContents(formatSpan);
             preRange.setEnd(range.startContainer, range.startOffset);
@@ -312,7 +263,6 @@ const ColorManager = {
 
         // Se siamo all'inizio di un nodo di testo preceduto dallo span formattato
         if (prevSibling && isTargetSpan(prevSibling)) {
-            // Il cursore è già fisicamente fuori dallo span; garantiamo che il range attivo sia solido
             const newRange = document.createRange();
             newRange.setStart(node, offset);
             newRange.collapse(true);
@@ -326,6 +276,82 @@ const ColorManager = {
         }
 
         return false;
+    },
+
+    // Gestisce l'applicazione o rimozione colore su una riga vuota (es. <p><span class="tx-c6"><br></span></p>)
+    _applyColorOnEmptyBlockCaret: (type, colorClass, sel, editor) => {
+        if (!sel || !sel.rangeCount || !sel.isCollapsed || !editor) return false;
+        const range = sel.getRangeAt(0);
+        const startEl = range.startContainer.nodeType === Node.TEXT_NODE ? range.startContainer.parentNode : range.startContainer;
+        if (!startEl) return false;
+
+        const block = startEl.closest('p, div, li, h1, h2, h3, h4, h5, h6, td, th');
+        if (!block || block === editor || !editor.contains(block)) return false;
+
+        const cleanBlockText = block.textContent.replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+        if (cleanBlockText !== '' || block.querySelector('img, audio, iframe, svg, .adv-widget-shell, .adv-inline-shell')) {
+            return false;
+        }
+
+        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+
+        const isPrefixMatch = (cls) => type === 'highlight' ? (cls.startsWith('hl-c') || cls.startsWith('hl-u-c')) : cls.startsWith('tx-c');
+
+        // Rimuove dal basso verso l'alto le classi di questo canale colore e srotola gli span rimasti vuoti
+        Array.from(block.querySelectorAll('span, font')).reverse().forEach(sp => {
+            if (!ColorManager._isSafeToColor(sp)) return;
+            Array.from(sp.classList).filter(isPrefixMatch).forEach(c => sp.classList.remove(c));
+            if (type === 'highlight') sp.style.backgroundColor = '';
+            else sp.style.color = '';
+
+            if (sp.getAttribute('class') === '') sp.removeAttribute('class');
+            if (sp.getAttribute('style') === '') sp.removeAttribute('style');
+            if (sp.attributes.length === 0) {
+                const p = sp.parentNode;
+                if (p) {
+                    while (sp.firstChild) p.insertBefore(sp.firstChild, sp);
+                    sp.remove();
+                }
+            }
+        });
+
+        let caretHost = block;
+        if (colorClass) {
+            const existingSpan = block.querySelector('span');
+            if (existingSpan && ColorManager._isSafeToColor(existingSpan)) {
+                existingSpan.classList.add(colorClass);
+                if (!existingSpan.querySelector('br')) existingSpan.innerHTML = '<br>';
+                caretHost = existingSpan;
+            } else {
+                const newSpan = document.createElement('span');
+                newSpan.className = colorClass;
+                newSpan.innerHTML = '<br>';
+                block.innerHTML = '';
+                block.appendChild(newSpan);
+                caretHost = newSpan;
+            }
+        } else {
+            const remainingSpan = block.querySelector('span');
+            if (remainingSpan && ColorManager._isSafeToColor(remainingSpan)) {
+                if (!remainingSpan.querySelector('br')) remainingSpan.innerHTML = '<br>';
+                caretHost = remainingSpan;
+            } else if (block.childNodes.length === 0 && block.tagName !== 'TD' && block.tagName !== 'TH') {
+                block.innerHTML = '<br>';
+            }
+        }
+
+        const newRange = document.createRange();
+        newRange.setStart(caretHost, 0);
+        newRange.collapse(true);
+        sel.removeAllRanges();
+        sel.addRange(newRange);
+
+        if (typeof Editor !== 'undefined') {
+            Editor.savedRange = newRange.cloneRange();
+        }
+        Store.triggerAutoSave();
+        Editor.updateToolbarFormatting();
+        return true;
     },
 
     openColorMenu: (e, anchorId, type) => {
@@ -421,11 +447,6 @@ const ColorManager = {
         const sel = window.getSelection();
         if (!sel || !sel.rangeCount) return false;
 
-        if (!sel.isCollapsed) {
-            ColorManager.trimSelection();
-            if (sel.isCollapsed) return false;
-        }
-
         const range = sel.getRangeAt(0);
 
         // Funzione di verifica se un elemento possiede la classe specifica ricercata
@@ -449,7 +470,14 @@ const ColorManager = {
         };
 
         if (sel.isCollapsed) {
-            return isNodeWithinColoredSpan(sel.anchorNode);
+            if (isNodeWithinColoredSpan(sel.anchorNode)) return true;
+            if (sel.anchorNode && sel.anchorNode.nodeType === Node.ELEMENT_NODE && sel.anchorNode.childNodes[sel.anchorOffset]) {
+                const child = sel.anchorNode.childNodes[sel.anchorOffset];
+                if (hasMatchingClass(child) || (child.querySelector && targetClass && child.querySelector(`.${targetClass}`))) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         // Selezione estesa: verifica se il comune antenato o tutti i nodi di testo intersecati hanno il colore
@@ -460,7 +488,9 @@ const ColorManager = {
             return true;
         }
 
-        // Scansione puntuale dei soli nodi di testo inclusi nel range (senza interrogare querySelector generici su blocchi antenati)
+        const hasNonSpaceInSelection = /\S/.test(range.toString().replace(/[\u200B\uFEFF]/g, ''));
+
+        // Scansione puntuale dei soli nodi di testo inclusi nel range (includendo gli spazi se la selezione contiene solo spazi)
         const walker = document.createTreeWalker(rootContainer, NodeFilter.SHOW_TEXT, null, false);
         let textNode;
         let hasText = false;
@@ -480,8 +510,11 @@ const ColorManager = {
             }
 
             if (isIntersecting) {
-                const textVal = textNode.nodeValue.replace(/[\u200B\uFEFF\u00A0\r\n\t]/g, '').trim();
-                if (textVal.length > 0) {
+                const cleanContent = hasNonSpaceInSelection
+                    ? textNode.nodeValue.replace(/[\u200B\uFEFF\u00A0\r\n\t]/g, '').trim()
+                    : textNode.nodeValue.replace(/[\u200B\uFEFF\r\n]/g, '');
+
+                if (cleanContent.length > 0) {
                     hasText = true;
                     if (!isNodeWithinColoredSpan(textNode)) {
                         allColored = false;
@@ -510,7 +543,7 @@ const ColorManager = {
             wasAutoExpanded = ColorManager.expandSelectionToWord(sel);
         }
 
-        // SMART ESCAPE SU SPAZI: se non tocca alcuna parola ed è collassato, verifica se siamo in uscita da uno span
+        // SMART ESCAPE SU SPAZI: se non tocca alcuna parola ed è collassato, verifica se siamo in uscita da uno span con testo
         if (!hasSelectedCells && !wasAutoExpanded && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
             const escaped = ColorManager.escapeFormattingSpan(type, sel, editor);
             if (escaped) {
@@ -518,12 +551,6 @@ const ColorManager = {
                 Editor.updateToolbarFormatting();
                 return;
             }
-        }
-
-        // TRIM RANGE: Se la selezione è estesa, esclude gli spazi esterni
-        if (!hasSelectedCells && sel && sel.rangeCount > 0 && !sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
-            ColorManager.trimSelection();
-            if (sel.isCollapsed) return;
         }
 
         const targetColor = type === 'highlight' ? ColorManager.lastHighlight : ColorManager.lastText;
@@ -534,7 +561,7 @@ const ColorManager = {
             return;
         }
 
-        // Se la selezione o le celle contengono già una colorazione di quel tipo, attiva la rimozione (Toggle OFF)
+        // Se la selezione o le celle contengono già la stessa colorazione, attiva la rimozione (Toggle OFF)
         const isAlreadyColored = ColorManager._isSelectionAlreadyColored(type, targetColor);
         
         if (isAlreadyColored) {
@@ -559,8 +586,7 @@ const ColorManager = {
             ColorManager.updateToolbarIcon('text', colorClass || 'tx-auto');
         }
 
-        // FIX RACE CONDITION: Applica la colorazione PRIMA di chiudere il menu
-        // per evitare che il bubbling del click svuoti TableManager.Selection.selectedCells
+        // Applica la colorazione PRIMA di chiudere il menu per evitare lo svuotamento della selezione celle
         ColorManager.applyColor(type, colorClass);
 
         if (typeof UI !== 'undefined' && UI.Menu) UI.Menu.closeAll(true);
@@ -616,7 +642,6 @@ const ColorManager = {
 
     applyColor: (type, colorClass, forceAutoExpanded = false) => {
         // GESTIONE FORMATTAZIONE MULTICELLA TABELLA (Colore Testo ed Evidenziatore)
-        // Se ci sono più celle selezionate o l'intera cella è priva di selezione di testo parziale, hasCellSelection() è true
         const hasSelectedCells = typeof TableManager !== 'undefined' && 
                                  TableManager.Selection && 
                                  (typeof TableManager.Selection.hasCellSelection === 'function'
@@ -624,13 +649,10 @@ const ColorManager = {
                                      : TableManager.Selection.selectedCells && TableManager.Selection.selectedCells.length > 0);
 
         if (hasSelectedCells) {
-            // Forza l'inserimento dello snapshot di partenza per garantire l'Undo (Ctrl+Z)
             Editor.saveSnapshot(true);
             const cells = TableManager.Selection.selectedCells;
 
             cells.forEach(cell => {
-                // 1. Rimuove le classi e gli stili ESCLUSIVAMENTE dagli elementi testuali interni alla cella.
-                // Il tag TD o TH non viene minimamente toccato, preservando integralmente il colore di sfondo della cella (TableManager).
                 if (type === 'text') {
                     cell.querySelectorAll('[class*="tx-c"]').forEach(el => {
                         Array.from(el.classList).filter(c => c.startsWith('tx-c')).forEach(c => el.classList.remove(c));
@@ -643,7 +665,6 @@ const ColorManager = {
                     });
                 }
 
-                // 2. Se è stato specificato un colore (non null/rimozione), avvolge tutto il contenuto utile in uno span
                 if (colorClass) {
                     const textOnly = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
                     const span = document.createElement('span');
@@ -652,14 +673,12 @@ const ColorManager = {
                     if (textOnly || cell.querySelector('img, audio, input, svg')) {
                         while (cell.firstChild) span.appendChild(cell.firstChild);
                     } else {
-                        // Cella vuota: assicura il marcatore <br> per consentire la digitazione immediata nello stile scelto
                         span.innerHTML = '<br>';
                         cell.innerHTML = '';
                     }
                     cell.appendChild(span);
                 }
 
-                // 3. Srotolamento ricorsivo di TUTTI gli span rimasti privi di classi o attributi
                 let cleanChanged = true;
                 while (cleanChanged) {
                     cleanChanged = false;
@@ -701,8 +720,7 @@ const ColorManager = {
         const sel = window.getSelection();
         let wasAutoExpanded = forceAutoExpanded;
 
-        // GESTIONE ATTENTA DELLA SELEZIONE:
-        // Se il cursore o la selezione è attiva dentro l'editor, il range corrente nel DOM vivo è la verità
+        // Ripristina la selezione solo se il cursore non è già attivo nell'editor
         if (sel && sel.rangeCount > 0 && editor && editor.contains(sel.anchorNode)) {
             if (typeof Editor !== 'undefined') {
                 Editor.savedRange = sel.getRangeAt(0).cloneRange();
@@ -716,8 +734,11 @@ const ColorManager = {
             wasAutoExpanded = ColorManager.expandSelectionToWord(sel) || wasAutoExpanded;
         }
 
-        // SMART ESCAPE SU SPAZI: se non tocca alcuna parola ed è ancora collassato, verifica se siamo in uscita da uno span
+        // Se siamo in una riga vuota (es. dopo Invio su testo colorato), gestisce direttamente lo span vuoto
         if (!wasAutoExpanded && sel && sel.rangeCount > 0 && sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
+            if (ColorManager._applyColorOnEmptyBlockCaret(type, colorClass, sel, editor)) {
+                return;
+            }
             const escaped = ColorManager.escapeFormattingSpan(type, sel, editor);
             if (escaped) {
                 Store.triggerAutoSave();
@@ -726,38 +747,75 @@ const ColorManager = {
             }
         }
 
-        // TRIM RANGE: Esclusione automatica degli spazi esterni prima della colorazione
-        if (sel && sel.rangeCount > 0 && !sel.isCollapsed && editor && editor.contains(sel.anchorNode)) {
-            ColorManager.trimSelection();
-        }
-
         if (!sel || !sel.rangeCount || sel.isCollapsed) return;
 
         if (typeof Editor !== 'undefined') Editor.saveSnapshot();
 
         document.execCommand('styleWithCSS', false, true);
 
-        try {
-            // 1. Converte tutte le classi attuali in colori finti, ESCLUDENDO l'infrastruttura Widget e i tag cella TD/TH
-            editor.querySelectorAll('*').forEach(el => {
-                if (!ColorManager._isSafeToColor(el)) return;
+        const activeRange = sel.getRangeAt(0);
+        const savedStartC = activeRange.startContainer;
+        const savedStartO = activeRange.startOffset;
+        const savedEndC = activeRange.endContainer;
+        const savedEndO = activeRange.endOffset;
+        const reshapedMap = new Map();
 
+        try {
+            // 1. Converte tutte le classi attuali in colori finti, isolando il canale in uno span puro
+            // quando l'elemento possiede altre classi (es. tx-* + hl-*) così execCommand può tagliarlo nativamente
+            const safeElements = Array.from(editor.querySelectorAll('*')).filter(el => ColorManager._isSafeToColor(el));
+            safeElements.forEach(el => {
+                let magicHex = null;
                 if (type === 'highlight') {
                     for (let cls in ColorManager.magicHl) {
-                        if (el.classList.contains(cls)) { 
-                            el.style.backgroundColor = ColorManager.magicHl[cls].hex; 
-                            el.classList.remove(cls); 
+                        if (el.classList.contains(cls)) {
+                            magicHex = ColorManager.magicHl[cls].hex;
+                            el.classList.remove(cls);
                         }
                     }
                 } else {
                     for (let cls in ColorManager.magicTx) {
-                        if (el.classList.contains(cls)) { 
-                            el.style.color = ColorManager.magicTx[cls].hex; 
-                            el.classList.remove(cls); 
+                        if (el.classList.contains(cls)) {
+                            magicHex = ColorManager.magicTx[cls].hex;
+                            el.classList.remove(cls);
                         }
                     }
                 }
+
+                if (el.getAttribute('class') === '') el.removeAttribute('class');
+
+                if (magicHex) {
+                    const hasOtherClasses = el.classList.length > 0;
+                    const isNonSpan = el.tagName !== 'SPAN';
+                    const hasBlockChildren = !!el.querySelector('p, div, li, ul, ol, table, h1, h2, h3, h4, h5, h6, blockquote');
+
+                    if ((hasOtherClasses || isNonSpan) && !hasBlockChildren) {
+                        const styleSpan = document.createElement('span');
+                        if (type === 'highlight') styleSpan.style.backgroundColor = magicHex;
+                        else styleSpan.style.color = magicHex;
+                        while (el.firstChild) styleSpan.appendChild(el.firstChild);
+                        el.appendChild(styleSpan);
+                        reshapedMap.set(el, styleSpan);
+                    } else {
+                        if (type === 'highlight') el.style.backgroundColor = magicHex;
+                        else el.style.color = magicHex;
+                    }
+                }
             });
+
+            if (reshapedMap.size > 0) {
+                try {
+                    const r = document.createRange();
+                    const sc = reshapedMap.has(savedStartC) ? reshapedMap.get(savedStartC) : savedStartC;
+                    const so = reshapedMap.has(savedStartC) ? Math.min(savedStartO, sc.childNodes.length) : savedStartO;
+                    const ec = reshapedMap.has(savedEndC) ? reshapedMap.get(savedEndC) : savedEndC;
+                    const eo = reshapedMap.has(savedEndC) ? Math.min(savedEndO, ec.childNodes.length) : savedEndO;
+                    r.setStart(sc, so);
+                    r.setEnd(ec, eo);
+                    sel.removeAllRanges();
+                    sel.addRange(r);
+                } catch (_) {}
+            }
 
             // 2. Comanda al browser di tagliare/fondere i nodi nativamente
             let targetHex = type === 'highlight' ? ColorManager.removeHl.hex : ColorManager.removeTx.hex;
@@ -800,7 +858,6 @@ const ColorManager = {
                             const g = parseInt(m[1], 10);
                             const b = parseInt(m[2], 10);
                             el.style.backgroundColor = '';
-                            // Auto-guarigione mirata per il disallineamento storico (15, 16)
                             if (g === 15 && b === 16) {
                                 el.classList.add('hl-u-c6');
                             } else if (g >= 1 && g <= 10) {
@@ -885,12 +942,54 @@ const ColorManager = {
         }
 
         // SMART CARET COLLAPSE: Se la parola è stata auto-estesa da un cursore collassato,
-        // disattiva la selezione e collassa il cursore a fine parola per prevenire la sovrascrittura accidentale del testo
+        // collassa il cursore alla fine dell'ultimo nodo di testo effettivo della parola stessa
+        // (rimanendo dentro lo span formattato) così che un secondo Ctrl+Alt+H / Ctrl+Shift+H esegua il toggle-off immediato
         if (wasAutoExpanded) {
             const currentSel = window.getSelection();
             if (currentSel && currentSel.rangeCount > 0) {
-                currentSel.collapseToEnd();
-                if (typeof Editor !== 'undefined') {
+                const curRange = currentSel.getRangeAt(0);
+                let endNode = curRange.endContainer;
+                let endOff = curRange.endOffset;
+                let targetTextNode = null;
+
+                if (endNode.nodeType === Node.TEXT_NODE && endOff > 0) {
+                    targetTextNode = endNode;
+                } else if (endNode.nodeType === Node.ELEMENT_NODE && endOff > 0 && endNode.childNodes[endOff - 1]) {
+                    let candidate = endNode.childNodes[endOff - 1];
+                    while (candidate && candidate.nodeType === Node.ELEMENT_NODE) {
+                        candidate = candidate.lastChild;
+                    }
+                    if (candidate && candidate.nodeType === Node.TEXT_NODE && candidate.nodeValue.length > 0) {
+                        targetTextNode = candidate;
+                    }
+                }
+
+                if (!targetTextNode) {
+                    const endEl = endNode.nodeType === Node.TEXT_NODE ? endNode.parentNode : endNode;
+                    const blockHost = (endEl && endEl.closest ? endEl.closest('p, div, li, h1, h2, h3, h4, h5, h6, td, th') : null) || editor;
+                    const refNode = (endNode.nodeType === Node.ELEMENT_NODE && endNode.childNodes[endOff]) ? endNode.childNodes[endOff] : endNode;
+                    const walker = document.createTreeWalker(blockHost, NodeFilter.SHOW_TEXT, null, false);
+                    let prevT = null;
+                    let w;
+                    while ((w = walker.nextNode())) {
+                        if (w === refNode || (refNode.contains && refNode.contains(w))) break;
+                        if (w.nodeValue && w.nodeValue.length > 0) prevT = w;
+                    }
+                    targetTextNode = prevT;
+                }
+
+                if (targetTextNode && document.body.contains(targetTextNode)) {
+                    const safeEnd = endNode === targetTextNode ? Math.min(endOff, targetTextNode.nodeValue.length) : targetTextNode.nodeValue.length;
+                    const collapsedRange = document.createRange();
+                    collapsedRange.setStart(targetTextNode, safeEnd);
+                    collapsedRange.collapse(true);
+                    currentSel.removeAllRanges();
+                    currentSel.addRange(collapsedRange);
+                } else {
+                    currentSel.collapseToEnd();
+                }
+
+                if (typeof Editor !== 'undefined' && currentSel.rangeCount > 0) {
                     Editor.savedRange = currentSel.getRangeAt(0).cloneRange();
                 }
             }

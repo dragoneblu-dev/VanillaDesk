@@ -1,0 +1,869 @@
+/**
+ * editor-paste-html.js
+ * Sottomodulo di Editor.
+ * Sanificazione profonda Rich Text HTML e inserimento DOM con fusione continua dei paragrafi:
+ * - Acquisizione e salvataggio fisico immagini incorporate da HTML/RTF/Web (_sanitizePastedHTML).
+ * - Pulizia tag proprietari Office/Google Docs, conversione semantica stili e incapsulamento tabelle.
+ * - Motore di inserimento DOM con fusione continua di testa e coda e ripristino esatto del cursore (_insertCleanedHTML).
+ */
+
+Object.assign(Editor, {
+
+    _sanitizePastedHTML: async (pastedHTML, pastedText, items, pastedRTF) => {
+        const cleanRawHTML = pastedHTML
+            .replace(/<!--\[if\s+gte\s+vml\s+1\][\s\S]*?<!\[endif\]-->/gi, '')
+            .replace(/<!\[if\s+!vml\]>/gi, '')
+            .replace(/<!\[endif\]>/gi, '')
+            .replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '');
+
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(cleanRawHTML, 'text/html');
+
+        // =========================================================================
+        // ELABORAZIONE E SALVATAGGIO FISICO DELLE IMMAGINI (FSAA o IndexedDB)
+        // =========================================================================
+        const docImages = Array.from(doc.querySelectorAll('img'));
+
+        if (docImages.length > 0) {
+            const clipboardImageFiles = items
+                .filter(it => it.kind === 'file' && it.type && it.type.startsWith('image/'))
+                .map(it => it.getAsFile())
+                .filter(Boolean);
+
+            const rtfImages = Editor._extractImagesFromWordRTF(pastedRTF);
+
+            let clipImgIdx = 0;
+            let rtfImgIdx = 0;
+
+            for (const imgEl of docImages) {
+                let src = imgEl.getAttribute('src') || '';
+                let saved = null;
+
+                // Caso A: Immagine Base64 incorporata (Word, OneNote, rich text)
+                if (src.startsWith('data:image/')) {
+                    saved = await Editor.saveImageSource(src);
+                }
+                // Caso B: Percorso locale file:/// di Word desktop -> risoluzione via RTF o file clipboard
+                else if (src.startsWith('file:///') || src.startsWith('file:\\\\\\') || !src) {
+                    if (rtfImgIdx < rtfImages.length) {
+                        saved = await Editor.saveImageSource(rtfImages[rtfImgIdx++]);
+                    } else if (clipImgIdx < clipboardImageFiles.length) {
+                        saved = await Editor.saveImageSource(clipboardImageFiles[clipImgIdx++]);
+                    }
+                }
+                // Caso C: Immagine web remota (Google Docs, Google Immagini o siti web)
+                else if (src.startsWith('http://') || src.startsWith('https://')) {
+                    saved = await Editor.saveImageSource(src);
+                }
+
+                if (saved) {
+                    imgEl.setAttribute('data-image-ref', saved.fileName);
+                    imgEl.setAttribute('src', saved.blobUrl);
+                    imgEl.setAttribute('onerror', 'Editor.handleImageError(this)');
+                } else if (src.startsWith('file:///') || src.startsWith('file:\\\\\\')) {
+                    imgEl.remove();
+                }
+            }
+        }
+
+        // =========================================================================
+        // INVERSIONE SEMANTICA E RISANAMENTO DEI LINK ANOMALI (<a> ATTORNO A BLOCCHI)
+        // Garantisce che i link <a> non vengano persi, ma che nessun <p> stia dentro un <a>
+        // =========================================================================
+        doc.querySelectorAll('a').forEach(aEl => {
+            const blocksInside = aEl.querySelectorAll('p, div, h1, h2, h3, h4, h5, h6, table, ul, ol, blockquote');
+            if (blocksInside.length > 0) {
+                // Se un <a> racchiude dei blocchi, inverte la gerarchia: ciascun blocco interno eredita il link
+                const href = aEl.getAttribute('href');
+                const targetAttr = aEl.getAttribute('target');
+                const parent = aEl.parentNode;
+
+                if (parent) {
+                    const frag = doc.createDocumentFragment();
+                    while (aEl.firstChild) {
+                        const child = aEl.firstChild;
+                        if (child.nodeType === Node.ELEMENT_NODE && ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI'].includes(child.tagName)) {
+                            // Avvolge il contenuto del blocco dentro un <a> con lo stesso href originario
+                            const innerLink = doc.createElement('a');
+                            if (href) innerLink.setAttribute('href', href);
+                            if (targetAttr) innerLink.setAttribute('target', targetAttr);
+                            while (child.firstChild) innerLink.appendChild(child.firstChild);
+                            child.appendChild(innerLink);
+                            frag.appendChild(child);
+                        } else {
+                            frag.appendChild(child);
+                        }
+                    }
+                    parent.replaceChild(frag, aEl);
+                }
+            }
+        });
+
+        // FASE 0: RIMOZIONE TAG INTRUSIVI E PROPRIETARI OFFICE
+        doc.querySelectorAll('script, style, meta, link, iframe, object, embed, noscript, o\\:p, o-p, w\\:sdt').forEach(el => el.remove());
+
+        Array.from(doc.body.querySelectorAll('*')).forEach(el => {
+            const t = el.tagName.toUpperCase();
+            if (t.startsWith('O:') || t.startsWith('W:') || t.startsWith('M:') || t === 'O-P') {
+                el.remove();
+            }
+        });
+
+        // Rimuove commenti invisibili
+        const iter = doc.createNodeIterator(doc.body, NodeFilter.SHOW_COMMENT, null, false);
+        let commentNode;
+        const commentsToRemove = [];
+        while ((commentNode = iter.nextNode())) commentsToRemove.push(commentNode);
+        commentsToRemove.forEach(c => c.remove());
+
+        // Normalizzazione b/strong di Google Docs
+        doc.querySelectorAll('b, strong').forEach(bEl => {
+            const styleStr = (bEl.getAttribute('style') || '').toLowerCase();
+            const isNormal = bEl.style.fontWeight === 'normal' || bEl.style.fontWeight === '400' || /font-weight\s*:\s*(normal|[1-4]00)/.test(styleStr);
+            const isDocsGuid = (bEl.id && bEl.id.startsWith('docs-internal-guid')) || styleStr.includes('font-weight:normal');
+            if (isNormal || isDocsGuid) {
+                const parent = bEl.parentNode;
+                if (parent) {
+                    while (bEl.firstChild) parent.insertBefore(bEl.firstChild, bEl);
+                    bEl.remove();
+                }
+            }
+        });
+
+        // Conversione preventiva <font> in <span>
+        doc.querySelectorAll('font').forEach(fontEl => {
+            const span = doc.createElement('span');
+            while (fontEl.attributes.length > 0) {
+                span.setAttribute(fontEl.attributes[0].name, fontEl.attributes[0].value);
+                fontEl.removeAttribute(fontEl.attributes[0].name);
+            }
+            while (fontEl.firstChild) span.appendChild(fontEl.firstChild);
+            fontEl.parentNode.replaceChild(span, fontEl);
+        });
+
+        // FASE 0.5: Incapsulamento tag <li> orfani
+        const orphanLis = Array.from(doc.body.children).filter(el => el.tagName === 'LI');
+        if (orphanLis.length > 0) {
+            const wrapUl = doc.createElement('ul');
+            doc.body.insertBefore(wrapUl, orphanLis[0]);
+            orphanLis.forEach(li => wrapUl.appendChild(li));
+        }
+
+        // FASE 0.8: Conversione elenchi Word in <ol> e <ul>
+        Editor._convertWordListsToHTML(doc.body);
+
+        // Re-idratazione ID widget incollati
+        doc.querySelectorAll(WidgetManager.blockSelector).forEach(wrapper => {
+            const oldId = wrapper.id;
+            const type = wrapper.getAttribute('data-widget-type');
+
+            if (type === 'simple-table' || wrapper.classList.contains('simple-table-wrapper')) {
+                wrapper.id = 'stbl_' + Store.generateId();
+                return;
+            }
+
+            const isJournal = wrapper.classList.contains('adv-journal-wrapper');
+            const prefix = isJournal ? 'adv_journal_' : 'adv_tbl_';
+            const newId = prefix + Store.generateId();
+            wrapper.id = newId;
+
+            if (AppState.databases && AppState.databases[oldId]) {
+                let stateClone = JSON.parse(JSON.stringify(AppState.databases[oldId]));
+                if (!isJournal && !stateClone.isPivot && !stateClone.isLinkedView) {
+                    stateClone.title = (stateClone.title || "Database") + " (Copia)";
+                }
+                AppState.databases[newId] = stateClone;
+            }
+            wrapper.removeAttribute('data-state');
+            wrapper.innerHTML = ''; 
+        });
+
+        // FASE 1: Conversione semantica stili di testo
+        const allElements = Array.from(doc.body.querySelectorAll('*')).reverse();
+
+        allElements.forEach(el => {
+            if (WidgetManager.isProtectedBlock(el) || (el.closest && el.closest('.adv-widget-shell, .adv-inline-shell'))) {
+                return;
+            }
+
+            const tag = el.tagName.toUpperCase();
+            const rawStyle = (el.getAttribute('style') || '').toLowerCase();
+
+            const hasBoldWeight = (el.style && (el.style.fontWeight === 'bold' || el.style.fontWeight === 'bolder' || parseInt(el.style.fontWeight, 10) >= 600)) ||
+                                  /font-weight\s*:\s*(bold|bolder|[6-9]00)/i.test(rawStyle) ||
+                                  /mso-bidi-font-weight\s*:\s*bold/i.test(rawStyle);
+
+            const hasItalicStyle = (el.style && (el.style.fontStyle === 'italic' || el.style.fontStyle === 'oblique')) ||
+                                   /font-style\s*:\s*(italic|oblique)/i.test(rawStyle);
+
+            const hasUnderlineStyle = (el.style && el.style.textDecoration && el.style.textDecoration.includes('underline')) ||
+                                      /text-decoration\s*:\s*[^;]*underline/i.test(rawStyle);
+
+            const hasStrikeStyle = (el.style && el.style.textDecoration && el.style.textDecoration.includes('line-through')) ||
+                                   /text-decoration\s*:\s*[^;]*line-through/i.test(rawStyle);
+
+            if (tag === 'STRONG') {
+                const b = doc.createElement('b');
+                while (el.firstChild) b.appendChild(el.firstChild);
+                el.parentNode.replaceChild(b, el);
+                return;
+            }
+            if (tag === 'EM') {
+                const i = doc.createElement('i');
+                while (el.firstChild) i.appendChild(el.firstChild);
+                el.parentNode.replaceChild(i, el);
+                return;
+            }
+            if (tag === 'DEL') {
+                const s = doc.createElement('s');
+                while (el.firstChild) s.appendChild(el.firstChild);
+                el.parentNode.replaceChild(s, el);
+                return;
+            }
+
+            if (tag === 'SPAN' || tag === 'FONT') {
+                const needB = hasBoldWeight && tag !== 'B';
+                const needI = hasItalicStyle && tag !== 'I';
+                const needU = hasUnderlineStyle && tag !== 'U';
+                const needS = hasStrikeStyle && tag !== 'S';
+
+                const existingClass = el.getAttribute('class') || '';
+                const hasVanillaDeskClass = /(?:^|\s)(?:ff-|fs-|hl-c|hl-u-c|tx-c|tag-hash)/.test(existingClass);
+
+                if (needB || needI || needU || needS) {
+                    const frag = doc.createDocumentFragment();
+                    while (el.firstChild) frag.appendChild(el.firstChild);
+
+                    let wrapperTag = frag;
+                    if (needS) {
+                        const sTag = doc.createElement('s');
+                        sTag.appendChild(wrapperTag);
+                        wrapperTag = sTag;
+                    }
+                    if (needU) {
+                        const uTag = doc.createElement('u');
+                        uTag.appendChild(wrapperTag);
+                        wrapperTag = uTag;
+                    }
+                    if (needI) {
+                        const iTag = doc.createElement('i');
+                        iTag.appendChild(wrapperTag);
+                        wrapperTag = iTag;
+                    }
+                    if (needB) {
+                        const bTag = doc.createElement('b');
+                        bTag.appendChild(wrapperTag);
+                        wrapperTag = bTag;
+                    }
+
+                    if (hasVanillaDeskClass) {
+                        el.appendChild(wrapperTag);
+                    } else {
+                        el.parentNode.replaceChild(wrapperTag, el);
+                    }
+                }
+            }
+
+            if (tag === 'P' || tag === 'LI') {
+                const needB = hasBoldWeight && !Array.from(el.children).some(c => c.tagName === 'B');
+                const needI = hasItalicStyle && !Array.from(el.children).some(c => c.tagName === 'I');
+
+                if (needB || needI) {
+                    const frag = doc.createDocumentFragment();
+                    while (el.firstChild) frag.appendChild(el.firstChild);
+
+                    let wrapperTag = frag;
+                    if (needI) {
+                        const iTag = doc.createElement('i');
+                        iTag.appendChild(wrapperTag);
+                        wrapperTag = iTag;
+                    }
+                    if (needB) {
+                        const bTag = doc.createElement('b');
+                        bTag.appendChild(wrapperTag);
+                        wrapperTag = bTag;
+                    }
+                    el.appendChild(wrapperTag);
+                }
+            }
+        });
+
+        // FASE 2: Srotolamento <p> dentro <li>
+        doc.querySelectorAll('li > p').forEach(pInsideLi => {
+            const li = pInsideLi.parentNode;
+            if (li && li.tagName === 'LI' && li.children.length === 1) {
+                while (pInsideLi.firstChild) li.insertBefore(pInsideLi.firstChild, pInsideLi);
+                pInsideLi.remove();
+            }
+        });
+
+        // FASE 3: Normalizzazione celle tabelle
+        doc.querySelectorAll('td, th').forEach(cell => {
+            cell.querySelectorAll('p, div').forEach(b => {
+                const parent = b.parentNode;
+                while (b.firstChild) parent.insertBefore(b.firstChild, b);
+                if (b.nextSibling) parent.insertBefore(doc.createElement('br'), b.nextSibling);
+                b.remove();
+            });
+
+            ['border', 'cellpadding', 'cellspacing', 'width', 'height', 'align', 'valign', 'bgcolor', 'background'].forEach(attr => {
+                cell.removeAttribute(attr);
+            });
+
+            const rawStyle = (cell.getAttribute('style') || '').toLowerCase();
+            const alignMatch = rawStyle.match(/text-align\s*:\s*(center|right|left)/i);
+                
+            if (alignMatch) {
+                cell.setAttribute('style', `text-align: ${alignMatch[1].toLowerCase()};`);
+            } else {
+                cell.removeAttribute('style');
+            }
+
+            let h = cell.innerHTML.trim();
+            h = h.replace(/^(?:&nbsp;|\s|<br\s*\/?>)+/i, '');
+            h = h.replace(/(?:&nbsp;|\s|<br\s*\/?>)+$/i, '');
+            cell.innerHTML = h.trim();
+
+            const cellCleanText = cell.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+            if (!cellCleanText && !cell.querySelector('img, audio, input, svg')) {
+                cell.innerHTML = '<br>';
+            }
+        });
+
+        // FASE 3.2: Incapsulamento tabelle in .simple-table-wrapper
+        doc.querySelectorAll('table').forEach(tbl => {
+            if (tbl.closest('.adv-widget-shell, .simple-table-wrapper')) return;
+
+            ['border', 'cellpadding', 'cellspacing', 'width', 'height', 'align', 'valign', 'bgcolor', 'background'].forEach(attr => {
+                tbl.removeAttribute(attr);
+            });
+            tbl.removeAttribute('style');
+
+            tbl.querySelectorAll('tr').forEach(tr => {
+                ['align', 'valign', 'bgcolor', 'style', 'height'].forEach(attr => tr.removeAttribute(attr));
+            });
+
+            const stblId = 'stbl_' + (typeof Store !== 'undefined' ? Store.generateId() : Date.now());
+            const wrapper = doc.createElement('div');
+            wrapper.className = 'adv-widget-shell simple-table-wrapper';
+            wrapper.setAttribute('data-widget-type', 'simple-table');
+            wrapper.id = stblId;
+            wrapper.contentEditable = 'false';
+
+            tbl.parentNode.insertBefore(wrapper, tbl);
+            wrapper.appendChild(tbl);
+
+            tbl.classList.add('table-striped');
+            tbl.style.width = '100%';
+            tbl.style.tableLayout = 'auto';
+
+            tbl.querySelectorAll('th, td').forEach(c => {
+                c.setAttribute('contenteditable', 'true');
+            });
+        });
+
+        // FASE 4: SANIFICAZIONE PROFONDA UNIFICATA (Editor.cleanDOMTree normalizza anche i <br> in <p>)
+        if (typeof Editor !== 'undefined' && typeof Editor.cleanDOMTree === 'function') {
+            Editor.cleanDOMTree(doc.body);
+        }
+
+        // PULIZIA SELETTIVA DEI SOLI LINK FANTASMA VERAMENTE VUOTI:
+        // Rimuove esclusivamente i tag <a> che non contengono testo e non contengono immagini/media
+        doc.querySelectorAll('a').forEach(aEl => {
+            if (aEl.classList.contains('internal-link') || aEl.classList.contains('file-link')) return;
+            const text = (aEl.textContent || '').replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+            const hasMedia = !!aEl.querySelector('img, audio, video, svg, iframe');
+            if (!text && !hasMedia) {
+                aEl.remove();
+            }
+        });
+
+        // FASE 5: Rimozione nodi di testo vuoti ai margini del body (senza eliminare righe vuote intenzionali)
+        Array.from(doc.body.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
+                node.remove();
+            }
+        });
+
+        while (doc.body.firstElementChild && ['P', 'DIV'].includes(doc.body.firstElementChild.tagName) && doc.body.children.length > 1) {
+            const first = doc.body.firstElementChild;
+            const text = first.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
+            const hasMedia = first.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
+            if (!text && !hasMedia && first.querySelectorAll('br').length === 0) first.remove();
+            else break;
+        }
+        while (doc.body.lastElementChild && ['P', 'DIV'].includes(doc.body.lastElementChild.tagName) && doc.body.children.length > 1) {
+            const last = doc.body.lastElementChild;
+            const text = last.textContent.replace(/[\u200B\uFEFF\u00A0\s]/g, '');
+            const hasMedia = last.querySelector('img, audio, input, svg, iframe, .adv-widget-shell');
+            if (!text && !hasMedia && last.querySelectorAll('br').length === 0) last.remove();
+            else break;
+        }
+
+        let finalHTML = doc.body.innerHTML;
+        finalHTML = finalHTML.replace(/^[\r\n\t]+|[\r\n\t]+$/g, '');
+        finalHTML = finalHTML.replace(/<span[^>]*class="Apple-converted-space"[^>]*>.*?<\/span>/gi, '&nbsp;');
+
+        // Trattamento spazi iniziale e finale deterministico
+        const hasBlockTags = /<\/(p|div|h[1-6]|table|ul|ol|li|blockquote|pre)>/i.test(finalHTML);
+        if (!hasBlockTags) {
+            finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
+            const leadingSpaces = pastedText.match(/^[ \t]*/)[0];
+            const trailingSpaces = pastedText.match(/[ \t]*$/)[0];
+            finalHTML = leadingSpaces + finalHTML + trailingSpaces;
+        } else {
+            finalHTML = finalHTML.replace(/^[\s\uFEFF]+|[\s\uFEFF]+$/g, '');
+        }
+
+        return finalHTML;
+    },
+
+    _insertCleanedHTML: (finalHTML, sel, editorRootEl, preAsyncAnchorMarker) => {
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = finalHTML;
+
+        Array.from(tempDiv.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
+                node.remove();
+            }
+        });
+
+        const isBlockElement = (el) => {
+            if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+            const tag = el.tagName.toUpperCase();
+            return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'TABLE', 'HR', 'UL', 'OL'].includes(tag) ||
+                   el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper');
+        };
+
+        const hasAnyBlocks = Array.from(tempDiv.children).some(isBlockElement);
+        let caretTargetNode = null;
+        let caretTargetOffset = 0;
+        let caretPositionMode = null; // 'after' | 'start' | 'end'
+
+        // Determinazione del blocco contenitore (targetBlock) usando l'ancora o la selezione
+        let targetBlock = null;
+        if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+            targetBlock = preAsyncAnchorMarker.closest('p, div, li, h1, h2, h3, h4, h5, h6, blockquote');
+            if (targetBlock && targetBlock.id === 'noteContent') targetBlock = null;
+        }
+
+        // Se il cursore si trova su testo nudo direttamente figlio di #noteContent (senza <p> attorno),
+        // avvolgiamo i nodi inline contigui in un <p> ospite così da applicare la fusione continua anche in quel caso
+        if (!targetBlock && hasAnyBlocks && preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode === editorRootEl) {
+            const isInlineSibling = (n) => {
+                if (!n) return false;
+                if (n.nodeType === Node.TEXT_NODE) return true;
+                if (n.nodeType === Node.ELEMENT_NODE) {
+                    return n.tagName !== 'BR' && !isBlockElement(n);
+                }
+                return false;
+            };
+
+            const leftNodes = [];
+            let prev = preAsyncAnchorMarker.previousSibling;
+            while (prev && isInlineSibling(prev)) {
+                leftNodes.unshift(prev);
+                prev = prev.previousSibling;
+            }
+
+            const rightNodes = [];
+            let next = preAsyncAnchorMarker.nextSibling;
+            while (next && isInlineSibling(next)) {
+                rightNodes.push(next);
+                next = next.nextSibling;
+            }
+
+            const wrapperP = document.createElement('p');
+            editorRootEl.insertBefore(wrapperP, preAsyncAnchorMarker);
+            leftNodes.forEach(n => wrapperP.appendChild(n));
+            wrapperP.appendChild(preAsyncAnchorMarker);
+            rightNodes.forEach(n => wrapperP.appendChild(n));
+            targetBlock = wrapperP;
+        }
+
+        // CASO A: Contenuto puramente inline (es. immagine singola, frase o link)
+        if (!hasAnyBlocks || !targetBlock) {
+            const frag = document.createDocumentFragment();
+
+            if (!targetBlock && !hasAnyBlocks) {
+                let curP = document.createElement('p');
+                while (tempDiv.firstChild) {
+                    const c = tempDiv.firstChild;
+                    if (c.nodeType === Node.ELEMENT_NODE && c.tagName === 'BR') {
+                        c.remove();
+                        if (curP.childNodes.length === 0) curP.innerHTML = '<br>';
+                        frag.appendChild(curP);
+                        curP = document.createElement('p');
+                    } else {
+                        curP.appendChild(c);
+                    }
+                }
+                if (curP.childNodes.length > 0) {
+                    frag.appendChild(curP);
+                } else if (frag.childNodes.length === 0) {
+                    curP.innerHTML = '<br>';
+                    frag.appendChild(curP);
+                }
+            } else {
+                while (tempDiv.firstChild) frag.appendChild(tempDiv.firstChild);
+            }
+
+            const lastNode = frag.lastChild;
+
+            if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode) {
+                preAsyncAnchorMarker.parentNode.insertBefore(frag, preAsyncAnchorMarker);
+                preAsyncAnchorMarker.remove();
+                preAsyncAnchorMarker = null;
+            } else if (sel.rangeCount > 0) {
+                const curRange = sel.getRangeAt(0);
+                curRange.deleteContents();
+                curRange.insertNode(frag);
+            } else if (editorRootEl) {
+                editorRootEl.appendChild(frag);
+            }
+
+            if (lastNode) {
+                caretTargetNode = lastNode;
+                caretTargetOffset = lastNode.nodeType === Node.TEXT_NODE ? lastNode.nodeValue.length : 1;
+            }
+        } else {
+            // CASO B: Contenuto strutturato con blocchi multipli o singoli incapsulati
+            const normalizedBlocks = [];
+            let inlineBuffer = [];
+
+            const flushInlineBuffer = () => {
+                if (inlineBuffer.length > 0) {
+                    // Riconosce nodi con testo reale O elementi multimediali/immagini (anche se racchiusi in tag <a> o <span>)
+                    const hasRealContent = inlineBuffer.some(n => 
+                        (n.nodeType === Node.TEXT_NODE && n.nodeValue.replace(/[\r\n\t\s\u200B\uFEFF]/g, '') !== '') ||
+                        (n.nodeType === Node.ELEMENT_NODE && (
+                            n.tagName === 'BR' || 
+                            n.tagName === 'IMG' || 
+                            n.querySelector('img, audio, video, iframe, input, svg') !== null || 
+                            n.textContent.trim() !== ''
+                        ))
+                    );
+                    if (hasRealContent) {
+                        const p = document.createElement('p');
+                        inlineBuffer.forEach(n => p.appendChild(n));
+                        normalizedBlocks.push(p);
+                    }
+                    inlineBuffer = [];
+                }
+            };
+
+            Array.from(tempDiv.childNodes).forEach(node => {
+                if (isBlockElement(node)) {
+                    flushInlineBuffer();
+                    normalizedBlocks.push(node);
+                } else if (node.nodeType === Node.ELEMENT_NODE && node.tagName === 'BR') {
+                    flushInlineBuffer();
+                    const p = document.createElement('p');
+                    p.innerHTML = '<br>';
+                    normalizedBlocks.push(p);
+                } else {
+                    inlineBuffer.push(node);
+                }
+            });
+            flushInlineBuffer();
+
+            // Verifica se un blocco è un contenitore testuale i cui figli inline possono fondersi col paragrafo ospite
+            const isMergeableTextBlock = (el) => {
+                if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+                if (el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper') || el.classList.contains('col-box')) return false;
+                return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6'].includes(el.tagName.toUpperCase());
+            };
+
+            // Estrae il contenuto inline effettivo di un blocco omettendo eventuali <br> segnaposto di riga vuota
+            const extractInlineContent = (blockEl) => {
+                const t = blockEl.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                const m = blockEl.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+                const contentFrag = document.createDocumentFragment();
+                if (!t && !m) return contentFrag;
+                while (blockEl.firstChild) {
+                    contentFrag.appendChild(blockEl.firstChild);
+                }
+                return contentFrag;
+            };
+
+            // Adatta i blocchi <p>/<div> in <li> se inseriti direttamente dentro una lista <ul>/<ol>
+            const adaptBlockForParent = (blockEl) => {
+                if (targetBlock.tagName === 'LI' && targetBlock.parentNode && ['UL', 'OL'].includes(targetBlock.parentNode.tagName)) {
+                    if (isMergeableTextBlock(blockEl)) {
+                        const li = document.createElement('li');
+                        while (blockEl.firstChild) li.appendChild(blockEl.firstChild);
+                        if (li.childNodes.length === 0) li.innerHTML = '<br>';
+                        return li;
+                    }
+                }
+                return blockEl;
+            };
+
+            const setCaretAfterInlineNode = (node) => {
+                caretTargetNode = node;
+                if (node.nodeType === Node.TEXT_NODE) {
+                    caretTargetOffset = node.nodeValue.length;
+                    caretPositionMode = null;
+                } else {
+                    caretPositionMode = 'after';
+                }
+            };
+
+            const checklistTextSpan = (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode)
+                ? preAsyncAnchorMarker.parentNode.closest('.checklist-text')
+                : null;
+
+            if (checklistTextSpan && normalizedBlocks.length === 1 && isMergeableTextBlock(normalizedBlocks[0])) {
+                const inlineFrag = extractInlineContent(normalizedBlocks[0]);
+                const lastMoved = inlineFrag.lastChild;
+                preAsyncAnchorMarker.parentNode.insertBefore(inlineFrag, preAsyncAnchorMarker);
+                preAsyncAnchorMarker.remove();
+                preAsyncAnchorMarker = null;
+
+                if (lastMoved) {
+                    setCaretAfterInlineNode(lastMoved);
+                } else {
+                    caretTargetNode = checklistTextSpan;
+                    caretPositionMode = 'end';
+                }
+            } else {
+                // Estrae l'eventuale coda di testo/formattazione presente dopo il cursore nel blocco ospite
+                let tailFrag = null;
+                let hasTailContent = false;
+                if (preAsyncAnchorMarker && preAsyncAnchorMarker.parentNode && targetBlock.contains(preAsyncAnchorMarker)) {
+                    const tailRange = document.createRange();
+                    tailRange.setStartAfter(preAsyncAnchorMarker);
+                    tailRange.setEnd(targetBlock, targetBlock.childNodes.length);
+                    tailFrag = tailRange.extractContents();
+                    preAsyncAnchorMarker.remove();
+                    preAsyncAnchorMarker = null;
+
+                    hasTailContent = tailFrag.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() !== '' ||
+                                     !!tailFrag.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+                }
+
+                const hasHeadContent = targetBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim() !== '' ||
+                                       !!targetBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+
+                if (!hasHeadContent && !hasTailContent) {
+                    // Blocco ospite vuoto: sostituisce interamente con i nuovi blocchi
+                    const frag = document.createDocumentFragment();
+                    let lastInsertedBlock = null;
+                    normalizedBlocks.forEach(b => {
+                        const adapted = adaptBlockForParent(b);
+                        frag.appendChild(adapted);
+                        lastInsertedBlock = adapted;
+                    });
+                    targetBlock.parentNode.replaceChild(frag, targetBlock);
+                    if (lastInsertedBlock) {
+                        caretTargetNode = lastInsertedBlock;
+                        caretPositionMode = 'end';
+                    }
+                } else if (normalizedBlocks.length === 1) {
+                    const onlyBlock = normalizedBlocks[0];
+
+                    if (isMergeableTextBlock(onlyBlock)) {
+                        // Singolo blocco testuale incollato in un blocco non vuoto: fusione diretta inline tra testa e coda
+                        if (!hasHeadContent) {
+                            targetBlock.innerHTML = '';
+                        }
+                        const inlineFrag = extractInlineContent(onlyBlock);
+                        const lastMoved = inlineFrag.lastChild;
+                        if (lastMoved) {
+                            targetBlock.appendChild(inlineFrag);
+                            setCaretAfterInlineNode(lastMoved);
+                        } else if (hasHeadContent && targetBlock.lastChild) {
+                            setCaretAfterInlineNode(targetBlock.lastChild);
+                        } else {
+                            caretTargetNode = targetBlock;
+                            caretPositionMode = 'start';
+                        }
+
+                        if (hasTailContent && tailFrag) {
+                            targetBlock.appendChild(tailFrag);
+                        }
+                    } else {
+                        // Singolo blocco strutturale non fondibile (lista, tabella, widget)
+                        const adaptedOnly = adaptBlockForParent(onlyBlock);
+                        if (!hasHeadContent && hasTailContent) {
+                            targetBlock.innerHTML = '';
+                            targetBlock.appendChild(tailFrag);
+                            targetBlock.parentNode.insertBefore(adaptedOnly, targetBlock);
+                        } else if (hasHeadContent && !hasTailContent) {
+                            targetBlock.parentNode.insertBefore(adaptedOnly, targetBlock.nextSibling);
+                        } else {
+                            const tailBlock = document.createElement(targetBlock.tagName === 'LI' ? 'li' : 'p');
+                            tailBlock.appendChild(tailFrag);
+                            const parent = targetBlock.parentNode;
+                            const nextSib = targetBlock.nextSibling;
+                            parent.insertBefore(adaptedOnly, nextSib);
+                            parent.insertBefore(tailBlock, nextSib);
+                        }
+                        caretTargetNode = adaptedOnly;
+                        caretPositionMode = 'end';
+                    }
+                } else {
+                    // Più blocchi incollati in un blocco non vuoto: fusione continua di testa (B_0) e coda (B_k)
+                    const remainingBlocks = [...normalizedBlocks];
+
+                    // 1. Testa: se c'è contenuto prima del cursore e il primo blocco è testuale, fondilo in coda a targetBlock
+                    let headMergedNode = null;
+                    if (hasHeadContent && isMergeableTextBlock(remainingBlocks[0])) {
+                        const firstBlock = remainingBlocks.shift();
+                        const firstFrag = extractInlineContent(firstBlock);
+                        const lastFromFirst = firstFrag.lastChild;
+                        if (lastFromFirst) {
+                            targetBlock.appendChild(firstFrag);
+                            headMergedNode = lastFromFirst;
+                        } else {
+                            headMergedNode = targetBlock.lastChild;
+                        }
+                    }
+
+                    // 2. Coda: se c'è contenuto dopo il cursore, fondilo in coda all'ultimo blocco testuale (o crea blocco coda)
+                    let tailBlock = null;
+                    let lastBlockInInsertion = null;
+
+                    if (hasTailContent && tailFrag) {
+                        const lastIdx = remainingBlocks.length - 1;
+                        if (lastIdx >= 0 && isMergeableTextBlock(remainingBlocks[lastIdx])) {
+                            const lastBlock = remainingBlocks[lastIdx];
+                            const tLast = lastBlock.textContent.replace(/[\u200B\uFEFF\u00A0\n\r]/g, '').trim();
+                            const mLast = lastBlock.querySelector('img, audio, iframe, input, svg, .adv-widget-shell, .adv-inline-shell');
+                            if (!tLast && !mLast) {
+                                lastBlock.innerHTML = '';
+                            }
+                            const lastInLastBlock = lastBlock.lastChild;
+                            lastBlock.appendChild(tailFrag);
+
+                            const adaptedLast = adaptBlockForParent(lastBlock);
+                            remainingBlocks[lastIdx] = adaptedLast;
+
+                            if (lastInLastBlock) {
+                                setCaretAfterInlineNode(lastInLastBlock);
+                            } else {
+                                caretTargetNode = adaptedLast;
+                                caretPositionMode = 'start';
+                            }
+                        } else {
+                            tailBlock = document.createElement(targetBlock.tagName === 'LI' ? 'li' : 'p');
+                            tailBlock.appendChild(tailFrag);
+                            if (lastIdx >= 0) {
+                                lastBlockInInsertion = remainingBlocks[lastIdx];
+                            } else if (headMergedNode) {
+                                setCaretAfterInlineNode(headMergedNode);
+                            }
+                        }
+                    } else {
+                        if (remainingBlocks.length > 0) {
+                            lastBlockInInsertion = remainingBlocks[remainingBlocks.length - 1];
+                        } else if (headMergedNode) {
+                            setCaretAfterInlineNode(headMergedNode);
+                        }
+                    }
+
+                    const frag = document.createDocumentFragment();
+                    remainingBlocks.forEach((b) => {
+                        const adapted = adaptBlockForParent(b);
+                        if (b === lastBlockInInsertion) {
+                            lastBlockInInsertion = adapted;
+                        }
+                        frag.appendChild(adapted);
+                    });
+                    if (tailBlock) {
+                        frag.appendChild(tailBlock);
+                    }
+
+                    if (!caretTargetNode && lastBlockInInsertion) {
+                        caretTargetNode = lastBlockInInsertion;
+                        caretPositionMode = 'end';
+                    }
+
+                    if (hasHeadContent) {
+                        targetBlock.parentNode.insertBefore(frag, targetBlock.nextSibling);
+                    } else {
+                        targetBlock.parentNode.replaceChild(frag, targetBlock);
+                    }
+                }
+            }
+        }
+
+        // =========================================================================
+        // NORMALIZZAZIONE STRUTTURALE ROOT: QUALSIASI INLINE ORFANO VIENE AVVOLTO IN <p>
+        // Impedisce che tag <a> o <img> restino nudi direttamente sotto #noteContent
+        // =========================================================================
+        if (editorRootEl) {
+            Array.from(editorRootEl.childNodes).forEach(node => {
+                if (node.nodeType === Node.ELEMENT_NODE) {
+                    const isBlock = isBlockElement(node);
+                    if (!isBlock) {
+                        const p = document.createElement('p');
+                        editorRootEl.insertBefore(p, node);
+                        p.appendChild(node);
+                    }
+                } else if (node.nodeType === Node.TEXT_NODE && node.nodeValue.trim() !== '') {
+                    const p = document.createElement('p');
+                    editorRootEl.insertBefore(p, node);
+                    p.appendChild(node);
+                }
+            });
+        }
+
+        // Ripristino del cursore e del focus
+        if (editorRootEl && document.activeElement !== editorRootEl && !editorRootEl.contains(document.activeElement)) {
+            editorRootEl.focus({ preventScroll: true });
+        }
+
+        const finalSel = window.getSelection();
+        if (caretTargetNode && document.body.contains(caretTargetNode) && finalSel) {
+            const newRange = document.createRange();
+            if (caretPositionMode === 'start') {
+                newRange.setStart(caretTargetNode, 0);
+                newRange.collapse(true);
+            } else if (caretPositionMode === 'end') {
+                newRange.selectNodeContents(caretTargetNode);
+                newRange.collapse(false);
+            } else if (caretPositionMode === 'after') {
+                newRange.setStartAfter(caretTargetNode);
+                newRange.collapse(true);
+            } else if (caretTargetNode.nodeType === Node.TEXT_NODE) {
+                const safeOffset = Math.min(caretTargetOffset, caretTargetNode.nodeValue.length);
+                newRange.setStart(caretTargetNode, safeOffset);
+                newRange.collapse(true);
+            } else if (isBlockElement(caretTargetNode)) {
+                newRange.selectNodeContents(caretTargetNode);
+                newRange.collapse(false);
+            } else {
+                newRange.setStartAfter(caretTargetNode);
+                newRange.collapse(true);
+            }
+            finalSel.removeAllRanges();
+            finalSel.addRange(newRange);
+            if (typeof Editor !== 'undefined') {
+                Editor.savedRange = newRange.cloneRange();
+            }
+        }
+
+        Editor._ensureLastLineBreak(document.getElementById('noteContent'));
+        if (typeof Editor.healFontArtifacts === 'function') {
+            Editor.healFontArtifacts(document.getElementById('noteContent'));
+        }
+
+        // Sincronizzazione immediata della nota in RAM
+        if (AppState.currentNoteId) {
+            const note = Store.getNote(AppState.currentNoteId);
+            if (note && typeof Editor.getCleanHTML === 'function') {
+                note.content = Editor.getCleanHTML();
+                note._isDirty = true;
+                note.updatedAt = new Date().toISOString();
+            }
+        }
+
+        if (typeof WidgetManager !== 'undefined') {
+            WidgetManager.mountAll();
+        }
+        if (typeof Store !== 'undefined') {
+            Store.triggerAutoSave();
+        }
+    }
+});

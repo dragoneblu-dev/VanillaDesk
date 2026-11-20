@@ -6,7 +6,7 @@
  * ZERO REGRESSIONI & ZERO FLOODING:
  * - Le record note non vengono mai riversate in blocco per prevenire il sovraccarico del DOM su tabelle con migliaia di righe.
  * - Una record note (e relative sotto-note) compare ESCLUSIVAMENTE quando l'utente accede alla nota o ad un suo discendente,
- *   oppure quando risponde ai filtri di ricerca attiva.
+ *   oppure quando lei o un suo discendente risponde ai filtri attivi (Ricerca, Preferiti, Segnalibri, Tag/Proprietà).
  * - Le viste collegate e le macro appaiono solo nel tab Database e non inquinano mai il tab Note.
  */
 
@@ -173,7 +173,7 @@ Object.assign(UI, {
         const activePropFilters = AppState.activePropertyFilters || [];
         const reqBook = AppState.showBookmarksInTree;
         const reqFav = AppState.showFavoritesInTree;
-        const isFiltering = filter || reqBook || reqFav || activePropFilters.length > 0;
+        const isFiltering = !!(filter || reqBook || reqFav || activePropFilters.length > 0);
 
         let dbTitleMatch = false;
         if (filter && dbState.title && dbState.title.toLowerCase().includes(filter)) {
@@ -264,8 +264,6 @@ Object.assign(UI, {
             });
         }
 
-        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
-
         // Ordinamento alfabetico naturale delle note-record per facilitare la scansione visiva
         const sortedDbNotes = [...dbNotes].sort((a, b) => 
             (a.title || '').localeCompare(b.title || '', undefined, { numeric: true, sensitivity: 'base' })
@@ -273,71 +271,22 @@ Object.assign(UI, {
 
         // LOGICA UNIFICATA & ANTI-FLOODING:
         // Le record note NON vengono riversate in blocco nel tree. Compaiono ESCLUSIVAMENTE se:
-        // 1. La record note è la nota attiva (o un suo antenato), per permettere la navigazione della scheda aperta e delle sue sotto-note.
-        // 2. È attiva una ricerca (isFiltering) e la record note (o una sua sotto-nota) corrisponde al testo cercato.
+        // 1. La record note è la nota attiva (o un suo antenato, anche attraverso database annidati).
+        // 2. È attivo un filtro (ricerca, preferiti, segnalibri, tag/proprietà) e UI.buildTreeElement
+        //    conferma che la record note o una qualsiasi delle sue sotto-note soddisfa i criteri.
         sortedDbNotes.forEach(note => {
-            let noteDirectMatch = true;
+            const isActivePath = AppState.currentNoteId === note.id ||
+                UI.isDescendant(note.id, AppState.currentNoteId) ||
+                (UI._activeRecordHostNoteIds && UI._activeRecordHostNoteIds.has(note.id));
 
-            if (activePropFilters.length > 0) {
-                if (!propsDb || !Array.isArray(propsDb.rows)) {
-                    noteDirectMatch = activePropFilters.every(f => f.realValue === '*EMPTY*');
-                } else {
-                    const sysRow = propsDb.rows.find(r => r && r.cells && r.cells['sys_c_note'] === note.id);
-                    noteDirectMatch = UI._checkNotePropertyMatch(sysRow, activePropFilters);
-                }
-            }
+            if (!isFiltering && !isActivePath) return;
 
-            if (noteDirectMatch && filter) {
-                const matchTitle = (note.title || "").toLowerCase().includes(filter);
-                const matchContent = UI.extractSearchableText(note.content).toLowerCase().includes(filter);
-                if (!matchTitle && !matchContent) noteDirectMatch = false;
-
-                if (noteDirectMatch) {
-                    if (matchTitle) {
-                        let idx = (note.title || "").toLowerCase().indexOf(filter);
-                        while (idx !== -1) { AppState._globalHighlights++; idx = (note.title || "").toLowerCase().indexOf(filter, idx + filter.length); }
-                    }
-                    if (matchContent) {
-                        let text = UI.extractSearchableText(note.content).toLowerCase();
-                        let idx = text.indexOf(filter);
-                        while (idx !== -1) { AppState._globalHighlights++; idx = text.indexOf(filter, idx + filter.length); }
-                    }
-                }
-            }
-            if (noteDirectMatch && reqBook) {
-                if (!(note.content && note.content.includes('adv-bookmark-marker'))) noteDirectMatch = false;
-            }
-            if (noteDirectMatch && reqFav) {
-                if (!note.isMarked) noteDirectMatch = false;
-            }
-
-            const isActivePath = AppState.currentNoteId === note.id || UI.isDescendant(note.id, AppState.currentNoteId);
-            const hasSubNotes = Store.getChildren(note.id).some(c => !c.deletedAt && !c.isRecordNote);
-
-            // Verifica se un discendente di questa record note risponde al filtro attivo
-            let childHasMatch = false;
-            if (isFiltering && hasSubNotes) {
-                const checkDescendantsMatch = (parentId) => {
-                    return Store.getChildren(parentId).some(child => {
-                        if (child.deletedAt) return false;
-                        const tMatch = (child.title || "").toLowerCase().includes(filter);
-                        const cMatch = UI.extractSearchableText(child.content).toLowerCase().includes(filter);
-                        return tMatch || cMatch || checkDescendantsMatch(child.id);
-                    });
-                };
-                childHasMatch = checkDescendantsMatch(note.id);
-            }
-
-            const shouldRender = (isFiltering && (noteDirectMatch || childHasMatch)) || isActivePath;
-
-            if (shouldRender) {
-                // Passa isDbBranch = true per garantire che la nota e tutti i suoi discendenti ereditino l'icona verde di database
-                const noteEl = UI.buildTreeElement(note, true, true);
-                if (noteEl) {
-                    childElements.push(noteEl);
-                    hasMatchChild = true;
-                    if (isFiltering && (noteDirectMatch || childHasMatch)) forceExpandBecauseOfMatch = true;
-                }
+            // Passa isDbBranch = true per garantire che la nota e tutti i suoi discendenti ereditino l'icona verde di database
+            const noteEl = UI.buildTreeElement(note, true, true);
+            if (noteEl) {
+                childElements.push(noteEl);
+                hasMatchChild = true;
+                if (isFiltering) forceExpandBecauseOfMatch = true;
             }
         });
 

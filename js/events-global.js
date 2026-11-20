@@ -10,6 +10,7 @@
  * Impedisce all'evento input scatenato dentro componenti autonomi (Database, Diari, Codice)
  * di sporcare la nota principale, garantendo al contempo che le Tabelle Semplici (.simple-table-wrapper) e gli Snippet
  * scatenino regolarmente UI.handleEditorInput() e il salvataggio automatico.
+ * Isolamento degli eventi tastiera dell'editor principale rispetto a Drawer, Modali e celle di Database.
  * Mantiene visibile il cursore nello scrollArea su ogni input nell'editor.
  * Scorciatoie titoli: H1 (Ctrl+Alt+1 / Ctrl+Shift+1), H2 (Ctrl+Alt+2 / Ctrl+Shift+2), H3 (Ctrl+Alt+3 / Ctrl+Shift+3), Paragrafo (Ctrl+Alt+0).
  * Scorciatoie colorazione: Ctrl+Shift+H (Evidenziatore), Ctrl+Alt+H (Colore Testo).
@@ -314,6 +315,13 @@ Object.assign(EventsGlobal, {
                 return;
             }
 
+            // Isolamento rigoroso per Drawer e Modali (es. #inlineNoteInput, #bookmarkCommentInput)
+            if (e.target && e.target.closest && e.target.closest('.adv-drawer, .link-modal-overlay, #advRelationPeekModalOverlay')) {
+                return;
+            }
+
+            const isInsideAdvDb = !!(e.target && e.target.closest && e.target.closest('.adv-table-wrapper, .widget-type-database, .widget-type-pivot'));
+
             // Isolamento Select-All (Ctrl+A)
             if (isCtrlOrCmd && key === 'a' && AppState.isEditMode) {
                 const sel = window.getSelection();
@@ -386,7 +394,7 @@ Object.assign(EventsGlobal, {
                 }
             }
 
-            if (typeof Editor !== 'undefined') {
+            if (typeof Editor !== 'undefined' && !isInsideAdvDb) {
                 if (!isCtrlOrCmd && !e.altKey && AppState.isEditMode) {
                     // Selezione verticale riga per riga (Shift + ArrowUp / ArrowDown)
                     if (e.shiftKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) {
@@ -466,7 +474,7 @@ Object.assign(EventsGlobal, {
                 return;
             }
 
-            if (!isCtrlOrCmd && !e.altKey && e.key && e.key.length === 1) {
+            if (!isCtrlOrCmd && !e.altKey && !isInsideAdvDb && e.key && e.key.length === 1) {
                 const sel = window.getSelection();
                 if (!sel.isCollapsed && sel.rangeCount > 0) {
                     if (typeof Editor !== 'undefined' && Editor.handleBulkWidgetDeletion) {

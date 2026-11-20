@@ -315,7 +315,7 @@ Object.assign(UI, {
             AppState.isEditMode = false;
         }
 
-        // Rivelazione nota nell'albero gerarchico se non cestinata
+        // Rivelazione nota nell'albero gerarchico se non cestinata (incluse le note ospiti dei database)
         if (!isTrashed) {
             let currParentId = note.parentId;
             while(currParentId) {
@@ -326,6 +326,23 @@ Object.assign(UI, {
                 } else {
                     break;
                 }
+            }
+
+            if (typeof UI._getRecordDbHostChain === 'function') {
+                const hostChain = UI._getRecordDbHostChain(id);
+                hostChain.hostNotes.forEach(hostNote => {
+                    hostNote.expanded = true;
+                    let hpId = hostNote.parentId;
+                    while (hpId) {
+                        const hp = Store.getNote(hpId);
+                        if (hp) {
+                            hp.expanded = true;
+                            hpId = hp.parentId;
+                        } else {
+                            break;
+                        }
+                    }
+                });
             }
         }
 

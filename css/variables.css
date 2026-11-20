@@ -103,7 +103,7 @@
     --item-active: #283e5c;
     --marked-bg: #283e5c;
     --marked-border: #ffd900;
-    --danger-color: #f87171;
+    --danger-color: #ea6363;
     --code-bg: #222222;
     --code-text: #d4d4d4;
     
@@ -163,7 +163,7 @@
     --item-active: rgba(255, 255, 255, 0.11);
     --marked-bg: rgba(35, 131, 226, 0.15);
     --marked-border: #cbf53f;
-    --danger-color: #FF5757;
+    --danger-color: #ee5050;
     --code-bg: #252525;
     --code-text: #d4d4d4;
     
