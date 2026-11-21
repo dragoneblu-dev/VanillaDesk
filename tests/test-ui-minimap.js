@@ -104,17 +104,24 @@ describe("UI Minimap: Sincronizzazione Documento & Isolamento DOM", () => {
         Assert.strictEqual(viewport.style.height, '50px');
         Assert.strictEqual(viewport.style.top, '40px');
 
-        // 2. Caso B: container reale renderizzato con altezza definita in CSS (calcolo cinematico proporzionale)
+        // 2. Caso B: documento corto in container renderizzato (scaledTotalHeight = 200 < CH = 600)
+        // trackHeight = Math.min(600, 200) = 200px; maxSliderTravel = 200 - 50 = 150px
+        // scrollPercent = 400 / 1500 = 0.2666... -> sliderTop = Math.round(0.2666... * 150) = 40px
         Object.defineProperty(container, 'clientHeight', { value: 600, configurable: true });
         UI.Minimap.updateViewport();
-
-        // Con container clientHeight = 600:
-        // sliderHeight = 500 * 0.1 = 50px
-        // maxST = 2000 - 500 = 1500px; scrollPercent = 400 / 1500 = 0.2666...
-        // maxSliderTravel = 600 - 50 = 550px
-        // sliderTop = Math.round(0.2666... * 550) = 147px
         Assert.strictEqual(viewport.style.height, '50px');
-        Assert.strictEqual(viewport.style.top, '147px');
+        Assert.strictEqual(viewport.style.top, '40px');
+
+        // 3. Caso C: documento lungo (scaledTotalHeight = 1000 > CH = 600, scorrimento proporzionale completo)
+        Object.defineProperty(scrollContent, 'scrollHeight', { value: 10000, configurable: true });
+        scrollContent.scrollTop = 4750;
+        UI.Minimap.updateViewport();
+        // maxST = 10000 - 500 = 9500; scrollPercent = 4750 / 9500 = 0.5
+        // trackHeight = Math.min(600, 1000) = 600px; maxSliderTravel = 600 - 50 = 550px
+        // sliderTop = Math.round(0.5 * 550) = 275px; maxMiniScroll = 400 -> translateY(-200px)
+        Assert.strictEqual(viewport.style.height, '50px');
+        Assert.strictEqual(viewport.style.top, '275px');
+        Assert.isTrue(wrapper.style.transform.includes('translateY(-200px)'));
     });
 
     test("Minimap: Isolamento contro la duplicazione degli attributi NAME di input", () => {

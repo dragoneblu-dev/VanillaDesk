@@ -81,31 +81,51 @@ describe("Editor Format Text: Toggle Header, Blockquote, Gomma & Typography (tes
         Assert.strictEqual(bq.querySelectorAll('p').length, 2);
     });
 
-    test("Editor.toggleBlockquote: su elementi di lista racchiude l'intero elenco nel blockquote (Blockquote List Wrap)", () => {
-        // AGGIORNAMENTO ARCHITETTURALE: l'applicazione racchiude legalmente l'intera lista <ul>
-        // dentro <blockquote> senza creare tag illegali all'interno di <li>
+    test("Editor.toggleBlockquote: supporto granulare su singolo <li> e wrap intero <ul> su selezione multipla", () => {
         let editor = document.getElementById('noteContent');
-        editor.innerHTML = '<ul><li id="li_quote">Elemento</li></ul>';
 
-        const li = editor.querySelector('#li_quote');
+        // 1. Singolo <li>: la citazione resta confinata alla riga interna al punto elenco
+        editor.innerHTML = '<ul><li id="li_single">Elemento singolo</li></ul>';
+        const liSingle = editor.querySelector('#li_single');
         const sel = window.getSelection();
         sel.removeAllRanges();
-        const r = document.createRange();
-        r.setStart(li.firstChild, 0);
-        r.collapse(true);
-        sel.addRange(r);
+        const rSingle = document.createRange();
+        rSingle.setStart(liSingle.firstChild, 0);
+        rSingle.collapse(true);
+        sel.addRange(rSingle);
 
         Editor.toggleBlockquote();
 
-        const bq = editor.querySelector('blockquote');
-        Assert.isNotNull(bq, "Deve creare un blockquote contenitore attorno alla lista");
-        Assert.isNull(li.querySelector('blockquote'), "Non deve creare blockquote internamente a li");
-        Assert.isNotNull(bq.querySelector('ul'), "La lista ul deve trovarsi all'interno del blockquote");
-        Assert.strictEqual(bq.querySelector('li').textContent, 'Elemento');
+        const innerBq = liSingle.querySelector('blockquote');
+        Assert.isNotNull(innerBq, "Su singolo <li> deve creare un blockquote granulare al suo interno");
+        Assert.strictEqual(innerBq.textContent, 'Elemento singolo');
+
+        // Secondo toggle: unwrap pulito del blockquote interno al <li>
+        Editor.toggleBlockquote();
+        Assert.isNull(liSingle.querySelector('blockquote'), "Il secondo toggle deve rimuovere il blockquote interno a li");
+        Assert.strictEqual(liSingle.textContent, 'Elemento singolo');
+
+        // 2. Selezione su due o più <li>: racchiude l'intera lista <ul> dentro <blockquote>
+        editor.innerHTML = '<ul><li id="li_m1">Primo</li><li id="li_m2">Secondo</li></ul>';
+        const li1 = editor.querySelector('#li_m1');
+        const li2 = editor.querySelector('#li_m2');
+        sel.removeAllRanges();
+        const rMulti = document.createRange();
+        rMulti.setStart(li1.firstChild, 0);
+        rMulti.setEnd(li2.firstChild, li2.firstChild.length);
+        sel.addRange(rMulti);
+
+        Editor.toggleBlockquote();
+
+        const outerBq = editor.querySelector('blockquote');
+        Assert.isNotNull(outerBq, "Su più <li> deve creare un blockquote contenitore attorno alla lista");
+        Assert.isNull(li1.querySelector('blockquote'), "Non deve creare blockquote internamente ai singoli li in selezione multipla");
+        Assert.isNotNull(outerBq.querySelector('ul'), "La lista ul deve trovarsi all'interno del blockquote");
+        Assert.strictEqual(outerBq.querySelectorAll('li').length, 2);
 
         // Verifica disattivazione (Toggle-Off): unwrap della lista citata
         Editor.toggleBlockquote();
-        Assert.isNull(editor.querySelector('blockquote'), "Il secondo toggle deve rimuovere il blockquote");
+        Assert.isNull(editor.querySelector('blockquote'), "Il secondo toggle deve rimuovere il blockquote esterno");
         Assert.isNotNull(editor.querySelector('ul'), "La lista originale deve rimanere intatta");
     });
 

@@ -124,7 +124,9 @@ window.GraphUI = {
         const matches = new Set();
         const matchList = [];
         GraphData.nodes.forEach(node => {
-            if (node.title.toLowerCase().includes(term)) {
+            const titleMatch = node.title.toLowerCase().includes(term);
+            const altMatch = node.altText && node.altText.toLowerCase().includes(term);
+            if (titleMatch || altMatch) {
                 matches.add(node.id);
                 matchList.push(node.id);
             }
@@ -197,6 +199,10 @@ window.GraphUI = {
                             <input type="checkbox" id="chkShowCitations" ${opts.showCitations ? 'checked' : ''} onchange="GraphUI.updateOption('showCitations', this.checked)">
                             <span>Mostra Citazioni Live (Transclusion)</span>
                         </label>
+                        <label style="display:flex; align-items:center; gap:8px; cursor:pointer;">
+                            <input type="checkbox" id="chkShowImages" ${opts.showImages ? 'checked' : ''} onchange="GraphUI.updateOption('showImages', this.checked)">
+                            <span>Mostra Nodi Immagine (Anteprima al passaggio)</span>
+                        </label>
                     </div>
                 </div>
 
@@ -268,7 +274,8 @@ window.GraphUI = {
             showTags: 'chkShowTags',
             showRecordNotes: 'chkShowRecordNotes',
             showHierarchy: 'chkShowHierarchy',
-            showCitations: 'chkShowCitations'
+            showCitations: 'chkShowCitations',
+            showImages: 'chkShowImages'
         };
         const chkId = chkMap[key];
         if (chkId) {

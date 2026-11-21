@@ -92,14 +92,14 @@ window.UI = {
             el.classList.add('status-saving');
         } else if (state === 'saved') {
             el.textContent = I18n.t('common.saved');
-            el.classList.add('status-saved');
+            el.classList.add('status-saved', 'hidden');
         } else if (state === 'error') {
             el.textContent = I18n.t('common.error');
             el.classList.add('status-error');
         } else if (state === 'unsaved') {
             if (AppState.storageMode === 'idb') {
                 el.textContent = I18n.t('common.saved');
-                el.classList.add('status-saved');
+                el.classList.add('status-saved', 'hidden');
             } else {
                 el.textContent = I18n.t('preferences.status_unsaved');
                 el.classList.add('status-error');

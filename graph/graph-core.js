@@ -8,7 +8,7 @@
  * - Invocazione affidabile di loadGraphConfig() con persistenza su disco (FSAA) o IndexedDB (Modalità Browser).
  * - Apertura e Inquadratura Panoramica (fitToView): mostra sempre l'intera costellazione adattata a pieno schermo,
  *   selezionando visivamente il targetNoteId (se specificato) senza alterare la telecamera globale.
- * - Navigazione reattiva: al doppio click su nota o tag (#), chiude il grafo e attiva istantaneamente la pagina in VanillaDesk.
+ * - Navigazione reattiva: al doppio click su nota, tag (#) o immagine, chiude il grafo e attiva istantaneamente la pagina in VanillaDesk.
  */
 
 window.GraphApp = {
@@ -214,13 +214,28 @@ window.GraphApp = {
     /**
      * Seleziona la nota in VanillaDesk e chiude la vista del grafo
      */
-    openNoteInOpener: (noteId) => {
+    openNoteInOpener: (noteId, imageRef = null) => {
         if (!noteId) return;
 
         GraphApp.close();
 
         if (typeof UI !== 'undefined' && typeof UI.selectNote === 'function') {
             UI.selectNote(noteId);
+
+            if (imageRef) {
+                setTimeout(() => {
+                    const imgEl = document.querySelector(`#noteContent img[data-image-ref="${imageRef}"]`);
+                    if (imgEl) {
+                        imgEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                        imgEl.style.transition = 'box-shadow 0.6s ease';
+                        imgEl.style.boxShadow = '0 0 0 4px var(--marked-border), 0 0 30px var(--marked-border)';
+                        setTimeout(() => {
+                            imgEl.style.boxShadow = '';
+                            setTimeout(() => imgEl.style.transition = '', 600);
+                        }, 1000);
+                    }
+                }, 220);
+            }
         }
     },
 

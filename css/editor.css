@@ -263,7 +263,7 @@ input.title-input[readonly] { cursor: default; }
 .editor-content a.internal-link:hover { background-color: color-mix(in srgb, var(--accent-color) 20%, transparent); border-color: var(--accent-color); }
 .editor-content a.internal-link::before { content: "↪"; font-size: 0.8em; margin-right: 4px; opacity: 0.7; }
 
-.editor-content img { max-width: 100%; border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin: 10px 0; }
+.editor-content img { max-width: 100%; border-radius: 6px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); margin: 2px; }
 .editor-content blockquote { border-left: 3px solid var(--accent-color); margin: 10px 0; padding-left: 15px; color: var(--text-secondary); font-style: italic; background: rgba(0, 0, 0, 0.02); padding-top: 5px; padding-bottom: 5px; border-radius: 0 4px 4px 0; }
 
 .highlighted-text { background-color: var(--highlight-bg); color: var(--highlight-text); border-radius: 2px; padding: 0 2px; }

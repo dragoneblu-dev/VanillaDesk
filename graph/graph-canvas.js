@@ -17,10 +17,11 @@
  * - Comparsa Dinamica dei Titoli per Spazio Vitale: il testo appare solo se c'è spazio reale libero.
  * - Formattazione su Due Righe e Troncamento Adattivo con alone di contrasto (Halo).
  * - Scala Nodi Sub-Lineare Bounded (max 22px a schermo allo zoom ravvicinato).
- * - Differenziazione Cromatica Linee: Collegamenti Gerarchici (Cartelle) in ambra/arancio, riferimenti testuali in grigio, tag tratteggiati.
+ * - Differenziazione Cromatica Linee: Collegamenti Gerarchici (Cartelle) in ambra/arancio, riferimenti testuali in grigio, tag/immagini tratteggiati.
  * - Frecce Direzionali sui Collegamenti (source ➔ target).
  * - Doppio Click su Tag (#tag): filtra istantaneamente le note in VanillaDesk.
  * - Doppio Click su Nota: apre la nota in VanillaDesk e chiude la vista del grafo.
+ * - Nodi Immagine: renderizzati come pallini leggeri; l'anteprima viene caricata on-demand solo nel tooltip su hover.
  * - Persistenza Topologica Continua: sincronizzazione immediata delle coordinate modificate manualmente o via simulazione.
  */
 
@@ -171,7 +172,7 @@ window.GraphCanvas = {
 
                 neighbors.forEach((nbr, nIdx) => {
                     const angle = nbrCount === 1 ? baseAngle : startAngle + nIdx * stepAngle;
-                    const branchDist = (nbr.type === 'record_note' ? 55 : (nbr.type === 'tag' ? 120 : 80)) + (nIdx % 2) * 20;
+                    const branchDist = ((nbr.type === 'record_note' || nbr.type === 'image') ? 55 : (nbr.type === 'tag' ? 120 : 80)) + (nIdx % 2) * 20;
 
                     nbr.x = hub.x + Math.cos(angle) * branchDist;
                     nbr.y = hub.y + Math.sin(angle) * branchDist;
@@ -431,6 +432,8 @@ window.GraphCanvas = {
                 if (maxHubDeg > 3) {
                     targetLength += Math.min(35, (maxHubDeg - 3) * 2.8);
                 }
+            } else if (link.type === 'image_link') {
+                targetLength = (p.springLengthRecord || 55) * 0.95;
             } else if (link.type === 'tag_link') {
                 const tagNode = (na.type === 'tag') ? na : nb;
                 const tagDegree = tagNode.degree || 1;
@@ -614,6 +617,7 @@ window.GraphCanvas = {
         const isDark = document.body.getAttribute('data-theme')?.includes('dark');
         const defaultLinkColor = isDark ? 'rgba(156, 163, 175, 0.28)' : 'rgba(107, 114, 128, 0.35)';
         const hierarchyLinkColor = isDark ? 'rgba(245, 158, 11, 0.45)' : 'rgba(217, 119, 6, 0.55)';
+        const imageLinkColor = isDark ? 'rgba(236, 72, 153, 0.35)' : 'rgba(219, 39, 119, 0.35)';
         const defaultTextColor = isDark ? '#f3f4f6' : '#111827';
         const dimmedTextColor = isDark ? 'rgba(156, 163, 175, 0.2)' : 'rgba(107, 114, 128, 0.22)';
         const haloColor = isDark ? 'rgba(17, 24, 39, 0.95)' : 'rgba(255, 255, 255, 0.95)';
@@ -643,6 +647,7 @@ window.GraphCanvas = {
         for (let i = 0; i < lLen; i++) {
             const l = links[i];
             const isHierarchy = l.type === 'hierarchy';
+            const isImageLink = l.type === 'image_link';
             const isConnectedToSelected = activeSelected && (l.source === activeSelected || l.target === activeSelected);
             const isConnectedToHover = !activeSelected && activeHover && (l.source === activeHover || l.target === activeHover);
             const isDimmed = activeSelected && !isConnectedToSelected;
@@ -655,16 +660,16 @@ window.GraphCanvas = {
             ctx.moveTo(l.source.x, l.source.y);
             ctx.lineTo(l.target.x, l.target.y);
 
-            let strokeColor = isHierarchy ? hierarchyLinkColor : defaultLinkColor;
+            let strokeColor = isHierarchy ? hierarchyLinkColor : (isImageLink ? imageLinkColor : defaultLinkColor);
             let strokeWidth = (isHierarchy ? 1.3 : 1.0) / curZoom;
             let alpha = isHierarchy ? 0.85 : 0.75;
 
             if (isConnectedToSelected || isConnectedToHover) {
-                strokeColor = isHierarchy ? '#f59e0b' : '#2563eb';
+                strokeColor = isHierarchy ? '#f59e0b' : (isImageLink ? '#ec4899' : '#2563eb');
                 strokeWidth = 2.2 / curZoom;
                 alpha = 1.0;
             } else if (isDimmed) {
-                strokeColor = isHierarchy ? hierarchyLinkColor : defaultLinkColor;
+                strokeColor = isHierarchy ? hierarchyLinkColor : (isImageLink ? imageLinkColor : defaultLinkColor);
                 strokeWidth = 0.5 / curZoom;
                 alpha = 0.08;
             }
@@ -675,6 +680,8 @@ window.GraphCanvas = {
 
             if (l.type === 'tag_link') {
                 ctx.setLineDash([3 / curZoom, 3 / curZoom]);
+            } else if (isImageLink) {
+                ctx.setLineDash([2 / curZoom, 3 / curZoom]);
             } else {
                 ctx.setLineDash([]);
             }
@@ -896,7 +903,7 @@ window.GraphCanvas = {
                     GraphCanvas.updateTooltip(hovered, e.clientX, e.clientY);
                     GraphCanvas.render();
                 } else if (hovered) {
-                    GraphCanvas.updateTooltip(hovered, e.clientX, e.clientY);
+                    GraphCanvas.updateTooltip(hovered, e.clientX, e.clientY, true);
                 }
             }
         });
@@ -961,6 +968,13 @@ window.GraphCanvas = {
                     GraphApp.openNoteInOpener(node.id);
                 } else if (node.type === 'tag') {
                     GraphApp.filterTagInOpener(node.title);
+                } else if (node.type === 'image') {
+                    const neighbors = Array.from(GraphData.neighborsMap.get(node.id) || []);
+                    if (neighbors.length === 1) {
+                        GraphApp.openNoteInOpener(neighbors[0], node.imageRef);
+                    } else if (neighbors.length > 1) {
+                        GraphUI.setLocalRoot(node.id);
+                    }
                 }
             }
         });
@@ -1081,7 +1095,7 @@ window.GraphCanvas = {
         GraphCanvas.render();
     },
 
-    updateTooltip: (node, clientX, clientY) => {
+    updateTooltip: (node, clientX, clientY, positionOnly = false) => {
         const tip = document.getElementById('graphTooltip');
         if (!tip) return;
 
@@ -1090,7 +1104,60 @@ window.GraphCanvas = {
             return;
         }
 
+        const flipThresholdY = node.type === 'image' ? 240 : 75;
+        tip.style.transform = clientY < flipThresholdY ? 'translate(-50%, 20px)' : 'translate(-50%, -130%)';
+        tip.style.left = `${clientX}px`;
+        tip.style.top = `${clientY}px`;
+
+        if (positionOnly && tip.style.display === 'block') {
+            return;
+        }
+
         const deg = node.degree || 0;
+
+        if (node.type === 'image') {
+            const cachedUrl = (typeof Editor !== 'undefined' && Editor.imageCache && Editor.imageCache[node.imageRef])
+                ? Editor.imageCache[node.imageRef]
+                : null;
+            const altLine = node.altText
+                ? `<div style="color:rgba(255,255,255,0.85); font-size:0.75rem; margin-bottom:4px;">${UI.escapeHTML(node.altText)}</div>`
+                : '';
+            const actionHint = deg === 1
+                ? 'Click: isola connessioni &bull; Doppio Click: apri nota'
+                : (deg > 1 ? 'Click: isola connessioni &bull; Doppio Click: isola in grafo locale' : 'Immagine scollegata');
+
+            tip.innerHTML = `
+                <div id="graphTooltipImgBox" style="margin-bottom:6px; text-align:center; min-height:40px; display:flex; align-items:center; justify-content:center; background:rgba(0,0,0,0.25); border-radius:4px; overflow:hidden;">
+                    ${cachedUrl
+                        ? `<img src="${cachedUrl}" style="max-width:220px; max-height:150px; object-fit:contain; display:block;">`
+                        : `<span style="font-size:0.72rem; color:rgba(255,255,255,0.6); padding:10px;">Caricamento anteprima...</span>`}
+                </div>
+                <div style="font-weight:bold; font-size:0.82rem; margin-bottom:2px; font-family:monospace;">${UI.escapeHTML(node.title)}</div>
+                ${altLine}
+                <div style="color:rgba(255,255,255,0.7); font-size:0.75rem; margin-bottom:4px;">
+                    Tipo: <b>image</b> &bull; Usata in: <b>${deg}</b> ${deg === 1 ? 'nota' : 'note'}
+                </div>
+                <div style="color:rgba(255,255,255,0.6); font-size:0.7rem; border-top:1px solid rgba(255,255,255,0.15); padding-top:3px;">
+                    ${actionHint}
+                </div>
+            `;
+            tip.style.display = 'block';
+
+            if (!cachedUrl && typeof Editor !== 'undefined' && typeof Editor.loadAssetOnDemand === 'function') {
+                Editor.loadAssetOnDemand(node.imageRef, 'img').then(url => {
+                    if (GraphCanvas.hoveredNode !== node) return;
+                    const imgBox = tip.querySelector('#graphTooltipImgBox');
+                    if (!imgBox) return;
+                    if (url) {
+                        imgBox.innerHTML = `<img src="${url}" style="max-width:220px; max-height:150px; object-fit:contain; display:block;">`;
+                    } else {
+                        imgBox.innerHTML = `<span style="font-size:0.72rem; color:#fca5a5; padding:8px;">Anteprima non disponibile</span>`;
+                    }
+                });
+            }
+            return;
+        }
+
         let extraInfo = '';
         if (node.folderName) extraInfo += ` &bull; Cartella: <b>${UI.escapeHTML(node.folderName)}</b>`;
         if (node.primaryTag) extraInfo += ` &bull; Tag: <b>#${UI.escapeHTML(node.primaryTag)}</b>`;
@@ -1111,10 +1178,6 @@ window.GraphCanvas = {
                 ${actionHint}
             </div>
         `;
-
-        tip.style.transform = clientY < 75 ? 'translate(-50%, 20px)' : 'translate(-50%, -130%)';
         tip.style.display = 'block';
-        tip.style.left = `${clientX}px`;
-        tip.style.top = `${clientY}px`;
     }
 };

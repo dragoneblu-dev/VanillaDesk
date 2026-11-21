@@ -205,17 +205,20 @@ header.header-unsaved .btn:not(.btn-primary):hover {
     color: #991b1b;
 }
 
-[data-theme="dark"] .status-saved {
+[data-theme="dark"] .status-saved,
+[data-theme="notion-dark"] .status-saved {
     background-color: #374151;
     color: #9ca3af;
 }
 
-[data-theme="dark"] .status-saving {
+[data-theme="dark"] .status-saving,
+[data-theme="notion-dark"] .status-saving {
     background-color: #713f12;
     color: #fef08a;
 }
 
-[data-theme="dark"] .status-error {
+[data-theme="dark"] .status-error,
+[data-theme="notion-dark"] .status-error {
     background-color: #7f1d1d;
     color: #fca5a5;
 }
@@ -367,9 +370,8 @@ aside.collapsed {
 
 /* Search Box */
 .search-box {
-    padding: 10px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid var(--border-color);
+    padding: 2px 8px 4px 8px;
+    /*border-bottom: 1px solid var(--border-color);*/
 }
 
 .search-wrapper {
@@ -398,7 +400,7 @@ aside.collapsed {
 }
 
 .search-wrapper:focus-within .search-input {
-    border-color: var(--accent-color) !important;
+    border-bottom: 1px solid var(--accent-color) !important;
 }
 
 .search-controls {
@@ -471,11 +473,16 @@ aside.collapsed {
 .sidebar-tabs-container {
     display: flex;
     gap: 2px;
-    padding: 8px 10px;
+    padding: 0 10px;
+    height: 40px;
+    flex-shrink: 0;
+    box-sizing: border-box;
+   /* border-bottom: 1px solid var(--border-color);*/
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
     align-items: center;
+    /*background-color: var(--box-bg);*/
 }
 .sidebar-tabs-container::-webkit-scrollbar {
     display: none;
@@ -489,13 +496,15 @@ aside.collapsed {
     background: transparent;
     border: none;
     color: var(--text-secondary);
-    padding: 6px 10px;
+    height: 28px;
+    padding: 0 10px;
     border-radius: 6px;
     cursor: pointer;
     font-size: 0.85rem;
     font-weight: 600;
     transition: all 0.2s ease;
     white-space: nowrap;
+    box-sizing: border-box;
 }
 
 .sidebar-tab:hover {
@@ -523,6 +532,7 @@ aside.collapsed {
     gap: 2px;
     margin-left: auto;
     padding-left: 5px;
+    align-items: center;
 }
 
 /* Tree Scroll */
@@ -847,6 +857,16 @@ details > summary { list-style: none; }
     .toggle-btn {
         width: 30px !important; 
         height: 30px !important;
+    }
+
+    .sidebar-tabs-container {
+        height: auto;
+        min-height: 40px;
+        padding: 4px 10px;
+    }
+
+    .sidebar-tab {
+        height: 34px;
     }
 
     /* 3. AUMENTO SPAZIATURA MENU CONTESTUALI E TENDINE */

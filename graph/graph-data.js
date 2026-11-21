@@ -4,9 +4,9 @@
  * - Scansiona AppState.notes e SYS_PROPERTIES_DB per estrarre Nodi e Connessioni reali.
  * - Supporto per Grafo Globale e Grafo Locale (profondità fissa 3x tramite BFS).
  * - PRESERVAZIONE COORDINATE PERSISTENTE: Mantiene inalterate le coordinate (x, y) dei nodi
- *   anche quando vengono temporaneamente nascosti tramite i filtri visivi (Tag, Record).
- * - Architettura Nativa VanillaDesk: riconosce solo collegamenti univoci reali (<a data-note-id="...">),
- *   citazioni (<blockquote data-ref-note="...">), gerarchie padre-figlio e tag censiti.
+ *   anche quando vengono temporaneamente nascosti tramite i filtri visivi (Tag, Record, Immagini).
+ * - Architettura Nativa VanillaDesk: riconosce collegamenti univoci reali (<a data-note-id="...">),
+ *   citazioni (<blockquote data-ref-note="...">), gerarchie padre-figlio, tag censiti e immagini (data-image-ref).
  * - Zero Nodi Fantasma: se un link punta a una nota eliminata o inesistente, viene ignorato.
  * - EREDITARIETÀ RAMO RECORD DATABASE: Tutte le note facenti parte di normali database
  *   (sia le record note primarie sia tutte le loro sotto-note discendenti) ereditano stabilmente
@@ -30,6 +30,7 @@ window.GraphData = {
         showRecordNotes: true,
         showHierarchy: true,
         showCitations: true,
+        showImages: false,
         colorMode: 'type'    // 'type' | 'folder' | 'tag'
     },
 
@@ -276,10 +277,75 @@ window.GraphData = {
             });
         }
 
+        // 6b. Estrazione Nodi Immagine (leggeri, attivabili su richiesta)
+        if (GraphData.options.showImages) {
+            const imgTagRegex = /<img\b[^>]*\bdata-image-ref=["']([^"']+)["'][^>]*>/gi;
+
+            notes.forEach(n => {
+                if (!n.content || !GraphData.nodeMap.has(n.id)) return;
+
+                let imgMatch;
+                imgTagRegex.lastIndex = 0;
+                while ((imgMatch = imgTagRegex.exec(n.content)) !== null) {
+                    const imageRef = imgMatch[1].trim();
+                    if (!imageRef) continue;
+
+                    const imgNodeId = 'imgnode_' + imageRef;
+                    const altMatch = imgMatch[0].match(/\balt=["']([^"']*)["']/i);
+                    const rawAlt = altMatch ? altMatch[1].trim() : '';
+                    const cleanAlt = (rawAlt && rawAlt !== imageRef && rawAlt.toLowerCase() !== 'immagine' && rawAlt.toLowerCase() !== 'image') ? rawAlt : '';
+
+                    if (!GraphData.nodeMap.has(imgNodeId)) {
+                        const prevImg = GraphData.persistentPositions.get(imgNodeId);
+                        let initX = 0;
+                        let initY = 0;
+
+                        if (prevImg) {
+                            initX = prevImg.x;
+                            initY = prevImg.y;
+                        } else {
+                            const sourceNote = GraphData.nodeMap.get(n.id);
+                            if (sourceNote && (sourceNote.x !== 0 || sourceNote.y !== 0)) {
+                                const angle = Math.random() * Math.PI * 2;
+                                const dist = 45 + Math.random() * 35;
+                                initX = sourceNote.x + Math.cos(angle) * dist;
+                                initY = sourceNote.y + Math.sin(angle) * dist;
+                            }
+                        }
+
+                        const imgNode = {
+                            id: imgNodeId,
+                            imageRef: imageRef,
+                            title: imageRef,
+                            altText: cleanAlt,
+                            type: 'image',
+                            color: '#ec4899',
+                            radius: 4,
+                            degree: 0,
+                            x: initX,
+                            y: initY,
+                            vx: prevImg ? prevImg.vx : 0,
+                            vy: prevImg ? prevImg.vy : 0
+                        };
+                        GraphData.nodes.push(imgNode);
+                        GraphData.nodeMap.set(imgNodeId, imgNode);
+                        GraphData.neighborsMap.set(imgNodeId, new Set());
+                    } else if (cleanAlt) {
+                        const existingImg = GraphData.nodeMap.get(imgNodeId);
+                        if (existingImg && !existingImg.altText) {
+                            existingImg.altText = cleanAlt;
+                        }
+                    }
+
+                    GraphData.addLink(n.id, imgNodeId, 'image_link');
+                }
+            });
+        }
+
         // 7. Dimensionamento proporzionale al numero di connessioni
         GraphData.nodes.forEach(node => {
             const deg = node.degree || 0;
-            const baseRadius = node.type === 'note' ? 4 : (node.type === 'record_note' ? 4 : 3);
+            const baseRadius = (node.type === 'note' || node.type === 'record_note' || node.type === 'image') ? 4 : 3;
             node.radius = Math.min(18, baseRadius + Math.sqrt(deg) * 2);
         });
 
@@ -389,6 +455,11 @@ window.GraphData = {
                      title="Clicca per mostrare/nascondere i Nodi Tag (#)">
                     <span class="legend-dot" style="background:#8b5cf6;"></span> Tag (#)
                 </div>
+                <div class="legend-item interactive ${opts.showImages ? '' : 'inactive'}" 
+                     onclick="GraphUI.toggleOption('showImages')" 
+                     title="Clicca per mostrare/nascondere i Nodi Immagine">
+                    <span class="legend-dot" style="background:#ec4899;"></span> Immagini
+                </div>
             `;
         } else if (colorMode === 'folder') {
             const entries = Array.from(GraphData.folderColorMap.entries()).slice(0, 5);
@@ -405,6 +476,14 @@ window.GraphData = {
         }
 
         // Legenda dei tipi di collegamento con scorciatoie interattive
+        const imageLinkToggle = colorMode !== 'type' ? `
+            <div class="legend-item interactive ${opts.showImages ? '' : 'inactive'}" 
+                 onclick="GraphUI.toggleOption('showImages')" 
+                 title="Clicca per mostrare/nascondere i Nodi Immagine">
+                <span class="legend-dot" style="background:#ec4899;"></span> Immagini
+            </div>
+        ` : '';
+
         const linksLegendHtml = `
             <div style="width:1px; height:14px; background:var(--border-color); margin: 0 4px;"></div>
             <div class="legend-item interactive ${opts.showHierarchy ? '' : 'inactive'}" 
@@ -422,6 +501,7 @@ window.GraphData = {
                  title="Clicca per mostrare/nascondere i collegamenti ai Tag (#)">
                 <span style="display:inline-block; width:16px; height:0px; border-top:2px dashed #8b5cf6; margin-right:2px;"></span> Tag
             </div>
+            ${imageLinkToggle}
         `;
 
         legendContainer.innerHTML = nodesLegendHtml + linksLegendHtml;

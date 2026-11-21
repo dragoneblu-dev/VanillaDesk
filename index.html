@@ -226,26 +226,6 @@
 
     <div class="layout">
         <aside id="sidebar">
-            <div class="search-box">
-                <div class="search-wrapper">
-                    <input type="text" id="searchInput" class="search-input" autocomplete="off">
-                    <script>document.getElementById('searchInput').placeholder = I18n.t('common.search_sidebar_placeholder');</script>
-                    <div class="search-controls hidden" id="searchControls">
-                        <span class="search-counter" id="searchCounter">0/0</span>
-                        <button class="search-nav-btn" id="btnSearchPrev" onclick="AppState.findPrevious()">
-                            <script>document.write(Icons.searchUp); document.getElementById('btnSearchPrev').title = I18n.t('toolbar.search_prev');</script>
-                        </button>
-                        <button class="search-nav-btn" id="btnSearchNext" onclick="AppState.findNext()">
-                            <script>document.write(Icons.searchDown); document.getElementById('btnSearchNext').title = I18n.t('toolbar.search_next');</script>
-                        </button>
-                        <button id="searchClearBtn" class="search-clear-btn">✕</button>
-                        <script>document.getElementById('searchClearBtn').title = I18n.t('toolbar.search_clear');</script>
-                    </div>
-                </div>
-                <!-- Contenitore Filtri Attivi (Pills) -->
-                <div id="activeSearchFilters" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; padding:0 2px;"></div>
-            </div>
-            
             <div class="sidebar-tabs-container">
                 <button class="sidebar-tab active" id="tab-notes" onclick="UI.switchToNotes()">
                     <script>document.getElementById('tab-notes').title = I18n.t('toolbar.tab_notes');</script>
@@ -272,6 +252,26 @@
                     <button class="icon-btn" id="btnSideAddNote" onclick="UI.addNote(null)">+</button>
                     <script>document.getElementById('btnSideAddNote').title = I18n.t('toolbar.new_note');</script>
                 </div>
+            </div>
+
+            <div class="search-box">
+                <div class="search-wrapper">
+                    <input type="text" id="searchInput" class="search-input" autocomplete="off">
+                    <script>document.getElementById('searchInput').placeholder = I18n.t('common.search_sidebar_placeholder');</script>
+                    <div class="search-controls hidden" id="searchControls">
+                        <span class="search-counter" id="searchCounter">0/0</span>
+                        <button class="search-nav-btn" id="btnSearchPrev" onclick="AppState.findPrevious()">
+                            <script>document.write(Icons.searchUp); document.getElementById('btnSearchPrev').title = I18n.t('toolbar.search_prev');</script>
+                        </button>
+                        <button class="search-nav-btn" id="btnSearchNext" onclick="AppState.findNext()">
+                            <script>document.write(Icons.searchDown); document.getElementById('btnSearchNext').title = I18n.t('toolbar.search_next');</script>
+                        </button>
+                        <button id="searchClearBtn" class="search-clear-btn">✕</button>
+                        <script>document.getElementById('searchClearBtn').title = I18n.t('toolbar.search_clear');</script>
+                    </div>
+                </div>
+                <!-- Contenitore Filtri Attivi (Pills) -->
+                <div id="activeSearchFilters" style="display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; padding:0 2px;"></div>
             </div>
 
             <div id="treeContainer" class="tree-scroll" ondragover="UI.handleDragOverRoot(event)"
