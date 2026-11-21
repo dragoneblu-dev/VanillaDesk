@@ -1,0 +1,347 @@
+/**
+ * ui-notes-utils.js
+ * Sottomodulo di UI.
+ * Funzioni di supporto, formattazione, Breadcrumb e segnalibri della Nota (Utilities).
+ * Integrazione del badge Cestino nel breadcrumb per le note eliminate e marcatura dirty su toggle preferiti.
+ * Aggiunta voce "Modifica Sorgente HTML..." nel menu contestuale della nota.
+ * Calcolo e rendering pillole [N] per Proprietà (🏷️) e Backlinks (ℹ️).
+ * Voci di menu contestuali per mostrare/nascondere le proprietà in cima alla pagina.
+ * Gestione e sincronizzazione del controllo ortografico (spellcheck) attivabile/disattivabile per singola nota.
+ * Menu contestuale rapido sul click destro dei nodi nota nella sidebar (openTreeNoteMenu).
+ */
+
+Object.assign(UI, {
+
+    applyNoteSpellcheck: (note) => {
+        const contentEl = document.getElementById('noteContent');
+        const titleInput = document.getElementById('noteTitle');
+        const isSpellcheckDisabled = note ? note.disableSpellcheck === true : false;
+        const val = isSpellcheckDisabled ? 'false' : 'true';
+        if (contentEl) contentEl.setAttribute('spellcheck', val);
+        if (titleInput) titleInput.setAttribute('spellcheck', val);
+    },
+
+    checkAndUpdatePropertiesIcon: (noteId) => {
+        const btn = document.getElementById('btnNoteProperties');
+        if (!btn) return;
+        
+        const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+        let count = 0;
+        
+        if (propsDb && propsDb.rows && noteId) {
+            const sysRow = propsDb.rows.find(r => r.cells && r.cells['sys_c_note'] === noteId);
+            if (sysRow && propsDb.columns) {
+                for (const col of propsDb.columns) {
+                    if (col.id === 'sys_c_note') continue;
+                    const val = sysRow.cells[col.id];
+                    
+                    if (val === true) count++;
+                    else if (Array.isArray(val) && val.length > 0) count++;
+                    else if (typeof val === 'string' && val.trim() !== '') count++;
+                    else if (typeof val === 'number') count++;
+                    else if (typeof val === 'object' && val !== null && (val.start || val.end)) count++;
+                }
+            }
+        }
+
+        // Rimuove eventuale vecchio badge residuo
+        const oldBadge = btn.querySelector('.header-counter-badge');
+        if (oldBadge) oldBadge.remove();
+
+        if (count > 0) {
+            btn.classList.add('active');
+            btn.title = I18n.t('toolbar.page_properties_count', { count });
+            const badge = document.createElement('span');
+            badge.className = 'header-counter-badge';
+            badge.textContent = count;
+            btn.appendChild(badge);
+        } else {
+            btn.classList.remove('active');
+            btn.title = I18n.t('toolbar.page_properties');
+        }
+    },
+
+    updateNoteInfoIcon: (noteId) => {
+        const btn = document.getElementById('btnNoteInfo');
+        if (!btn) return;
+
+        // Rimuove eventuale badge precedente
+        const oldBadge = btn.querySelector('.header-counter-badge');
+        if (oldBadge) oldBadge.remove();
+
+        if (!noteId || !AppState.notes) {
+            btn.classList.remove('active');
+            btn.title = I18n.t('toolbar.page_info');
+            return;
+        }
+
+        // Calcolo rapido eseguito solo all'apertura della nota (zero carico durante la digitazione)
+        const noteIdStr = `data-note-id="${noteId}"`;
+        const refNoteStr = `data-ref-note="${noteId}"`;
+        let backlinkCount = 0;
+
+        for (let i = 0; i < AppState.notes.length; i++) {
+            const n = AppState.notes[i];
+            if (n.deletedAt || n.id === noteId) continue;
+            if (n.content && (n.content.includes(noteIdStr) || n.content.includes(refNoteStr))) {
+                backlinkCount++;
+            }
+        }
+
+        if (backlinkCount > 0) {
+            btn.classList.add('active');
+            btn.title = I18n.t('toolbar.page_info_count', { count: backlinkCount });
+            const badge = document.createElement('span');
+            badge.className = 'header-counter-badge';
+            badge.textContent = backlinkCount;
+            btn.appendChild(badge);
+        } else {
+            btn.classList.remove('active');
+            btn.title = I18n.t('toolbar.page_info');
+        }
+    },
+
+    openTreeNoteMenu: (e, anchorId, noteId) => {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        const note = Store.getNote(noteId);
+        if (!note || note.deletedAt) return;
+
+        const chk = ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>';
+        const items = [
+            {
+                icon: Icons.plus || '+',
+                label: I18n.t('editor_alerts.tree_add_subnote'),
+                onClick: () => {
+                    note.expanded = true;
+                    UI.addNote(note.id);
+                }
+            },
+            {
+                icon: note.isMarked ? Icons.starFilled : Icons.starEmpty,
+                label: I18n.t('toolbar.favorite') + (note.isMarked ? chk : ''),
+                onClick: () => UI.toggleMark(note.id)
+            },
+            {
+                icon: Icons.tag,
+                label: I18n.t('toolbar.page_properties'),
+                onClick: () => {
+                    if (typeof AdvancedTable !== 'undefined') {
+                        AdvancedTable.openRecordView('SYS_PROPERTIES_DB', 'sys_r_' + note.id);
+                    }
+                }
+            },
+            {
+                icon: Icons.info,
+                label: I18n.t('toolbar.page_info'),
+                onClick: () => UI.openNoteInfoPanel(note.id)
+            },
+            { type: 'divider' },
+            {
+                icon: Icons.trash,
+                label: I18n.t('notes_utils.menu_move_trash'),
+                danger: true,
+                onClick: () => UI.deleteNote(note.id)
+            }
+        ];
+
+        const targetAnchor = (e && typeof e.clientX === 'number' && typeof e.clientY === 'number')
+            ? { x: e.clientX, y: e.clientY }
+            : anchorId;
+        UI.Menu.buildContextMenu(targetAnchor, items);
+    },
+
+    openNoteOptionsMenu: (e, anchorId) => {
+        if(e) e.stopPropagation();
+        
+        const currentNote = Store.getNote(AppState.currentNoteId);
+        const isTrashed = currentNote && currentNote.deletedAt;
+
+        const items = [];
+
+        if (isTrashed) {
+            items.push({
+                icon: Icons.restore,
+                label: I18n.t('notes_utils.menu_restore_trash'),
+                onClick: () => UI.restoreNoteFromBanner(AppState.currentNoteId)
+            });
+            items.push({ type: 'divider' });
+            items.push({
+                icon: Icons.trash,
+                label: I18n.t('notes_utils.menu_hard_delete'),
+                danger: true,
+                onClick: () => {
+                    if (confirm(I18n.t('notes_utils.confirm_hard_delete'))) {
+                        UI.Trash.hardDelete(AppState.currentNoteId, true);
+                        UI.goHome();
+                    }
+                }
+            });
+        } else {
+            // GESTIONE INDIPENDENTE DEI DUE SET DI PROPRIETÀ IN CIMA ALLA PAGINA
+            if (currentNote && currentNote.isRecordNote && currentNote.linkedTableId) {
+                const realTableId = typeof AdvancedTable !== 'undefined' ? AdvancedTable._resolveSourceId(currentNote.linkedTableId) : currentNote.linkedTableId;
+                const dbState = typeof AdvancedTable !== 'undefined' ? AdvancedTable.getState(realTableId) : null;
+                
+                const isRecordFieldsEnabled = dbState ? dbState.showHeaderRecordFields !== false : true;
+                const chkRecord = isRecordFieldsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+
+                const isPagePropsEnabled = dbState ? dbState.showHeaderPageProps === true : false;
+                const chkProps = isPagePropsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+
+                const labelRecordFields = I18n.t('notes_utils.menu_header_record_fields');
+                const labelPageProps = I18n.t('notes_utils.menu_header_page_props');
+
+                items.push({
+                    icon: Icons.tableDatabase,
+                    label: labelRecordFields + chkRecord,
+                    onClick: () => {
+                        if (dbState) {
+                            dbState.showHeaderRecordFields = !isRecordFieldsEnabled;
+                            AdvancedTable.setState(realTableId, dbState);
+                            Store.triggerAutoSave();
+                            if (typeof UI.renderPageHeaderProperties === 'function') {
+                                UI.renderPageHeaderProperties(currentNote);
+                            }
+                        }
+                    }
+                });
+
+                items.push({
+                    icon: Icons.tag,
+                    label: labelPageProps + chkProps,
+                    onClick: () => {
+                        if (dbState) {
+                            dbState.showHeaderPageProps = !isPagePropsEnabled;
+                            AdvancedTable.setState(realTableId, dbState);
+                            Store.triggerAutoSave();
+                            if (typeof UI.renderPageHeaderProperties === 'function') {
+                                UI.renderPageHeaderProperties(currentNote);
+                            }
+                        }
+                    }
+                });
+
+                items.push({ type: 'divider' });
+            } else if (currentNote) {
+                // Per le note libere standard
+                const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
+                const isPropsEnabled = propsDb ? propsDb.showHeaderOnNotes === true : false;
+                const chk = isPropsEnabled ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+                const labelPageProps = I18n.t('notes_utils.menu_header_page_props');
+
+                items.push({
+                    icon: Icons.tag,
+                    label: labelPageProps + chk,
+                    onClick: () => {
+                        if (propsDb) {
+                            propsDb.showHeaderOnNotes = !isPropsEnabled;
+                            AdvancedTable.setState('SYS_PROPERTIES_DB', propsDb);
+                            Store.triggerAutoSave();
+                            if (typeof UI.renderPageHeaderProperties === 'function') {
+                                UI.renderPageHeaderProperties(currentNote);
+                            }
+                        }
+                    }
+                });
+
+                items.push({ type: 'divider' });
+            }
+
+            // CONTROLLO ORTOGRAFICO (SPELLCHECK) PER LA NOTA CORRENTE
+            const isSpellcheckActive = currentNote ? currentNote.disableSpellcheck !== true : true;
+            const chkSpellcheck = isSpellcheckActive ? ' <span style="color:var(--accent-color); font-weight:bold; float:right;">✓</span>' : '';
+            const labelSpellcheck = I18n.t('notes_utils.menu_spellcheck');
+
+            items.push({
+                icon: '<span style="font-family:sans-serif; font-weight:bold; font-size:0.80rem; text-decoration:underline wavy var(--accent-color); display:inline-flex; align-items:center;">Ab</span>',
+                label: labelSpellcheck + chkSpellcheck,
+                onClick: () => {
+                    if (currentNote) {
+                        currentNote.disableSpellcheck = isSpellcheckActive;
+                        currentNote._isDirty = true;
+                        UI.applyNoteSpellcheck(currentNote);
+                        Store.triggerAutoSave();
+                    }
+                }
+            });
+
+            items.push({ type: 'divider' });
+
+            items.push({ icon: Icons.save, label: I18n.t('notes_utils.menu_save_template'), onClick: () => TemplateManager.saveCurrentNoteAsTemplate() });
+            items.push({ icon: Icons.tableSimple, label: I18n.t('notes_utils.menu_manage_templates'), onClick: () => TemplateManager.openManager() });
+            items.push({ type: 'divider' });
+            items.push({
+                icon: typeof Icons !== 'undefined' ? Icons.code : '</>',
+                label: I18n.t('notes_utils.menu_raw_html'),
+                onClick: () => {
+                    if (typeof Editor !== 'undefined' && typeof Editor.openRawHtmlEditor === 'function') {
+                        Editor.openRawHtmlEditor();
+                    }
+                }
+            });
+            items.push({ type: 'divider' });
+            items.push({ icon: Icons.download, label: I18n.t('notes_utils.menu_export_modpack'), onClick: () => PackageManager.exportNoteAsModpack(AppState.currentNoteId) });
+            items.push({ type: 'divider' });
+            items.push({ icon: Icons.trash, label: I18n.t('notes_utils.menu_move_trash'), danger: true, onClick: () => UI.deleteCurrentNote() });
+        }
+
+        UI.Menu.buildContextMenu(anchorId, items);
+    },
+
+    toggleMark: (targetNoteId = null) => {
+        const id = targetNoteId || AppState.currentNoteId;
+        if (!id) return;
+        const note = Store.getNote(id);
+        if (!note || note.deletedAt) return;
+
+        note.isMarked = !note.isMarked;
+        note._isDirty = true;
+        
+        if (id === AppState.currentNoteId) {
+            UI.updateMarkBtn(note.isMarked);
+        }
+        if (typeof UI.renderTree !== 'undefined') UI.renderTree();
+        if (typeof Store !== 'undefined') Store.triggerAutoSave();
+    },
+
+    updateMarkBtn: (active) => {
+        const btn = document.getElementById('markBtn');
+        if (!btn) return;
+        btn.innerHTML = active ? Icons.starFilled : Icons.starEmpty;
+        if (active) {
+            btn.classList.add('active');
+        } else {
+            btn.classList.remove('active');
+        }
+    },
+
+    updateBreadcrumb: (note) => {
+        const bc = document.getElementById('breadcrumb');
+        if (!bc) return;
+        
+        let path = []; 
+        let curr = note;
+        while (curr) { 
+            path.unshift(curr); 
+            curr = Store.getNote(curr.parentId); 
+        }
+
+        let breadcrumbHTML = '';
+
+        if (note && note.deletedAt) {
+            breadcrumbHTML += `<span style="background: rgba(239, 68, 68, 0.1); color: var(--danger-color); padding: 1px 6px; border-radius: 4px; font-weight: bold; font-size: 0.75rem; display: inline-flex; align-items: center; gap: 4px;">${Icons.trash} ${I18n.t('notes_utils.breadcrumb_trash')}</span><span style="opacity:0.5;"> / </span>`;
+        }
+
+        breadcrumbHTML += path.map((n, i) => {
+            const isLast = i === path.length - 1;
+            const safeTitle = n.title || I18n.t('editor.untitled');
+            const colorStyle = n.deletedAt ? 'color: var(--danger-color);' : '';
+            return `<span style="cursor:pointer; color:var(--text-secondary); ${colorStyle} ${isLast ? 'font-weight:bold; color:var(--text-primary);' : ''}" onclick="UI.selectNote('${n.id}')">${safeTitle}</span>`;
+        }).join('<span style="opacity:0.5;"> / </span>');
+
+        bc.innerHTML = breadcrumbHTML;
+    }
+});
