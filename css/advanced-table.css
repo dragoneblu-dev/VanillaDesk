@@ -47,7 +47,7 @@
 .adv-tool-btn:hover { background: var(--item-hover); color: var(--text-primary);
 }
 
-.adv-tool-btn.active { color: var(--accent-color); background: rgba(37, 99, 235, 0.1);
+.adv-tool-btn.active { color: var(--accent-color); background: color-mix(in srgb, var(--accent-color) 12%, transparent);
 }
 
 /* Contenitore a scorrimento orizzontale */

@@ -553,8 +553,9 @@ Object.assign(Editor, {
             Editor.saveSnapshot();
 
             let targetLi = node.closest('li.adv-checklist-item');
+            const hadSelection = !selection.isCollapsed;
 
-            if (!selection.isCollapsed) {
+            if (hadSelection) {
                 const range = selection.getRangeAt(0);
                 const startEl = range.startContainer.nodeType === 3 ? range.startContainer.parentNode : range.startContainer;
                 const endEl = range.endContainer.nodeType === 3 ? range.endContainer.parentNode : range.endContainer;
@@ -577,7 +578,7 @@ Object.assign(Editor, {
             const spanText = Editor._getChecklistTextSpan(targetLi);
             const isEmpty = Editor._isChecklistSpanEmpty(spanText);
 
-            if (isEmpty) {
+            if (!hadSelection && isEmpty) {
                 const resultNode = Editor.outdentChecklistLine(targetLi);
                 if (resultNode && resultNode.classList && resultNode.classList.contains('adv-checklist-item')) {
                     Editor._placeCaretInChecklistSpan(Editor._getChecklistTextSpan(resultNode), false);
@@ -951,24 +952,28 @@ Object.assign(Editor, {
                 return;
             }
 
+            // Fusione pulita dentro span.checklist-text se il blocco precedente è una voce To-Do
+            if (prevNode && prevNode.classList && prevNode.classList.contains('adv-checklist-item') && !block.closest('li, table, .adv-widget-shell')) {
+                e.preventDefault();
+                Editor.saveSnapshot();
+                const prevSpan = Editor._getChecklistTextSpan(prevNode);
+                if (prevSpan) Editor._mergeChecklistSpans(prevSpan, block, block);
+                Store.triggerAutoSave();
+                return;
+            }
+
             // Se il blocco corrente è vuoto (tra testi normali o sotto un media): rimuovilo e posiziona il cursore sul blocco precedente
             if (isEmptyBlock && prevNode && !WidgetManager.isProtectedBlock(prevNode) && !block.closest('li, table, .adv-widget-shell')) {
                 e.preventDefault();
                 Editor.saveSnapshot();
 
-                if (prevNode.classList && prevNode.classList.contains('adv-checklist-item')) {
-                    const prevSpan = Editor._getChecklistTextSpan(prevNode);
-                    block.remove();
-                    if (prevSpan) Editor._placeCaretInChecklistSpan(prevSpan, true);
-                } else {
-                    const newRange = document.createRange();
-                    newRange.selectNodeContents(prevNode);
-                    newRange.collapse(false);
+                const newRange = document.createRange();
+                newRange.selectNodeContents(prevNode);
+                newRange.collapse(false);
 
-                    block.remove();
-                    selection.removeAllRanges();
-                    selection.addRange(newRange);
-                }
+                block.remove();
+                selection.removeAllRanges();
+                selection.addRange(newRange);
                 Store.triggerAutoSave();
                 return;
             }

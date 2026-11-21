@@ -69,7 +69,7 @@ const PackageManager = {
         });
 
         const bodyHTML = `
-            <div style="background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2); padding: 15px; border-radius: 6px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
+            <div style="background: color-mix(in srgb, var(--accent-color) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); padding: 15px; border-radius: 6px; font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 20px;">
                 ${I18n.t('pkg_manager.export_banner', { count: requiredDbs.size })}
             </div>
             <div style="display:flex; flex-direction:column; gap:15px;">

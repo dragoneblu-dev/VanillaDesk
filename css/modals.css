@@ -76,7 +76,7 @@
 
 .modern-input:focus {
     border-bottom-color: var(--accent-color) !important;
-    background: rgba(37, 99, 235, 0.05) !important;
+    background: color-mix(in srgb, var(--accent-color) 6%, transparent) !important;
 }
 
 .modern-input option,
@@ -231,7 +231,7 @@
 
 .formula-editor-area:focus {
     border-color: var(--accent-color);
-    box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.2);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
 
 .f-string {
@@ -268,7 +268,7 @@
 
 .adv-intellisense-item:hover,
 .adv-intellisense-item.selected {
-    background-color: rgba(37, 99, 235, 0.15);
+    background-color: color-mix(in srgb, var(--accent-color) 15%, transparent);
     border-left: 3px solid var(--accent-color);
 }
 
@@ -575,7 +575,7 @@
 }
 
 .adv-menu-btn:hover { 
-    background: rgba(37, 99, 235, 0.15); 
+    background: color-mix(in srgb, var(--accent-color) 15%, transparent); 
 }
 
 .adv-filter-autocomplete {

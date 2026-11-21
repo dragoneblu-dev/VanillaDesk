@@ -114,7 +114,7 @@ Object.assign(AdvancedAutomations, {
                         <div style="display:flex; gap:5px;">
                             <button class="btn" style="flex:1; font-size:0.8rem; border-color: var(--border-color); color: var(--text-primary);" onclick="AdvancedAutomations.editAutomation(event, '${tableId}', '${auto.id}')"><span style="margin-right:5px; display:flex; align-items:center;">${Icons.edit}</span> ${I18n.t('adv_automations.btn_edit_fix')}</button>
                             
-                            <button class="adv-icon-btn" style="padding:0 12px; background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius:4px; color: var(--accent-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.runMassiveAutomation(event, '${tableId}', '${auto.id}')" title="${I18n.t('adv_automations.title_run_all')}">${Icons.play}</button>
+                            <button class="adv-icon-btn" style="padding:0 12px; background: color-mix(in srgb, var(--accent-color) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); border-radius:4px; color: var(--accent-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.runMassiveAutomation(event, '${tableId}', '${auto.id}')" title="${I18n.t('adv_automations.title_run_all')}">${Icons.play}</button>
 
                             <button class="adv-icon-btn danger" style="padding:0 12px; background: rgba(239, 68, 68, 0.05); border: 1px solid rgba(239, 68, 68, 0.2); border-radius:4px; color: var(--danger-color); display:flex; align-items:center; justify-content:center;" onclick="AdvancedAutomations.deleteAutomation(event, '${tableId}', '${auto.id}')" title="${I18n.t('common.delete')}">${Icons.trash}</button>
                         </div>
@@ -373,7 +373,7 @@ Object.assign(AdvancedAutomations, {
                         
                         const renderDayBtn = (label, code, activeArray) => {
                             const isActive = activeArray.includes(code);
-                            return `<button class="adv-icon-btn" style="flex:1; border:1px solid ${isActive ? 'var(--accent-color)' : 'var(--border-color)'}; background:${isActive ? 'rgba(37,99,235,0.1)' : 'var(--bg-color)'}; color:${isActive ? 'var(--accent-color)' : 'var(--text-secondary)'}; font-weight:bold; padding:4px 0; opacity:1;" onclick="AdvancedAutomations._toggleTimerDay(event, ${idx}, '${code}')">${label}</button>`;
+                            return `<button class="adv-icon-btn" style="flex:1; border:1px solid ${isActive ? 'var(--accent-color)' : 'var(--border-color)'}; background:${isActive ? 'color-mix(in srgb, var(--accent-color) 12%, transparent)' : 'var(--bg-color)'}; color:${isActive ? 'var(--accent-color)' : 'var(--text-secondary)'}; font-weight:bold; padding:4px 0; opacity:1;" onclick="AdvancedAutomations._toggleTimerDay(event, ${idx}, '${code}')">${label}</button>`;
                         };
 
                         let modeSelectHtml = `
@@ -633,7 +633,7 @@ Object.assign(AdvancedAutomations, {
 
         if (hasFormulaTrigger) {
             triggerFormulaHelperHTML = `
-                <div style="background: rgba(37, 99, 235, 0.05); padding: 10px 12px; border-radius: 6px; border: 1px solid rgba(37, 99, 235, 0.2); margin-bottom: 10px; font-size: 0.8rem; display:flex; align-items:center; gap:10px;">
+                <div style="background: color-mix(in srgb, var(--accent-color) 8%, transparent); padding: 10px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); margin-bottom: 10px; font-size: 0.8rem; display:flex; align-items:center; gap:10px;">
                     <span style="display:inline-flex; color:var(--accent-color);">${Icons.formula}</span>
                     <div style="flex:1; color:var(--text-secondary);">
                         <b>${I18n.t('adv_automations.formula_mode_title')}</b> ${I18n.t('adv_automations.formula_mode_desc')}
@@ -825,7 +825,7 @@ Object.assign(AdvancedAutomations, {
         
         if (hasFormulaAction) {
             formulaHelperHTML = `
-                <div style="background: rgba(37, 99, 235, 0.05); padding: 10px 12px; border-radius: 6px; border: 1px solid rgba(37, 99, 235, 0.2); margin-bottom: 10px; font-size: 0.8rem; display:flex; align-items:center; gap:10px;">
+                <div style="background: color-mix(in srgb, var(--accent-color) 8%, transparent); padding: 10px 12px; border-radius: 6px; border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); margin-bottom: 10px; font-size: 0.8rem; display:flex; align-items:center; gap:10px;">
                     <span style="display:inline-flex; color:var(--accent-color);">${Icons.formula}</span>
                     <div style="flex:1; color:var(--text-secondary);">
                         <b>${I18n.t('adv_automations.formula_mode_title')}</b> ${I18n.t('adv_automations.formula_mode_desc')}

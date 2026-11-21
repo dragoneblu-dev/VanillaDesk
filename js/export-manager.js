@@ -41,7 +41,7 @@ const ExportManager = {
                 card.classList.add('active');
                 card.style.borderColor = 'var(--accent-color)';
                 card.style.borderWidth = '2px';
-                card.style.backgroundColor = 'rgba(37, 99, 235, 0.06)';
+                card.style.backgroundColor = 'color-mix(in srgb, var(--accent-color) 8%, transparent)';
             } else {
                 card.classList.remove('active');
                 card.style.borderColor = 'var(--border-color)';
@@ -110,7 +110,7 @@ const ExportManager = {
                 card.classList.add('active');
                 card.style.borderColor = 'var(--accent-color)';
                 card.style.borderWidth = '2px';
-                card.style.backgroundColor = 'rgba(37, 99, 235, 0.06)';
+                card.style.backgroundColor = 'color-mix(in srgb, var(--accent-color) 8%, transparent)';
             } else {
                 card.classList.remove('active');
                 card.style.borderColor = 'var(--border-color)';

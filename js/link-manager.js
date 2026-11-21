@@ -114,7 +114,7 @@ const LinkManager = {
                 <div class="selection-card" onclick="LinkManager.selectType(event, 'internal')" style="position:relative;">
                     <span class="selection-icon" style="color:var(--accent-color);">${Icons.file}</span>
                     <div>
-                        <div style="font-weight:bold">${I18n.t('link_manager.internal_link_title')} <span style="font-size:0.75rem; color:var(--accent-color); background:rgba(37,99,235,0.1); padding:2px 6px; border-radius:10px; margin-left:5px; font-family:monospace; font-weight:normal;">${I18n.t('link_manager.internal_link_badge')}</span></div>
+                        <div style="font-weight:bold">${I18n.t('link_manager.internal_link_title')} <span style="font-size:0.75rem; color:var(--accent-color); background:color-mix(in srgb, var(--accent-color) 12%, transparent); padding:2px 6px; border-radius:10px; margin-left:5px; font-family:monospace; font-weight:normal;">${I18n.t('link_manager.internal_link_badge')}</span></div>
                         <div style="font-size:0.8rem; color:var(--text-secondary)">${I18n.t('link_manager.internal_link_desc')}</div>
                     </div>
                 </div>
@@ -520,7 +520,7 @@ const LinkManager = {
 
         const html = `
             <div id="fileLinkDrawerContainer" style="display:flex; flex-direction:column; height:100%; gap:15px;">
-                <div style="background: rgba(37,99,235,0.05); border: 1px solid rgba(37,99,235,0.2); padding: 10px; border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary); flex-shrink:0;">
+                <div style="background: color-mix(in srgb, var(--accent-color) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); padding: 10px; border-radius: 6px; font-size: 0.8rem; color: var(--text-secondary); flex-shrink:0;">
                     ${I18n.t('link_manager.file_path_info_banner')}
                 </div>
                 <div style="flex-shrink:0;">
@@ -634,7 +634,7 @@ const LinkManager = {
         const title = `<span style="display:inline-flex; align-items:center; gap:5px; color:var(--danger-color);">${Icons.youtube} ${titleText}</span>`;
         const html = `
             <div id="youtubeDrawerContainer" style="display:flex; flex-direction:column; gap:15px;">
-                <div style="font-size:0.85rem; color:var(--text-secondary); background:rgba(37,99,235,0.05); border:1px solid rgba(37,99,235,0.2); padding:10px; border-radius:6px; line-height:1.5;">
+                <div style="font-size:0.85rem; color:var(--text-secondary); background:color-mix(in srgb, var(--accent-color) 8%, transparent); border:1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); padding:10px; border-radius:6px; line-height:1.5;">
                     ${I18n.t('link_manager.youtube_banner_info')}
                 </div>
                 <div>

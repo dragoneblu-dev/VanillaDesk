@@ -1,17 +1,17 @@
 :root {
     /* Layout Colors (Tema Default - Crema) */
-    --bg-color: #f3f4f6;
+    --bg-color: #f3f6f5;
     --sidebar-bg: #f1f0ea;
     --box-bg: #00000006;
     --editor-bg: #f9f8f3;
     --text-primary: #000000;
-    --text-secondary: #566172;
+    --text-secondary: #56726c;
     --accent-color: #4f8b00; /*2563eb;*/
     --accent-color-tx: #FFFFFF;
     --accent-hover: #60a900;
     --border-color: #e5e7eb;
-    --item-hover: #edf3d0; /*f9fafb;*/
-    --item-active: #f4fbcf; /*eff6ff;*/
+    --item-hover: #efe9e0; /*edf3d0 f9fafb;*/
+    --item-active: #f2e9d1; /*eff6ff;*/
     --marked-bg: #fffbeb;
     --marked-border: #fbbf24;
     --danger-color: #ef4444;

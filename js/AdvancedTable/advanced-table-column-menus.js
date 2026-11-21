@@ -227,7 +227,7 @@ const AdvancedTableColumnMenus = {
         const aggType = col.backlinkAggType || 'list';
 
         const bodyHTML = `
-            <div style="background: rgba(37, 99, 235, 0.05); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; border: 1px solid rgba(37, 99, 235, 0.2);">
+            <div style="background: color-mix(in srgb, var(--accent-color) 8%, transparent); padding: 10px; border-radius: 6px; margin-bottom: 15px; font-size: 0.8rem; border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent);">
                 ${I18n.t('adv_col_menu.backlink_drawer_desc')}
             </div>
             

@@ -313,7 +313,7 @@ header.header-unsaved .btn:not(.btn-primary):hover {
 }
 
 .btn-editing {
-    background-color: rgba(37, 99, 235, 0.1);
+    background-color: color-mix(in srgb, var(--accent-color) 12%, transparent);
     border-color: var(--accent-color);
     color: var(--accent-color);
     font-weight: bold;
@@ -558,7 +558,7 @@ aside.collapsed {
 }
 
 .tree-scroll.drag-over-root {
-    background: rgba(37, 99, 235, 0.05);
+    background: color-mix(in srgb, var(--accent-color) 8%, transparent);
     box-shadow: inset 0 0 0 2px var(--accent-color);
 }
 
@@ -870,9 +870,10 @@ details > summary { list-style: none; }
         padding: 8px 10px !important;
     }
     
-    .btn-color-arrow {
+    /*.btn-color-arrow {
         width: 24px !important;
-    }
+    }*/
+    
 
     /* 5. GESTIONE MIGLIORE DELLO SCROLL ORIZZONTALE SUI WIDGET */
     .adv-scroll-container,

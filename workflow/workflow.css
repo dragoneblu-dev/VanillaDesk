@@ -27,7 +27,7 @@ body {
 
 /* --- HEADER & TOOLBAR --- */
 header {
-    height: 52px;
+    height: 50px;
     background: var(--sidebar-bg);
     border-bottom: 1px solid var(--border-color);
     display: flex;
@@ -402,14 +402,14 @@ select optgroup,
     position: absolute;
     border: 1.5px dashed var(--accent-color);
     border-radius: 12px;
-    background: rgba(37, 99, 235, 0.03);
+    background: color-mix(in srgb, var(--accent-color) 4%, transparent);
     box-sizing: border-box;
     transition: all 0.15s ease;
     pointer-events: none;
 }
 
 [data-theme="dark"] .wf-cluster-card, [data-theme="notion-dark"] .wf-cluster-card {
-    background: rgba(37, 99, 235, 0.05);
+    background: color-mix(in srgb, var(--accent-color) 7%, transparent);
 }
 
 .wf-cluster-header {
@@ -433,7 +433,7 @@ select optgroup,
 #canvasMarqueeBox {
     position: absolute;
     border: 1.5px solid var(--accent-color);
-    background: rgba(37, 99, 235, 0.12);
+    background: color-mix(in srgb, var(--accent-color) 12%, transparent);
     border-radius: 4px;
     pointer-events: none;
     display: none;
@@ -474,7 +474,7 @@ select optgroup,
 
 .wf-node.selected {
     border-color: var(--accent-color) !important;
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 6px 18px rgba(0,0,0,0.12) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 35%, transparent), 0 6px 18px rgba(0,0,0,0.12) !important;
 }
 
 .wf-node.highlighted {
@@ -573,13 +573,13 @@ select optgroup,
     display: inline-flex;
     align-items: center;
     gap: 4px;
-    background: rgba(37, 99, 235, 0.08);
+    background: color-mix(in srgb, var(--accent-color) 8%, transparent);
     color: var(--accent-color);
     padding: 3px 6px;
     border-radius: 4px;
     font-size: 0.75rem;
     font-weight: 600;
-    border: 1px solid rgba(37, 99, 235, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-color) 20%, transparent);
 }
 
 .wf-bool-true { 
@@ -808,7 +808,7 @@ body.layout-locked .wf-port {
     font-weight: 700;
     color: var(--accent-color);
     padding: 2px 8px;
-    background: rgba(37, 99, 235, 0.1);
+    background: color-mix(in srgb, var(--accent-color) 12%, transparent);
     border-radius: 12px;
     margin-right: 4px;
     white-space: nowrap;

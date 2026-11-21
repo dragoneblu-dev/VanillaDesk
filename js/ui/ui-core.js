@@ -249,8 +249,6 @@ window.UI = {
             if (btnCreate) {
                 btnCreate.classList.remove('btn-primary');
                 btnCreate.style.background = '';
-                btnCreate.style.color = 'var(--col_memBro)';
-                btnCreate.style.borderColor = 'var(--col_memBro)';
             }
 
             if (btnOpen) {

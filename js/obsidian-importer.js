@@ -26,7 +26,7 @@ const ObsidianImporter = {
         }
 
         const bodyHTML = `
-            <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); padding: 15px; border-radius: 6px; font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; margin-bottom: 20px;">
+            <div style="background: color-mix(in srgb, var(--accent-color) 8%, transparent); border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent); padding: 15px; border-radius: 6px; font-size: 0.85rem; color: var(--text-primary); line-height: 1.5; margin-bottom: 20px;">
                 <p style="margin-top:0;">
                     ${I18n.t('obsidian_importer.banner_desc')}
                 </p>

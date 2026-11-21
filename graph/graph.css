@@ -18,7 +18,7 @@
 }
 
 .graph-header {
-    height: 52px;
+    height: 50px;
     background: var(--sidebar-bg, #f9fafb);
     border-bottom: 1px solid var(--border-color, #e5e7eb);
     display: flex;
@@ -130,8 +130,8 @@
 }
 
 .graph-search-box input:focus {
-    border-color: var(--accent-color, #2563eb);
-    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+    border-color: var(--accent-color);
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-color) 20%, transparent);
 }
 
 .graph-clear-btn {

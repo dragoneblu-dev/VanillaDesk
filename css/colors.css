@@ -40,11 +40,14 @@
 /* --- TOOLBAR COLOR PICKER --- */
 .color-picker-group {
     display: inline-flex;
-    align-items: stretch; /* Modificato: i figli riempiono l'altezza */
+    align-items: center;
     border: 1px solid transparent;
     border-radius: 4px;
-    margin-right: 4px;
-    position: relative; 
+    margin-right: 2px;
+    position: relative;
+    height: 28px;
+    box-sizing: border-box;
+    vertical-align: middle;
 }
 .color-picker-group:hover {
     background-color: var(--item-hover);
@@ -52,22 +55,29 @@
 }
 
 .btn-color-main {
-    padding: 4px 6px;
+    position: relative;
+    height: 28px;
+    padding: 0 3px;
     cursor: pointer;
-    display: flex;
-    flex-direction: column;
+    display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 2px;
     background: transparent;
     border: none;
     color: var(--text-secondary);
+    box-sizing: border-box;
+    line-height: 1;
 }
 
 .btn-color-bar {
-    width: 16px;
-    height: 4px;
+    position: absolute;
+    bottom: 2px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 14px;
+    height: 3px;
     border-radius: 2px;
+    pointer-events: none;
 }
 
 .btn-color-bar.hl-c1 { background-color: var(--hl-c1); border: 1px solid rgba(0,0,0,0.1); }
@@ -104,19 +114,9 @@
 .btn-color-bar.tx-c9 { background-color: var(--tx-c9); }
 .btn-color-bar.tx-c10 { background-color: var(--tx-c10); }
 
-/* Freccia rimpicciolita per rubare meno spazio in Toolbar */
+/* Freccia rimpicciolita e compatta per la Toolbar */
 .btn-color-arrow {
-    padding: 0;
-    width: 14px; /* Dimensione ridotta e fissa */
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    font-size: 0.6rem; /* Font più piccolo */
     color: var(--text-secondary);
-    background: transparent;
-    border: none;
-    border-left: 1px solid transparent;
 }
 .color-picker-group:hover .btn-color-arrow {
     border-left-color: var(--border-color);

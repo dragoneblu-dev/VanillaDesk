@@ -29,8 +29,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:8px;">
                         ${I18n.t('export_dialog.step1_format')}
                     </label>
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;" id="exportFormatCards">
-                        <div class="selection-card export-format-card active" data-format="html" onclick="ExportManager.selectFormatCard('html')" style="padding:12px 8px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:rgba(37,99,235,0.06); transition:all 0.2s;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;" id="exportFormatCards">
+                        <div class="selection-card export-format-card active" data-format="html" onclick="ExportManager.selectFormatCard('html')" style="padding:12px 8px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:6px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:color-mix(in srgb, var(--accent-color) 8%, transparent); transition:all 0.2s;">
                             <span style="color:var(--accent-color); display:inline-flex; transform:scale(1.2);">${Icons.book}</span>
                             <div style="font-weight:bold; font-size:0.85rem; color:var(--text-primary);">${I18n.t('export_dialog.fmt_html_title')}</div>
                             <div style="font-size:0.7rem; color:var(--text-secondary); line-height:1.2;">${I18n.t('export_dialog.fmt_html_desc')}</div>
@@ -61,8 +61,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     <label style="font-size:0.8rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase; letter-spacing:0.5px; display:block; margin-bottom:8px;">
                         ${I18n.t('export_dialog.step2_scope')}
                     </label>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;" id="exportScopeCards">
-                        <div class="selection-card export-scope-card active" data-scope="current" onclick="ExportManager.selectScopeCard('current')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:rgba(37,99,235,0.06); transition:all 0.2s;">
+                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px;" id="exportScopeCards">
+                        <div class="selection-card export-scope-card active" data-scope="current" onclick="ExportManager.selectScopeCard('current')" style="padding:10px; display:flex; flex-direction:column; align-items:center; text-align:center; gap:4px; border:2px solid var(--accent-color); border-radius:8px; cursor:pointer; background:color-mix(in srgb, var(--accent-color) 8%, transparent); transition:all 0.2s;">
                             <span style="display:inline-flex; color:var(--accent-color);">${Icons.file}</span>
                             <div style="font-weight:bold; font-size:0.8rem; color:var(--text-primary);">${I18n.t('export_dialog.scope_current')}</div>
                             <div style="font-size:0.7rem; color:var(--text-secondary);">${I18n.t('export_dialog.scope_current_desc')}</div>

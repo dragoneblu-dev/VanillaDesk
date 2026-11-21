@@ -24,13 +24,13 @@
 }
 
 .ui-security-banner {
-    background: rgba(37, 99, 235, 0.05);
+    background: color-mix(in srgb, var(--accent-color) 8%, transparent);
     padding: 15px;
     border-radius: 6px;
     margin-bottom: 20px;
     font-size: 0.85rem;
     line-height: 1.5;
-    border: 1px solid rgba(37, 99, 235, 0.2);
+    border: 1px solid color-mix(in srgb, var(--accent-color) 25%, transparent);
 }
 
 .ui-danger-box {
