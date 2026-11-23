@@ -9,6 +9,7 @@
  * opzioni disponibili per proprietà e rimozione isolata su click della ✕.
  * Risoluzione semantica dei record collegati, date ad intervallo {start, end} e note_link.
  * Supporto al filtraggio per sole note senza tag/proprietà valorizzata (*EMPTY*) o presenti (*EXISTS*).
+ * Selettore rapido di ambito (Stesso paragrafo, Stesso capitolo, Tutta la nota) per ricerche multi-termine con ';'.
  */
 
 const SidebarManager = {
@@ -577,44 +578,91 @@ const SidebarManager = {
             }
         },
 
+        setMultiSearchScope: (scope) => {
+            if (AppState.multiSearchScope === scope) return;
+            AppState.multiSearchScope = scope;
+            SidebarManager.SearchAutocomplete.renderPills();
+            if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._triggerSearchUpdate === 'function') {
+                EventsGlobal._triggerSearchUpdate();
+            }
+        },
+
         renderPills: () => {
             const container = document.getElementById('activeSearchFilters');
             if (!container) return;
 
-            if (!AppState.activePropertyFilters || AppState.activePropertyFilters.length === 0) {
+            const searchTerms = (typeof AppState !== 'undefined' && typeof AppState.parseSearchTerms === 'function')
+                ? AppState.parseSearchTerms(AppState.searchFilter)
+                : [];
+            const isMultiTerm = searchTerms.length > 1;
+            const hasPropFilters = AppState.activePropertyFilters && AppState.activePropertyFilters.length > 0;
+
+            if (!hasPropFilters && !isMultiTerm) {
                 container.innerHTML = '';
                 return;
             }
 
             let html = '';
-            AppState.activePropertyFilters.forEach((filter, idx) => {
-                const safeTitle = String(filter.visualText).replace(/"/g, '&quot;');
-                const anchorId = `active-filter-pill-${idx}`;
 
-                html += `
-                    <span id="${anchorId}" class="adv-select-pill ${filter.colorClass || 'default-color'}" 
-                          style="display:inline-flex; align-items:center; gap:0; margin:0; padding:1px 2px 1px 6px; user-select:none; border-radius:12px;"
-                          title="${I18n.t('sidebar_filter.active_filter_tooltip', { title: safeTitle })}">
-                        
-                        <!-- Corpo cliccabile per aprire le opzioni -->
-                        <span class="pill-body" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; padding:1px 2px;"
-                              onclick="SidebarManager.SearchAutocomplete.openPillMenu(event, ${idx}, '${anchorId}')">
-                            <span>${filter.visualText}</span>
-                            <span style="opacity:0.6; font-size:0.65rem;">▾</span>
+            // Pillole di selezione ambito per ricerca multi-termine (';') con tooltip personalizzato coerente col tema
+            if (isMultiTerm) {
+                const curScope = AppState.multiSearchScope || 'paragraph';
+                const scopes = [
+                    { id: 'paragraph', label: I18n.t('tree.scope_paragraph'), title: I18n.t('tree.scope_paragraph_title') },
+                    { id: 'chapter', label: I18n.t('tree.scope_chapter'), title: I18n.t('tree.scope_chapter_title') },
+                    { id: 'note', label: I18n.t('tree.scope_note'), title: I18n.t('tree.scope_note_title') }
+                ];
+
+                html += `<div style="display:flex; flex-wrap:wrap; gap:4px; width:100%; margin-bottom:${hasPropFilters ? '4px' : '0'};">`;
+                scopes.forEach(sc => {
+                    const isActive = curScope === sc.id;
+                    const activeStyle = isActive
+                        ? 'background:var(--item-active); color:var(--accent-color); border:1px solid var(--accent-color); font-weight:600;'
+                        : 'background:transparent; color:var(--text-secondary); border:1px solid var(--border-color); opacity:0.8;';
+                    const safeTooltip = (typeof UI !== 'undefined' && UI.escapeHTML)
+                        ? UI.escapeHTML(sc.title)
+                        : String(sc.title).replace(/"/g, '&quot;');
+                    html += `
+                        <span class="adv-select-pill" data-tooltip="${safeTooltip}" style="cursor:pointer; margin:0; padding:1px 7px; font-size:0.72rem; border-radius:10px; user-select:none; ${activeStyle}"
+                              onclick="SidebarManager.SearchAutocomplete.setMultiSearchScope('${sc.id}')">
+                            ${sc.label}
                         </span>
+                    `;
+                });
+                html += `</div>`;
+            }
 
-                        <!-- Separatore visivo ergonomico -->
-                        <span style="width:1px; height:12px; background:currentColor; opacity:0.25; margin:0 4px;"></span>
+            if (hasPropFilters) {
+                AppState.activePropertyFilters.forEach((filter, idx) => {
+                    const safeTitle = String(filter.visualText).replace(/"/g, '&quot;');
+                    const anchorId = `active-filter-pill-${idx}`;
 
-                        <!-- Bersaglio isolato di eliminazione -->
-                        <span class="pill-close" style="cursor:pointer; padding:1px 4px; opacity:0.6; font-weight:bold; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; transition:all 0.15s ease;"
-                              onmouseenter="this.style.opacity='1'; this.style.backgroundColor='rgba(0,0,0,0.1)';"
-                              onmouseleave="this.style.opacity='0.6'; this.style.backgroundColor='transparent';"
-                              onclick="event.stopPropagation(); SidebarManager.SearchAutocomplete.remove(${idx})" 
-                              title="${I18n.t('sidebar_filter.remove_filter_tooltip')}">✕</span>
-                    </span>
-                `;
-            });
+                    html += `
+                        <span id="${anchorId}" class="adv-select-pill ${filter.colorClass || 'default-color'}" 
+                              style="display:inline-flex; align-items:center; gap:0; margin:0; padding:1px 2px 1px 6px; user-select:none; border-radius:12px;"
+                              title="${I18n.t('sidebar_filter.active_filter_tooltip', { title: safeTitle })}">
+                            
+                            <!-- Corpo cliccabile per aprire le opzioni -->
+                            <span class="pill-body" style="cursor:pointer; display:inline-flex; align-items:center; gap:4px; padding:1px 2px;"
+                                  onclick="SidebarManager.SearchAutocomplete.openPillMenu(event, ${idx}, '${anchorId}')">
+                                <span>${filter.visualText}</span>
+                                <span style="opacity:0.6; font-size:0.65rem;">▾</span>
+                            </span>
+
+                            <!-- Separatore visivo ergonomico -->
+                            <span style="width:1px; height:12px; background:currentColor; opacity:0.25; margin:0 4px;"></span>
+
+                            <!-- Bersaglio isolato di eliminazione -->
+                            <span class="pill-close" style="cursor:pointer; padding:1px 4px; opacity:0.6; font-weight:bold; display:inline-flex; align-items:center; justify-content:center; border-radius:50%; transition:all 0.15s ease;"
+                                  onmouseenter="this.style.opacity='1'; this.style.backgroundColor='rgba(0,0,0,0.1)';"
+                                  onmouseleave="this.style.opacity='0.6'; this.style.backgroundColor='transparent';"
+                                  onclick="event.stopPropagation(); SidebarManager.SearchAutocomplete.remove(${idx})" 
+                                  title="${I18n.t('sidebar_filter.remove_filter_tooltip')}">✕</span>
+                        </span>
+                    `;
+                });
+            }
+
             container.innerHTML = html;
         }
     }

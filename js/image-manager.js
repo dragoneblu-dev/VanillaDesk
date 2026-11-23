@@ -5,6 +5,7 @@
  * Inibizione forzata dei menu tabella (TableManager) se l'utente
  * seleziona un'immagine posta all'interno della griglia, dando priorità al Resizer.
  * Apertura e visualizzazione a pieno schermo con recupero on-demand tramite Editor.loadAssetOnDemand.
+ * Rimozione centralizzata tramite deleteActiveImage() condivisa tra tastiera (Canc/Backspace) e Taglio (Ctrl+X).
  */
 
 const ImageManager = {
@@ -14,6 +15,86 @@ const ImageManager = {
     dragStartX: 0,
     startWidth: 0,
     dragDirection: '', 
+
+    deleteActiveImage: () => {
+        if (!ImageManager.activeImage) return false;
+
+        const img = ImageManager.activeImage;
+        const editorEl = document.getElementById('noteContent');
+        const parent = img.parentNode;
+        const prev = img.previousSibling;
+        const next = img.nextSibling;
+        const sel = window.getSelection();
+
+        // Collassa la selezione subito prima dell'immagine per registrare la posizione nello snapshot Undo
+        if (sel && parent) {
+            try {
+                const preRange = document.createRange();
+                preRange.setStartBefore(img);
+                preRange.collapse(true);
+                sel.removeAllRanges();
+                sel.addRange(preRange);
+            } catch (_) {}
+        }
+
+        if (typeof Editor !== 'undefined') Editor.saveSnapshot();
+
+        const idx = parent ? Array.prototype.indexOf.call(parent.childNodes, img) : 0;
+        img.remove();
+
+        ImageManager.hideResizerOverlay();
+        ImageManager.hideFloatingMenu();
+
+        if (parent && sel) {
+            const editableHost = parent.closest ? (parent.closest('[contenteditable="true"]') || editorEl) : editorEl;
+            if (editableHost) editableHost.focus({ preventScroll: true });
+
+            const range = document.createRange();
+            if (editorEl && parent === editorEl) {
+                const isEmptyP = next && next.nodeType === 1 && next.tagName === 'P' &&
+                    next.innerText.trim() === '' &&
+                    !next.querySelector('img, audio, iframe, hr, .adv-widget-shell');
+
+                if (isEmptyP) {
+                    range.setStart(next, 0);
+                } else {
+                    const p = document.createElement('p');
+                    p.innerHTML = '<br>';
+                    if (next && next.parentNode === editorEl) editorEl.insertBefore(p, next);
+                    else editorEl.appendChild(p);
+                    range.setStart(p, 0);
+                }
+            } else {
+                const isBlockEmpty = parent.textContent.replace(/[\u200B\uFEFF]/g, '') === '' &&
+                    !parent.querySelector('img, audio, iframe, svg, .adv-widget-shell, .adv-inline-shell');
+
+                if (isBlockEmpty) {
+                    if (parent.tagName !== 'TD' && parent.tagName !== 'TH' && !parent.querySelector('br')) {
+                        parent.innerHTML = '<br>';
+                    }
+                    range.setStart(parent, 0);
+                } else if (prev && prev.nodeType === 3 && prev.parentNode === parent) {
+                    range.setStart(prev, prev.nodeValue.length);
+                } else if (next && next.nodeType === 3 && next.parentNode === parent) {
+                    range.setStart(next, 0);
+                } else {
+                    range.setStart(parent, Math.min(Math.max(0, idx), parent.childNodes.length));
+                }
+            }
+            range.collapse(true);
+            sel.removeAllRanges();
+            sel.addRange(range);
+            if (typeof Editor !== 'undefined') Editor.savedRange = range.cloneRange();
+        }
+
+        if (typeof UI !== 'undefined' && typeof UI.handleEditorInput === 'function') {
+            UI.handleEditorInput();
+        } else if (typeof Store !== 'undefined') {
+            Store.triggerAutoSave();
+        }
+
+        return true;
+    },
 
     init: () => {
         document.addEventListener('click', (e) => {
@@ -40,79 +121,7 @@ const ImageManager = {
                 e.stopPropagation();
                 e.stopImmediatePropagation();
 
-                const img = ImageManager.activeImage;
-                const editorEl = document.getElementById('noteContent');
-                const parent = img.parentNode;
-                const prev = img.previousSibling;
-                const next = img.nextSibling;
-                const sel = window.getSelection();
-
-                // Collassa la selezione subito prima dell'immagine per registrare la posizione nello snapshot Undo
-                if (sel && parent) {
-                    try {
-                        const preRange = document.createRange();
-                        preRange.setStartBefore(img);
-                        preRange.collapse(true);
-                        sel.removeAllRanges();
-                        sel.addRange(preRange);
-                    } catch (_) {}
-                }
-
-                if (typeof Editor !== 'undefined') Editor.saveSnapshot();
-
-                const idx = parent ? Array.prototype.indexOf.call(parent.childNodes, img) : 0;
-                img.remove();
-
-                ImageManager.hideResizerOverlay();
-                ImageManager.hideFloatingMenu();
-
-                if (parent && sel) {
-                    const editableHost = parent.closest ? (parent.closest('[contenteditable="true"]') || editorEl) : editorEl;
-                    if (editableHost) editableHost.focus({ preventScroll: true });
-
-                    const range = document.createRange();
-                    if (editorEl && parent === editorEl) {
-                        const isEmptyP = next && next.nodeType === 1 && next.tagName === 'P' &&
-                            next.innerText.trim() === '' &&
-                            !next.querySelector('img, audio, iframe, hr, .adv-widget-shell');
-
-                        if (isEmptyP) {
-                            range.setStart(next, 0);
-                        } else {
-                            const p = document.createElement('p');
-                            p.innerHTML = '<br>';
-                            if (next && next.parentNode === editorEl) editorEl.insertBefore(p, next);
-                            else editorEl.appendChild(p);
-                            range.setStart(p, 0);
-                        }
-                    } else {
-                        const isBlockEmpty = parent.textContent.replace(/[\u200B\uFEFF]/g, '') === '' &&
-                            !parent.querySelector('img, audio, iframe, svg, .adv-widget-shell, .adv-inline-shell');
-
-                        if (isBlockEmpty) {
-                            if (parent.tagName !== 'TD' && parent.tagName !== 'TH' && !parent.querySelector('br')) {
-                                parent.innerHTML = '<br>';
-                            }
-                            range.setStart(parent, 0);
-                        } else if (prev && prev.nodeType === 3 && prev.parentNode === parent) {
-                            range.setStart(prev, prev.nodeValue.length);
-                        } else if (next && next.nodeType === 3 && next.parentNode === parent) {
-                            range.setStart(next, 0);
-                        } else {
-                            range.setStart(parent, Math.min(Math.max(0, idx), parent.childNodes.length));
-                        }
-                    }
-                    range.collapse(true);
-                    sel.removeAllRanges();
-                    sel.addRange(range);
-                    if (typeof Editor !== 'undefined') Editor.savedRange = range.cloneRange();
-                }
-
-                if (typeof UI !== 'undefined' && typeof UI.handleEditorInput === 'function') {
-                    UI.handleEditorInput();
-                } else if (typeof Store !== 'undefined') {
-                    Store.triggerAutoSave();
-                }
+                ImageManager.deleteActiveImage();
             }
         });
 

@@ -7,8 +7,8 @@
  * FEEDFORWARD TOOLTIPS: Mostra nel tooltip delle frecce Indietro/Avanti il titolo esatto della nota di destinazione.
  * RETURNING RECORD ANCHOR: Evidenziazione visiva e centratura temporanea (pulse di 1.2s)
  * confinata alla riga/card di partenza (stili definiti in css/advanced-table.css).
- * HISTORY CONTEXT MENU: Pressione prolungata (con drag-and-release) e tasto destro su Indietro/Avanti
- * per selezionare direttamente qualsiasi nota nella cronologia senza occupare spazio extra.
+ * HISTORY & HIERARCHY CONTEXT MENU: Pressione prolungata (con drag-and-release) e tasto destro su Indietro,
+ * Avanti e Livello Superiore per saltare direttamente a qualsiasi nota nella cronologia o nella gerarchia.
  */
 
 Object.assign(UI, {
@@ -106,6 +106,82 @@ Object.assign(UI, {
         }
         if (items.length > 0 && typeof UI.Menu !== 'undefined') {
             UI.Menu.buildContextMenu(anchorId, items);
+        }
+    },
+
+    openGoUpMenu: (anchorId) => {
+        if (!AppState.currentNoteId) return;
+        const startNote = Store.getNote(AppState.currentNoteId);
+        if (!startNote) return;
+
+        const items = [];
+        const visited = new Set([startNote.id]);
+        let curr = startNote;
+
+        while (curr && items.length < 15) {
+            if (curr.isRecordNote && curr.linkedTableId) {
+                const dbId = curr.linkedTableId;
+                const rowId = curr.linkedRowId;
+                const realDbId = (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable._resolveSourceId === 'function')
+                    ? AdvancedTable._resolveSourceId(dbId)
+                    : dbId.split('_cited_')[0];
+                const dbState = AppState.databases ? (AppState.databases[dbId] || AppState.databases[realDbId]) : null;
+                const rawDbTitle = (dbState && dbState.title) ? dbState.title : I18n.t('editor.database');
+                const dbLabel = rawDbTitle.length > 45 ? rawDbTitle.slice(0, 42) + '...' : rawDbTitle;
+
+                items.push({
+                    icon: Icons.tableDatabase || Icons.file,
+                    label: UI.escapeHTML(dbLabel),
+                    onClick: () => UI.jumpToWidget(dbId, rowId)
+                });
+
+                const hostRegex = new RegExp(`\\sid=["']${dbId.split('_cited_')[0]}["']`);
+                const hostNote = (AppState.notes || []).find(n =>
+                    !n.deletedAt && !visited.has(n.id) && n.content && hostRegex.test(n.content)
+                );
+                if (hostNote) {
+                    visited.add(hostNote.id);
+                    const hostTitle = hostNote.title || I18n.t('editor.untitled');
+                    const hostLabel = hostTitle.length > 45 ? hostTitle.slice(0, 42) + '...' : hostTitle;
+                    items.push({
+                        icon: hostNote.isRecordNote ? Icons.recordPage : Icons.file,
+                        label: UI.escapeHTML(hostLabel),
+                        onClick: () => UI.selectNote(hostNote.id)
+                    });
+                    curr = hostNote;
+                    continue;
+                }
+                break;
+            }
+
+            if (curr.parentId && !visited.has(curr.parentId)) {
+                const parentNote = Store.getNote(curr.parentId);
+                if (parentNote && !parentNote.deletedAt) {
+                    visited.add(parentNote.id);
+                    const pTitle = parentNote.title || I18n.t('editor.untitled');
+                    const pLabel = pTitle.length > 45 ? pTitle.slice(0, 42) + '...' : pTitle;
+                    items.push({
+                        icon: parentNote.isRecordNote ? Icons.recordPage : Icons.file,
+                        label: UI.escapeHTML(pLabel),
+                        onClick: () => UI.selectNote(parentNote.id)
+                    });
+                    curr = parentNote;
+                    continue;
+                }
+            }
+            break;
+        }
+
+        if (items.length > 0) {
+            items.push({ type: 'divider' });
+            items.push({
+                icon: Icons.book || Icons.file,
+                label: UI.escapeHTML(I18n.t('home_dashboard.title')),
+                onClick: () => UI.goHome()
+            });
+            if (typeof UI.Menu !== 'undefined') {
+                UI.Menu.buildContextMenu(anchorId, items);
+            }
         }
     },
 
@@ -463,16 +539,20 @@ Object.assign(UI, {
     }
 });
 
-// Sincronizzazione atomica iniziale e binding menu cronologia (Long Press + Tasto Destro)
+// Sincronizzazione atomica iniziale e binding menu cronologia/gerarchia (Long Press + Tasto Destro)
 document.addEventListener('DOMContentLoaded', () => {
     if (typeof UI !== 'undefined' && typeof UI.updateNavHistoryUI === 'function') {
         UI.updateNavHistoryUI();
     }
-    [['navBackBtn', -1], ['navForwardBtn', 1]].forEach(([id, dir]) => {
+    [
+        ['navBackBtn', () => UI.openNavHistoryMenu('navBackBtn', -1)],
+        ['navForwardBtn', () => UI.openNavHistoryMenu('navForwardBtn', 1)],
+        ['goUpBtn', () => UI.openGoUpMenu('goUpBtn')]
+    ].forEach(([id, openMenuFn]) => {
         const btn = document.getElementById(id);
         if (!btn) return;
         let timer = null, opened = false;
-        btn.addEventListener('contextmenu', (e) => { if (!btn.disabled) { e.preventDefault(); UI.openNavHistoryMenu(id, dir); } });
+        btn.addEventListener('contextmenu', (e) => { if (!btn.disabled) { e.preventDefault(); openMenuFn(); } });
         btn.addEventListener('pointercancel', () => clearTimeout(timer));
         btn.addEventListener('click', (e) => { if (btn._skipClick) { btn._skipClick = false; e.preventDefault(); e.stopImmediatePropagation(); } }, true);
         btn.addEventListener('pointerdown', (e) => {
@@ -481,7 +561,7 @@ document.addEventListener('DOMContentLoaded', () => {
             timer = setTimeout(() => {
                 opened = true; btn._skipClick = true;
                 if (UI.Menu) UI.Menu._preventClose = true;
-                UI.openNavHistoryMenu(id, dir);
+                openMenuFn();
             }, 350);
             window.addEventListener('pointerup', (upEv) => {
                 clearTimeout(timer);

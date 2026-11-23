@@ -9,7 +9,7 @@
     --accent-color: #4f8b00; /*2563eb;*/
     --accent-color-tx: #FFFFFF;
     --accent-hover: #60a900;
-    --border-color: #e5e7eb;
+    --border-color: #dcdde1;
     --item-hover: #efe9e0; /*edf3d0 f9fafb;*/
     --item-active: #f2e9d1; /*eff6ff;*/
     --marked-bg: #fffbeb;
@@ -20,6 +20,7 @@
     --reading-font-size: 16px;
     --code-bg: #353535;
     --code-text: #ffffff;
+    --block-citations-bg: #f0ff0012;
     
     /* Variabili specifiche per il Tooltip Custom */
     --tooltip-bg: #f6f3e6;
@@ -83,6 +84,7 @@
     --item-active: #eff6ff;
     --code-bg: #f4f4f5;
     --code-text: #1f2937;
+    --block-citations-bg: #0066ff12;
     
     --tooltip-bg: #f6f3e6;
     --tooltip-text: #000000;
@@ -106,6 +108,7 @@
     --danger-color: #ea6363;
     --code-bg: #222222;
     --code-text: #d4d4d4;
+    --block-citations-bg: #0066ff12;
     
     --tooltip-bg: #2a3856; /* 111827 */
     --tooltip-text: #f9fafb;
@@ -166,6 +169,7 @@
     --danger-color: #ee5050;
     --code-bg: #252525;
     --code-text: #d4d4d4;
+    --block-citations-bg: #747a3912;
     
     --tooltip-bg: #2f2f2f;
     --tooltip-text: #ffffff;
@@ -217,7 +221,7 @@
     --text-secondary: #566172;
     --accent-color: #38B2AC;
     --accent-hover: #319795;
-    --border-color: #E2E8F0;
+    --border-color: #dbe1e9;
     --item-hover: #E2E8F0;
     --item-active: #B2F5EA;
     --marked-bg: #FEFCBF;
@@ -225,6 +229,7 @@
     --danger-color: #FC8181;
     --code-bg: #e2e8f0;
     --code-text: #1a202c;
+    --block-citations-bg: #0066ff12;
     
     --tooltip-bg: #319795;
     --tooltip-text: #F8FAF9;

@@ -2,6 +2,7 @@
  * editor-paste-html.js
  * Sottomodulo di Editor.
  * Sanificazione profonda Rich Text HTML e inserimento DOM con fusione continua dei paragrafi:
+ * - Riuso immediato delle immagini interne di VanillaDesk (via data-image-ref esistente o blob presente in Editor.imageCache).
  * - Acquisizione e salvataggio fisico immagini incorporate da HTML/RTF/Web (_sanitizePastedHTML).
  * - Pulizia tag proprietari Office/Google Docs, conversione semantica stili e incapsulamento tabelle.
  * - Motore di inserimento DOM con fusione continua di testa e coda e ripristino esatto del cursore (_insertCleanedHTML).
@@ -37,6 +38,37 @@ Object.assign(Editor, {
 
             for (const imgEl of docImages) {
                 let src = imgEl.getAttribute('src') || '';
+                const existingRef = imgEl.getAttribute('data-image-ref');
+
+                // Caso 0A: Immagine interna VanillaDesk con data-image-ref già presente nel workspace corrente
+                if (existingRef) {
+                    let existingUrl = (Editor.imageCache && Editor.imageCache[existingRef]) ? Editor.imageCache[existingRef] : null;
+                    if (!existingUrl && typeof Editor.loadAssetOnDemand === 'function') {
+                        existingUrl = await Editor.loadAssetOnDemand(existingRef, 'img');
+                    }
+                    if (existingUrl) {
+                        imgEl.setAttribute('data-image-ref', existingRef);
+                        imgEl.setAttribute('src', existingUrl);
+                        imgEl.classList.remove('broken-image');
+                        imgEl.removeAttribute('data-broken');
+                        imgEl.setAttribute('onerror', 'Editor.handleImageError(this)');
+                        continue;
+                    }
+                }
+
+                // Caso 0B: Immagine copiata tramite menu contestuale del browser il cui blob: è già in Editor.imageCache
+                if (src.startsWith('blob:') && Editor.imageCache) {
+                    const cachedEntry = Object.entries(Editor.imageCache).find(([, cachedUrl]) => cachedUrl === src);
+                    if (cachedEntry) {
+                        imgEl.setAttribute('data-image-ref', cachedEntry[0]);
+                        imgEl.setAttribute('src', cachedEntry[1]);
+                        imgEl.classList.remove('broken-image');
+                        imgEl.removeAttribute('data-broken');
+                        imgEl.setAttribute('onerror', 'Editor.handleImageError(this)');
+                        continue;
+                    }
+                }
+
                 let saved = null;
 
                 // Caso A: Immagine Base64 incorporata (Word, OneNote, rich text)

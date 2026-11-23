@@ -13,6 +13,7 @@ supportedLangs: ['it', 'en', 'es', 'de'],
 dict: {
 it: {
 common: {
+    done_editing: "Fine",
     save: "Salva",
     saved: "Salvato",
     saving: "Salvataggio in corso...",
@@ -31,7 +32,8 @@ common: {
     copied: "Copiato!",
     error: "Errore Salvataggio",
     no_workspace: "Nessun Workspace",
-    session_recovered: "Sessione Ripristinata (Senza Workspace)"
+    session_recovered: "Sessione Ripristinata (Senza Workspace)",
+    occurrences_found: "{count} occorrenze trovate"
 },
 menu: {
     default_font: "Carattere Predefinito",
@@ -521,6 +523,13 @@ conflict: {
     toast_reloaded: "Nota ricaricata da disco. Le tue modifiche sono recuperabili con Ctrl+Z."
 },
 tree: {
+    scope_paragraph_title: "Tutti i termini (separati da ;) devono comparire nello stesso paragrafo o riga.\nUsa le virgolette \"...\" per cercare un ; letterale.",
+    scope_chapter_title: "Tutti i termini (separati da ;) devono comparire sotto lo stesso titolo/capitolo (titolo compreso).\nUsa le virgolette \"...\" per cercare un ; letterale.",
+    scope_note_title: "Tutti i termini (separati da ;) possono trovarsi in qualsiasi punto della nota.\nUsa le virgolette \"...\" per cercare un ; letterale.",
+    preview_multipage_hint: "Alt + Rotella: scorri le occorrenze e le pagine",
+    scope_paragraph: "Stesso paragrafo",
+    scope_chapter: "Stesso capitolo",
+    scope_note: "Tutta la nota",
     empty_search_text_and_tags: "Nessuna nota trovata combinando la ricerca con i filtri tag attivi.",
     empty_search_tags: "Nessuna nota corrisponde ai filtri tag selezionati.",
     empty_search_text: "Nessuna nota trovata per \"{term}\".",
@@ -896,6 +905,8 @@ image_manager: {
     compress_error: "Errore durante la compressione dell'immagine: "
 },
 toolbar: {
+    done_editing_title: "Termina modifica e passa in modalità Lettura (salvataggio automatico attivo)",
+    edit_mode_title: "Passa in modalità Modifica",
     graph_view: "Mappa delle Connessioni (Graph View)",
     page_properties_count: "Proprietà / Tag Pagina ({count} valorizzati)",
     page_info_count: "Informazioni e Collegamenti Nota ({count} menzioni in entrata)",
@@ -1461,7 +1472,6 @@ events_search: {
     toast_searching_tag_in_text: "Ricerca tag nel testo: \"#{tag}\""
 },
 
-// Da aggiungere come nuova sezione dentro dict.it:
 ui_lifecycle: {
     toast_note_not_available_storage: "La nota non è più disponibile sul disco o nel browser.",
     modified_on: "Modificato il: {date}"
@@ -1934,6 +1944,8 @@ workflow: {
 
     en: {
 common: {
+    done_editing: "Listo",
+    done_editing: "Done",
     save: "Save",
     saved: "Saved",
     saving: "Saving...",
@@ -1952,7 +1964,8 @@ common: {
     copied: "Copied!",
     error: "Save Error",
     no_workspace: "No Workspace",
-    session_recovered: "Recovered Session (No Workspace)"
+    session_recovered: "Recovered Session (No Workspace)",
+    occurrences_found: "{count} occurrences found"
 },
 menu: {
     default_font: "Default Font",
@@ -2439,6 +2452,13 @@ conflict: {
     toast_reloaded: "Note reloaded from disk. Your edits can be restored with Ctrl+Z."
 },
 tree: {
+    scope_paragraph_title: "All terms (separated by ;) must appear in the same paragraph or line.\nUse quotes \"...\" to search for a literal ;.",
+    scope_chapter_title: "All terms (separated by ;) must appear under the same heading/chapter (including heading).\nUse quotes \"...\" to search for a literal ;.",
+    scope_note_title: "All terms (separated by ;) can appear anywhere in the note.\nUse quotes \"...\" to search for a literal ;.",
+    preview_multipage_hint: "Alt + Scroll: cycle through matches and pages",
+    scope_paragraph: "Same paragraph",
+    scope_chapter: "Same chapter",
+    scope_note: "Entire note",
     empty_search_text_and_tags: "No notes found matching both the text search and active tag filters.",
     empty_search_tags: "No notes match the selected tag filters.",
     empty_search_text: "No notes found for \"{term}\".",
@@ -2814,6 +2834,8 @@ image_manager: {
     compress_error: "Error during image compression: "
 },
 toolbar: {
+    done_editing_title: "Finish editing and switch to Read mode (auto-save active)",
+    edit_mode_title: "Switch to Edit mode",
     graph_view: "Connection Map (Graph View)",
     page_properties_count: "Page Properties / Tags ({count} set)",
     page_info_count: "Note Info & Links ({count} incoming mentions)",
@@ -3850,6 +3872,7 @@ workflow: {
 
     es: {
 common: {
+    done_editing: "Fertig",
     save: "Guardar",
     saved: "Guardado",
     saving: "Guardando...",
@@ -3868,7 +3891,8 @@ common: {
     copied: "¡Copiado!",
     error: "Error al guardar",
     no_workspace: "Ningún Espacio Abierto",
-    session_recovered: "Sesión Recuperada (Sin Espacio)"
+    session_recovered: "Sesión Recuperada (Sin Espacio)",
+    occurrences_found: "{count} apariciones encontradas"
 },
 menu: {
     default_font: "Fuente Predeterminada",
@@ -4355,6 +4379,13 @@ conflict: {
     toast_reloaded: "Nota recargada desde el disco. Tus cambios se pueden recuperar con Ctrl+Z."
 },
 tree: {
+    scope_paragraph_title: "Todos los términos (separados por ;) deben aparecer en el mismo párrafo o línea.\nUsa comillas \"...\" para buscar un ; literal.",
+    scope_chapter_title: "Todos los términos (separados por ;) deben aparecer bajo el mismo título/capítulo (título incluido).\nUsa comillas \"...\" para buscar un ; literal.",
+    scope_note_title: "Todos los términos (separados por ;) pueden estar en cualquier parte de la nota.\nUsa comillas \"...\" para buscar un ; literal.",
+    preview_multipage_hint: "Alt + Rueda: recorre las apariciones y páginas",
+    scope_paragraph: "Mismo párrafo",
+    scope_chapter: "Mismo capítulo",
+    scope_note: "Toda la nota",
     empty_search_text_and_tags: "No se encontraron notas combinando la búsqueda con los filtros de etiquetas activos.",
     empty_search_tags: "Ninguna nota coincide con los filtros de etiquetas seleccionados.",
     empty_search_text: "No se encontraron notas para \"{term}\".",
@@ -4730,6 +4761,8 @@ image_manager: {
     compress_error: "Error durante la compresión de la imagen: "
 },
 toolbar: {
+    done_editing_title: "Finalizar edición y cambiar a modo Lectura (guardado automático activo)",
+    edit_mode_title: "Cambiar a modo Edición",
     graph_view: "Mapa de Conexiones (Graph View)",
     page_properties_count: "Propiedades / Etiquetas de Página ({count} valoradas)",
     page_info_count: "Información y enlaces de nota ({count} menciones entrantes)",
@@ -5784,7 +5817,8 @@ common: {
     copied: "Kopiert!",
     error: "Fehler beim Speichern",
     no_workspace: "Kein Arbeitsbereich geöffnet",
-    session_recovered: "Wiederhergestellte Sitzung (Ohne Arbeitsbereich)"
+    session_recovered: "Wiederhergestellte Sitzung (Ohne Arbeitsbereich)",
+    occurrences_found: "{count} Treffer gefunden"
 },
 menu: {
     default_font: "Standardschriftart",
@@ -6271,6 +6305,13 @@ conflict: {
     toast_reloaded: "Notiz von Festplatte neu geladen. Änderungen können mit Strg+Z wiederhergestellt werden."
 },
 tree: {
+    scope_paragraph_title: "Alle Begriffe (getrennt durch ;) müssen im selben Absatz oder in derselben Zeile stehen.\nVerwende Anführungszeichen \"...\" für ein wörtliches ;.",
+    scope_chapter_title: "Alle Begriffe (getrennt durch ;) müssen unter derselben Überschrift/Kapitel (inkl. Überschrift) stehen.\nVerwende Anführungszeichen \"...\" für ein wörtliches ;.",
+    scope_note_title: "Alle Begriffe (getrennt durch ;) können an beliebiger Stelle in der Notiz stehen.\nVerwende Anführungszeichen \"...\" für ein wörtliches ;.",
+    preview_multipage_hint: "Alt + Mausrad: Treffer und Seiten durchblättern",
+    scope_paragraph: "Gleicher Absatz",
+    scope_chapter: "Gleiches Kapitel",
+    scope_note: "Gesamte Notiz",
     empty_search_text_and_tags: "Keine Notizen gefunden, die sowohl der Textsuche als auch den aktiven Tag-Filtern entsprechen.",
     empty_search_tags: "Keine Notizen entsprechen den ausgewählten Tag-Filtern.",
     empty_search_text: "Keine Notizen für \"{term}\" gefunden.",
@@ -6646,6 +6687,8 @@ image_manager: {
     compress_error: "Fehler beim Komprimieren des Bildes: "
 },
 toolbar: {
+    done_editing_title: "Bearbeitung beenden und in den Lesemodus wechseln (automatisches Speichern aktiv)",
+    edit_mode_title: "In den Bearbeitungsmodus wechseln",
     graph_view: "Verbindungskarte (Graph View)",
     page_properties_count: "Seiteneigenschaften / Tags ({count} ausgefüllt)",
     page_info_count: "Hinweisinformationen und Links ({count} eingehende Erwähnungen)",

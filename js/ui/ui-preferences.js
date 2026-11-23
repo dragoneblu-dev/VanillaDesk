@@ -459,7 +459,8 @@ Object.assign(UI, {
             contentDiv.querySelectorAll('.adv-checklist input[type="checkbox"]').forEach(el => el.removeAttribute('disabled'));
 
             toolbar.classList.remove('hidden');
-            toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} ${I18n.t('common.save')}</span>`;
+            toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.checkCircle} ${I18n.t('common.done_editing')}</span>`;
+            toggleBtn.title = I18n.t('toolbar.done_editing_title');
             toggleBtn.classList.add('btn-editing');
 
             if (typeof Editor !== 'undefined' && Editor.updateToolbarFormatting) {
@@ -482,6 +483,7 @@ Object.assign(UI, {
 
             toolbar.classList.add('hidden');
             toggleBtn.innerHTML = `<span style="display:inline-flex; align-items:center; gap:5px;">${Icons.edit} ${I18n.t('common.edit')}</span>`;
+            toggleBtn.title = I18n.t('toolbar.edit_mode_title');
             toggleBtn.classList.remove('btn-editing');
 
             if (typeof TableManager !== 'undefined') {

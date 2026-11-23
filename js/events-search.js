@@ -6,9 +6,10 @@
  * FEAT ESC CLEAR SEARCH: Tasto ESC all'interno del campo cerca/tag svuota automaticamente il campo e azzera i filtri.
  * FEAT TAG DISAMBIGUATION: Gestione unificata navigazione tag con prefisso '#' - Selezione diretta se univoco, autocompletamento se ambiguo.
  * FEAT MIN SEARCH THRESHOLD: Ricerca as-you-type attiva da 2 caratteri in su (o da 1 carattere su Invio esplicito), prevenendo overload da singola lettera.
- * FIX LIVE IN-PLACE HIGHLIGHTING: Evidenziazione diretta in-place sull'editor attivo senza distruggere la pagina con selectNote.
+ * LIVE IN-PLACE HIGHLIGHTING: Evidenziazione diretta in-place sull'editor attivo senza distruggere la pagina con selectNote.
  * FEAT PRESERVE WHITESPACE ON TEXT SEARCH: Mantenimento rigoroso degli spazi iniziali e finali digitati per consentire la ricerca mirata di parole esatte.
- * FIX NBSP NORMALIZATION: Normalizzazione trasparente tra spazi normali e non-breaking spaces (\u00A0 / &nbsp;).
+ * NBSP NORMALIZATION: Normalizzazione trasparente tra spazi normali e non-breaking spaces (\u00A0 / &nbsp;).
+ * FEAT MULTI-TERM AND SEARCH: Supporto a ';' come separatore AND e doppie virgolette per stringhe esatte.
  * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
@@ -45,13 +46,15 @@ Object.assign(EventsGlobal, {
             }
         }
 
-        if (meetsThreshold) {
+        const parsedTerms = meetsThreshold ? AppState.parseSearchTerms(isTagQuery ? trimmed : rawValue) : [];
+
+        if (meetsThreshold && parsedTerms.length > 0) {
             // Se è una ricerca per tag (#...) applichiamo il trim; per il testo semplice preserviamo gli spazi digitati
             // normalizzando i caratteri \u00A0 (&nbsp;) in spazi standard per la comparazione
             const rawFilter = isTagQuery ? trimmed.toLowerCase() : rawValue.toLowerCase();
             AppState.searchFilter = rawFilter.replace(/\u00A0/g, ' ');
         } else {
-            // Sotto la soglia minima: azzera il filtro testuale per non sovraccaricare l'albero
+            // Sotto la soglia minima o soli separatori/virgolette: azzera il filtro testuale per non sovraccaricare l'albero
             AppState.searchFilter = "";
         }
         

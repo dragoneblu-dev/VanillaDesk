@@ -3,6 +3,9 @@
  * Variabili di stato globale dell'applicazione. Fonte assoluta della verità in RAM.
  * Logica centralizzata di valutazione filtri proprietà (AppState.matchesPropertyFilters)
  * per *EXISTS*, *EMPTY*, booleani, array, date range e note_link.
+ * Parser unificato dei termini di ricerca (AppState.parseSearchTerms) con supporto a ';' (AND logico)
+ * e doppie virgolette '"..."' per ricerche letterali contenenti ';', con scope configurabile
+ * (multiSearchScope: 'paragraph' | 'chapter' | 'note').
  * Type guard centralizzati (AppState.isRelationalTable, AppState.getRelationalDatabaseIds)
  * per disambiguare i database relazionali da widget non-RDBMS in AppState.databases.
  * Supporto alla navigazione di ricerca nelle record note (isRecordNote) e relative sotto-note,
@@ -26,6 +29,7 @@ const AppState = {
     
     draggedNoteId: null,
     searchFilter: "",
+    multiSearchScope: "paragraph", // 'paragraph' | 'chapter' | 'note'
     activePropertyFilters: [], // Array di { colId, realValue, colName, visualText, colorClass }
     
     fileName: typeof I18n !== 'undefined' ? I18n.t('common.no_workspace') : "Nessun Workspace",
@@ -47,6 +51,51 @@ const AppState = {
     _currentHighlightIndex: 0,
     _totalHighlights: 0,
     _globalHighlights: 0,
+
+    // =========================================================================
+    // PARSER TERMINI DI RICERCA (; = AND LOGICO, "..." = STRINGA LETTERALE)
+    // =========================================================================
+    parseSearchTerms: (rawQuery) => {
+        if (!rawQuery || typeof rawQuery !== 'string') return [];
+        const normalized = rawQuery.replace(/\u00A0/g, ' ');
+        if (!normalized.trim()) return [];
+
+        const tokens = [];
+        let current = '';
+        let inQuotes = false;
+        let hasQuotesInToken = false;
+        let hasSemicolonSplit = false;
+
+        for (let i = 0; i < normalized.length; i++) {
+            const ch = normalized[i];
+            if (ch === '"') {
+                inQuotes = !inQuotes;
+                hasQuotesInToken = true;
+            } else if (ch === ';' && !inQuotes) {
+                hasSemicolonSplit = true;
+                tokens.push({ text: current, quoted: hasQuotesInToken });
+                current = '';
+                hasQuotesInToken = false;
+            } else {
+                current += ch;
+            }
+        }
+        tokens.push({ text: current, quoted: hasQuotesInToken });
+
+        const seen = new Set();
+        const result = [];
+        tokens.forEach(t => {
+            const val = (hasSemicolonSplit && !t.quoted) ? t.text.trim() : t.text;
+            if (val.length > 0 && val.trim().length > 0) {
+                const key = val.toLowerCase();
+                if (!seen.has(key)) {
+                    seen.add(key);
+                    result.push(val);
+                }
+            }
+        });
+        return result;
+    },
 
     // =========================================================================
     // TYPE GUARDS CENTRALI PER LA DISAMBIGUAZIONE DELLE ENTITÀ
@@ -272,8 +321,8 @@ const AppState = {
         let currentIndex = flatNotes.findIndex(n => n.id === AppState.currentNoteId);
         if (currentIndex === -1) currentIndex = 0;
 
-        const rawTerm = AppState.searchFilter ? AppState.searchFilter.toLowerCase() : "";
-        const term = rawTerm ? rawTerm.replace(/\u00A0/g, ' ') : "";
+        const searchTerms = AppState.parseSearchTerms(AppState.searchFilter).map(t => t.toLowerCase());
+        const hasTerms = searchTerms.length > 0;
         const activePropFilters = AppState.activePropertyFilters || [];
         const propsDb = AppState.databases && AppState.databases['SYS_PROPERTIES_DB'];
 
@@ -294,16 +343,20 @@ const AppState = {
                 isValidMatch = AppState.matchesPropertyFilters(sysRow, activePropFilters);
             }
 
-            // 2. Controllo Filtri Testuali e Toggles Speciali
+            // 2. Controllo Filtri Testuali (rispettando multiSearchScope) e Toggles Speciali
             if (isValidMatch) {
-                let titleMatch = false;
-                let contentMatch = false;
+                let textMatch = false;
                 let bookmarkMatch = false;
                 let favoriteMatch = false;
 
-                if (term) {
-                    titleMatch = (note.title || "").toLowerCase().replace(/\u00A0/g, ' ').includes(term);
-                    contentMatch = UI.extractSearchableText(note.content || "").toLowerCase().includes(term);
+                if (hasTerms) {
+                    if (searchTerms.length > 1 && typeof UI !== 'undefined' && typeof UI.matchesMultiTermScope === 'function') {
+                        textMatch = UI.matchesMultiTermScope(note, searchTerms, AppState.multiSearchScope || 'paragraph');
+                    } else {
+                        const normTitle = (note.title || "").toLowerCase().replace(/\u00A0/g, ' ');
+                        const normContent = UI.extractSearchableText(note.content || "").toLowerCase();
+                        textMatch = searchTerms.every(t => normTitle.includes(t) || normContent.includes(t));
+                    }
                 }
                 
                 if (AppState.showBookmarksInTree) {
@@ -313,11 +366,11 @@ const AppState = {
                     favoriteMatch = note.isMarked === true;
                 }
 
-                if (term) {
-                    if (AppState.showFavoritesInTree && AppState.showBookmarksInTree) isValidMatch = (titleMatch || contentMatch) && favoriteMatch && bookmarkMatch;
-                    else if (AppState.showFavoritesInTree) isValidMatch = (titleMatch || contentMatch) && favoriteMatch;
-                    else if (AppState.showBookmarksInTree) isValidMatch = (titleMatch || contentMatch) && bookmarkMatch;
-                    else isValidMatch = titleMatch || contentMatch;
+                if (hasTerms) {
+                    if (AppState.showFavoritesInTree && AppState.showBookmarksInTree) isValidMatch = textMatch && favoriteMatch && bookmarkMatch;
+                    else if (AppState.showFavoritesInTree) isValidMatch = textMatch && favoriteMatch;
+                    else if (AppState.showBookmarksInTree) isValidMatch = textMatch && bookmarkMatch;
+                    else isValidMatch = textMatch;
                 } else {
                     if (AppState.showFavoritesInTree && AppState.showBookmarksInTree) isValidMatch = favoriteMatch && bookmarkMatch;
                     else if (AppState.showFavoritesInTree) isValidMatch = favoriteMatch;

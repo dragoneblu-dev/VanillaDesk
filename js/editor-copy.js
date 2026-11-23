@@ -8,6 +8,7 @@
  * - Riconoscimento blocchi di codice per esportazione pulita senza tag parassiti e ripristino esatto del cursore su taglio.
  * - Pulizia elementi di servizio e maniglie UI nel frammento clonato.
  * - Cancellazione controllata su taglio per fondere regolarmente i blocchi intersecati senza lasciare tag <p></p> orfani.
+ * - Supporto a Copia/Taglio diretto su immagine selezionata tramite ImageManager.activeImage delegando a ImageManager.deleteActiveImage().
  */
 
 Object.assign(Editor, {
@@ -15,9 +16,28 @@ Object.assign(Editor, {
     initCopyInterceptor: () => {
         const handleCopyCut = (e) => {
             const editorEl = document.getElementById('noteContent');
-            if (!editorEl || !editorEl.contains(window.getSelection().anchorNode)) return;
+            if (!editorEl) return;
 
             const sel = window.getSelection();
+
+            // Copia/Taglio diretto di una singola immagine selezionata tramite ImageManager (preserva data-image-ref)
+            if ((!sel || !sel.rangeCount || sel.isCollapsed) &&
+                typeof ImageManager !== 'undefined' &&
+                ImageManager.activeImage &&
+                editorEl.contains(ImageManager.activeImage)) {
+                e.preventDefault();
+                const imgClone = ImageManager.activeImage.cloneNode(true);
+                imgClone.classList.remove('broken-image');
+                e.clipboardData.setData('text/html', imgClone.outerHTML);
+                e.clipboardData.setData('text/plain', '');
+
+                if (e.type === 'cut' && (typeof AppState === 'undefined' || AppState.isEditMode)) {
+                    ImageManager.deleteActiveImage();
+                }
+                return;
+            }
+
+            if (!sel || !sel.rangeCount || !editorEl.contains(sel.anchorNode)) return;
             if (sel.isCollapsed) return;
 
             e.preventDefault();

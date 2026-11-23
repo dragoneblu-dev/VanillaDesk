@@ -8,7 +8,9 @@
  * - Ripristino ed estirpazione cuscinetti ZWS attorno ai widget inline (ensureInlineWidgetBuffers).
  * - Normalizzazione dei blocchi vuoti (_normalizeEmptyBlocks), con conversione dei blocchi con <br> multipli in <p><br></p> e bonifica dei <br> orfani a livello root.
  * - Minificazione e serializzazione protetta per il salvataggio (minifyHTMLForStorage, getCleanHTML, sanitizeContent).
- * - Gestione evidenziazioni di ricerca prima e dopo il salvataggio (applyHighlight, cleanHighlightsBeforeSave).
+ * - Gestione evidenziazioni di ricerca prima e dopo il salvataggio (applyHighlight, cleanHighlightsBeforeSave)
+ *   con supporto a termini multipli separati da ';' (evidenziati ciclicamente con hl-c5..hl-c10), stringhe letterali tra doppie virgolette
+ *   e filtraggio coerente per ambito (Stesso paragrafo, Stesso capitolo, Tutta la nota).
  * - Scansione e supporto per match cross-node di termini multi-parola separati da tag inline (es. "ciao <b>bello</b>").
  * - Pulizia centralizzata cache in RAM (cleanOrphanedCaches).
  * - Preservazione degli spazi e trasparenza regex verso \u00A0 (&nbsp;).
@@ -573,45 +575,147 @@ Object.assign(Editor, {
 
     applyHighlight: (elementOrHtml, term) => {
         if (!term || typeof term !== 'string') return elementOrHtml;
+        // Se la stringa contiene solo spazi vuoti, non applicare evidenziazioni globali a vuoto
+        if (term.trim() === '') return elementOrHtml;
+
+        const terms = (typeof AppState !== 'undefined' && typeof AppState.parseSearchTerms === 'function')
+            ? AppState.parseSearchTerms(term)
+            : [term];
+        if (terms.length === 0) return elementOrHtml;
+
         const isString = typeof elementOrHtml === 'string';
         const root = isString ? document.createElement('div') : elementOrHtml;
         if (isString) root.innerHTML = elementOrHtml;
 
-        // Se la stringa contiene solo spazi vuoti, non applicare evidenziazioni globali a vuoto
-        if (term.trim() === '') return elementOrHtml;
+        const isMultiTerm = terms.length > 1;
+        // Mappa ciascun termine al proprio colore ciclico hl-c5..hl-c10 solo in caso di ricerca multi-termine
+        const termObjs = terms.map((t, idx) => ({
+            raw: t,
+            lower: t.replace(/\u00A0/g, ' ').toLowerCase(),
+            colorClass: isMultiTerm ? `hl-c${5 + (idx % 6)}` : ''
+        }));
 
-        // Preserva gli spazi iniziali e finali intenzionali digitati dall'utente
-        // E rende la regex trasparente rispetto a spazi normali (\u0020) e non-breaking spaces (\u00A0 / &nbsp;)
-        const cleanTerm = term;
-        const escapedTerm = cleanTerm.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const safeTerm = escapedTerm.replace(/[ \u00A0]/g, '[ \\u00A0]');
-        const regex = new RegExp(`(${safeTerm})`, 'gi');
+        // Determina i nodi ammessi in base allo scope attivo (Stesso paragrafo / Stesso capitolo / Tutta la nota)
+        let allowedTextNodesSet = null;
+        let allowedBlocksSet = null;
+        const activeScope = isMultiTerm && typeof AppState !== 'undefined' ? (AppState.multiSearchScope || 'paragraph') : 'note';
 
-        // FASE 1: Fast-Path standard su singoli nodi di testo (copre termini monoriga e parole singole con spazi)
+        if (isMultiTerm && activeScope !== 'note') {
+            const lowerTerms = termObjs.map(o => o.lower);
+            allowedTextNodesSet = new Set();
+            allowedBlocksSet = new Set();
+
+            if (activeScope === 'paragraph') {
+                const leafSelector = 'p, li, h1, h2, h3, h4, h5, h6, blockquote, tr, pre, div';
+                const allCandidates = Array.from(root.querySelectorAll(leafSelector));
+                const leafBlocks = allCandidates.filter(b => {
+                    if (b.id === 'noteContent') return false;
+                    if (WidgetManager.isTotallyProtected(b)) return false;
+                    if (b.tagName === 'TR') return true;
+                    return !b.querySelector('p, li, h1, h2, h3, h4, h5, h6, blockquote, tr, pre');
+                });
+
+                leafBlocks.forEach(b => {
+                    const txt = (b.textContent || '').replace(/\u00A0/g, ' ').toLowerCase();
+                    if (lowerTerms.every(lt => txt.includes(lt))) {
+                        allowedBlocksSet.add(b);
+                        const w = document.createTreeWalker(b, NodeFilter.SHOW_TEXT, null, false);
+                        let tn;
+                        while ((tn = w.nextNode())) allowedTextNodesSet.add(tn);
+                    }
+                });
+            } else if (activeScope === 'chapter') {
+                const blocks = Array.from(root.children);
+                const noteTitleEl = document.getElementById('noteTitle');
+                const noteTitleLower = (noteTitleEl && noteTitleEl.value ? noteTitleEl.value : '').replace(/\u00A0/g, ' ').toLowerCase();
+
+                // Raccolta sezioni capitolo con inclusione del titolo di sezione
+                const sections = [{ level: 0, titleText: noteTitleLower, nodes: [], text: noteTitleLower }];
+                const activeStack = [sections[0]];
+
+                blocks.forEach(el => {
+                    const m = el.tagName ? el.tagName.match(/^H([1-6])$/i) : null;
+                    const elText = (el.textContent || '').replace(/\u00A0/g, ' ').toLowerCase();
+                    if (m) {
+                        const lvl = parseInt(m[1], 10);
+                        while (activeStack.length > 1 && activeStack[activeStack.length - 1].level >= lvl) {
+                            activeStack.pop();
+                        }
+                        const sec = { level: lvl, nodes: [el], text: elText };
+                        sections.push(sec);
+                        activeStack.push(sec);
+                        // Propaga il testo dell'intestazione anche ai capitoli superiori ancora aperti (es. H1 contiene H2)
+                        for (let s = 1; s < activeStack.length - 1; s++) {
+                            activeStack[s].nodes.push(el);
+                            activeStack[s].text += ' ' + elText;
+                        }
+                    } else {
+                        // Se il blocco è prima di qualsiasi intestazione (solo activeStack[0]), entra nella testata
+                        if (activeStack.length === 1) {
+                            activeStack[0].nodes.push(el);
+                            activeStack[0].text += ' ' + elText;
+                        } else {
+                            for (let s = 1; s < activeStack.length; s++) {
+                                activeStack[s].nodes.push(el);
+                                activeStack[s].text += ' ' + elText;
+                            }
+                        }
+                    }
+                });
+
+                sections.forEach(sec => {
+                    if (lowerTerms.every(lt => sec.text.includes(lt))) {
+                        sec.nodes.forEach(nodeEl => {
+                            allowedBlocksSet.add(nodeEl);
+                            const w = document.createTreeWalker(nodeEl, NodeFilter.SHOW_TEXT, null, false);
+                            let tn;
+                            while ((tn = w.nextNode())) allowedTextNodesSet.add(tn);
+                        });
+                    }
+                });
+            }
+        }
+
+        // Ordina dal termine più lungo al più corto per evitare che un termine breve spezzi uno più lungo.
+        // Rende la regex trasparente rispetto a spazi normali (\u0020) e non-breaking spaces (\u00A0 / &nbsp;).
+        const sortedTermObjs = [...termObjs].sort((a, b) => b.raw.length - a.raw.length);
+        const patternParts = sortedTermObjs.map(obj =>
+            obj.raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/[ \u00A0]/g, '[ \\u00A0]')
+        );
+        const regex = new RegExp(`(${patternParts.join('|')})`, 'gi');
+
+        // FASE 1: Fast-Path standard su singoli nodi di testo in un unico passaggio
         const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null, false);
         const nodesToReplace = [];
 
         let n;
         while ((n = walker.nextNode())) {
+            if (allowedTextNodesSet && !allowedTextNodesSet.has(n)) continue;
             const parent = n.parentNode;
             const parentTag = parent ? parent.tagName.toUpperCase() : '';
             if (parentTag !== 'SCRIPT' && parentTag !== 'STYLE' && parentTag !== 'MARK' && !WidgetManager.isTotallyProtected(parent)) {
-                if (n.nodeValue.match(regex)) nodesToReplace.push(n);
+                if (regex.test(n.nodeValue)) nodesToReplace.push(n);
+                regex.lastIndex = 0;
             }
         }
 
         nodesToReplace.forEach(textNode => {
             const fragment = document.createDocumentFragment();
             const parts = textNode.nodeValue.split(regex);
-            parts.forEach(part => {
-                const normPart = part.replace(/\u00A0/g, ' ').toLowerCase();
-                const normTerm = cleanTerm.replace(/\u00A0/g, ' ').toLowerCase();
-                if (normPart === normTerm) {
+            parts.forEach((part, idx) => {
+                if (!part) return;
+                if (idx % 2 === 1) {
                     const mark = document.createElement('mark');
-                    mark.className = 'search-highlight';
+                    if (isMultiTerm) {
+                        const lowerPart = part.replace(/\u00A0/g, ' ').toLowerCase();
+                        const matchedObj = sortedTermObjs.find(o => o.lower === lowerPart);
+                        mark.className = matchedObj ? `search-highlight ${matchedObj.colorClass}` : 'search-highlight';
+                    } else {
+                        mark.className = 'search-highlight';
+                    }
                     mark.textContent = part;
                     fragment.appendChild(mark);
-                } else if (part.length > 0) {
+                } else {
                     fragment.appendChild(document.createTextNode(part));
                 }
             });
@@ -619,85 +723,98 @@ Object.assign(Editor, {
         });
 
         // FASE 2: Cross-Node Boundary Matching (per ricerche multi-parola separate da tag come "ciao <b>bello</b>")
-        if (cleanTerm.includes(' ') || cleanTerm.includes('\u00A0')) {
+        const multiWordObjs = sortedTermObjs.filter(obj => obj.raw.includes(' ') || obj.raw.includes('\u00A0'));
+        if (multiWordObjs.length > 0) {
             const blockSelector = 'p, div, li, h1, h2, h3, h4, h5, h6, blockquote, td, th';
             const blocks = Array.from(root.querySelectorAll(blockSelector)).filter(b => {
-                return !b.querySelector(blockSelector) && !WidgetManager.isTotallyProtected(b);
+                if (b.querySelector(blockSelector) || WidgetManager.isTotallyProtected(b)) return false;
+                if (allowedBlocksSet) {
+                    let curr = b;
+                    let isAllowed = false;
+                    while (curr && curr !== root) {
+                        if (allowedBlocksSet.has(curr)) { isAllowed = true; break; }
+                        curr = curr.parentNode;
+                    }
+                    if (!isAllowed) return false;
+                }
+                return true;
             });
 
-            const normSearchTerm = cleanTerm.replace(/\u00A0/g, ' ').toLowerCase();
+            multiWordObjs.forEach(termObj => {
+                const normSearchTerm = termObj.lower;
 
-            blocks.forEach(block => {
-                const fullText = (block.textContent || '').replace(/\u00A0/g, ' ');
-                const lowerFullText = fullText.toLowerCase();
+                blocks.forEach(block => {
+                    const fullText = (block.textContent || '').replace(/\u00A0/g, ' ');
+                    const lowerFullText = fullText.toLowerCase();
 
-                let searchIdx = lowerFullText.indexOf(normSearchTerm);
-                if (searchIdx === -1) return;
+                    let searchIdx = lowerFullText.indexOf(normSearchTerm);
+                    if (searchIdx === -1) return;
 
-                // Raccoglie tutti i nodi di testo del blocco ignorando quelli già dentro un <mark>
-                const blockWalker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null, false);
-                const textNodesInfo = [];
-                let currOffset = 0;
-                let tNode;
+                    // Raccoglie tutti i nodi di testo del blocco ignorando quelli già dentro un <mark>
+                    const blockWalker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT, null, false);
+                    const textNodesInfo = [];
+                    let currOffset = 0;
+                    let tNode;
 
-                while ((tNode = blockWalker.nextNode())) {
-                    if (tNode.parentNode && tNode.parentNode.tagName === 'MARK') {
-                        currOffset += tNode.nodeValue.length;
-                        continue;
-                    }
-                    const len = tNode.nodeValue.length;
-                    textNodesInfo.push({
-                        node: tNode,
-                        start: currOffset,
-                        end: currOffset + len
-                    });
-                    currOffset += len;
-                }
-
-                // Per ogni occorrenza trovata nel blocco
-                while (searchIdx !== -1) {
-                    const matchStart = searchIdx;
-                    const matchEnd = searchIdx + normSearchTerm.length;
-
-                    // Trova i nodi di testo che intersecano l'intervallo [matchStart, matchEnd]
-                    const intersecting = textNodesInfo.filter(info => {
-                        return info.end > matchStart && info.start < matchEnd;
-                    });
-
-                    // Se l'occorrenza era già stata gestita dalla FASE 1 su un singolo nodo, salta
-                    const alreadyMarked = intersecting.some(info => info.node.parentNode && info.node.parentNode.tagName === 'MARK');
-
-                    if (!alreadyMarked && intersecting.length > 0) {
-                        intersecting.forEach(info => {
-                            const node = info.node;
-                            if (!node.parentNode || node.parentNode.tagName === 'MARK') return;
-
-                            const nodeVal = node.nodeValue;
-                            const localStart = Math.max(0, matchStart - info.start);
-                            const localEnd = Math.min(nodeVal.length, matchEnd - info.start);
-
-                            if (localStart < localEnd) {
-                                const beforeText = nodeVal.substring(0, localStart);
-                                const matchText = nodeVal.substring(localStart, localEnd);
-                                const afterText = nodeVal.substring(localEnd);
-
-                                const frag = document.createDocumentFragment();
-                                if (beforeText) frag.appendChild(document.createTextNode(beforeText));
-
-                                const mark = document.createElement('mark');
-                                mark.className = 'search-highlight';
-                                mark.textContent = matchText;
-                                frag.appendChild(mark);
-
-                                if (afterText) frag.appendChild(document.createTextNode(afterText));
-
-                                node.parentNode.replaceChild(frag, node);
-                            }
+                    while ((tNode = blockWalker.nextNode())) {
+                        if (tNode.parentNode && tNode.parentNode.tagName === 'MARK') {
+                            currOffset += tNode.nodeValue.length;
+                            continue;
+                        }
+                        const len = tNode.nodeValue.length;
+                        textNodesInfo.push({
+                            node: tNode,
+                            start: currOffset,
+                            end: currOffset + len
                         });
+                        currOffset += len;
                     }
 
-                    searchIdx = lowerFullText.indexOf(normSearchTerm, matchEnd);
-                }
+                    // Per ogni occorrenza trovata nel blocco
+                    while (searchIdx !== -1) {
+                        const matchStart = searchIdx;
+                        const matchEnd = searchIdx + normSearchTerm.length;
+
+                        // Trova i nodi di testo che intersecano l'intervallo [matchStart, matchEnd]
+                        const intersecting = textNodesInfo.filter(info => {
+                            return info.end > matchStart && info.start < matchEnd;
+                        });
+
+                        // Se l'occorrenza era già stata gestita dalla FASE 1 su un singolo nodo, salta
+                        const alreadyMarked = intersecting.some(info => info.node.parentNode && info.node.parentNode.tagName === 'MARK');
+
+                        if (!alreadyMarked && intersecting.length > 0) {
+                            intersecting.forEach(info => {
+                                const node = info.node;
+                                if (!node.parentNode || node.parentNode.tagName === 'MARK') return;
+
+                                const nodeVal = node.nodeValue;
+                                const localStart = Math.max(0, matchStart - info.start);
+                                const localEnd = Math.min(nodeVal.length, matchEnd - info.start);
+
+                                if (localStart < localEnd) {
+                                    const beforeText = nodeVal.substring(0, localStart);
+                                    const matchText = nodeVal.substring(localStart, localEnd);
+                                    const afterText = nodeVal.substring(localEnd);
+
+                                    const frag = document.createDocumentFragment();
+                                    if (beforeText) frag.appendChild(document.createTextNode(beforeText));
+
+                                    const mark = document.createElement('mark');
+                                    mark.className = termObj.colorClass ? `search-highlight ${termObj.colorClass}` : 'search-highlight';
+                                    mark.textContent = matchText;
+                                    frag.appendChild(mark);
+
+                                    if (afterText) frag.appendChild(document.createTextNode(afterText));
+
+                                    node.parentNode.replaceChild(frag, node);
+                                }
+                            });
+                        }
+
+                        searchIdx = lowerFullText.indexOf(normSearchTerm, matchEnd);
+                    }
+                });
             });
         }
 

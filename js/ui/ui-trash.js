@@ -71,7 +71,7 @@ Object.assign(UI, {
                                 <button class="btn" style="padding:4px 8px; font-size:0.8rem;" onclick="UI.Trash.restore('${n.id}')">
                                     <span style="margin-right:4px; display:inline-flex; align-items:center;">${Icons.restore}</span> ${I18n.t('trash.restore_btn')}
                                 </button>
-                                <button class="adv-icon-btn danger" style="padding:4px 8px; background:rgba(239,68,68,0.1);" onclick="UI.Trash.hardDelete('${n.id}')" title="${I18n.t('trash.delete_forever_btn')}">${Icons.close}</button>
+                                <button class="adv-icon-btn danger" style="padding:4px 8px; background:rgba(239,68,68,0.1);" onclick="UI.Trash.hardDelete('${n.id}')" data-tooltip="${I18n.t('trash.delete_forever_btn')}">${Icons.close}</button>
                             </div>
                         </div>
                     `;

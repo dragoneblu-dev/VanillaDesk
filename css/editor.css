@@ -288,6 +288,14 @@ mark.search-highlight {
     text-shadow: none !important;
 }
 
+/* Colorazione differenziata per ricerche multi-termine con ';' (palette hl-c5 .. hl-c10) */
+mark.search-highlight.hl-c5:not(.active-highlight) { background-color: var(--hl-c5) !important; color: var(--hl-tc-c5, #000000) !important; }
+mark.search-highlight.hl-c6:not(.active-highlight) { background-color: var(--hl-c6) !important; color: var(--hl-tc-c6, #000000) !important; }
+mark.search-highlight.hl-c7:not(.active-highlight) { background-color: var(--hl-c7) !important; color: var(--hl-tc-c7, #000000) !important; }
+mark.search-highlight.hl-c8:not(.active-highlight) { background-color: var(--hl-c8) !important; color: var(--hl-tc-c8, #000000) !important; }
+mark.search-highlight.hl-c9:not(.active-highlight) { background-color: var(--hl-c9) !important; color: var(--hl-tc-c9, #000000) !important; }
+mark.search-highlight.hl-c10:not(.active-highlight) { background-color: var(--hl-c10) !important; color: var(--hl-tc-c10, #000000) !important; }
+
 /* Riscontro attivo selezionato: arancione vivo con contorno bianco netto anti-confusione */
 mark.active-highlight { 
     background-color: #f97316 !important; 

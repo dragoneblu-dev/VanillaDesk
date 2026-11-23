@@ -147,7 +147,7 @@
     background: rgba(0, 0, 0, 0.01); 
     padding: 0 10px;
     border-radius: 4px;
-    background-color: color-mix(in srgb, var(--hl-c7), transparent 80%);
+    background-color: var(--block-citations-bg);
 }
 .adv-widget-shell.block-citation .widget-body {
     font-style: italic;

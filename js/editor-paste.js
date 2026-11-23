@@ -3,6 +3,7 @@
  * Modulo orchestratore per la gestione dell'evento Incolla (Paste) nell'Editor.
  * Sottomodulo di Editor (i parser e la sanificazione HTML sono in 'editor-paste-parser.js' ed 'editor-paste-html.js').
  * - Smistamento per input nativi, tabelle Excel/Google Sheets, screenshot/immagini pure (singole o multiple), URL web/YouTube e widget protetti.
+ * - Riuso diretto delle immagini interne di VanillaDesk (via data-image-ref o blob presente in Editor.imageCache) senza duplicare file su disco.
  * - Incolla testo piano con preservazione dello spazio finale precedente al cursore (senza collasso Blink su execCommand).
  * - Intercettore diretto in fase di cattura su #inlineNoteInput e #bookmarkCommentInput.
  */
@@ -166,6 +167,16 @@ Object.assign(Editor, {
             }
         }
 
+        // Verifica se l'HTML negli appunti contiene già un riferimento interno di VanillaDesk (data-image-ref o blob in imageCache)
+        const hasInternalImageRef = !!(pastedHTML && /\bdata-image-ref=["'][^"']+["']/i.test(pastedHTML));
+        let hasCachedBlobImage = false;
+        if (!hasInternalImageRef && pastedHTML && typeof Editor !== 'undefined' && Editor.imageCache) {
+            const blobMatch = pastedHTML.match(/<img\b[^>]*\bsrc=["'](blob:[^"']+)["']/i);
+            if (blobMatch && blobMatch[1]) {
+                hasCachedBlobImage = Object.values(Editor.imageCache).includes(blobMatch[1]);
+            }
+        }
+
         // 1. GESTIONE SCREENSHOT O FILE IMMAGINE PURI (Singoli o Multipli senza testo di contorno)
         const hasTextContent = (pastedText && pastedText.trim().length > 0) || (pastedHTML && pastedHTML.replace(/<[^>]*>/g, '').trim().length > 0);
         const rawPlainTrimmed = (pastedText || '').trim();
@@ -182,7 +193,7 @@ Object.assign(Editor, {
                 );
             });
 
-        if (!isSpreadsheetData && !isFromOfficeOrExcel && imageFiles.length > 0 && (!hasTextContent || isFileNamesOnlyText)) {
+        if (!isSpreadsheetData && !isFromOfficeOrExcel && !hasInternalImageRef && !hasCachedBlobImage && imageFiles.length > 0 && (!hasTextContent || isFileNamesOnlyText)) {
             const isBlockedTarget = (isInsideWidget && !targetNode.closest('.simple-table-wrapper td, .simple-table-wrapper th, .widget-type-columns .col-box')) ||
                                     !!targetNode.closest('.code-content');
             if (isBlockedTarget) {
