@@ -65,6 +65,16 @@
             line-height: 1.5;
         }
 
+        .hidden { display: none !important; }
+        .link-modal-overlay { position: fixed; inset: 0; }
+        body > :not(.container):not(#testSandBox):not(script):not(style):not(.link-modal-overlay) {
+            position: fixed;
+            left: -9999px;
+            top: -9999px;
+            opacity: 0;
+            pointer-events: none;
+        }
+
         .container { max-width: 1200px; margin: 0 auto; }
 
         header {
@@ -216,6 +226,7 @@
     <script src="../js/export-html.js"></script>
     <script src="../js/export-markdown.js"></script>
     <script src="../js/export-markdown-import.js"></script>
+    <script src="../js/obsidian-importer.js"></script>
 
     <script src="../js/image-manager.js"></script>
     <script src="../js/audio-manager.js"></script>
@@ -247,6 +258,7 @@
     <script src="../js/ui/ui-preferences.js"></script>
     <script src="../js/ui/ui-scrollspy.js"></script>
     <script src="../js/ui/ui-trash.js"></script>
+    <script src="../js/ui/ui-modals.js"></script>
     <script src="../js/ui/ui-document-browser.js"></script>
     <script src="../js/sidebar-manager.js"></script>
     <script src="../js/events-search.js"></script>
@@ -382,11 +394,18 @@
     <script src="test-editor-keyboard-navigation.js"></script>
     <script src="test-editor-keyboard.js"></script>
     <script src="test-editor-multicursor.js"></script>
+    <script src="test-editor-copy.js"></script>
+    <script src="test-editor-paste-parser.js"></script>
+    <script src="test-editor-paste-html.js"></script>
     <script src="test-editor-paste.js"></script>
     <script src="test-events-search.js"></script>
     <script src="test-events-drag.js"></script>
     <script src="test-events-global.js"></script>
     <script src="test-export-manager.js"></script>
+    <script src="test-export-html.js"></script>
+    <script src="test-export-markdown.js"></script>
+    <script src="test-export-markdown-import.js"></script>
+    <script src="test-obsidian-importer.js"></script>
     <script src="test-image-manager.js"></script>
     <script src="test-journal-manager.js"></script>
     <script src="test-link-manager.js"></script>
@@ -410,9 +429,14 @@
     <script src="test-ui-notifications.js"></script>
     <script src="test-ui-preferences.js"></script>
     <script src="test-ui-security.js"></script>
+    <script src="test-ui-tree-db.js"></script>
+    <script src="test-ui-tree-dnd.js"></script>
     <script src="test-ui-tree.js"></script>
     <script src="test-sidebar-manager.js"></script>
     <script src="test-ui-notes-lifecycle.js"></script>
+    <script src="test-ui-notes-header.js"></script>
+    <script src="test-ui-notes-nav.js"></script>
+    <script src="test-ui-modals.js"></script>
     <script src="test-ui-drawer.js"></script>
     <script src="test-ui-menu.js"></script>
     <script src="test-ui-notes-info.js"></script>

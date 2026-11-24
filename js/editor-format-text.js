@@ -1317,7 +1317,8 @@ Object.assign(Editor, {
                 }
             }
 
-            if (!allowedTags.includes(tag)) {
+            const isSimpleTableShell = tag === 'DIV' && (currentEl.classList.contains('simple-table-wrapper') || currentEl.classList.contains('adv-widget-shell'));
+            if (!allowedTags.includes(tag) && !isSimpleTableShell) {
                 const frag = doc.createDocumentFragment();
                 while (currentEl.firstChild) frag.appendChild(currentEl.firstChild);
                 currentEl.parentNode.replaceChild(frag, currentEl);

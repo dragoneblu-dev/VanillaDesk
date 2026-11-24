@@ -2,7 +2,7 @@
  * ui-tree-dnd.js
  * Sottomodulo di UI dedicato all'intera logica di Drag & Drop delle Note nella sidebar:
  * - Inizio, trascinamento e termine del drag (handleDragStart, handleDragEnd).
- * - Calcolo delle zone di inserimento (top, middle, bottom) e feedback visivo (handleDragOverNode, handleDragOverRoot).
+ * - Calcolo delle zone di inserimento (top, middle, bottom) e feedback visivo (handleDragOverNode, handleDragOverRoot, handleDragLeaveRoot).
  * - Risoluzione del rilascio (handleDropNode, handleDropRoot).
  * - Spostamento gerarchico nell'albero e aggiornamento parentId (executeMove).
  * - Verifica relazioni di discendenza anti-ciclo (isDescendant).
@@ -28,7 +28,12 @@ Object.assign(UI, {
     },
 
     handleDragOverNode: (e, targetId) => {
+        if (!AppState.draggedNoteId && !AppState.draggedBlockId) return;
+
         e.preventDefault();
+        const tc = document.getElementById('treeContainer');
+        if (tc) tc.classList.remove('drag-over-root');
+
         const targetEl = e.currentTarget;
 
         if (AppState.draggedBlockId) {
@@ -65,9 +70,25 @@ Object.assign(UI, {
     },
 
     handleDragOverRoot: (e) => { 
+        if (!AppState.draggedNoteId) return;
         e.preventDefault(); 
-        if (e.target.closest('.node-content')) return; 
-        document.getElementById('treeContainer').classList.add('drag-over-root'); 
+        if (e.target && e.target.closest && e.target.closest('.node-content')) return; 
+        const tc = document.getElementById('treeContainer');
+        if (tc) tc.classList.add('drag-over-root'); 
+    },
+
+    handleDragLeaveRoot: (e) => {
+        const tc = document.getElementById('treeContainer');
+        if (!tc) return;
+        if (e && typeof e.clientX === 'number' && typeof e.clientY === 'number') {
+            const rect = tc.getBoundingClientRect();
+            if (rect.width > 0 && rect.height > 0 &&
+                e.clientX > rect.left && e.clientX < rect.right &&
+                e.clientY > rect.top && e.clientY < rect.bottom) {
+                return;
+            }
+        }
+        tc.classList.remove('drag-over-root');
     },
     
     handleDropNode: (e, targetId) => { 
@@ -92,8 +113,9 @@ Object.assign(UI, {
     
     handleDropRoot: (e) => { 
         e.preventDefault(); 
-        document.getElementById('treeContainer').classList.remove('drag-over-root'); 
-        if (e.target.closest('.node-content')) return; 
+        const tc = document.getElementById('treeContainer');
+        if (tc) tc.classList.remove('drag-over-root'); 
+        if (e.target && e.target.closest && e.target.closest('.node-content')) return; 
         if (AppState.draggedNoteId) UI.executeMove(AppState.draggedNoteId, null, 'root'); 
     },
     

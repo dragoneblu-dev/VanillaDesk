@@ -5,7 +5,8 @@
  * Include:
  * - Parsing e normalizzazione intervalli di date (_parseDateStringToMs, _extractIntervalFromValue).
  * - Motore centrale di ordinamento multi-colonna (sortRows).
- * - Motore centrale di filtraggio dati con ricerca rapida universale (filterRows) e supporto a termini multipli in AND separati da ';'.
+ * - Motore centrale di filtraggio dati con ricerca rapida universale (filterRows) e supporto a termini multipli
+ *   in AND tramite spazio, doppie virgolette '"..."' per spazi esatti ed escape '\' per apici ('\"') e backslash ('\\').
  */
 
 Object.assign(AdvancedTable, {
@@ -154,12 +155,11 @@ Object.assign(AdvancedTable, {
 
         let filtered = [...viewRows];
 
-        // 1. RICERCA RAPIDA UNIVERSALE (FULL-TEXT IN AND A LIVELLO DI RIGA SU TUTTI I CAMPI, CON SUPPORTO A ';')
+        // 1. RICERCA RAPIDA UNIVERSALE (FULL-TEXT IN AND A LIVELLO DI RIGA SU TUTTI I CAMPI)
         if (state.quickSearch && state.quickSearch.trim() !== '') {
-            const quickTerms = state.quickSearch
-                .split(';')
-                .map(t => t.trim().toLowerCase())
-                .filter(t => t);
+            const quickTerms = (typeof AppState !== 'undefined' && typeof AppState.parseSearchTerms === 'function')
+                ? AppState.parseSearchTerms(state.quickSearch).map(t => t.toLowerCase())
+                : state.quickSearch.trim().split(/\s+/).map(t => t.toLowerCase()).filter(t => t);
 
             if (quickTerms.length > 0) {
                 filtered = filtered.filter(r => {
@@ -188,11 +188,11 @@ Object.assign(AdvancedTable, {
                             }
                         }
 
-                        const lowerDisplay = String(displayStr || '').toLowerCase();
+                        const lowerDisplay = String(displayStr || '').replace(/\u00A0/g, ' ').toLowerCase();
                         if (lowerDisplay) rowColumnTexts.push(lowerDisplay);
                     });
 
-                    // Ogni termine separato da ';' deve comparire in almeno una colonna della riga
+                    // Ogni termine deve comparire in almeno una colonna della riga
                     return quickTerms.every(term => rowColumnTexts.some(txt => txt.includes(term)));
                 });
             }

@@ -4,7 +4,7 @@
  * Sottomodulo di Editor.
  * - Algoritmo lineare a blocchi leaf per estrazione plainText con corrispondenza 1:1 delle righe vuote.
  * - Ricostruzione deterministica degli stili antenati (b, i, u, s, code, link e classi VanillaDesk) per selezioni parziali.
- * - Serializzazione tabulare TSV pulita per fogli di calcolo.
+ * - Serializzazione tabulare TSV pulita per fogli di calcolo (inclusi frammenti con <tbody>/<tr> orfani).
  * - Riconoscimento blocchi di codice per esportazione pulita senza tag parassiti e ripristino esatto del cursore su taglio.
  * - Pulizia elementi di servizio e maniglie UI nel frammento clonato.
  * - Cancellazione controllata su taglio per fondere regolarmente i blocchi intersecati senza lasciare tag <p></p> orfani.
@@ -186,8 +186,8 @@ Object.assign(Editor, {
             // 2. Rimuove classi temporanee di selezione dalle celle
             tempDiv.querySelectorAll('.adv-cell-selected').forEach(c => c.classList.remove('adv-cell-selected'));
 
-            // 3. Normalizza input e checkbox nei cloni per renderne i dati visibili e copiabili
-            tempDiv.querySelectorAll('input').forEach(input => {
+            // 3. Normalizza input e checkbox nei cloni per renderne i dati visibili e copiabili (esclude i checkbox delle checklist)
+            tempDiv.querySelectorAll('input:not(.adv-checklist-cb)').forEach(input => {
                 let val = '';
                 if (input.type === 'checkbox') {
                     val = input.checked ? 'Sì' : 'No';
@@ -203,6 +203,13 @@ Object.assign(Editor, {
             const clipboardHTML = tempDiv.innerHTML;
 
             // 4. Formattazione tabulare snella per plainText (TSV per Excel/Notepad senza cicli quadrupli)
+            const orphanTableChildren = Array.from(tempDiv.children).filter(el => ['TBODY', 'THEAD', 'TFOOT', 'TR'].includes(el.tagName));
+            if (orphanTableChildren.length > 0) {
+                const wrapTable = document.createElement('table');
+                tempDiv.insertBefore(wrapTable, orphanTableChildren[0]);
+                orphanTableChildren.forEach(el => wrapTable.appendChild(el));
+            }
+
             tempDiv.querySelectorAll('table').forEach(table => {
                 const tsv = Array.from(table.rows).map(row => 
                     Array.from(row.cells).map(cell => (cell.innerText || cell.textContent || '').trim().replace(/[\r\n\t]+/g, ' ')).join('\t')

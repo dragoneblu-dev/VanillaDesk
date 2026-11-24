@@ -14,6 +14,20 @@ const CitationManager = {
     editingCitationId: null,
     homeDraggedIdx: null,
 
+    openSidebarTab: (tab) => {
+        const sb = document.getElementById('sidebar');
+        if (sb && sb.classList.contains('collapsed') && typeof UI !== 'undefined' && typeof UI.toggleSidebar === 'function') {
+            UI.toggleSidebar();
+        }
+        if (typeof UI !== 'undefined') {
+            if (tab === 'databases' && typeof UI.toggleDbNotesInTree === 'function') {
+                UI.toggleDbNotesInTree();
+            } else if (typeof UI.switchToNotes === 'function') {
+                UI.switchToNotes();
+            }
+        }
+    },
+
     mountAll: (container = document) => {
         const root = container.id === 'noteContent' ? container : (container.querySelector ? container.querySelector('#noteContent') || container : document);
         const citations = root.querySelectorAll('.block-citation.adv-widget-shell');
@@ -375,10 +389,10 @@ const CitationManager = {
 
         let chipsHtml = '';
 
-        // 1. Note attive
+        // 1. Note attive (clic sul numero apre la sidebar sulla scheda Note)
         chipsHtml += buildChip(
             I18n.t('home_dashboard.stat_active_notes'),
-            activeNotesCount.toLocaleString(),
+            `<span style="cursor:pointer;" onclick="CitationManager.openSidebarTab('notes')">${activeNotesCount.toLocaleString()}</span>`,
             `<span style="color:var(--accent-color);">${typeof Icons !== 'undefined' ? Icons.file : '📄'}</span>`
         );
 
@@ -391,11 +405,11 @@ const CitationManager = {
             );
         }
 
-        // 3. Database Relazionali
+        // 3. Database Relazionali (clic sul numero apre la sidebar sulla scheda Database)
         if (relationalDbCount > 0) {
             chipsHtml += buildChip(
                 I18n.t('home_dashboard.stat_databases'),
-                relationalDbCount.toLocaleString(),
+                `<span style="cursor:pointer;" onclick="CitationManager.openSidebarTab('databases')">${relationalDbCount.toLocaleString()}</span>`,
                 `<span style="color:var(--accent-color);">${typeof Icons !== 'undefined' ? Icons.tableDatabase : '📊'}</span>`
             );
         }

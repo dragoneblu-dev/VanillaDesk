@@ -10,6 +10,29 @@
 
 Object.assign(Editor, {
 
+    _isPasteBlockElement: (el) => {
+        if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
+        const tag = el.tagName.toUpperCase();
+        return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'TABLE', 'HR', 'UL', 'OL'].includes(tag) ||
+               el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper');
+    },
+
+    // Rimuove solo i nodi di testo whitespace adiacenti a elementi a blocco (es. indentazione HTML tra </p> e <p>),
+    // preservando tutti gli spazi reali (' ' e &nbsp;) tra nodi inline o ai margini di selezioni puramente inline.
+    _removeInterBlockWhitespace: (container) => {
+        if (!container) return;
+        container.normalize();
+        Array.from(container.childNodes).forEach(node => {
+            if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
+                const prev = node.previousSibling;
+                const next = node.nextSibling;
+                if ((prev && Editor._isPasteBlockElement(prev)) || (next && Editor._isPasteBlockElement(next))) {
+                    node.remove();
+                }
+            }
+        });
+    },
+
     _sanitizePastedHTML: async (pastedHTML, pastedText, items, pastedRTF) => {
         const cleanRawHTML = pastedHTML
             .replace(/<!--\[if\s+gte\s+vml\s+1\][\s\S]*?<!\[endif\]-->/gi, '')
@@ -410,12 +433,8 @@ Object.assign(Editor, {
             }
         });
 
-        // FASE 5: Rimozione nodi di testo vuoti ai margini del body (senza eliminare righe vuote intenzionali)
-        Array.from(doc.body.childNodes).forEach(node => {
-            if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
-                node.remove();
-            }
-        });
+        // FASE 5: Rimozione nodi di testo whitespace inter-blocco (senza eliminare gli spazi tra elementi inline)
+        Editor._removeInterBlockWhitespace(doc.body);
 
         while (doc.body.firstElementChild && ['P', 'DIV'].includes(doc.body.firstElementChild.tagName) && doc.body.children.length > 1) {
             const first = doc.body.firstElementChild;
@@ -454,18 +473,9 @@ Object.assign(Editor, {
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = finalHTML;
 
-        Array.from(tempDiv.childNodes).forEach(node => {
-            if (node.nodeType === Node.TEXT_NODE && !node.nodeValue.replace(/[\r\n\t\s]/g, '')) {
-                node.remove();
-            }
-        });
+        Editor._removeInterBlockWhitespace(tempDiv);
 
-        const isBlockElement = (el) => {
-            if (!el || el.nodeType !== Node.ELEMENT_NODE) return false;
-            const tag = el.tagName.toUpperCase();
-            return ['P', 'DIV', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'LI', 'BLOCKQUOTE', 'PRE', 'TABLE', 'HR', 'UL', 'OL'].includes(tag) ||
-                   el.classList.contains('adv-widget-shell') || el.classList.contains('simple-table-wrapper');
-        };
+        const isBlockElement = Editor._isPasteBlockElement;
 
         const hasAnyBlocks = Array.from(tempDiv.children).some(isBlockElement);
         let caretTargetNode = null;

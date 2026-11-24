@@ -7,7 +7,7 @@
  * esposte dai moduli dell'applicazione (senza duplicazione locale della logica di business).
  */
 
-describe("Editor Sanitizer: Minificazione, Normalizzazione Blocchi, ZWS & Sicurezza (44 Test)", () => {
+describe("Editor Sanitizer: Minificazione, Normalizzazione Blocchi, ZWS & Sicurezza (test-editor-sanitizer.js)", () => {
 
     // =========================================================================
     // 1. SANIFICAZIONE TESTI BREVI E NOTE INLINE (Editor.sanitizeMiniText)
@@ -356,7 +356,7 @@ describe("Editor Sanitizer: Minificazione, Normalizzazione Blocchi, ZWS & Sicure
         container.innerHTML = `<p>Prezzo: $100.00 (IVA inclusa [speciale])</p>`;
 
         Assert.doesNotThrow(() => {
-            Editor.applyHighlight(container, "$100.00 (IVA inclusa [speciale])");
+            Editor.applyHighlight(container, '"$100.00 (IVA inclusa [speciale])"');
         });
 
         const mark = container.querySelector('mark.search-highlight');
@@ -368,7 +368,7 @@ describe("Editor Sanitizer: Minificazione, Normalizzazione Blocchi, ZWS & Sicure
         const container = document.createElement('div');
         container.innerHTML = `<p>Testo con <b>parola</b> evidenziata insieme</p>`;
 
-        Editor.applyHighlight(container, "parola evidenziata");
+        Editor.applyHighlight(container, '"parola evidenziata"');
 
         const marks = container.querySelectorAll('mark.search-highlight');
         Assert.isTrue(marks.length >= 1);
@@ -550,7 +550,7 @@ describe("Editor Sanitizer: Minificazione, Normalizzazione Blocchi, ZWS & Sicure
 
     test("CleanDOMTree (Design System): preserva integralmente le classi autorizzate di VanillaDesk (hl-c*, tx-c*, ff-*, fs-*, tag-hash)", () => {
         const container = document.createElement('div');
-        container.innerHTML = `<p><span class="hl-c6 tx-c1 ff-serif fs-large">Testo Formattato VanillaDesk</span> <span class="tag-hash">#progetto</span></p>`;
+        container.innerHTML = `<p><span class="hl-c6 tx-c1 ff-serif fs-large tag-hash">Testo Formattato VanillaDesk</span> <span class="tag-hash">#progetto</span></p>`;
 
         Editor.cleanDOMTree(container);
 
@@ -594,7 +594,7 @@ describe("Editor Sanitizer: Minificazione, Normalizzazione Blocchi, ZWS & Sicure
         Assert.isTrue(cleaned.includes("<b>Titolo Nota</b><br>Descrizione con <i>corsivo</i> e <u>sottolineato</u>."));
     });
 
-    test("HealFontArtifacts (Web & Browser): rimuove span anonimi con font-size inline annidati nei paragrafi", () => {
+    test("HealFontArtifacts (Web & Browser): rimuove span parassiti con font-size inline annidati nei paragrafi", () => {
         const container = document.createElement('div');
         container.innerHTML = `<p>Testo Normale <span style="font-size: 11pt;">con font-size parassita</span> seguito.</p>`;
 

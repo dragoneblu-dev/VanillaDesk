@@ -7,7 +7,7 @@
  * esposte dai moduli dell'applicazione (senza duplicazione locale della logica di business).
  */
 
-describe("EditorPaste, EditorCopy & PasteParser (64 Test)", () => {
+describe("EditorPaste, EditorCopy & PasteParser (test-editor-paste.js)", () => {
 
     // =========================================================================
     // 1. FORMATTAZIONE TESTO PIANO (Editor._formatPlainTextForHTML)

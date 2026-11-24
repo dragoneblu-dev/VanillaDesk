@@ -81,7 +81,17 @@ obsidian_importer: {
     feature_tags: "Estrazione automatica dei tag YAML nelle proprietà di pagina.",
     opt_wrap_root: "Raggruppa tutte le note importate in una cartella radice con il nome del Vault",
     btn_select_and_import: "Seleziona Cartella Vault ed Avvia",
-    toast_success: "Vault importato con successo: {notes} note, {folders} cartelle e {assets} allegati!"
+    toast_success: "Vault importato con successo: {notes} note, {folders} cartelle e {assets} allegati!",
+    initializing: "Inizializzazione...",
+    scanning: "Scansione file e cartelle del Vault...",
+    vault_root_title: "[Vault] {name}",
+    vault_root_desc: "Vault importato da Obsidian ({notes} note, {assets} allegati).",
+    copying_assets: "Copia allegati: {current}/{total}",
+    indexing_notes: "Censimento note: {current}/{total}",
+    converting_notes: "Conversione contenuti: {current}/{total}",
+    asset_not_found: "*[Allegato non trovato: {target}]*",
+    link_unresolved: "*[Link non risolto: {label}]*",
+    import_error_prefix: "Errore durante l'importazione del Vault: "
 },
 calendar_view: {
     today: "Oggi",
@@ -741,7 +751,7 @@ adv_filter: {
 },
 adv_search: {
     title: "Cerca in tutti i campi...",
-    placeholder: "Cerca in tutti i campi (usa ; per combinare più criteri in AND)...",
+    placeholder: "Cerca in tutti i campi (spazio = AND, \"...\" per spazi esatti, \\\" per apici)...",
     clear: "Azzera ricerca"
 },
 adv_col_menu: {
@@ -1652,17 +1662,7 @@ bookmarks: {
     btn_delete: "Rimuovi segnalibro",
     drawer_comment_title: "💬 Appunto Segnalibro",
     btn_save_comment: "Salva Appunto",
-    confirm_delete_commented: "Questo segnalibro contiene un appunto o commento. Sei sicuro di volerlo eliminare?",
-    initializing: "Inizializzazione...",
-    scanning: "Scansione file e cartelle del Vault...",
-    vault_root_title: "[Vault] {name}",
-    vault_root_desc: "Vault importato da Obsidian ({notes} note, {assets} allegati).",
-    copying_assets: "Copia allegati: {current}/{total}",
-    indexing_notes: "Censimento note: {current}/{total}",
-    converting_notes: "Conversione contenuti: {current}/{total}",
-    asset_not_found: "*[Allegato non trovato: {target}]*",
-    link_unresolved: "*[Link non risolto: {label}]*",
-    import_error_prefix: "Errore durante l'importazione del Vault: "
+    confirm_delete_commented: "Questo segnalibro contiene un appunto o commento. Sei sicuro di volerlo eliminare?"
 },
 inline_notes: {
     drawer_title: "💬 Modifica Appunto Nascosto",
@@ -2014,7 +2014,17 @@ obsidian_importer: {
     feature_tags: "Automatic extraction of YAML frontmatter tags into page properties.",
     opt_wrap_root: "Group all imported notes inside a root folder named after the Vault",
     btn_select_and_import: "Select Vault Folder & Start",
-    toast_success: "Vault successfully imported: {notes} notes, {folders} folders, and {assets} attachments!"
+    toast_success: "Vault successfully imported: {notes} notes, {folders} folders, and {assets} attachments!",
+    initializing: "Initializing...",
+    scanning: "Scanning Vault files and folders...",
+    vault_root_title: "[Vault] {name}",
+    vault_root_desc: "Vault imported from Obsidian ({notes} notes, {assets} attachments).",
+    copying_assets: "Copying attachments: {current}/{total}",
+    indexing_notes: "Indexing notes: {current}/{total}",
+    converting_notes: "Converting content: {current}/{total}",
+    asset_not_found: "*[Attachment not found: {target}]*",
+    link_unresolved: "*[Unresolved link: {label}]*",
+    import_error_prefix: "Error during Vault import: "
 },
 calendar_view: {
     today: "Today",
@@ -2671,7 +2681,7 @@ adv_filter: {
 },
 adv_search: {
     title: "Search in all fields...",
-    placeholder: "Search all fields (use ; to combine multiple criteria with AND)...",
+    placeholder: "Search all fields (space = AND, \"...\" for exact spaces, \\\" for quotes)...",
     clear: "Clear search"
 },
 adv_col_menu: {
@@ -3581,17 +3591,7 @@ bookmarks: {
     btn_delete: "Remove bookmark",
     drawer_comment_title: "💬 Bookmark Comment",
     btn_save_comment: "Save Comment",
-    confirm_delete_commented: "This bookmark contains a note. Are you sure you want to delete it?",
-    initializing: "Initializing...",
-    scanning: "Scanning Vault files and folders...",
-    vault_root_title: "[Vault] {name}",
-    vault_root_desc: "Vault imported from Obsidian ({notes} notes, {assets} attachments).",
-    copying_assets: "Copying attachments: {current}/{total}",
-    indexing_notes: "Indexing notes: {current}/{total}",
-    converting_notes: "Converting content: {current}/{total}",
-    asset_not_found: "*[Attachment not found: {target}]*",
-    link_unresolved: "*[Unresolved link: {label}]*",
-    import_error_prefix: "Error during Vault import: "
+    confirm_delete_commented: "This bookmark contains a note. Are you sure you want to delete it?"
 },
 inline_notes: {
     drawer_title: "💬 Edit Inline Footnote",
@@ -3942,7 +3942,17 @@ obsidian_importer: {
     feature_tags: "Extracción automática de etiquetas YAML a propiedades de página.",
     opt_wrap_root: "Agrupar todas las notas importadas en una carpeta raíz con el nombre del Vault",
     btn_select_and_import: "Seleccionar carpeta del Vault e iniciar",
-    toast_success: "¡Vault importado con éxito: {notes} notas, {folders} carpetas y {assets} archivos adjuntos!"
+    toast_success: "¡Vault importado con éxito: {notes} notas, {folders} carpetas y {assets} archivos adjuntos!",
+    initializing: "Inicializando...",
+    scanning: "Escaneando archivos y carpetas del Vault...",
+    vault_root_title: "[Vault] {name}",
+    vault_root_desc: "Vault importado de Obsidian ({notes} notas, {assets} adjuntos).",
+    copying_assets: "Copia de adjuntos: {current}/{total}",
+    indexing_notes: "Censo de notas: {current}/{total}",
+    converting_notes: "Conversión de contenidos: {current}/{total}",
+    asset_not_found: "*[Adjunto no encontrado: {target}]*",
+    link_unresolved: "*[Enlace no resuelto: {label}]*",
+    import_error_prefix: "Error durante la importación del Vault: "
 },
 calendar_view: {
     today: "Hoy",
@@ -4599,7 +4609,7 @@ adv_filter: {
 },
 adv_search: {
     title: "Buscar en todos los campos...",
-    placeholder: "Buscar en todos los campos (usa ; para combinar varios criterios con AND)...",
+    placeholder: "Buscar en todos los campos (espacio = AND, \"...\" para espacios exactos, \\\" para comillas)...",
     clear: "Borrar búsqueda"
 },
 adv_col_menu: {
@@ -5509,17 +5519,7 @@ bookmarks: {
     btn_delete: "Eliminar marcador",
     drawer_comment_title: "💬 Nota del Marcador",
     btn_save_comment: "Guardar Nota",
-    confirm_delete_commented: "Este marcador contiene una nota o comentario. ¿Estás seguro de que deseas eliminarlo?",
-    initializing: "Inicializando...",
-    scanning: "Escaneando archivos y carpetas del Vault...",
-    vault_root_title: "[Vault] {name}",
-    vault_root_desc: "Vault importado de Obsidian ({notes} notas, {assets} adjuntos).",
-    copying_assets: "Copia de adjuntos: {current}/{total}",
-    indexing_notes: "Censo de notas: {current}/{total}",
-    converting_notes: "Conversión de contenidos: {current}/{total}",
-    asset_not_found: "*[Adjunto no encontrado: {target}]*",
-    link_unresolved: "*[Enlace no resuelto: {label}]*",
-    import_error_prefix: "Error durante la importación del Vault: "
+    confirm_delete_commented: "Este marcador contiene una nota o comentario. ¿Estás seguro de que deseas eliminarlo?"
 },
 inline_notes: {
     drawer_title: "💬 Modificar Nota al Pie Oculta",
@@ -5869,7 +5869,17 @@ obsidian_importer: {
     feature_tags: "Automatische Extraktion von YAML-Frontmatter-Tags in Seiteneigenschaften.",
     opt_wrap_root: "Alle importierten Notizen in einem Stammordner mit dem Namen des Vaults gruppieren",
     btn_select_and_import: "Vault-Ordner auswählen und starten",
-    toast_success: "Vault erfolgreich importiert: {notes} Notizen, {folders} Ordner und {assets} Anhänge!"
+    toast_success: "Vault erfolgreich importiert: {notes} Notizen, {folders} Ordner und {assets} Anhänge!",
+    initializing: "Initialisierung...",
+    scanning: "Dateien und Ordner des Vaults werden gescannt...",
+    vault_root_title: "[Vault] {name}",
+    vault_root_desc: "Vault importiert aus Obsidian ({notes} Notizen, {assets} Anhänge).",
+    copying_assets: "Anhänge kopieren: {current}/{total}",
+    indexing_notes: "Notizen erfassen: {current}/{total}",
+    converting_notes: "Inhalte konvertieren: {current}/{total}",
+    asset_not_found: "*[Anhang nicht gefunden: {target}]*",
+    link_unresolved: "*[Nicht aufgelöster Link: {label}]*",
+    import_error_prefix: "Fehler beim Importieren des Vaults: "
 },
 calendar_view: {
     today: "Heute",
@@ -6526,7 +6536,7 @@ adv_filter: {
 },
 adv_search: {
     title: "In allen Feldern suchen...",
-    placeholder: "Alle Felder durchsuchen (nutze ; um mehrere Kriterien mit AND zu verknüpfen)...",
+    placeholder: "Alle Felder durchsuchen (Leerzeichen = AND, \"...\" für exakte Leerzeichen, \\\" für Anführungszeichen)...",
     clear: "Suche zurücksetzen"
 },
 adv_col_menu: {
@@ -7436,17 +7446,7 @@ bookmarks: {
     btn_delete: "Lesezeichen entfernen",
     drawer_comment_title: "💬 Lesezeichen-Notiz",
     btn_save_comment: "Notiz speichern",
-    confirm_delete_commented: "Dieses Lesezeichen enthält eine Notiz oder einen Kommentar. Möchten Sie es wirklich löschen?",
-    initializing: "Initialisierung...",
-    scanning: "Dateien und Ordner des Vaults werden gescannt...",
-    vault_root_title: "[Vault] {name}",
-    vault_root_desc: "Vault importiert aus Obsidian ({notes} Notizen, {assets} Anhänge).",
-    copying_assets: "Anhänge kopieren: {current}/{total}",
-    indexing_notes: "Notizen erfassen: {current}/{total}",
-    converting_notes: "Inhalte konvertieren: {current}/{total}",
-    asset_not_found: "*[Anhang nicht gefunden: {target}]*",
-    link_unresolved: "*[Nicht aufgelöster Link: {label}]*",
-    import_error_prefix: "Fehler beim Importieren des Vaults: "
+    confirm_delete_commented: "Dieses Lesezeichen enthält eine Notiz oder einen Kommentar. Möchten Sie es wirklich löschen?"
 },
 inline_notes: {
     drawer_title: "💬 Versteckte Fußnote bearbeiten",

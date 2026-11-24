@@ -129,12 +129,16 @@ const AdvancedTable = {
     renderQuickSearchBar: (tableId, state) => {
         if (!state.showQuickSearch) return '';
         const safeTerm = String(state.quickSearch || '').replace(/"/g, '&quot;');
+        const rawPlaceholder = (typeof I18n !== 'undefined' ? I18n.t('adv_search.placeholder') : '') || '';
+        const safePlaceholder = (typeof UI !== 'undefined' && UI.escapeHTML)
+            ? UI.escapeHTML(rawPlaceholder)
+            : rawPlaceholder.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
         const clearBtn = state.quickSearch ? `<button class="adv-icon-btn danger" style="position:absolute; right:10px; top:50%; transform:translateY(-50%); padding:2px; margin:0;" onclick="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', '')" title="${(typeof I18n !== 'undefined' && I18n.t('adv_search.clear'))}">${Icons.close}</button>` : '';
 
         return `
             <div class="adv-quick-search-wrapper" style="padding: 4px 2px 8px 2px; display:flex; align-items:center; width:100%; position:relative;" onmousedown="event.stopPropagation()" onclick="event.stopPropagation()">
                 <span class="search-icon">${Icons.search}</span>
-                <input type="text" id="adv-search-input-${tableId}" class="adv-quick-search-input" placeholder="${(typeof I18n !== 'undefined' && I18n.t('adv_search.placeholder'))}" value="${safeTerm}"
+                <input type="text" id="adv-search-input-${tableId}" class="adv-quick-search-input" placeholder="${safePlaceholder}" value="${safeTerm}"
                        autocomplete="off"
                        oninput="event.stopPropagation(); AdvancedTable.setQuickSearch('${tableId}', this.value)"
                        onkeydown="if(event.key==='Escape'){ event.stopPropagation(); AdvancedTable.toggleQuickSearch('${tableId}'); } event.stopPropagation();"

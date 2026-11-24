@@ -439,10 +439,28 @@ Object.assign(ExportManager, {
         t = t.replace(/==(.*?)==/g, '<span class="hl-c5">$1</span>');
         t = t.replace(/<mark(?![^>]*class=["'][^"']*(?:search-highlight|active-highlight)[^"']*["'])[^>]*>(.*?)<\/mark>/gi, '<span class="hl-c5">$1</span>');
 
+        const protectedUrls = [];
+        t = t.replace(/(\[[^\]\n]*\]\()([^)\n]+)(\))/g, (m, pre, url, post) => {
+            protectedUrls.push(url);
+            return `${pre}\uE000VDURL:${protectedUrls.length - 1}\uE001${post}`;
+        });
+
+        const protectedTags = [];
+        t = t.replace(/<[^>]+>/g, (tag) => {
+            protectedTags.push(tag);
+            return `\uE000VDTAG:${protectedTags.length - 1}\uE001`;
+        });
+
         t = t.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
         t = t.replace(/\*(.*?)\*/g, '<i>$1</i>');
+        t = t.replace(/(?<![a-zA-Z0-9])__([^_\n]+?)__(?![a-zA-Z0-9])/g, '<b>$1</b>');
+        t = t.replace(/(?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9])/g, '<i>$1</i>');
         t = t.replace(/~~(.*?)~~/g, '<s>$1</s>');
         t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
+
+        t = t.replace(/\uE000VDTAG:(\d+)\uE001/g, (m, idx) => protectedTags[parseInt(idx, 10)] ?? m);
+        t = t.replace(/\uE000VDURL:(\d+)\uE001/g, (m, idx) => protectedUrls[parseInt(idx, 10)] ?? m);
+
         t = t.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
         return t || '<br>';
     },
@@ -626,11 +644,28 @@ Object.assign(ExportManager, {
         html = html.replace(/==(.*?)==/g, '<span class="hl-c5">$1</span>');
         html = html.replace(/<mark(?![^>]*class=["'][^"']*(?:search-highlight|active-highlight)[^"']*["'])[^>]*>(.*?)<\/mark>/gi, '<span class="hl-c5">$1</span>');
 
+        // Protegge URL di immagini/link Markdown e attributi dei tag HTML già presenti
+        // per impedire che percorsi con underscore (es. assets/img_123_abc.png) o attributi vengano alterati da _(...)_
+        const protectedUrls = [];
+        html = html.replace(/(!?\[[^\]\n]*\]\()([^)\n]+)(\))/g, (m, pre, url, post) => {
+            protectedUrls.push(url);
+            return `${pre}\uE000VDURL:${protectedUrls.length - 1}\uE001${post}`;
+        });
+
+        const protectedHtmlTags = [];
+        html = html.replace(/<[^>]+>/g, (tag) => {
+            protectedHtmlTags.push(tag);
+            return `\uE000VDTAG:${protectedHtmlTags.length - 1}\uE001`;
+        });
+
         html = html.replace(/\*\*(.*?)\*\*/g, '<b>$1</b>');
         html = html.replace(/\*(.*?)\*/g, '<i>$1</i>');
-        html = html.replace(/__(.*?)__/g, '<b>$1</b>');
-        html = html.replace(/_(.*?)_/g, '<i>$1</i>');
+        html = html.replace(/(?<![a-zA-Z0-9])__([^_\n]+?)__(?![a-zA-Z0-9])/g, '<b>$1</b>');
+        html = html.replace(/(?<![a-zA-Z0-9])_([^_\n]+?)_(?![a-zA-Z0-9])/g, '<i>$1</i>');
         html = html.replace(/~~(.*?)~~/g, '<s>$1</s>');
+
+        html = html.replace(/\uE000VDTAG:(\d+)\uE001/g, (m, idx) => protectedHtmlTags[parseInt(idx, 10)] ?? m);
+        html = html.replace(/\uE000VDURL:(\d+)\uE001/g, (m, idx) => protectedUrls[parseInt(idx, 10)] ?? m);
 
         html = html.replace(/!\[(.*?)\]\((.*?)\)/g, '<img src="$2" alt="$1">');
         html = html.replace(/\[(.*?)\]\((.*?)\)/g, '<a href="$2" target="_blank">$1</a>');
