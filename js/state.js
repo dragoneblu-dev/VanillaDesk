@@ -3,9 +3,9 @@
  * Variabili di stato globale dell'applicazione. Fonte assoluta della verità in RAM.
  * Logica centralizzata di valutazione filtri proprietà (AppState.matchesPropertyFilters)
  * per *EXISTS*, *EMPTY*, booleani, array, date range e note_link.
- * Parser unificato dei termini di ricerca (AppState.parseSearchTerms) con supporto a ';' (AND logico)
- * e doppie virgolette '"..."' per ricerche letterali contenenti ';', con scope configurabile
- * (multiSearchScope: 'paragraph' | 'chapter' | 'note').
+ * Parser unificato dei termini di ricerca (AppState.parseSearchTerms) con supporto allo spazio (AND logico),
+ * doppie virgolette '"..."' per ricerche letterali con spazi ed escape '\' per doppi apici ('\"') e backslash ('\\'),
+ * con scope configurabile (multiSearchScope: 'paragraph' | 'chapter' | 'note').
  * Type guard centralizzati (AppState.isRelationalTable, AppState.getRelationalDatabaseIds)
  * per disambiguare i database relazionali da widget non-RDBMS in AppState.databases.
  * Supporto alla navigazione di ricerca nelle record note (isRecordNote) e relative sotto-note,
@@ -53,7 +53,7 @@ const AppState = {
     _globalHighlights: 0,
 
     // =========================================================================
-    // PARSER TERMINI DI RICERCA (; = AND LOGICO, "..." = STRINGA LETTERALE)
+    // PARSER TERMINI DI RICERCA (SPAZIO = AND LOGICO, "..." = FRASE CON SPAZI, \ = ESCAPE)
     // =========================================================================
     parseSearchTerms: (rawQuery) => {
         if (!rawQuery || typeof rawQuery !== 'string') return [];
@@ -63,29 +63,39 @@ const AppState = {
         const tokens = [];
         let current = '';
         let inQuotes = false;
-        let hasQuotesInToken = false;
-        let hasSemicolonSplit = false;
 
         for (let i = 0; i < normalized.length; i++) {
             const ch = normalized[i];
-            if (ch === '"') {
+
+            if (ch === '\\') {
+                if (i + 1 < normalized.length) {
+                    const nextCh = normalized[i + 1];
+                    if (nextCh === '"' || nextCh === '\\' || nextCh === ' ') {
+                        current += nextCh;
+                        i++;
+                        continue;
+                    }
+                }
+                current += ch;
+            } else if (ch === '"') {
                 inQuotes = !inQuotes;
-                hasQuotesInToken = true;
-            } else if (ch === ';' && !inQuotes) {
-                hasSemicolonSplit = true;
-                tokens.push({ text: current, quoted: hasQuotesInToken });
-                current = '';
-                hasQuotesInToken = false;
+            } else if (ch === ' ' && !inQuotes) {
+                if (current.length > 0) {
+                    tokens.push(current);
+                    current = '';
+                }
             } else {
                 current += ch;
             }
         }
-        tokens.push({ text: current, quoted: hasQuotesInToken });
+
+        if (current.length > 0) {
+            tokens.push(current);
+        }
 
         const seen = new Set();
         const result = [];
-        tokens.forEach(t => {
-            const val = (hasSemicolonSplit && !t.quoted) ? t.text.trim() : t.text;
+        tokens.forEach(val => {
             if (val.length > 0 && val.trim().length > 0) {
                 const key = val.toLowerCase();
                 if (!seen.has(key)) {

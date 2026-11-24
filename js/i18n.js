@@ -523,10 +523,11 @@ conflict: {
     toast_reloaded: "Nota ricaricata da disco. Le tue modifiche sono recuperabili con Ctrl+Z."
 },
 tree: {
-    scope_paragraph_title: "Tutti i termini (separati da ;) devono comparire nello stesso paragrafo o riga.\nUsa le virgolette \"...\" per cercare un ; letterale.",
-    scope_chapter_title: "Tutti i termini (separati da ;) devono comparire sotto lo stesso titolo/capitolo (titolo compreso).\nUsa le virgolette \"...\" per cercare un ; letterale.",
-    scope_note_title: "Tutti i termini (separati da ;) possono trovarsi in qualsiasi punto della nota.\nUsa le virgolette \"...\" per cercare un ; letterale.",
-    preview_multipage_hint: "Alt + Rotella: scorri le occorrenze e le pagine",
+    scope_paragraph_title: "Tutti i termini nello stesso paragrafo",
+    scope_chapter_title: "Tutti i termini nello stesso capitolo",
+    scope_note_title: "Termini in qualsiasi punto della nota",
+    preview_multipage_hint: "Alt + Rotella: scorri risultati",
+    preview_multiterm_tip: "Suggerimento: usa \"...\" per spazi esatti e \\\" per gli apici",
     scope_paragraph: "Stesso paragrafo",
     scope_chapter: "Stesso capitolo",
     scope_note: "Tutta la nota",
@@ -2452,10 +2453,11 @@ conflict: {
     toast_reloaded: "Note reloaded from disk. Your edits can be restored with Ctrl+Z."
 },
 tree: {
-    scope_paragraph_title: "All terms (separated by ;) must appear in the same paragraph or line.\nUse quotes \"...\" to search for a literal ;.",
-    scope_chapter_title: "All terms (separated by ;) must appear under the same heading/chapter (including heading).\nUse quotes \"...\" to search for a literal ;.",
-    scope_note_title: "All terms (separated by ;) can appear anywhere in the note.\nUse quotes \"...\" to search for a literal ;.",
-    preview_multipage_hint: "Alt + Scroll: cycle through matches and pages",
+    scope_paragraph_title: "All terms in the same paragraph",
+    scope_chapter_title: "All terms in the same chapter",
+    scope_note_title: "Terms anywhere in the note",
+    preview_multipage_hint: "Alt + Scroll: cycle matches",
+    preview_multiterm_tip: "Tip: use \"...\" for exact spaces and \\\" for quotes",
     scope_paragraph: "Same paragraph",
     scope_chapter: "Same chapter",
     scope_note: "Entire note",
@@ -4379,10 +4381,11 @@ conflict: {
     toast_reloaded: "Nota recargada desde el disco. Tus cambios se pueden recuperar con Ctrl+Z."
 },
 tree: {
-    scope_paragraph_title: "Todos los términos (separados por ;) deben aparecer en el mismo párrafo o línea.\nUsa comillas \"...\" para buscar un ; literal.",
-    scope_chapter_title: "Todos los términos (separados por ;) deben aparecer bajo el mismo título/capítulo (título incluido).\nUsa comillas \"...\" para buscar un ; literal.",
-    scope_note_title: "Todos los términos (separados por ;) pueden estar en cualquier parte de la nota.\nUsa comillas \"...\" para buscar un ; literal.",
-    preview_multipage_hint: "Alt + Rueda: recorre las apariciones y páginas",
+    scope_paragraph_title: "Todos los términos en el mismo párrafo",
+    scope_chapter_title: "Todos los términos en el mismo capítulo",
+    scope_note_title: "Términos en cualquier parte de la nota",
+    preview_multipage_hint: "Alt + Rueda: recorre resultados",
+    preview_multiterm_tip: "Consejo: usa \"...\" para espacios exactos y \\\" para comillas",
     scope_paragraph: "Mismo párrafo",
     scope_chapter: "Mismo capítulo",
     scope_note: "Toda la nota",
@@ -6305,10 +6308,11 @@ conflict: {
     toast_reloaded: "Notiz von Festplatte neu geladen. Änderungen können mit Strg+Z wiederhergestellt werden."
 },
 tree: {
-    scope_paragraph_title: "Alle Begriffe (getrennt durch ;) müssen im selben Absatz oder in derselben Zeile stehen.\nVerwende Anführungszeichen \"...\" für ein wörtliches ;.",
-    scope_chapter_title: "Alle Begriffe (getrennt durch ;) müssen unter derselben Überschrift/Kapitel (inkl. Überschrift) stehen.\nVerwende Anführungszeichen \"...\" für ein wörtliches ;.",
-    scope_note_title: "Alle Begriffe (getrennt durch ;) können an beliebiger Stelle in der Notiz stehen.\nVerwende Anführungszeichen \"...\" für ein wörtliches ;.",
-    preview_multipage_hint: "Alt + Mausrad: Treffer und Seiten durchblättern",
+    scope_paragraph_title: "Alle Begriffe im selben Absatz",
+    scope_chapter_title: "Alle Begriffe im selben Kapitel",
+    scope_note_title: "Begriffe irgendwo in der Notiz",
+    preview_multipage_hint: "Alt + Mausrad: Treffer durchblättern",
+    preview_multiterm_tip: "Tipp: \"...\" für exakte Leerzeichen und \\\" für Anführungszeichen",
     scope_paragraph: "Gleicher Absatz",
     scope_chapter: "Gleiches Kapitel",
     scope_note: "Gesamte Notiz",

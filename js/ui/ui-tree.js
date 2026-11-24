@@ -10,18 +10,21 @@
  * - Matching delle proprietà della pagina delegato al motore centrale AppState.matchesPropertyFilters.
  * - Ricerca testuale multi-termine in AND logico tramite ';' e stringhe letterali tra doppie virgolette '"..."'
  *   con valutazione per ambito (Stesso paragrafo, Stesso capitolo con titolo compreso, Tutta la nota).
+ * - Conteggio nella pillola laterale allineato alle singole occorrenze per ricerche singole e al numero
+ *   effettivo di box visibili in anteprima per ricerche multiple (';').
  * - Estrazione testo indicizzabile da note, blocchi codice, URL dei link (href / data-file-path) e diari (extractSearchableText).
  * - Anteprima contestuale in hover sui risultati della ricerca nella sidebar:
  *   - Card distinte dinamiche suddivise in pagine in base allo spazio verticale disponibile;
  *   - In modalità multi-termine AND mostra solo i periodi/righe con i match dell'ambito selezionato garantendo
  *     copertura ed evidenziazione differenziata hl-c5..hl-c10 per ciascun termine;
  *   - Nessun titolo della nota ripetuto in testa all'anteprima;
- *   - Navigazione delle occorrenze sia tramite scrubbing orizzontale sulla riga (sospeso mentre ALT è premuto o
- *     dopo interazione con la rotella) sia tramite ALT + Rotella del mouse;
- *   - Intestazione informativa sul comando "Alt + Rotella" visibile quando l'anteprima si estende su più pagine;
+ *   - Navigazione tra le occorrenze e le pagine tramite ALT + Rotella del mouse con memorizzazione
+ *     dell'ultima posizione per ciascuna nota fino al cambio o reset della ricerca;
+ *   - Intestazione informativa sul comando "Alt + Rotella" quando sono presenti più risultati, con suggerimento
+ *     contestuale su ";" per ricerche singole estese su più pagine;
  *   - Evidenziazione card tramite solo bordo colorato coerente col tema (senza cambio sfondo);
- *   - Chiusura immediata del riquadro di anteprima quando il cursore raggiunge '+' (node-add-btn)
- *     o al click di selezione della nota, con ripristino su successivo movimento reale del mouse;
+ *   - Chiusura immediata del riquadro di anteprima quando il cursore raggiunge '+' (node-add-btn),
+ *     la freccia di espansione (toggle-btn) o al click di selezione della nota, con ripristino su movimento del mouse;
  *   - Salto diretto all'occorrenza evidenziata al click sulla nota.
  * - TOC dinamico per capitoli H1, H2, H3 (scrollToHeader).
  * - Evidenziazione del nodo attivo nella sidebar (highlightTreeNode).
@@ -37,8 +40,9 @@ Object.assign(UI, {
     _activeRecordDbInjected: false,
     _searchPreviewTimer: null,
     _searchPreviewState: null,
-    _lastSearchHoverClientX: null,
     _searchPreviewDismissPos: null,
+    _searchPreviewLastQueryKey: '',
+    _searchPreviewLastIndexByNote: new Map(),
 
     _getValidChapterNoteScope: (note, lowerTerms) => {
         const rawTitle = (note && note.title ? note.title : '').replace(/\u00A0/g, ' ');
@@ -366,7 +370,6 @@ Object.assign(UI, {
         });
 
         const cardEl = document.createElement('div');
-        cardEl.dataset.entryIdx = String(entry.globalCardIdx);
         cardEl.style.cssText = 'background:color-mix(in srgb, var(--bg-color) 55%, transparent); border:1px solid var(--border-color); border-radius:6px; padding:8px 10px; transition:border-color 0.1s ease, box-shadow 0.1s ease;';
         cardEl.innerHTML = rowsHtml;
         return cardEl;
@@ -385,12 +388,12 @@ Object.assign(UI, {
 
     _renderPreviewPage: (state, pageIdx) => {
         const { tooltip, cardsContainer, footerEl, pages, totalEntries } = state;
-        const pageEntries = pages[pageIdx] || [];
+        const pageCards = pages[pageIdx] || [];
 
         cardsContainer.innerHTML = '';
-        pageEntries.forEach(item => {
-            UI._setCardActiveStyle(item.cardEl, false);
-            cardsContainer.appendChild(item.cardEl);
+        pageCards.forEach(cardEl => {
+            UI._setCardActiveStyle(cardEl, false);
+            cardsContainer.appendChild(cardEl);
         });
 
         state.currentPageIdx = pageIdx;
@@ -417,21 +420,19 @@ Object.assign(UI, {
     },
 
     _selectPreviewEntry: (state, targetIdx) => {
-        if (!state || state.isTitleOnly || !state.entries || state.entries.length === 0) return;
-        if (targetIdx < 0 || targetIdx >= state.entries.length) return;
-
-        if (state.tooltip && state.tooltip.style.opacity !== '1') {
-            state.tooltip.style.opacity = '1';
-        }
-
+        if (!state || state.isTitleOnly || !state.entryItems || state.entryItems.length === 0) return;
+        if (targetIdx < 0 || targetIdx >= state.entryItems.length) return;
         if (targetIdx === state.activeEntryIdx && state.activeCardEl) return;
 
+        const targetItem = state.entryItems[targetIdx];
+        if (!targetItem) return;
+
         state.activeEntryIdx = targetIdx;
-        const targetPageIdx = state.entryToPage[targetIdx] || 0;
+        UI._searchPreviewLastIndexByNote.set(state.noteId, targetIdx);
 
         // Cambia schermata di anteprima solo quando la card attiva appartiene a un'altra pagina
-        if (targetPageIdx !== state.currentPageIdx) {
-            UI._renderPreviewPage(state, targetPageIdx);
+        if (targetItem.pageIdx !== state.currentPageIdx) {
+            UI._renderPreviewPage(state, targetItem.pageIdx);
         }
 
         // Aggiorna in-place esclusivamente lo stile della card precedente e di quella corrente
@@ -439,35 +440,12 @@ Object.assign(UI, {
             UI._setCardActiveStyle(state.activeCardEl, false);
         }
 
-        const pageItems = state.pages[targetPageIdx] || [];
-        const targetItem = pageItems.find(it => it.entry.globalCardIdx === targetIdx);
-        if (targetItem && targetItem.cardEl) {
-            UI._setCardActiveStyle(targetItem.cardEl, true);
-            state.activeCardEl = targetItem.cardEl;
-        }
+        UI._setCardActiveStyle(targetItem.cardEl, true);
+        state.activeCardEl = targetItem.cardEl;
 
         if (state.footerCountSpan) {
-            state.footerCountSpan.textContent = `${targetIdx + 1} / ${state.entries.length}`;
+            state.footerCountSpan.textContent = `${targetIdx + 1} / ${state.entryItems.length}`;
         }
-    },
-
-    _updateSearchPreviewScrub: (noteId, clientX, anchorEl) => {
-        const state = UI._searchPreviewState;
-        if (!state || state.noteId !== noteId || state.isTitleOnly || !state.entries || state.entries.length === 0) return;
-
-        const rect = anchorEl.getBoundingClientRect();
-        // L'area di scrubbing parte dall'inizio effettivo della riga (freccia/icone incluse)
-        // e termina prima del pulsante '+' (node-add-btn)
-        const addBtn = anchorEl.querySelector('.node-add-btn');
-        const scrubLeft = rect.left;
-        const scrubRight = addBtn ? (addBtn.getBoundingClientRect().left - 4) : (rect.right - 4);
-        const scrubWidth = scrubRight - scrubLeft;
-        if (scrubWidth <= 0) return;
-
-        const ratio = Math.max(0, Math.min(0.9999, (clientX - scrubLeft) / scrubWidth));
-        const targetIdx = Math.floor(ratio * state.entries.length);
-
-        UI._selectPreviewEntry(state, targetIdx);
     },
 
     _showSearchPreviewTooltip: (note, rawFilter, anchorEl) => {
@@ -482,6 +460,13 @@ Object.assign(UI, {
         const lowerTerms = terms.map(t => t.toLowerCase());
         const isMultiTerm = lowerTerms.length > 1;
         const activeScope = isMultiTerm ? (AppState.multiSearchScope || 'paragraph') : 'note';
+
+        const queryKey = `${rawFilter}||${activeScope}`;
+        if (UI._searchPreviewLastQueryKey !== queryKey) {
+            UI._searchPreviewLastQueryKey = queryKey;
+            UI._searchPreviewLastIndexByNote.clear();
+        }
+
         const rawTitle = (note.title || I18n.t('editor.untitled')).replace(/\u00A0/g, ' ');
         const lowerTitle = rawTitle.toLowerCase();
 
@@ -593,61 +578,62 @@ Object.assign(UI, {
         if (matchEntries.length > 0) {
             const headerHintText = typeof I18n !== 'undefined'
                 ? I18n.t('tree.preview_multipage_hint')
-                : 'Alt + Rotella: scorri le occorrenze e le pagine';
+                : 'Alt + Rotella: scorri risultati';
+            const multiTermTipText = (!isMultiTerm && typeof I18n !== 'undefined')
+                ? I18n.t('tree.preview_multiterm_tip')
+                : '';
 
-            tooltip.innerHTML = `<div style="width:100%; white-space:normal;"><div id="searchTooltipHeader" style="display:none; font-size:0.72rem; color:var(--accent-color); font-weight:600; margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed var(--border-color);">${UI.escapeHTML(headerHintText)}</div><div id="searchTooltipCards" style="display:flex; flex-direction:column; gap:8px; font-size:0.8rem; line-height:1.45;"></div><div id="searchTooltipFooter" style="display:none; justify-content:space-between; align-items:center; margin-top:8px; padding-top:4px; border-top:1px dashed var(--border-color); font-size:0.72rem; opacity:0.8;"><span id="searchTooltipCount"></span><span id="searchTooltipPage"></span></div></div>`;
+            tooltip.innerHTML = `<div style="width:100%; white-space:normal;"><div id="searchTooltipHeader" style="display:none; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px; font-size:0.72rem; color:var(--accent-color); font-weight:600; margin-bottom:6px; padding-bottom:4px; border-bottom:1px dashed var(--border-color);"><span>${UI.escapeHTML(headerHintText)}</span><span id="searchTooltipMultiTip" style="display:none; opacity:0.75; font-weight:normal; color:var(--tooltip-text);">${UI.escapeHTML(multiTermTipText)}</span></div><div id="searchTooltipCards" style="display:flex; flex-direction:column; gap:8px; font-size:0.8rem; line-height:1.45;"></div><div id="searchTooltipFooter" style="display:none; justify-content:space-between; align-items:center; margin-top:8px; padding-top:4px; border-top:1px dashed var(--border-color); font-size:0.72rem; opacity:0.8;"><span id="searchTooltipCount"></span><span id="searchTooltipPage"></span></div></div>`;
 
             const headerEl = tooltip.querySelector('#searchTooltipHeader');
+            const multiTipEl = tooltip.querySelector('#searchTooltipMultiTip');
             const cardsContainer = tooltip.querySelector('#searchTooltipCards');
             const footerEl = tooltip.querySelector('#searchTooltipFooter');
             const footerCountSpan = tooltip.querySelector('#searchTooltipCount');
             const footerPageSpan = tooltip.querySelector('#searchTooltipPage');
 
-            // Mostra temporaneamente il footer durante il calcolo delle pagine per riservarne l'altezza
-            if (matchEntries.length > 1) footerEl.style.display = 'flex';
+            // Mostra header e footer prima del calcolo pagine quando sono presenti più risultati
+            if (matchEntries.length > 1) {
+                if (headerEl) headerEl.style.display = 'flex';
+                if (footerEl) footerEl.style.display = 'flex';
+            }
 
-            const cardElements = matchEntries.map((entry, globalIdx) => {
-                entry.globalCardIdx = globalIdx;
-                return UI._createPreviewCardElement(entry, lines, terms, isMultiTerm);
-            });
+            const cardElements = matchEntries.map((entry) => UI._createPreviewCardElement(entry, lines, terms, isMultiTerm));
 
             const paginateCards = () => {
                 cardsContainer.innerHTML = '';
                 const pagesList = [[]];
-                const mapIdxToPage = [];
+                const entryItems = [];
 
                 cardElements.forEach((cardEl, globalIdx) => {
-                    const entry = matchEntries[globalIdx];
                     cardsContainer.appendChild(cardEl);
 
                     const curPageIdx = pagesList.length - 1;
                     if (pagesList[curPageIdx].length > 0 && tooltip.scrollHeight > maxHeightPx) {
                         cardsContainer.innerHTML = '';
                         cardsContainer.appendChild(cardEl);
-                        pagesList.push([{ entry, cardEl }]);
-                        mapIdxToPage[globalIdx] = pagesList.length - 1;
+                        pagesList.push([cardEl]);
+                        entryItems[globalIdx] = { pageIdx: pagesList.length - 1, cardEl };
                     } else {
-                        pagesList[curPageIdx].push({ entry, cardEl });
-                        mapIdxToPage[globalIdx] = curPageIdx;
+                        pagesList[curPageIdx].push(cardEl);
+                        entryItems[globalIdx] = { pageIdx: curPageIdx, cardEl };
                     }
                 });
 
-                return { pagesList, mapIdxToPage };
+                return { pagesList, entryItems };
             };
 
-            let { pagesList: pages, mapIdxToPage: entryToPage } = paginateCards();
+            let { pagesList: pages, entryItems } = paginateCards();
 
-            // Se l'anteprima si estende su più pagine, attiva la riga di intestazione e ricalcola l'altezza delle pagine
-            if (pages.length > 1 && headerEl) {
-                headerEl.style.display = 'block';
-                ({ pagesList: pages, mapIdxToPage: entryToPage } = paginateCards());
+            // Sulle ricerche singole estese su più pagine mostra anche il suggerimento su ";"
+            if (pages.length > 1 && multiTipEl && multiTermTipText) {
+                multiTipEl.style.display = 'inline';
+                ({ pagesList: pages, entryItems } = paginateCards());
             }
 
             UI._searchPreviewState = {
                 noteId: note.id,
                 isTitleOnly: false,
-                wheelLocked: false,
-                wheelAnchorX: null,
                 anchorEl,
                 tooltip,
                 cardsContainer,
@@ -656,15 +642,19 @@ Object.assign(UI, {
                 footerPageSpan,
                 entries: matchEntries,
                 pages,
-                entryToPage,
+                entryItems,
                 totalEntries: matchEntries.length,
                 currentPageIdx: -1,
                 activeEntryIdx: -1,
                 activeCardEl: null
             };
 
-            const initialX = UI._lastSearchHoverClientX !== null ? UI._lastSearchHoverClientX : rect.left;
-            UI._updateSearchPreviewScrub(note.id, initialX, anchorEl);
+            const savedIdx = UI._searchPreviewLastIndexByNote.get(note.id);
+            const initialIdx = (typeof savedIdx === 'number' && savedIdx >= 0 && savedIdx < matchEntries.length)
+                ? savedIdx
+                : 0;
+
+            UI._selectPreviewEntry(UI._searchPreviewState, initialIdx);
             tooltip.style.visibility = 'visible';
         } else {
             // Nessuna occorrenza nel corpo (match presente solo sul titolo): mostra solo le prime righe del corpo, mai il titolo
@@ -704,7 +694,6 @@ Object.assign(UI, {
         clearTimeout(UI._searchPreviewTimer);
         UI._searchPreviewTimer = null;
         UI._searchPreviewState = null;
-        UI._lastSearchHoverClientX = null;
         const tooltip = document.getElementById('advCustomTooltip');
         if (tooltip) {
             tooltip.style.cssText = '';
@@ -868,8 +857,6 @@ Object.assign(UI, {
                 const curIdx = state.activeEntryIdx >= 0 ? state.activeEntryIdx : 0;
                 const nextIdx = Math.max(0, Math.min(state.entries.length - 1, curIdx + step));
 
-                state.wheelLocked = true;
-                state.wheelAnchorX = e.clientX;
                 UI._selectPreviewEntry(state, nextIdx);
             }, { passive: false });
         }
@@ -892,6 +879,20 @@ Object.assign(UI, {
         const reqBook = AppState.showBookmarksInTree;
         const reqFav = AppState.showFavoritesInTree;
         const isFiltering = hasFilterText || hasFilterProp || reqBook || reqFav;
+
+        // Sincronizza e resetta la memoria delle posizioni di anteprima quando cambia o si azzera la ricerca
+        if (!hasFilterText) {
+            UI._searchPreviewLastQueryKey = '';
+            UI._searchPreviewLastIndexByNote.clear();
+        } else {
+            const curTerms = typeof AppState.parseSearchTerms === 'function' ? AppState.parseSearchTerms(AppState.searchFilter.toLowerCase()) : [];
+            const curScope = curTerms.length > 1 ? (AppState.multiSearchScope || 'paragraph') : 'note';
+            const curKey = `${AppState.searchFilter.toLowerCase()}||${curScope}`;
+            if (UI._searchPreviewLastQueryKey !== curKey) {
+                UI._searchPreviewLastQueryKey = curKey;
+                UI._searchPreviewLastIndexByNote.clear();
+            }
+        }
 
         // 1. Modalità Esplicita Database (Mostra solo l'elenco dei database e delle viste collegate)
         if (AppState.showDbNotesInTree) {
@@ -1192,34 +1193,40 @@ Object.assign(UI, {
             } else if (isMultiTerm && activeScope === 'paragraph') {
                 const titleMatched = searchTerms.every(t => normTitle.includes(t));
                 const lines = UI._extractSearchPreviewLines(node);
-                let lineMatchFound = false;
-
-                if (titleMatched) {
-                    noteMatchCount += countMatchesInString(normTitle, searchTerms);
-                }
+                let boxCount = 0;
 
                 lines.forEach(line => {
                     const lowerLine = line.toLowerCase();
                     if (searchTerms.every(t => lowerLine.includes(t))) {
-                        lineMatchFound = true;
-                        noteMatchCount += countMatchesInString(lowerLine, searchTerms);
+                        boxCount++;
                     }
                 });
 
-                nodeDirectMatch = titleMatched || lineMatchFound;
+                nodeDirectMatch = titleMatched || boxCount > 0;
+                noteMatchCount = boxCount > 0 ? boxCount : (titleMatched ? 1 : 0);
                 AppState._globalHighlights += noteMatchCount;
             } else if (isMultiTerm && activeScope === 'chapter') {
                 const chapterScope = UI._getValidChapterNoteScope(node, searchTerms);
                 nodeDirectMatch = chapterScope.hasMatch;
 
                 if (nodeDirectMatch) {
-                    if (chapterScope.validTitle) {
-                        noteMatchCount += countMatchesInString(chapterScope.validTitle.toLowerCase(), searchTerms);
-                    }
-                    const validContentLower = UI.extractSearchableText(chapterScope.validHtml).toLowerCase();
-                    noteMatchCount += countMatchesInString(validContentLower, searchTerms);
+                    const chLines = UI._extractSearchPreviewLines({ content: chapterScope.validHtml });
+                    const boxCount = chLines.filter(line => {
+                        const lowerLine = line.toLowerCase();
+                        return searchTerms.some(t => lowerLine.includes(t));
+                    }).length;
+                    noteMatchCount = boxCount > 0 ? boxCount : 1;
                     AppState._globalHighlights += noteMatchCount;
                 }
+            } else if (isMultiTerm) {
+                nodeDirectMatch = true;
+                const noteLines = UI._extractSearchPreviewLines(node);
+                const boxCount = noteLines.filter(line => {
+                    const lowerLine = line.toLowerCase();
+                    return searchTerms.some(t => lowerLine.includes(t));
+                }).length;
+                noteMatchCount = boxCount > 0 ? boxCount : 1;
+                AppState._globalHighlights += noteMatchCount;
             } else {
                 nodeDirectMatch = true;
                 noteMatchCount += countMatchesInString(normTitle, searchTerms);
@@ -1438,12 +1445,11 @@ Object.assign(UI, {
 
         if (hasSearchPreview) {
             content.onmouseenter = (e) => {
-                if (e.target.closest('.node-add-btn')) {
+                if (e.target.closest('.node-add-btn, .toggle-btn')) {
                     UI._hideSearchPreviewTooltip();
                     return;
                 }
                 if (UI._isSearchPreviewDismissed(e.clientX, e.clientY)) return;
-                UI._lastSearchHoverClientX = e.clientX;
                 clearTimeout(UI._searchPreviewTimer);
                 UI._searchPreviewTimer = setTimeout(() => {
                     UI._searchPreviewTimer = null;
@@ -1451,27 +1457,14 @@ Object.assign(UI, {
                 }, 250);
             };
             content.onmousemove = (e) => {
-                if (e.target.closest('.node-add-btn')) {
+                if (e.target.closest('.node-add-btn, .toggle-btn')) {
                     UI._hideSearchPreviewTooltip();
                     return;
                 }
                 if (UI._isSearchPreviewDismissed(e.clientX, e.clientY)) return;
-                UI._lastSearchHoverClientX = e.clientX;
 
                 const st = UI._searchPreviewState;
-                if (st && st.noteId === node.id) {
-                    if (st.isTitleOnly) return;
-                    // Disattiva lo scrubbing orizzontale finché il tasto ALT è premuto
-                    if (e.altKey) return;
-                    // Mantiene bloccato lo scrubbing dopo l'uso di ALT+Rotella finché il mouse non si sposta con decisione
-                    if (st.wheelLocked) {
-                        if (typeof st.wheelAnchorX === 'number' && Math.abs(e.clientX - st.wheelAnchorX) <= 12) {
-                            return;
-                        }
-                        st.wheelLocked = false;
-                    }
-                    UI._updateSearchPreviewScrub(node.id, e.clientX, content);
-                } else if (!UI._searchPreviewTimer) {
+                if ((!st || st.noteId !== node.id) && !UI._searchPreviewTimer) {
                     UI._searchPreviewTimer = setTimeout(() => {
                         UI._searchPreviewTimer = null;
                         UI._showSearchPreviewTooltip(node, rawFilter, content);
@@ -1540,9 +1533,6 @@ Object.assign(UI, {
         addBtn.className = 'node-add-btn';
         addBtn.textContent = '+';
         addBtn.title = I18n.t('editor_alerts.tree_add_subnote');
-        addBtn.onmouseenter = () => {
-            if (hasSearchPreview) UI._hideSearchPreviewTooltip();
-        };
         addBtn.onclick = (e) => { e.stopPropagation(); node.expanded = true; if(typeof UI.addNote !== 'undefined') UI.addNote(node.id); };
 
         if (hasSearchPreview) {
