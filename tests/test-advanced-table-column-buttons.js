@@ -146,7 +146,7 @@ describe("AdvancedTable Column Buttons: Esecuzione Macro, Azioni e Configurazion
             colId: 'c_btn',
             config: {
                 buttonLabel: 'Approva Subito',
-                buttonColor: '#22c55e',
+                buttonColor: '#02AC40',
                 requireConfirm: true,
                 actionBlocks: [{ id: 'blk1', targetDbId: 'THIS_ROW', actionType: 'update', actions: [] }]
             }
@@ -156,7 +156,7 @@ describe("AdvancedTable Column Buttons: Esecuzione Macro, Azioni e Configurazion
 
         const col = AppState.databases[dbId].columns[0];
         Assert.strictEqual(col.buttonLabel, 'Approva Subito');
-        Assert.strictEqual(col.buttonColor, '#22c55e');
+        Assert.strictEqual(col.buttonColor, '#02AC40');
         Assert.strictEqual(col.requireConfirm, true);
         Assert.strictEqual(col.actionBlocks.length, 1);
         Assert.strictEqual(col.actionBlocks[0].id, 'blk1');

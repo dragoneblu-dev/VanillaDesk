@@ -121,8 +121,8 @@ Object.assign(AdvancedTable, {
 
         const buttonColors = [
             { val: '#2563eb', name: I18n.t('adv_actions.btn_color_blue') },
-            { val: '#22c55e', name: I18n.t('adv_actions.btn_color_green') },
-            { val: '#ef4444', name: I18n.t('adv_actions.btn_color_red') },
+            { val: '#02AC40', name: I18n.t('adv_actions.btn_color_green') },
+            { val: '#ed3a3a', name: I18n.t('adv_actions.btn_color_red') },
             { val: '#eab308', name: I18n.t('adv_actions.btn_color_yellow') },
             { val: '#8b5cf6', name: I18n.t('adv_actions.btn_color_purple') },
             { val: '#333333', name: I18n.t('adv_actions.btn_color_black') }

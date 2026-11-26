@@ -10,6 +10,7 @@
  * FEAT PRESERVE WHITESPACE ON TEXT SEARCH: Mantenimento rigoroso degli spazi iniziali e finali digitati per consentire la ricerca mirata di parole esatte.
  * NBSP NORMALIZATION: Normalizzazione trasparente tra spazi normali e non-breaking spaces (\u00A0 / &nbsp;).
  * FEAT MULTI-TERM AND SEARCH: Supporto a ';' come separatore AND e doppie virgolette per stringhe esatte.
+ * FEAT SEARCH HISTORY (PROPOSTA A): Dropdown delle ultime 10 ricerche al focus/click su input vuoto, navigabile con frecce e Invio.
  * CLEAN I18N CALLS: Chiamate dirette a I18n.t() senza controlli ternari o stringhe di fallback duplicate.
  */
 
@@ -21,7 +22,7 @@ Object.assign(EventsGlobal, {
     _triggerSearchUpdate: () => {
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
-            AppState._currentHighlightIndex = 0;
+            AppState._currentHighlightIndex = -1;
             EventsGlobal._executeSearchLogic(searchInput, true);
         }
     },
@@ -73,6 +74,7 @@ Object.assign(EventsGlobal, {
             AppState._totalHighlights = 0;
             AppState._globalHighlights = 0;
             AppState._currentHighlightIndex = 0;
+            AppState._highlightSyncBetween = false;
         }
 
         // 1. Aggiorna l'albero laterale con le note pertinenti
@@ -88,13 +90,14 @@ Object.assign(EventsGlobal, {
                 // Applica i nuovi mark all'istante all'interno del documento già a video
                 Editor.applyHighlight(editor, AppState.searchFilter);
                 AppState._totalHighlights = editor.querySelectorAll('mark.search-highlight').length;
+                AppState._highlightSyncBetween = false;
 
                 if (searchCounter) {
                     if (AppState._totalHighlights > 0) {
-                        if (AppState._currentHighlightIndex === -1) {
-                            AppState._currentHighlightIndex = AppState._totalHighlights - 1;
-                        } else if (AppState._currentHighlightIndex >= AppState._totalHighlights) {
-                            AppState._currentHighlightIndex = 0;
+                        if (AppState._currentHighlightIndex < 0 || AppState._currentHighlightIndex >= AppState._totalHighlights) {
+                            AppState._currentHighlightIndex = typeof AppState.resolveInitialHighlightFromPosition === 'function'
+                                ? AppState.resolveInitialHighlightFromPosition()
+                                : 0;
                         }
                         AppState._focusHighlight(AppState._currentHighlightIndex);
                     } else {
@@ -321,34 +324,83 @@ Object.assign(EventsGlobal, {
 
         if (searchInput) {
             searchInput.addEventListener('input', (e) => {
-                // REGOLA CHIAVE: L'autocompletamento scatta esclusivamente se si digita il prefisso '#'
+                // REGOLA CHIAVE: Se inizia con '#' apre autocomplete tag; se vuoto mostra lo storico
                 if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
                     if (e.target.value.startsWith('#')) {
                         SidebarManager.SearchAutocomplete.show(e.target, e.target.value);
+                    } else if (e.target.value === '') {
+                        SidebarManager.SearchAutocomplete.showHistory(e.target);
                     } else {
                         SidebarManager.SearchAutocomplete.hide();
                     }
                 }
-                AppState._currentHighlightIndex = 0;
+                AppState._currentHighlightIndex = -1;
                 EventsGlobal._executeSearchLogic(searchInput, false);
             });
             
             searchInput.addEventListener('focus', (e) => {
-                if (e.target.value && e.target.value.startsWith('#')) {
-                    if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                if (e.target._skipNextFocusHistory) {
+                    e.target._skipNextFocusHistory = false;
+                    return;
+                }
+                if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                    if (e.target.value && e.target.value.startsWith('#')) {
                         SidebarManager.SearchAutocomplete.show(e.target, e.target.value);
+                    } else if (e.target.value === '') {
+                        SidebarManager.SearchAutocomplete.showHistory(e.target);
+                    }
+                }
+            });
+
+            searchInput.addEventListener('click', (e) => {
+                if (e.target.value === '' && typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                    if (!SidebarManager.SearchAutocomplete.isHistoryOpen()) {
+                        SidebarManager.SearchAutocomplete.showHistory(e.target);
                     }
                 }
             });
             
-            // Gestione tastiera sul campo cerca: Invio forza la ricerca e naviga, ESC azzera tutto
+            // Gestione tastiera sul campo cerca: navigazione storico su input vuoto, Invio consolida e naviga, ESC azzera
             searchInput.addEventListener('keydown', (e) => {
+                if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete && SidebarManager.SearchAutocomplete.isHistoryOpen()) {
+                    if (e.key === 'ArrowDown') {
+                        e.preventDefault();
+                        SidebarManager.SearchAutocomplete.navigateHistory(1);
+                        return;
+                    }
+                    if (e.key === 'ArrowUp') {
+                        e.preventDefault();
+                        SidebarManager.SearchAutocomplete.navigateHistory(-1);
+                        return;
+                    }
+                    if (e.key === 'Enter') {
+                        if (SidebarManager.SearchAutocomplete.confirmSelectedHistory()) {
+                            e.preventDefault();
+                            return;
+                        }
+                    }
+                }
+
+                if (e.key === 'ArrowDown' && searchInput.value === '') {
+                    if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                        e.preventDefault();
+                        SidebarManager.SearchAutocomplete.showHistory(searchInput);
+                        SidebarManager.SearchAutocomplete.navigateHistory(1);
+                        return;
+                    }
+                }
+
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     e.stopPropagation();
 
+                    const wasHistoryOpen = typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete && SidebarManager.SearchAutocomplete.isHistoryOpen();
                     if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
                         SidebarManager.SearchAutocomplete.hide();
+                    }
+
+                    if (wasHistoryOpen && searchInput.value === '') {
+                        return;
                     }
 
                     if (searchInput.value !== '' || (AppState.activePropertyFilters && AppState.activePropertyFilters.length > 0)) {
@@ -369,6 +421,10 @@ Object.assign(EventsGlobal, {
 
                 if (e.key === 'Enter') {
                     e.preventDefault();
+
+                    if (searchInput.value.trim().length > 0 && typeof SidebarManager !== 'undefined' && SidebarManager.SearchHistory) {
+                        SidebarManager.SearchHistory.add(searchInput.value);
+                    }
                     
                     // Se la ricerca non era ancora partita perché sotto soglia, Invio forza l'esecuzione immediata
                     if (!AppState.searchFilter && searchInput.value.length > 0) {
@@ -390,8 +446,12 @@ Object.assign(EventsGlobal, {
 
         if (searchClear) {
             searchClear.addEventListener('click', () => {
+                if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
+                    SidebarManager.SearchAutocomplete.hide();
+                }
                 if (searchInput) {
                     searchInput.value = '';
+                    searchInput._skipNextFocusHistory = true;
                     searchInput.focus();
                 }
                 // Svuota anche i filtri Proprietà/Tag e azzera il filtro attivo

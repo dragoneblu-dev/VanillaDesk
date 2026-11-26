@@ -74,12 +74,12 @@ Object.assign(ButtonManager, {
         const formulaPreviews = [];
 
         const buttonColors = [
-            { val: '#2563eb', name: 'Blu (Default)' },
-            { val: '#22c55e', name: 'Verde (Successo)' },
-            { val: '#ef4444', name: 'Rosso (Pericolo)' },
-            { val: '#eab308', name: 'Giallo (Avviso)' },
-            { val: '#8b5cf6', name: 'Viola (Speciale)' },
-            { val: '#333333', name: 'Nero (Scuro)' }
+            { val: '#2563eb', name: 'Blu' },
+            { val: '#02ac40', name: 'Verde' },
+            { val: '#ed3a3a', name: 'Rosso' },
+            { val: '#eab308', name: 'Giallo' },
+            { val: '#8b5cf6', name: 'Viola' },
+            { val: '#333333', name: 'Nero' }
         ];
 
         let colorSwatchesHtml = `<div style="display: flex; gap: 8px; margin-top: 5px; flex-wrap: wrap;">`;

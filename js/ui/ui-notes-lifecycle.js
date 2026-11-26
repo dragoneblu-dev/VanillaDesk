@@ -14,6 +14,7 @@
  * Applicazione automatica dello stato spellcheck (true/false) all'apertura della nota.
  * Memorizzazione e innesco dell'evidenziazione temporanea sulla riga quando si torna indietro da una record note.
  * Normalizzazione degli spazi multipli nel titolo differita su blur per evitare salti del cursore durante la digitazione.
+ * Parametrizzazione di UI.deleteNote(noteId) per supportare l'eliminazione diretta dalla sidebar senza cambiare la nota aperta.
  */
 
 Object.assign(UI, {
@@ -529,6 +530,7 @@ Object.assign(UI, {
             }, 150);
         } else if (AppState.searchFilter && AppState.searchFilter.length > 0) {
             AppState._totalHighlights = contentEl.querySelectorAll('mark.search-highlight').length;
+            AppState._highlightSyncBetween = false;
             const searchCounter = document.getElementById('searchCounter');
             
             if (searchCounter) {
@@ -540,20 +542,30 @@ Object.assign(UI, {
                     
                     const marks = contentEl.querySelectorAll('mark.search-highlight');
                     const targetMark = marks[AppState._currentHighlightIndex];
-                    if (targetMark) {
+                    if (targetMark && !(UI._pendingSearchTarget && UI._pendingSearchTarget.noteId === id)) {
                         targetMark.classList.add('active-highlight');
-                        targetMark.style.backgroundColor = 'var(--marked-border)';
+                        targetMark.style.backgroundColor = '';
                         
                         let curr = targetMark;
                         while (curr && curr.id !== 'noteContent') {
                             if (curr.classList && curr.classList.contains('collapsed')) curr.classList.remove('collapsed');
                             curr = curr.parentNode;
                         }
-                        setTimeout(() => targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' }), 50);
+                        clearTimeout(AppState._autoScrollHighlightTimer);
+                        AppState._isAutoScrollingToHighlight = true;
+                        setTimeout(() => {
+                            targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            AppState._autoScrollHighlightTimer = setTimeout(() => {
+                                AppState._isAutoScrollingToHighlight = false;
+                            }, 550);
+                        }, 50);
                     }
                 } else {
                     searchCounter.innerText = "0/0";
                 }
+            }
+            if (UI._pendingSearchTarget && UI._pendingSearchTarget.noteId === id && typeof UI._focusPendingSearchTarget === 'function') {
+                setTimeout(() => UI._focusPendingSearchTarget(), 80);
             }
             setTimeout(() => { AppState.isSwitchingNote = false; UI.updateTOCScrollSpy(); }, 300);
         } else if (AppState.showBookmarksInTree) {
@@ -650,7 +662,7 @@ Object.assign(UI, {
             })());
 
             if (isDbDescendant) {
-                customIcon = Icons.recordPage;
+                customIcon = note.isMarked ? Icons.starFilled : Icons.recordPage;
                 iconColorStyle = 'color:var(--record-color);';
             } else {
                 if (note.isMarked && hasBookmark) {
@@ -721,10 +733,11 @@ Object.assign(UI, {
         }, 500);
     },
 
-    deleteCurrentNote: async () => {
-        if (!AppState.currentNoteId) return; 
+    deleteNote: async (targetNoteId = null) => {
+        const targetId = targetNoteId || AppState.currentNoteId;
+        if (!targetId) return; 
         
-        const note = Store.getNote(AppState.currentNoteId);
+        const note = Store.getNote(targetId);
         if (!note || note.deletedAt) return;
 
         // Calcolo ricorsivo sotto-note discendenti
@@ -794,7 +807,6 @@ Object.assign(UI, {
         if (!confirm(confirmMsg)) return; 
         
         const parentIdToReturn = note.parentId;
-        const targetId = AppState.currentNoteId;
 
         if (note && note.isRecordNote && note.linkedTableId && note.linkedRowId && typeof AdvancedTable !== 'undefined') {
             let dbState = AdvancedTable.getState(note.linkedTableId);
@@ -811,12 +823,14 @@ Object.assign(UI, {
 
         const now = Date.now();
         const affectedNotes = [];
+        const affectedIds = new Set();
         const traverse = (id) => { 
             const n = Store.getNote(id);
             if (n) {
                 n.deletedAt = now;
                 n._isDirty = true;
                 affectedNotes.push(n);
+                affectedIds.add(n.id);
                 if (typeof AdvancedTable !== 'undefined') AdvancedTable.deleteSystemPropertiesRow(id);
                 AppState.notes.filter(child => child.parentId === id).forEach(child => traverse(child.id));
             }
@@ -852,11 +866,17 @@ Object.assign(UI, {
 
         UI.showToast(I18n.t('notes_utils.toast_moved_trash'), "warning");
 
-        if (parentIdToReturn && Store.getNote(parentIdToReturn) && !Store.getNote(parentIdToReturn).deletedAt) {
-            UI.selectNote(parentIdToReturn);
-        } else {
-            UI.goHome();
+        if (AppState.currentNoteId && affectedIds.has(AppState.currentNoteId)) {
+            if (parentIdToReturn && Store.getNote(parentIdToReturn) && !Store.getNote(parentIdToReturn).deletedAt) {
+                UI.selectNote(parentIdToReturn);
+            } else {
+                UI.goHome();
+            }
         }
+    },
+
+    deleteCurrentNote: async () => {
+        return UI.deleteNote(AppState.currentNoteId);
     },
 
     handleEditorInput: () => {

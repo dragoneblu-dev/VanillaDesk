@@ -79,7 +79,6 @@ Object.assign(UI, {
                     if (chipsHtml) {
                         const dbTitle = UI.escapeHTML(dbState.title || I18n.t('editor.database'));
                         const recordBadgeLabel = I18n.t('notes_utils.header_record_badge');
-                        const openTableTitle = I18n.t('notes_utils.header_record_open_table');
 
                         htmlBlocks += `
                             <div style="background:var(--box-bg); border:1px dashed var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
@@ -139,7 +138,6 @@ Object.assign(UI, {
 
                 if (pagePropsChipsHtml) {
                     const pagePropsBadgeLabel = I18n.t('notes_utils.header_page_props_badge');
-                    const editPropsTitle = I18n.t('notes_utils.header_page_props_edit');
 
                     htmlBlocks += `
                         <div style="background:var(--box-bg); border:1px dashed var(--border-color); border-radius:6px; padding:8px 12px; margin-bottom:10px; max-width:var(--page-max-width); margin-left:auto; margin-right:auto; width:100%; box-sizing:border-box;">
@@ -181,8 +179,8 @@ Object.assign(UI, {
             overlay.style.zIndex = '10001';
 
             const localTitle = localNote.title || I18n.t('editor.untitled');
-            const diskDateStr = diskNote.updatedAt ? UI.formatDate(diskNote.updatedAt) : 'Data sconosciuta';
-            const localDateStr = localNote.updatedAt ? UI.formatDate(localNote.updatedAt) : 'Data sconosciuta';
+            const diskDateStr = diskNote.updatedAt ? UI.formatDate(diskNote.updatedAt) : I18n.t('bookmarks.date_unknown');
+            const localDateStr = localNote.updatedAt ? UI.formatDate(localNote.updatedAt) : I18n.t('bookmarks.date_unknown');
 
             overlay.innerHTML = `
                 <div class="link-modal modal-animate" style="width: 580px; max-width: 95vw; padding: 25px; border-radius: 8px; border: 1px solid var(--danger-color); box-shadow: 0 10px 30px rgba(0,0,0,0.35);">
@@ -199,11 +197,11 @@ Object.assign(UI, {
                         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px;">
                             <div style="background: rgba(37, 99, 235, 0.05); border: 1px solid rgba(37, 99, 235, 0.2); border-radius: 6px; padding: 10px;">
                                 <div style="font-size: 0.75rem; font-weight: bold; color: var(--accent-color); text-transform: uppercase;">${I18n.t('conflict.disk_version')}:</div>
-                                <div style="font-size: 0.85rem; margin-top: 4px; font-weight: 500;">Salvataggio: ${diskDateStr}</div>
+                                <div style="font-size: 0.85rem; margin-top: 4px; font-weight: 500;">${I18n.t('conflict.saved_at', { date: diskDateStr })}</div>
                             </div>
                             <div style="background: rgba(234, 179, 8, 0.05); border: 1px solid rgba(234, 179, 8, 0.2); border-radius: 6px; padding: 10px;">
                                 <div style="font-size: 0.75rem; font-weight: bold; color: #b45309; text-transform: uppercase;">${I18n.t('conflict.local_version')}:</div>
-                                <div style="font-size: 0.85rem; margin-top: 4px; font-weight: 500;">Salvataggio: ${localDateStr}</div>
+                                <div style="font-size: 0.85rem; margin-top: 4px; font-weight: 500;">${I18n.t('conflict.saved_at', { date: localDateStr })}</div>
                             </div>
                         </div>
 

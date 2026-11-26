@@ -257,7 +257,7 @@ Object.assign(Editor, {
 
             if (activeListType) {
                 btnList.classList.add('active-format');
-                btnList.title = "Disattiva elenco (Riconverti in testo normale)";
+                btnList.title = I18n.t('format_lists.disable_list_title');
                 if (activeListType === 'checklist') btnList.innerHTML = `<span style="display:inline-flex; align-items:center;">${Icons.checkSquare}</span>`;
                 else if (activeListType === 'ol-a') btnList.innerHTML = `<span style="font-size:14px; font-weight:bold; font-family:sans-serif;">A.</span>`;
                 else if (activeListType === 'ol') btnList.innerHTML = `<span style="font-size:14px; font-weight:bold; font-family:sans-serif;">1.</span>`;

@@ -31,7 +31,7 @@ Object.assign(UI, {
             resizer = document.createElement('div');
             resizer.id = 'advDrawerResizer';
             resizer.className = 'adv-drawer-resizer';
-            resizer.title = "Trascina per ridimensionare il pannello";
+            resizer.title = I18n.t('preferences.drawer_resizer_title');
             drawer.appendChild(resizer);
         }
 

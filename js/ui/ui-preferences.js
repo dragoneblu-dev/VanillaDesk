@@ -493,6 +493,10 @@ Object.assign(UI, {
             if (typeof UI.Menu !== 'undefined') UI.Menu.closeAll();
         }
 
+        if (typeof Editor !== 'undefined' && typeof Editor.updateToolbarOverflow === 'function') {
+            Editor.updateToolbarOverflow();
+        }
+
         if (typeof WidgetManager !== 'undefined') {
             WidgetManager.mountAll(document.getElementById('noteContent'));
         }

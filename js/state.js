@@ -10,6 +10,7 @@
  * per disambiguare i database relazionali da widget non-RDBMS in AppState.databases.
  * Supporto alla navigazione di ricerca nelle record note (isRecordNote) e relative sotto-note,
  * escludendo gli ID citati dalle scansioni e normalizzando \u00A0 in spazi standard.
+ * Sincronizzazione automatica dell'indice delle occorrenze di ricerca rispetto alla posizione visibile / cursore.
  * Tracciamento esplicito di storageMode ('fsaa' | 'idb' | 'ram') e idbWorkspaceId.
  */
 
@@ -51,6 +52,9 @@ const AppState = {
     _currentHighlightIndex: 0,
     _totalHighlights: 0,
     _globalHighlights: 0,
+    _highlightSyncBetween: false,
+    _isAutoScrollingToHighlight: false,
+    _autoScrollHighlightTimer: null,
 
     // =========================================================================
     // PARSER TERMINI DI RICERCA (SPAZIO = AND LOGICO, "..." = FRASE CON SPAZI, \ = ESCAPE)
@@ -239,7 +243,13 @@ const AppState = {
 
     findNext: () => {
         if (AppState._globalHighlights === 0 && AppState.activePropertyFilters.length === 0) return;
-        
+
+        if (AppState.searchFilter && typeof SidebarManager !== 'undefined' && SidebarManager.SearchHistory) {
+            const inputEl = document.getElementById('searchInput');
+            SidebarManager.SearchHistory.add((inputEl && inputEl.value) ? inputEl.value : AppState.searchFilter);
+        }
+
+        AppState._highlightSyncBetween = false;
         AppState._currentHighlightIndex++;
         
         if (AppState._currentHighlightIndex >= AppState._totalHighlights) {
@@ -257,7 +267,20 @@ const AppState = {
 
     findPrevious: () => {
         if (AppState._globalHighlights === 0 && AppState.activePropertyFilters.length === 0) return;
-        
+
+        if (AppState.searchFilter && typeof SidebarManager !== 'undefined' && SidebarManager.SearchHistory) {
+            const inputEl = document.getElementById('searchInput');
+            SidebarManager.SearchHistory.add((inputEl && inputEl.value) ? inputEl.value : AppState.searchFilter);
+        }
+
+        if (AppState._highlightSyncBetween) {
+            AppState._highlightSyncBetween = false;
+            if (AppState._currentHighlightIndex >= 0 && AppState._currentHighlightIndex < AppState._totalHighlights) {
+                AppState._focusHighlight(AppState._currentHighlightIndex);
+                return;
+            }
+        }
+
         AppState._currentHighlightIndex--;
         
         if (AppState._currentHighlightIndex < 0) {
@@ -395,7 +418,115 @@ const AppState = {
         return null;
     },
 
-    _focusHighlight: (index) => {
+    resolveInitialHighlightFromPosition: () => {
+        const editor = document.getElementById('noteContent');
+        const scrollArea = document.getElementById('editorScrollContent');
+        if (!editor) return 0;
+
+        const marks = editor.querySelectorAll('mark.search-highlight');
+        if (marks.length === 0) return 0;
+
+        const areaRect = scrollArea ? scrollArea.getBoundingClientRect() : { top: 0, bottom: window.innerHeight };
+        const refY = areaRect.top + 8;
+
+        for (let i = 0; i < marks.length; i++) {
+            const mRect = marks[i].getBoundingClientRect();
+            if (mRect.bottom >= refY) {
+                return i;
+            }
+        }
+
+        return 0;
+    },
+
+    syncHighlightToPosition: (useCaret = false) => {
+        if (AppState._isAutoScrollingToHighlight || AppState.isSwitchingNote) return;
+
+        const editor = document.getElementById('noteContent');
+        const scrollArea = document.getElementById('editorScrollContent');
+        const counterEl = document.getElementById('searchCounter');
+        if (!editor || !scrollArea) return;
+
+        const marks = editor.querySelectorAll('mark.search-highlight');
+        if (marks.length === 0) return;
+
+        const areaRect = scrollArea.getBoundingClientRect();
+        const viewTop = areaRect.top + 8;
+        const viewBottom = areaRect.bottom - 8;
+
+        // 1. Se richiesto, controlla la posizione esatta del cursore dentro l'editor
+        if (useCaret) {
+            const sel = window.getSelection();
+            if (sel && sel.rangeCount > 0 && editor.contains(sel.anchorNode)) {
+                const caretRange = sel.getRangeAt(0);
+                let foundIdx = -1;
+
+                for (let i = 0; i < marks.length; i++) {
+                    const markRange = document.createRange();
+                    markRange.selectNodeContents(marks[i]);
+                    try {
+                        if (caretRange.compareBoundaryPoints(Range.START_TO_END, markRange) <= 0) {
+                            foundIdx = i;
+                            break;
+                        }
+                    } catch (_) {}
+                }
+
+                if (foundIdx === -1) {
+                    AppState._currentHighlightIndex = marks.length - 1;
+                    AppState._highlightSyncBetween = true;
+                    marks.forEach(m => { m.classList.remove('active-highlight'); m.style.backgroundColor = ''; });
+                    if (counterEl) counterEl.innerText = `${marks.length}/${marks.length}`;
+                    return;
+                }
+
+                const mRect = marks[foundIdx].getBoundingClientRect();
+                if (mRect.top <= viewBottom && mRect.bottom >= areaRect.top) {
+                    AppState._highlightSyncBetween = false;
+                    AppState._currentHighlightIndex = foundIdx;
+                    AppState._focusHighlight(foundIdx, false);
+                } else {
+                    AppState._currentHighlightIndex = foundIdx - 1;
+                    AppState._highlightSyncBetween = true;
+                    marks.forEach(m => { m.classList.remove('active-highlight'); m.style.backgroundColor = ''; });
+                    if (counterEl) counterEl.innerText = `${foundIdx}/${marks.length}`;
+                }
+                return;
+            }
+        }
+
+        // 2. Altrimenti sincronizza rispetto alla parte visibile dello scroll corrente
+        let firstIdx = -1;
+        for (let i = 0; i < marks.length; i++) {
+            const mRect = marks[i].getBoundingClientRect();
+            if (mRect.bottom >= viewTop) {
+                firstIdx = i;
+                break;
+            }
+        }
+
+        if (firstIdx === -1) {
+            AppState._currentHighlightIndex = marks.length - 1;
+            AppState._highlightSyncBetween = true;
+            marks.forEach(m => { m.classList.remove('active-highlight'); m.style.backgroundColor = ''; });
+            if (counterEl) counterEl.innerText = `${marks.length}/${marks.length}`;
+            return;
+        }
+
+        const firstRect = marks[firstIdx].getBoundingClientRect();
+        if (firstRect.top <= viewBottom) {
+            AppState._highlightSyncBetween = false;
+            AppState._currentHighlightIndex = firstIdx;
+            AppState._focusHighlight(firstIdx, false);
+        } else {
+            AppState._currentHighlightIndex = firstIdx - 1;
+            AppState._highlightSyncBetween = true;
+            marks.forEach(m => { m.classList.remove('active-highlight'); m.style.backgroundColor = ''; });
+            if (counterEl) counterEl.innerText = `${firstIdx}/${marks.length}`;
+        }
+    },
+
+    _focusHighlight: (index, shouldScroll = true) => {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
         
@@ -409,6 +540,7 @@ const AppState = {
 
         const targetMark = marks[index];
         if (targetMark) {
+            AppState._highlightSyncBetween = false;
             // Delega la formattazione e il contrasto esclusivamente alla classe CSS active-highlight
             targetMark.classList.add('active-highlight');
             targetMark.style.backgroundColor = ''; 
@@ -421,7 +553,14 @@ const AppState = {
                 curr = curr.parentNode;
             }
             
-            targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            if (shouldScroll) {
+                clearTimeout(AppState._autoScrollHighlightTimer);
+                AppState._isAutoScrollingToHighlight = true;
+                targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                AppState._autoScrollHighlightTimer = setTimeout(() => {
+                    AppState._isAutoScrollingToHighlight = false;
+                }, 550);
+            }
             
             const counterEl = document.getElementById('searchCounter');
             if (counterEl) counterEl.innerText = `${index + 1}/${AppState._totalHighlights}`;

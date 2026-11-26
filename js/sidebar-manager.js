@@ -1,7 +1,8 @@
 /**
  * sidebar-manager.js
  * Modulo dedicato alla gestione visiva e al ridimensionamento dell'albero di navigazione.
- * Integra il motore SearchAutocomplete per filtrare le note tramite Tag e Proprietà di Pagina.
+ * Integra il motore SearchAutocomplete per filtrare le note tramite Tag e Proprietà di Pagina
+ * e per accedere allo storico delle ultime 10 ricerche (SearchHistory).
  * SearchAutocomplete accetta ed elabora termini sia con prefisso '#' che puri, lasciando al
  * controller degli eventi la discrezione sull'apertura dell'overlay.
  * L'altezza e lo scorrimento del menu a tendina sono governati dal CSS (.adv-filter-autocomplete).
@@ -67,8 +68,55 @@ const SidebarManager = {
         }
     },
 
+    // STORICO DELLE ULTIME 10 RICERCHE TESTUALI CONSOLIDATE
+    SearchHistory: {
+        STORAGE_KEY: 'pronotes_search_history',
+        MAX_ITEMS: 10,
+
+        getAll: () => {
+            try {
+                const raw = localStorage.getItem(SidebarManager.SearchHistory.STORAGE_KEY);
+                const parsed = raw ? JSON.parse(raw) : [];
+                return Array.isArray(parsed) ? parsed.filter(q => typeof q === 'string' && q.trim().length > 0).slice(0, SidebarManager.SearchHistory.MAX_ITEMS) : [];
+            } catch (_) {
+                return [];
+            }
+        },
+
+        add: (rawQuery) => {
+            if (!rawQuery || typeof rawQuery !== 'string') return;
+            const clean = rawQuery.replace(/\u00A0/g, ' ');
+            if (clean.trim().length === 0) return;
+
+            const current = SidebarManager.SearchHistory.getAll().filter(item => item !== clean);
+            current.unshift(clean);
+            const trimmed = current.slice(0, SidebarManager.SearchHistory.MAX_ITEMS);
+
+            try {
+                localStorage.setItem(SidebarManager.SearchHistory.STORAGE_KEY, JSON.stringify(trimmed));
+            } catch (_) {}
+        },
+
+        remove: (index) => {
+            const current = SidebarManager.SearchHistory.getAll();
+            if (index >= 0 && index < current.length) {
+                current.splice(index, 1);
+                try {
+                    localStorage.setItem(SidebarManager.SearchHistory.STORAGE_KEY, JSON.stringify(current));
+                } catch (_) {}
+            }
+        },
+
+        clear: () => {
+            try {
+                localStorage.removeItem(SidebarManager.SearchHistory.STORAGE_KEY);
+            } catch (_) {}
+        }
+    },
+
     // MOTORE AUTOCOMPLETE E FILTRI A PILLOLA PER LA RICERCA LATERALE
     SearchAutocomplete: {
+        _activeHistoryIndex: -1,
 
         // Formatta valori composti di tipo Date Range o Note Link; restituisce null per altri tipi
         _formatDateOrLinkValue: (col, val) => {
@@ -148,7 +196,153 @@ const SidebarManager = {
             }
             return 'default-color';
         },
-        
+
+        _getOrCreatePortal: (inputEl) => {
+            let popup = document.getElementById('sidebar-filter-autocomplete-portal');
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.id = 'sidebar-filter-autocomplete-portal';
+                popup.className = 'adv-filter-autocomplete';
+                popup.style.position = 'fixed';
+                popup.style.zIndex = '99999';
+                document.body.appendChild(popup);
+            }
+
+            const rect = inputEl.getBoundingClientRect();
+            popup.style.top = rect.bottom + 5 + 'px';
+            popup.style.left = rect.left + 'px';
+            popup.style.minWidth = rect.width + 'px';
+            const availableSpace = Math.max(rect.width, window.innerWidth - rect.left - 15);
+            const maxAllowedWidth = Math.min(rect.width + 200, availableSpace);
+            popup.style.maxWidth = maxAllowedWidth + 'px';
+            popup.style.width = 'max-content';
+            popup.style.boxSizing = 'border-box';
+            return popup;
+        },
+
+        isHistoryOpen: () => {
+            const popup = document.getElementById('sidebar-filter-autocomplete-portal');
+            return !!(popup && popup.style.display === 'block' && popup.dataset.mode === 'history');
+        },
+
+        showHistory: (inputEl) => {
+            if (!inputEl || inputEl.value !== '') {
+                SidebarManager.SearchAutocomplete.hide();
+                return;
+            }
+
+            const history = SidebarManager.SearchHistory.getAll();
+            if (history.length === 0) {
+                SidebarManager.SearchAutocomplete.hide();
+                return;
+            }
+
+            const popup = SidebarManager.SearchAutocomplete._getOrCreatePortal(inputEl);
+            popup.dataset.mode = 'history';
+            SidebarManager.SearchAutocomplete._activeHistoryIndex = -1;
+
+            const titleTxt = I18n.t('sidebar_filter.recent_searches_title');
+            const clearTxt = I18n.t('sidebar_filter.clear_history');
+            const removeItemTitle = I18n.t('sidebar_filter.remove_history_item');
+            const searchIcon = (typeof Icons !== 'undefined' && (Icons.time || Icons.search)) ? (Icons.time || Icons.search) : '🕒';
+
+            let html = `
+                <div style="display:flex; justify-content:space-between; align-items:center; padding:4px 8px;">
+                    <span style="font-size:0.7rem; color:var(--text-secondary); font-weight:bold; text-transform:uppercase;">${titleTxt}</span>
+                    <span style="font-size:0.7rem; color:var(--text-secondary); cursor:pointer; opacity:0.8;"
+                          onmouseenter="this.style.opacity='1'; this.style.color='var(--danger-color)';"
+                          onmouseleave="this.style.opacity='0.8'; this.style.color='var(--text-secondary)';"
+                          onmousedown="event.preventDefault(); event.stopPropagation(); SidebarManager.SearchAutocomplete.clearAllHistory();">${clearTxt}</span>
+                </div>
+            `;
+
+            history.forEach((queryStr, idx) => {
+                const safeQuery = (typeof UI !== 'undefined' && UI.escapeHTML) ? UI.escapeHTML(queryStr) : queryStr.replace(/</g, '&lt;');
+                const jsEncoded = encodeURIComponent(queryStr).replace(/'/g, '%27');
+
+                html += `
+                    <div class="adv-filter-autocomplete-item history-item" data-history-idx="${idx}" data-query-enc="${jsEncoded}"
+                         style="display:flex; align-items:center; justify-content:space-between; gap:8px;"
+                         onmousedown="event.preventDefault(); SidebarManager.SearchAutocomplete.selectHistoryItem(decodeURIComponent(this.dataset.queryEnc || ''))">
+                        <div style="display:flex; align-items:center; gap:6px; flex:1; min-width:0; overflow:hidden;">
+                            <span style="opacity:0.6; display:inline-flex; flex-shrink:0;">${searchIcon}</span>
+                            <span style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${safeQuery}</span>
+                        </div>
+                        <span title="${removeItemTitle}"
+                              style="opacity:0.5; font-size:0.75rem; padding:1px 4px; border-radius:3px; flex-shrink:0; cursor:pointer;"
+                              onmouseenter="this.style.opacity='1'; this.style.color='var(--danger-color)';"
+                              onmouseleave="this.style.opacity='0.5'; this.style.color='inherit';"
+                              onmousedown="event.preventDefault(); event.stopPropagation(); SidebarManager.SearchAutocomplete.removeHistoryItem(${idx});">✕</span>
+                    </div>
+                `;
+            });
+
+            popup.innerHTML = html;
+            popup.style.display = 'block';
+        },
+
+        navigateHistory: (delta) => {
+            if (!SidebarManager.SearchAutocomplete.isHistoryOpen()) return false;
+            const popup = document.getElementById('sidebar-filter-autocomplete-portal');
+            const items = Array.from(popup.querySelectorAll('.history-item'));
+            if (items.length === 0) return false;
+
+            let nextIdx = SidebarManager.SearchAutocomplete._activeHistoryIndex + delta;
+            if (nextIdx < 0) nextIdx = items.length - 1;
+            if (nextIdx >= items.length) nextIdx = 0;
+
+            SidebarManager.SearchAutocomplete._activeHistoryIndex = nextIdx;
+            items.forEach((el, i) => {
+                if (i === nextIdx) {
+                    el.style.background = 'var(--item-hover)';
+                    el.style.color = 'var(--accent-color)';
+                    el.scrollIntoView({ block: 'nearest' });
+                } else {
+                    el.style.background = '';
+                    el.style.color = '';
+                }
+            });
+            return true;
+        },
+
+        confirmSelectedHistory: () => {
+            if (!SidebarManager.SearchAutocomplete.isHistoryOpen()) return false;
+            const idx = SidebarManager.SearchAutocomplete._activeHistoryIndex;
+            if (idx < 0) return false;
+            const popup = document.getElementById('sidebar-filter-autocomplete-portal');
+            const activeItem = popup.querySelector(`.history-item[data-history-idx="${idx}"]`);
+            if (!activeItem) return false;
+            const queryStr = decodeURIComponent(activeItem.dataset.queryEnc || '');
+            if (!queryStr) return false;
+            SidebarManager.SearchAutocomplete.selectHistoryItem(queryStr);
+            return true;
+        },
+
+        selectHistoryItem: (queryText) => {
+            const inputEl = document.getElementById('searchInput');
+            if (!inputEl) return;
+            inputEl.value = queryText;
+            SidebarManager.SearchAutocomplete.hide();
+            SidebarManager.SearchHistory.add(queryText);
+
+            if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._executeSearchLogic === 'function') {
+                AppState._currentHighlightIndex = -1;
+                EventsGlobal._executeSearchLogic(inputEl, true);
+            }
+            inputEl.focus();
+        },
+
+        removeHistoryItem: (index) => {
+            SidebarManager.SearchHistory.remove(index);
+            const inputEl = document.getElementById('searchInput');
+            if (inputEl) SidebarManager.SearchAutocomplete.showHistory(inputEl);
+        },
+
+        clearAllHistory: () => {
+            SidebarManager.SearchHistory.clear();
+            SidebarManager.SearchAutocomplete.hide();
+        },
+
         // Raccoglie tutte le corrispondenze presenti nel database di sistema per un determinato valore di tag
         getMatchesForTag: (cleanTag) => {
             if (!cleanTag) return [];
@@ -244,27 +438,9 @@ const SidebarManager = {
                 return;
             }
 
-            let popup = document.getElementById('sidebar-filter-autocomplete-portal');
-            if (!popup) {
-                popup = document.createElement('div');
-                popup.id = 'sidebar-filter-autocomplete-portal';
-                popup.className = 'adv-filter-autocomplete';
-                popup.style.position = 'fixed';
-                popup.style.zIndex = '99999';
-                document.body.appendChild(popup);
-            }
-
-            const rect = inputEl.getBoundingClientRect();
-            popup.style.top = rect.bottom + 5 + 'px';
-            popup.style.left = rect.left + 'px';
-
-            // CALCOLO DINAMICO LARGHEZZA: Larghezza minima pari al campo di input, espandibile fino a +200px con protezione schermo
-            popup.style.minWidth = rect.width + 'px';
-            const availableSpace = Math.max(rect.width, window.innerWidth - rect.left - 15);
-            const maxAllowedWidth = Math.min(rect.width + 200, availableSpace);
-            popup.style.maxWidth = maxAllowedWidth + 'px';
-            popup.style.width = 'max-content';
-            popup.style.boxSizing = 'border-box';
+            const popup = SidebarManager.SearchAutocomplete._getOrCreatePortal(inputEl);
+            popup.dataset.mode = 'tags';
+            SidebarManager.SearchAutocomplete._activeHistoryIndex = -1;
 
             let html = `<div style="font-size:0.7rem; color:var(--text-secondary); padding:4px 8px; font-weight:bold; text-transform:uppercase;">${I18n.t('sidebar_filter.suggestions_title')}</div>`;
             
@@ -296,8 +472,10 @@ const SidebarManager = {
 
         hide: (reason = 'Sconosciuta') => {
             const popup = document.getElementById('sidebar-filter-autocomplete-portal');
+            SidebarManager.SearchAutocomplete._activeHistoryIndex = -1;
             if (popup && popup.style.display !== 'none') {
                 popup.style.display = 'none';
+                delete popup.dataset.mode;
             }
         },
 

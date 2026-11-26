@@ -15,6 +15,7 @@
  * Riposizionamento automatico e restituzione del focus all'editor subito dopo
  * il link al termine della modifica, con blocco dello scroll { preventScroll: true } per impedire salti a inizio pagina.
  * YOUTUBE FILE PROTOCOL FALLBACK: Su protocollo file:// delega a WidgetManager.setupVideoShell evitando l'Errore 153.
+ * Posizionamento orizzontale della toolbar contestuale dei link centrato sotto la coordinata del click.
  */
 
 const LinkManager = {
@@ -153,7 +154,7 @@ const LinkManager = {
         else if (type === 'youtube') LinkManager.openYoutubeModal();
     },
 
-    showFloatingMenu: (link) => {
+    showFloatingMenu: (link, clickEvent = null) => {
         LinkManager.hideFloatingMenu();
         LinkManager.activeLink = link;
 
@@ -187,15 +188,24 @@ const LinkManager = {
 
         document.body.appendChild(popover);
 
-        const rect = link.getBoundingClientRect();
-        let top = rect.bottom + window.scrollY + 5;
-        let left = rect.left + window.scrollX;
+        let targetRect = link.getBoundingClientRect();
+        if (clickEvent && typeof clickEvent.clientY === 'number' && typeof link.getClientRects === 'function') {
+            const rects = Array.from(link.getClientRects());
+            const matchedRect = rects.find(r => clickEvent.clientY >= r.top && clickEvent.clientY <= r.bottom);
+            if (matchedRect) targetRect = matchedRect;
+        }
 
+        let top = targetRect.bottom + window.scrollY + 5;
+        let left = (clickEvent && typeof clickEvent.clientX === 'number')
+            ? (clickEvent.clientX + window.scrollX - (popover.offsetWidth / 2))
+            : (targetRect.left + window.scrollX);
+
+        if (left < 10) left = 10;
         if (left + popover.offsetWidth > window.innerWidth - 10) {
-            left = window.innerWidth - popover.offsetWidth - 10;
+            left = Math.max(10, window.innerWidth - popover.offsetWidth - 10);
         }
         if (top + popover.offsetHeight > window.innerHeight + window.scrollY) {
-            top = rect.top + window.scrollY - popover.offsetHeight - 5;
+            top = targetRect.top + window.scrollY - popover.offsetHeight - 5;
         }
 
         popover.style.top = top + 'px';

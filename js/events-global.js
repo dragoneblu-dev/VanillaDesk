@@ -14,11 +14,12 @@
  * Mantiene visibile il cursore nello scrollArea su ogni input nell'editor.
  * Scorciatoie titoli: H1 (Ctrl+Alt+1 / Ctrl+Shift+1), H2 (Ctrl+Alt+2 / Ctrl+Shift+2), H3 (Ctrl+Alt+3 / Ctrl+Shift+3), Paragrafo (Ctrl+Alt+0).
  * Scorciatoie colorazione: Ctrl+Shift+H (Evidenziatore), Ctrl+Alt+H (Colore Testo).
+ * Supporto a Ctrl+F per aprire e focalizzare la ricerca interna (con passthrough al browser su seconda pressione).
  * Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
  * Normalizzazione immediata del cursore per impedire digitazioni nella zona morta ZWS.
  * Chiusura automatica della toolbar fluttuante del link all'uscita del cursore.
+ * Sincronizzazione dell'indice delle occorrenze di ricerca al movimento nell'editor (scroll o click/tastiera).
  * Persistenza immediata su saveToIndexedDB() alla chiusura della scheda se in modalità Browser.
- * Svuotamento rapido del campo di ricerca con ESC dalla schermata di scrittura.
  */
 
 window.EventsGlobal = window.EventsGlobal || {};
@@ -26,6 +27,7 @@ window.EventsGlobal = window.EventsGlobal || {};
 Object.assign(EventsGlobal, {
     _lastMiddleClickTime: 0,
     _initialized: false,
+    _searchScrollSyncTimer: null,
 
     // Risoluzione ed esecuzione diretta dei link (usata da click, auxclick e Ctrl+Click)
     openLinkDirectly: (link) => {
@@ -108,6 +110,19 @@ Object.assign(EventsGlobal, {
         // 2. Inizializzazione Sottomodulo Drag & Drop e Gutter
         if (typeof EventsGlobal.initDragAndDrop === 'function' && editorEl) {
             EventsGlobal.initDragAndDrop(editorEl, scrollArea);
+        }
+
+        // Sincronizza l'indicatore delle occorrenze quando l'utente scrolla manualmente l'editor
+        if (scrollArea) {
+            scrollArea.addEventListener('scroll', () => {
+                if (!AppState._totalHighlights || AppState._isAutoScrollingToHighlight || AppState.isSwitchingNote) return;
+                clearTimeout(EventsGlobal._searchScrollSyncTimer);
+                EventsGlobal._searchScrollSyncTimer = setTimeout(() => {
+                    if (typeof AppState.syncHighlightToPosition === 'function') {
+                        AppState.syncHighlightToPosition(false);
+                    }
+                }, 120);
+            }, { passive: true });
         }
 
         // 3. Chiusura automatica toolbar link quando il cursore esce dall'elemento
@@ -267,8 +282,16 @@ Object.assign(EventsGlobal, {
                 }
             }
 
-            // Ctrl+P: apre sidebar e focalizza ricerca globale
-            if (isCtrlOrCmd && key === 'p') {
+            // Ctrl+F: apre sidebar e focalizza ricerca globale (seconda pressione lascia passare al browser)
+            if (isCtrlOrCmd && !e.shiftKey && !e.altKey && key === 'f') {
+                const searchInputEl = document.getElementById('searchInput');
+                const hasModalOpen = !!document.querySelector('.link-modal-overlay:not(.hidden), #advRelationPeekModalOverlay');
+                const isGraphOpen = !!(typeof GraphApp !== 'undefined' && GraphApp.isOpen);
+
+                if (hasModalOpen || isGraphOpen || (searchInputEl && document.activeElement === searchInputEl)) {
+                    return;
+                }
+
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -279,7 +302,6 @@ Object.assign(EventsGlobal, {
                     if (btn) btn.classList.add('active');
                 }
 
-                const searchInputEl = document.getElementById('searchInput');
                 if (searchInputEl) {
                     searchInputEl.focus();
                     if (typeof searchInputEl.select === 'function') {
@@ -496,12 +518,6 @@ Object.assign(EventsGlobal, {
             if (e.key === 'Escape') {
                 const drawer = document.getElementById('advGlobalDrawer');
                 const wasDrawerOpen = !!(drawer && drawer.classList.contains('open'));
-                const wasMultiSelect = !!(typeof Editor !== 'undefined' && Editor.multiSelectActive);
-                const wasMenuOpen = !!document.querySelector('.adv-dropdown, #adv-link-popover, #adv-bookmark-popover');
-                const hasOpenModal = !!document.querySelector('.link-modal-overlay:not(.hidden), #advRelationPeekModalOverlay');
-                const isGraphOpen = !!(typeof GraphApp !== 'undefined' && GraphApp.isOpen);
-                const editorWrapper = document.getElementById('editorWrapper');
-                const isWritingScreen = !!(editorWrapper && !editorWrapper.classList.contains('hidden'));
 
                 if (typeof TableManager !== 'undefined') {
                     if (TableManager.Drag && TableManager.Drag.dragState) TableManager.Drag.handleMouseUp();
@@ -529,18 +545,6 @@ Object.assign(EventsGlobal, {
                 if (wasDrawerOpen) {
                     if (typeof UI.closeDrawer !== 'undefined') UI.closeDrawer();
                 }
-
-                // Svuota il campo di ricerca nella schermata di scrittura se non erano aperti overlay, menu o multi-cursore
-                const searchInput = document.getElementById('searchInput');
-                if (searchInput && searchInput.value !== '' && isWritingScreen && !isGraphOpen && !wasDrawerOpen && !hasOpenModal && !wasMenuOpen && !wasMultiSelect) {
-                    searchInput.value = '';
-                    if (typeof SidebarManager !== 'undefined' && SidebarManager.SearchAutocomplete) {
-                        SidebarManager.SearchAutocomplete.hide();
-                    }
-                    if (typeof EventsGlobal._triggerSearchUpdate === 'function') {
-                        EventsGlobal._triggerSearchUpdate();
-                    }
-                }
             }
         });
 
@@ -560,10 +564,13 @@ Object.assign(EventsGlobal, {
             }
         });
 
-        // Correzione automatica del cursore dalla zona morta dello ZWS
+        // Correzione automatica del cursore dalla zona morta dello ZWS e aggiornamento indice ricerca
         editorEl.addEventListener('mouseup', () => {
             if (typeof Editor !== 'undefined' && typeof Editor.adjustCaretAwayFromZwsDeadZone === 'function') {
                 Editor.adjustCaretAwayFromZwsDeadZone();
+            }
+            if (AppState._totalHighlights > 0 && typeof AppState.syncHighlightToPosition === 'function') {
+                AppState.syncHighlightToPosition(true);
             }
         });
 
@@ -667,7 +674,12 @@ Object.assign(EventsGlobal, {
 
         editorEl.addEventListener('mouseup', checkSelectionAll);
         editorEl.addEventListener('keyup', (e) => {
-            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) checkSelectionAll(e);
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'PageUp', 'PageDown', 'Home', 'End'].includes(e.key)) {
+                checkSelectionAll(e);
+                if (AppState._totalHighlights > 0 && typeof AppState.syncHighlightToPosition === 'function') {
+                    AppState.syncHighlightToPosition(true);
+                }
+            }
         });
 
         // Modifica Checkbox: deidratazione rigorosa con esclusione dei database autonomi
@@ -681,7 +693,7 @@ Object.assign(EventsGlobal, {
                 const now = new Date().toLocaleString();
                 if (e.target.checked) e.target.setAttribute('checked', 'true');
                 else e.target.removeAttribute('checked');
-                e.target.setAttribute('title', `Modificato il: ${now}`);
+                e.target.setAttribute('title', I18n.t('ui_lifecycle.modified_on', { date: now }));
 
                 if (AppState.currentNoteId && !AppState.isSwitchingNote) {
                     const note = Store.getNote(AppState.currentNoteId);
@@ -843,7 +855,7 @@ Object.assign(EventsGlobal, {
                     e.preventDefault();
                     e.stopPropagation(); 
                     
-                    if (typeof LinkManager !== 'undefined') LinkManager.showFloatingMenu(link);
+                    if (typeof LinkManager !== 'undefined') LinkManager.showFloatingMenu(link, e);
                     if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
                     return;
                 } else {

@@ -288,7 +288,7 @@ Object.assign(Editor, {
                 let currentText = livePre.innerText;
                 if (currentText.endsWith('\n\n')) currentText = currentText.slice(0, -1);
                 else if (currentText.endsWith('\n') && currentText !== '\n') currentText = currentText.slice(0, -1);
-                const codeState = { ...(AppState.databases && AppState.databases[trueId] ? AppState.databases[trueId] : { title: 'Codice', language: 'none' }), content: currentText };
+                const codeState = { ...(AppState.databases && AppState.databases[trueId] ? AppState.databases[trueId] : { title: I18n.t('code_widget.default_title'), language: 'none' }), content: currentText };
                 serializedJson = JSON.stringify(codeState);
             } else if (AppState.databases && AppState.databases[trueId]) {
                 // Serializzazione diretta senza clonazione profonda ridondante

@@ -506,6 +506,7 @@
                         <span style="display:inline-flex; align-items:center; gap:5px;"><script>document.write(Icons.editTbl)</script> <script>document.write(I18n.t('toolbar.context_edit'))</script></span>
                     </button>
                 </div>
+                <button id="btnToolbarOverflow" class="toolbar-overflow-btn hidden" onmousedown="event.preventDefault(); Editor.saveSelection();" onclick="Editor.scrollToolbarOverflow()">»</button>
 
                 <div style="display:flex; flex:1; overflow:hidden; position:relative;">
                     
@@ -773,6 +774,7 @@
     <script src="js/ui/ui-modals.js"></script>
     <script src="js/ui/ui-tree-db.js"></script>
     <script src="js/ui/ui-tree-dnd.js"></script>
+    <script src="js/ui/ui-tree-search-preview.js"></script>
     <script src="js/ui/ui-tree.js"></script>
     
     <script src="js/sidebar-manager.js"></script>

@@ -46,7 +46,7 @@ Object.assign(UI, {
         }
 
         let html = `<div style="margin-top: 40px; padding-top: 20px; border-top: 1px dashed var(--border-color); font-size: 0.85rem; color: var(--text-secondary);">`;
-        html += `<div style="font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">Note a Piè di Pagina</div>`;
+        html += `<div style="font-weight: bold; margin-bottom: 10px; text-transform: uppercase;">${I18n.t('inline_notes.footnotes_title')}</div>`;
 
         markers.forEach((marker, index) => {
             let htmlContent = '';

@@ -397,6 +397,9 @@ adv_pivot: {
     no_results_filtered: "Nessun risultato per i filtri attuali."
 },
 sidebar_filter: {
+    recent_searches_title: "Ricerche recenti:",
+    clear_history: "Pulisci",
+    remove_history_item: "Rimuovi dallo storico",
     resizer_title: "Trascina per ridimensionare la barra laterale",
     yes_checked: "Sì (Spuntato)",
     no_empty: "No (Vuoto)",
@@ -533,6 +536,12 @@ conflict: {
     toast_reloaded: "Nota ricaricata da disco. Le tue modifiche sono recuperabili con Ctrl+Z."
 },
 tree: {
+    badge_bookmark: "Segnalibro",
+    badge_inline_note: "Appunto inline",
+    badge_link: "Link",
+    badge_code: "Codice",
+    badge_journal: "Diario",
+    badge_table: "Tabella",
     scope_paragraph_title: "Tutti i termini nello stesso paragrafo",
     scope_chapter_title: "Tutti i termini nello stesso capitolo",
     scope_note_title: "Termini in qualsiasi punto della nota",
@@ -629,9 +638,7 @@ journal: {
 notes_utils: {
     menu_spellcheck: "Controllo Ortografico",
     header_record_badge: "RECORD:",
-    header_record_open_table: "Apri Tabella Database",
     header_page_props_badge: "PROPRIETÀ E TAG PAGINA",
-    header_page_props_edit: "Modifica Proprietà Pagina",
     menu_save_template: "Salva come Template Locale",
     menu_manage_templates: "Gestisci Template...",
     menu_export_modpack: "Esporta come Modulo (Modpack)",
@@ -902,6 +909,24 @@ adv_timeline: {
     next_task_tooltip: "Successivo: {title} ({date})"
 },
 image_manager: {
+    btn_note_add: "Aggiungi descrizione / nota",
+    btn_note_edit: "Modifica descrizione / nota",
+    drawer_note_title: "Descrizione Immagine",
+    drawer_note_placeholder: "Scrivi una descrizione o nota per questa immagine (apparirà al passaggio del mouse e nell'anteprima)...",
+    copy_image: "Copia immagine negli appunti",
+    copied_toast: "Immagine copiata negli appunti!",
+    copy_error: "Impossibile copiare l'immagine negli appunti.",
+    download_image: "Scarica immagine",
+    edit_image: "Ritaglia e Annota",
+    lightbox_fit: "Adatta",
+    editor_title: "Ritaglia e Annota Immagine",
+    tool_crop: "Ritaglia",
+    tool_rect: "Riquadro",
+    tool_arrow: "Freccia",
+    tool_blur: "Oscura",
+    tool_undo: "Annulla",
+    btn_save_changes: "Salva Modifiche",
+    saved_toast: "Immagine aggiornata con successo!",
     align_left: "Testo a destra (Float Left)",
     align_center: "Al Centro (Nessun testo ai lati)",
     align_right: "Testo a sinistra (Float Right)",
@@ -949,7 +974,7 @@ toolbar: {
     favorite: "Aggiungi ai Preferiti",
     page_properties: "Proprietà / Tag Pagina",
     page_info: "Informazioni e Collegamenti Nota",
-    toggle_sidebar: "Mostra/Nascondi Struttura documento\n\nCtrl+P: Permette l'apertura automatica del pannello, pronto per una ricerca",
+    toggle_sidebar: "Mostra/Nascondi Struttura documento\n\nCtrl+F: Permette l'apertura automatica del pannello, pronto per una ricerca",
     toggle_minimap: "Toggle Minimap",
     main_menu: "Menu Principale",
     search_prev: "Precedente (Invio)",
@@ -1342,6 +1367,7 @@ link_manager: {
     viewer_security_notice: "Per motivi di sicurezza browser,<br>clicca su <b>\"Apri/Ricarica File\"</b> in alto per visualizzare il contenuto."
 },
 preferences: {
+    drawer_resizer_title: "Trascina per ridimensionare il pannello",
     status_unsaved: "⚠️ Salva File (Solo RAM)",
     status_unsaved_title: "I dati sono salvati solo nella memoria temporanea. Clicca per scegliere una cartella e salvare l'intero Workspace su disco.",
     drawer_ghost_title: "Modalità X-Ray (Scompare temporaneamente)",
@@ -1549,6 +1575,7 @@ widget_manager: {
     move_success: "Spostamento in \"{title}\" completato con successo."
 },
 format_lists: {
+    disable_list_title: "Disattiva elenco (Riconverti in testo normale)",
     prompt_start_num: "Imposta il numero iniziale per questo elenco numerato:",
     alert_invalid_num: "Inserisci un numero intero positivo valido (minimo 0).",
     toast_num_set: "Numerazione impostata da {num}.",
@@ -1651,6 +1678,10 @@ columns_widget: {
     mode_independent: "Moduli Indipendenti"
 },
 bookmarks: {
+    tooltip_comment: "Appunto Segnalibro: {comment}",
+    tooltip_expires_in: "Scade tra {time}",
+    tooltip_expired: "Timer Scaduto",
+    badge_expired: "Scaduto",
     confirm_overwrite: "In questa pagina è già presente un segnalibro con una nota.\n\nPremi OK per trasferire e importare la nota nel nuovo segnalibro.\nPremi Annulla per creare il nuovo segnalibro vuoto.",
     toast_snoozed: "Promemoria posticipato di {minutes} minuti.",
     date_unknown: "Data sconosciuta",
@@ -1665,6 +1696,7 @@ bookmarks: {
     confirm_delete_commented: "Questo segnalibro contiene un appunto o commento. Sei sicuro di volerlo eliminare?"
 },
 inline_notes: {
+    footnotes_title: "Note a Piè di Pagina",
     drawer_title: "💬 Modifica Appunto Nascosto",
     btn_save: "Salva Appunto"
 },
@@ -2327,6 +2359,9 @@ adv_pivot: {
     no_results_filtered: "No results for current filters."
 },
 sidebar_filter: {
+    recent_searches_title: "Recent searches:",
+    clear_history: "Clear",
+    remove_history_item: "Remove from history",
     resizer_title: "Drag to resize sidebar",
     yes_checked: "Yes (Checked)",
     no_empty: "No (Empty)",
@@ -2463,6 +2498,12 @@ conflict: {
     toast_reloaded: "Note reloaded from disk. Your edits can be restored with Ctrl+Z."
 },
 tree: {
+    badge_bookmark: "Bookmark",
+    badge_inline_note: "Inline note",
+    badge_link: "Link",
+    badge_code: "Code",
+    badge_journal: "Journal",
+    badge_table: "Table",
     scope_paragraph_title: "All terms in the same paragraph",
     scope_chapter_title: "All terms in the same chapter",
     scope_note_title: "Terms anywhere in the note",
@@ -2559,9 +2600,7 @@ journal: {
 notes_utils: {
     menu_spellcheck: "Spell Check",
     header_record_badge: "RECORD:",
-    header_record_open_table: "Open Database Table",
     header_page_props_badge: "PAGE PROPERTIES AND TAGS",
-    header_page_props_edit: "Edit Page Properties",
     menu_save_template: "Save as Local Template",
     menu_manage_templates: "Manage Templates...",
     menu_export_modpack: "Export as Module (Modpack)",
@@ -2832,6 +2871,24 @@ adv_timeline: {
     next_task_tooltip: "Next: {title} ({date})"
 },
 image_manager: {
+    btn_note_add: "Add description / note",
+    btn_note_edit: "Edit description / note",
+    drawer_note_title: "Image Description",
+    drawer_note_placeholder: "Write a description or note for this image (it will appear on hover and in preview)...",
+    copy_image: "Copy image to clipboard",
+    copied_toast: "Image copied to clipboard!",
+    copy_error: "Unable to copy image to clipboard.",
+    download_image: "Download image",
+    edit_image: "Crop & Annotate",
+    lightbox_fit: "Fit",
+    editor_title: "Crop & Annotate Image",
+    tool_crop: "Crop",
+    tool_rect: "Box",
+    tool_arrow: "Arrow",
+    tool_blur: "Blur",
+    tool_undo: "Undo",
+    btn_save_changes: "Save Changes",
+    saved_toast: "Image updated successfully!",
     align_left: "Text right (Float Left)",
     align_center: "Center (No text wrap)",
     align_right: "Text left (Float Right)",
@@ -2879,7 +2936,7 @@ toolbar: {
     favorite: "Add to Favorites",
     page_properties: "Page Properties / Tags",
     page_info: "Note Info & Links",
-    toggle_sidebar: "Show/Hide Document Structure\n\nCtrl+P: Automatically opens the panel, ready for searching",
+    toggle_sidebar: "Show/Hide Document Structure\n\nCtrl+F: Automatically opens the panel, ready for searching",
     toggle_minimap: "Toggle Minimap",
     main_menu: "Main Menu",
     search_prev: "Previous (Enter)",
@@ -3272,6 +3329,7 @@ link_manager: {
     viewer_security_notice: "Due to browser security policies,<br>click <b>\"Open/Reload File\"</b> above to display content."
 },
 preferences: {
+    drawer_resizer_title: "Drag to resize panel",
     status_unsaved: "⚠️ Save File (RAM Only)",
     status_unsaved_title: "Data is kept in temporary memory only. Click to choose a folder and save the workspace to disk.",
     drawer_ghost_title: "X-Ray Mode (Temporarily Hidden)",
@@ -3478,6 +3536,7 @@ widget_manager: {
     move_success: "Move to \"{title}\" completed successfully."
 },
 format_lists: {
+    disable_list_title: "Disable list (Convert back to plain text)",
     prompt_start_num: "Set starting number for this numbered list:",
     alert_invalid_num: "Please enter a valid positive integer (minimum 0).",
     toast_num_set: "Numbering starts at {num}.",
@@ -3580,6 +3639,10 @@ columns_widget: {
     mode_independent: "Independent Modules"
 },
 bookmarks: {
+    tooltip_comment: "Bookmark Note: {comment}",
+    tooltip_expires_in: "Expires in {time}",
+    tooltip_expired: "Timer Expired",
+    badge_expired: "Expired",
     confirm_overwrite: "This page already has a bookmark with a note.\n\nClick OK to transfer and keep the existing note in the new bookmark.\nClick Cancel to create an empty bookmark.",
     toast_snoozed: "Reminder snoozed by {minutes} minutes.",
     date_unknown: "Unknown date",
@@ -3594,6 +3657,7 @@ bookmarks: {
     confirm_delete_commented: "This bookmark contains a note. Are you sure you want to delete it?"
 },
 inline_notes: {
+    footnotes_title: "Footnotes",
     drawer_title: "💬 Edit Inline Footnote",
     btn_save: "Save Footnote"
 },
@@ -4255,6 +4319,9 @@ adv_pivot: {
     no_results_filtered: "No hay resultados para los filtros actuales."
 },
 sidebar_filter: {
+    recent_searches_title: "Búsquedas recientes:",
+    clear_history: "Limpiar",
+    remove_history_item: "Eliminar del historial",
     resizer_title: "Arrastra para redimensionar la barra lateral",
     yes_checked: "Sí (Marcado)",
     no_empty: "No (Vacío)",
@@ -4391,6 +4458,12 @@ conflict: {
     toast_reloaded: "Nota recargada desde el disco. Tus cambios se pueden recuperar con Ctrl+Z."
 },
 tree: {
+    badge_bookmark: "Marcador",
+    badge_inline_note: "Nota en línea",
+    badge_link: "Enlace",
+    badge_code: "Código",
+    badge_journal: "Diario",
+    badge_table: "Tabla",
     scope_paragraph_title: "Todos los términos en el mismo párrafo",
     scope_chapter_title: "Todos los términos en el mismo capítulo",
     scope_note_title: "Términos en cualquier parte de la nota",
@@ -4487,9 +4560,7 @@ journal: {
 notes_utils: {
     menu_spellcheck: "Corrector Ortográfico",
     header_record_badge: "REGISTRO:",
-    header_record_open_table: "Abrir tabla de base de datos",
     header_page_props_badge: "PROPIEDADES Y ETIQUETAS DE PÁGINA",
-    header_page_props_edit: "Editar propiedades de página",
     menu_save_template: "Guardar como Plantilla Local",
     menu_manage_templates: "Gestionar Plantillas...",
     menu_export_modpack: "Exportar como Módulo (Modpack)",
@@ -4760,6 +4831,24 @@ adv_timeline: {
     next_task_tooltip: "Siguiente: {title} ({date})"
 },
 image_manager: {
+    btn_note_add: "Añadir descripción / nota",
+    btn_note_edit: "Editar descripción / nota",
+    drawer_note_title: "Descripción de la Imagen",
+    drawer_note_placeholder: "Escribe una descripción o nota para esta imagen (aparecerá al pasar el ratón y en la vista previa)...",
+    copy_image: "Copiar imagen al portapapeles",
+    copied_toast: "¡Imagen copiada al portapapeles!",
+    copy_error: "No se pudo copiar la imagen al portapapeles.",
+    download_image: "Descargar imagen",
+    edit_image: "Recortar y Anotar",
+    lightbox_fit: "Ajustar",
+    editor_title: "Recortar y Anotar Imagen",
+    tool_crop: "Recortar",
+    tool_rect: "Cuadro",
+    tool_arrow: "Flecha",
+    tool_blur: "Difuminar",
+    tool_undo: "Deshacer",
+    btn_save_changes: "Guardar Cambios",
+    saved_toast: "¡Imagen actualizada con éxito!",
     align_left: "Texto a la derecha (Float Left)",
     align_center: "Al Centro (Sin texto a los lados)",
     align_right: "Texto a la izquierda (Float Right)",
@@ -4807,7 +4896,7 @@ toolbar: {
     favorite: "Añadir a Favoritos",
     page_properties: "Propiedades / Etiquetas de Página",
     page_info: "Información y Enlaces de Nota",
-    toggle_sidebar: "Mostrar/Ocultar Estructura del documento\n\nCtrl+P: Abre automáticamente el panel, listo para buscar",
+    toggle_sidebar: "Mostrar/Ocultar Estructura del documento\n\nCtrl+F: Abre automáticamente el panel, listo para buscar",
     toggle_minimap: "Alternar Minimapa",
     main_menu: "Menú Principal",
     search_prev: "Anterior (Intro)",
@@ -5200,6 +5289,7 @@ link_manager: {
     viewer_security_notice: "Por motivos de seguridad del navegador,<br>haz clic en <b>\"Abrir/Recargar Archivo\"</b> arriba para visualizar el contenido."
 },
 preferences: {
+    drawer_resizer_title: "Arrastra para cambiar el tamaño del panel",
     status_unsaved: "⚠️ Guardar Archivo (Solo RAM)",
     status_unsaved_title: "Los datos están guardados solo en memoria temporal. Haz clic para elegir una carpeta y guardar todo el Espacio en disco.",
     drawer_ghost_title: "Modo X-Ray (Ocultar temporalmente)",
@@ -5406,6 +5496,7 @@ widget_manager: {
     move_success: "Traslado a \"{title}\" completado con éxito."
 },
 format_lists: {
+    disable_list_title: "Desactivar lista (Convertir a texto normal)",
     prompt_start_num: "Establece el número inicial para esta lista numerada:",
     alert_invalid_num: "Introduce un número entero positivo válido (mínimo 0).",
     toast_num_set: "Numeración establecida desde {num}.",
@@ -5508,6 +5599,10 @@ columns_widget: {
     mode_independent: "Módulos Independientes"
 },
 bookmarks: {
+    tooltip_comment: "Nota del marcador: {comment}",
+    tooltip_expires_in: "Expira en {time}",
+    tooltip_expired: "Temporizador expirado",
+    badge_expired: "Expirado",
     confirm_overwrite: "En esta página ya existe un marcador con una nota.\n\nPulsa Aceptar para transferir e importar la nota al nuevo marcador.\nPulsa Cancelar para crear el nuevo marcador vacío.",
     toast_snoozed: "Recordatorio pospuesto {minutes} minutos.",
     date_unknown: "Fecha desconocida",
@@ -5522,6 +5617,7 @@ bookmarks: {
     confirm_delete_commented: "Este marcador contiene una nota o comentario. ¿Estás seguro de que deseas eliminarlo?"
 },
 inline_notes: {
+    footnotes_title: "Notas al pie",
     drawer_title: "💬 Modificar Nota al Pie Oculta",
     btn_save: "Guardar Nota"
 },
@@ -6182,6 +6278,9 @@ adv_pivot: {
     no_results_filtered: "Keine Ergebnisse für die aktuellen Filter."
 },
 sidebar_filter: {
+    recent_searches_title: "Letzte Suchen:",
+    clear_history: "Leeren",
+    remove_history_item: "Aus dem Verlauf entfernen",
     resizer_title: "Ziehen zum Ändern der Seitenleistenbreite",
     yes_checked: "Ja (Ausgewählt)",
     no_empty: "Nein (Leer)",
@@ -6318,6 +6417,12 @@ conflict: {
     toast_reloaded: "Notiz von Festplatte neu geladen. Änderungen können mit Strg+Z wiederhergestellt werden."
 },
 tree: {
+    badge_bookmark: "Lesezeichen",
+    badge_inline_note: "Inline-Notiz",
+    badge_link: "Link",
+    badge_code: "Code",
+    badge_journal: "Journal",
+    badge_table: "Tabelle",
     scope_paragraph_title: "Alle Begriffe im selben Absatz",
     scope_chapter_title: "Alle Begriffe im selben Kapitel",
     scope_note_title: "Begriffe irgendwo in der Notiz",
@@ -6414,9 +6519,7 @@ journal: {
 notes_utils: {
     menu_spellcheck: "Rechtschreibprüfung",
     header_record_badge: "DATENSATZ:",
-    header_record_open_table: "Datenbanktabelle öffnen",
     header_page_props_badge: "SEITENEIGENSCHAFTEN UND TAGS",
-    header_page_props_edit: "Seiteneigenschaften bearbeiten",
     menu_save_template: "Als lokale Vorlage speichern",
     menu_manage_templates: "Vorlagen verwalten...",
     menu_export_modpack: "Als Modul exportieren (Modpack)",
@@ -6687,6 +6790,24 @@ adv_timeline: {
     next_task_tooltip: "Nächste: {title} ({date})"
 },
 image_manager: {
+    btn_note_add: "Beschreibung / Notiz hinzufügen",
+    btn_note_edit: "Beschreibung / Notiz bearbeiten",
+    drawer_note_title: "Bildbeschreibung",
+    drawer_note_placeholder: "Schreiben Sie eine Beschreibung oder Notiz für dieses Bild (erscheint beim Überfahren und in der Vorschau)...",
+    copy_image: "Bild in Zwischenablage kopieren",
+    copied_toast: "Bild in Zwischenablage kopiert!",
+    copy_error: "Bild konnte nicht kopiert werden.",
+    download_image: "Bild herunterladen",
+    edit_image: "Zuschneiden & Kommentieren",
+    lightbox_fit: "Anpassen",
+    editor_title: "Bild zuschneiden & kommentieren",
+    tool_crop: "Zuschneiden",
+    tool_rect: "Rahmen",
+    tool_arrow: "Pfeil",
+    tool_blur: "Unkenntlich",
+    tool_undo: "Rückgängig",
+    btn_save_changes: "Änderungen speichern",
+    saved_toast: "Bild erfolgreich aktualisiert!",
     align_left: "Text rechts (Float Left)",
     align_center: "Zentriert (Kein Textfluss)",
     align_right: "Text links (Float Right)",
@@ -6734,7 +6855,7 @@ toolbar: {
     favorite: "Zu Favoriten hinzufügen",
     page_properties: "Seiteneigenschaften / Tags",
     page_info: "Notiz-Info & Verknüpfungen",
-    toggle_sidebar: "Dokumentstruktur anzeigen/ausblenden\n\nStrg+P: Öffnet automatisch das Suchfeld",
+    toggle_sidebar: "Dokumentstruktur anzeigen/ausblenden\n\nStrg+F: Öffnet automatisch das Suchfeld",
     toggle_minimap: "Minimap umschalten",
     main_menu: "Hauptmenü",
     search_prev: "Vorherige (Eingabe)",
@@ -7127,6 +7248,7 @@ link_manager: {
     viewer_security_notice: "Aus Sicherheitsgründen des Browsers,<br>klicke oben auf <b>\"Datei öffnen/neu laden\"</b>, um den Inhalt anzuzeigen."
 },
 preferences: {
+    drawer_resizer_title: "Ziehen, um die Breite anzupassen",
     status_unsaved: "⚠️ Datei speichern (Nur RAM)",
     status_unsaved_title: "Daten sind nur im temporären Speicher. Klicke hier, um einen Ordner auszuwählen und den Arbeitsbereich auf der Festplatte zu sichern.",
     drawer_ghost_title: "X-Ray-Modus (Vorübergehend ausblenden)",
@@ -7333,6 +7455,7 @@ widget_manager: {
     move_success: "Verschieben nach \"{title}\" erfolgreich abgeschlossen."
 },
 format_lists: {
+    disable_list_title: "Liste deaktivieren (In normalen Text umwandeln)",
     prompt_start_num: "Startnummer für diese nummerierte Liste festlegen:",
     alert_invalid_num: "Bitte eine gültige positive Ganzzahl eingeben (mindestens 0).",
     toast_num_set: "Nummerierung beginnt bei {num}.",
@@ -7435,6 +7558,10 @@ columns_widget: {
     mode_independent: "Unabhängige Module"
 },
 bookmarks: {
+    tooltip_comment: "Lesezeichen-Notiz: {comment}",
+    tooltip_expires_in: "Läuft ab in {time}",
+    tooltip_expired: "Timer abgelaufen",
+    badge_expired: "Abgelaufen",
     confirm_overwrite: "Auf dieser Seite ist bereits ein Lesezeichen mit einer Notiz vorhanden.\n\nKlicken Sie auf OK, um die Notiz in das neue Lesezeichen zu übernehmen.\nKlicken Sie auf Abbrechen, um das neue Lesezeichen leer anzulegen.",
     toast_snoozed: "Erinnerung um {minutes} Minuten verschoben.",
     date_unknown: "Unbekanntes Datum",
@@ -7449,6 +7576,7 @@ bookmarks: {
     confirm_delete_commented: "Dieses Lesezeichen enthält eine Notiz oder einen Kommentar. Möchten Sie es wirklich löschen?"
 },
 inline_notes: {
+    footnotes_title: "Fußnoten",
     drawer_title: "💬 Versteckte Fußnote bearbeiten",
     btn_save: "Fußnote speichern"
 },

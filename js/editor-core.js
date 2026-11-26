@@ -7,6 +7,7 @@
  * - Modalità avanzata Raw HTML Source Editor a tutto schermo (openRawHtmlEditor, applyRawHtml, copyRawHtmlToClipboard).
  * - Boundary enforcement, selezione widget e smart escape dai blocchi (enforceBoundaries, handleSmartClickEscape).
  * - Ispezione del contesto di selezione per la toolbar (checkContext, editContextElement, toggleAdvancedToolbar).
+ * - Pulsante overflow automatico (updateToolbarOverflow, scrollToolbarOverflow) quando la toolbar supera la larghezza disponibile.
  * - Disattivazione del marcatore rotto se l'immagine possiede data-image-ref ed è in corso il recupero da IDB/disco.
  * - Supporto alla lettura asincrona di Blob fisici da IndexedDB in modalità Browser.
  */
@@ -18,6 +19,39 @@ const Editor = {
     audioCache: {}, 
     imageCache: {},
     _pendingAssetPromises: new Map(),
+
+    updateToolbarOverflow: () => {
+        const tb = document.getElementById('editorToolbar');
+        const btn = document.getElementById('btnToolbarOverflow');
+        if (!tb || !btn) return;
+
+        if (tb.classList.contains('hidden') || tb.clientWidth === 0) {
+            btn.classList.add('hidden');
+            return;
+        }
+
+        const hasOverflow = tb.scrollWidth > tb.clientWidth + 2;
+        if (!hasOverflow) {
+            btn.classList.add('hidden');
+            return;
+        }
+
+        btn.classList.remove('hidden');
+        const atEnd = tb.scrollLeft + tb.clientWidth >= tb.scrollWidth - 4;
+        btn.textContent = atEnd ? '«' : '»';
+    },
+
+    scrollToolbarOverflow: () => {
+        const tb = document.getElementById('editorToolbar');
+        if (!tb) return;
+
+        const atEnd = tb.scrollLeft + tb.clientWidth >= tb.scrollWidth - 4;
+        if (atEnd) {
+            tb.scrollTo({ left: 0, behavior: 'smooth' });
+        } else {
+            tb.scrollBy({ left: 180, behavior: 'smooth' });
+        }
+    },
 
     // Genera un Data-URI SVG per mostrare chiaramente a schermo un'immagine
     getBrokenImagePlaceholder: (ref = '') => {
@@ -504,5 +538,18 @@ const Editor = {
             if (!enable) grp.classList.add('disabled-tool');
             else grp.classList.remove('disabled-tool');
         });
+        Editor.updateToolbarOverflow();
     }
 };
+
+document.addEventListener('DOMContentLoaded', () => {
+    const tb = document.getElementById('editorToolbar');
+    if (!tb) return;
+    tb.addEventListener('scroll', Editor.updateToolbarOverflow, { passive: true });
+    if (typeof ResizeObserver !== 'undefined') {
+        const ro = new ResizeObserver(() => Editor.updateToolbarOverflow());
+        ro.observe(tb);
+    } else {
+        window.addEventListener('resize', Editor.updateToolbarOverflow);
+    }
+});

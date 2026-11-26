@@ -469,6 +469,29 @@ aside.collapsed {
     pointer-events: none;
 }
 
+/* Micro-pillola compatta per il conteggio occorrenze sui capitoli del TOC */
+.toc-match-pill {
+    font-size: 0.62rem;
+    font-weight: 700;
+    padding: 0 5px;
+    min-width: 15px;
+    height: 15px;
+    border-radius: 999px;
+    background: var(--item-active);
+    color: var(--accent-color);
+    border: 1px solid var(--border-color);
+    margin-left: auto;
+    margin-right: 2px;
+    line-height: 1;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    user-select: none;
+    pointer-events: none;
+    box-sizing: border-box;
+}
+
 /* --- NUOVE TABS SIDEBAR (NOTION STYLE) --- */
 .sidebar-tabs-container {
     display: flex;
@@ -694,6 +717,61 @@ aside.collapsed {
     opacity: 1;
 }
 
+/* --- PILLOLA ESTESA PER TITOLI E CAPITOLI TRONCATI NELLA SIDEBAR --- */
+.tree-title-pill-portal {
+    position: fixed;
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 0 10px 0 0;
+    border-radius: 0 4px 4px 0;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+    background-color: var(--sidebar-bg);
+    background-image: linear-gradient(var(--item-hover), var(--item-hover));
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+    z-index: 350;
+    box-sizing: border-box;
+    user-select: none;
+}
+
+.tree-title-pill-portal.active {
+    background-image: linear-gradient(var(--item-active), var(--item-active));
+    color: var(--accent-color);
+    font-weight: 500;
+}
+
+.tree-title-pill-portal.tree-ghost-node {
+    font-style: italic;
+}
+
+.tree-title-pill-portal > span:first-child {
+    flex-shrink: 0;
+}
+
+.tree-title-pill-portal > span:nth-child(2) {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.tree-title-pill-portal svg {
+    opacity: 0.7;
+    flex-shrink: 0;
+}
+
+.tree-title-pill-portal.active svg {
+    opacity: 1;
+}
+
+.tree-title-pill-portal.toc-pill {
+    gap: 0;
+    color: var(--accent-color);
+}
+
 /* ANIMAZIONE ESPANSIONE ALBERO */
 .children-block {
     display: grid;
@@ -725,6 +803,7 @@ aside.collapsed {
     color: var(--text-secondary);
     border-left: 1px solid transparent;
     transition: all 0.1s;
+    gap: 4px;
 }
 
 .toc-node:hover {
@@ -753,11 +832,12 @@ aside.collapsed {
 }
 
 .toc-icon {
-    margin-right: 6px;
+    margin-right: 2px;
     font-size: 0.7rem;
     color: var(--accent-color);
     opacity: 0.5;
     font-family: monospace;
+    flex-shrink: 0;
 }
 
 /* --- NOTIFICHE TOAST --- */

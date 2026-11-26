@@ -8,6 +8,7 @@
  * Intercettazione della digitazione "[[" per LinkManager.openInternalModal() e "![[" per CitationManager.openModal().
  * Supporto ai trigger ``` e ''' a inizio riga con neutralizzazione dell'autoclose moltiplicatore
  * degli apici singoli e corretto posizionamento in-place del widget codice.
+ * Auto-close dell'apice singolo (') limitato esclusivamente ai blocchi di codice e formule.
  * Calcolo offset tramite _getCodeOffset/_setCodeOffset nei blocchi <pre> per evitare sfasamenti su <br>.
  */
 
@@ -280,6 +281,10 @@ Object.assign(Editor, {
         const range = selection.getRangeAt(0);
         let node = range.commonAncestorContainer;
         if (node.nodeType === 3) node = node.parentNode;
+
+        // Auto-close dell'apice singolo (') limitato esclusivamente ai blocchi di codice e formule
+        const isCodeOrFormula = !!node.closest('pre.code-content, .formula-editor-area');
+        if (e.key === "'" && !isCodeOrFormula && range.collapsed) return;
 
         if (WidgetManager.isProtectedBlock(node) && !WidgetManager.isInsideEditableWidgetArea(node)) return;
 

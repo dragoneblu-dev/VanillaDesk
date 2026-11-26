@@ -77,6 +77,29 @@ main {
 
 .toolbar::-webkit-scrollbar { display: none; }
 
+.toolbar-overflow-btn {
+    position: absolute;
+    top: 0;
+    right: 0;
+    height: 39px;
+    padding: 0 10px 0 18px;
+    border: none;
+    background: linear-gradient(to right, transparent, var(--editor-bg) 32%);
+    color: var(--text-primary);
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    z-index: 105;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    user-select: none;
+}
+
+.toolbar-overflow-btn:hover {
+    color: var(--accent-color);
+}
+
 @media (max-width: 1000px) { .toolbar { padding: 5px 20px; } }
 @media (max-width: 600px) { .toolbar { padding: 5px 10px; } }
 
