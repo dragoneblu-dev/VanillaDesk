@@ -2,8 +2,8 @@
  * editor-format-lists.js
  * Sottomodulo di Editor.
  * Gestione strutturale delle Liste e delle Checklist (Indent/Outdent).
- * Gestione avanzata degli Elenchi Numerati: valore di partenza (start),
- * continuazione della numerazione e unione fisica tra elenchi separati.
+ * Gestione avanzata degli Elenchi: valore di partenza (start),
+ * continuazione della numerazione e unione fisica tra elenchi separati dello stesso tipo (puntati, numerati, letterali).
  * Memorizzazione ultimo tipo elenco e toggle attivo con un click (toggleActiveList).
  * Conversione fedele e non distruttiva di selezioni multiple di paragrafi,
  * titoli o elenchi ordinati/puntati esistenti in To-Do List e riconversione bidirezionale
@@ -197,7 +197,7 @@ Object.assign(Editor, {
         Editor.updateToolbarFormatting();
     },
 
-    _getCurrentOrderedList: () => {
+    _getCurrentList: (selector = 'ol, ul:not(.adv-checklist)') => {
         let node = null;
         const sel = window.getSelection();
         if (sel && sel.rangeCount > 0) {
@@ -207,18 +207,19 @@ Object.assign(Editor, {
         }
         if (!node) return null;
         if (node.nodeType === 3) node = node.parentNode;
-        return node.closest('ol');
+        return node.closest(selector);
     },
 
-    _getPreviousOrderedList: (currentOl) => {
+    _getPreviousSameTypeList: (currentList) => {
         const editor = document.getElementById('noteContent');
-        if (!editor || !currentOl) return null;
-        const allOls = Array.from(editor.querySelectorAll('ol'));
-        const currentIndex = allOls.indexOf(currentOl);
-        if (currentIndex > 0) {
-            return allOls[currentIndex - 1];
-        }
-        return null;
+        if (!editor || !currentList) return null;
+        const isAlpha = (el) => el.tagName === 'OL' && (el.getAttribute('type') || '').toUpperCase() === 'A';
+        const targetAlpha = isAlpha(currentList);
+
+        const allSame = Array.from(editor.querySelectorAll('ol, ul:not(.adv-checklist)'))
+            .filter(el => el.tagName === currentList.tagName && isAlpha(el) === targetAlpha);
+        const currentIndex = allSame.indexOf(currentList);
+        return currentIndex > 0 ? allSame[currentIndex - 1] : null;
     },
 
     _calculateListEndValue: (olElement) => {
@@ -229,7 +230,7 @@ Object.assign(Editor, {
     },
 
     setListStart: (val = null) => {
-        const currentOl = Editor._getCurrentOrderedList();
+        const currentOl = Editor._getCurrentList('ol');
         if (!currentOl) return;
 
         let num = val;
@@ -260,7 +261,7 @@ Object.assign(Editor, {
     },
 
     resetListStart: () => {
-        const currentOl = Editor._getCurrentOrderedList();
+        const currentOl = Editor._getCurrentList('ol');
         if (!currentOl) return;
 
         Editor.saveSnapshot();
@@ -272,10 +273,10 @@ Object.assign(Editor, {
     },
 
     continueFromPreviousList: () => {
-        const currentOl = Editor._getCurrentOrderedList();
+        const currentOl = Editor._getCurrentList('ol');
         if (!currentOl) return;
 
-        const prevOl = Editor._getPreviousOrderedList(currentOl);
+        const prevOl = Editor._getPreviousSameTypeList(currentOl);
         if (!prevOl) {
             alert(I18n.t('format_lists.alert_no_prev_list'));
             return;
@@ -292,11 +293,11 @@ Object.assign(Editor, {
     },
 
     mergeWithPreviousList: () => {
-        const currentOl = Editor._getCurrentOrderedList();
-        if (!currentOl) return;
+        const currentList = Editor._getCurrentList();
+        if (!currentList) return;
 
-        const prevOl = Editor._getPreviousOrderedList(currentOl);
-        if (!prevOl) {
+        const prevList = Editor._getPreviousSameTypeList(currentList);
+        if (!prevList) {
             alert(I18n.t('format_lists.alert_no_prev_merge'));
             return;
         }
@@ -304,8 +305,8 @@ Object.assign(Editor, {
         Editor.saveSnapshot();
 
         // Rimuove eventuali paragrafi vuoti o interruzioni tra i due elenchi
-        let nodeBetween = prevOl.nextSibling;
-        while (nodeBetween && nodeBetween !== currentOl) {
+        let nodeBetween = prevList.nextSibling;
+        while (nodeBetween && nodeBetween !== currentList) {
             let next = nodeBetween.nextSibling;
             if (nodeBetween.nodeType === 3 && nodeBetween.textContent.trim() === '') {
                 nodeBetween.remove();
@@ -317,11 +318,11 @@ Object.assign(Editor, {
         }
 
         // Travasa tutti i punti dell'elenco corrente in coda a quello precedente
-        const firstTransferredLi = currentOl.querySelector('li');
-        while (currentOl.firstChild) {
-            prevOl.appendChild(currentOl.firstChild);
+        const firstTransferredLi = currentList.querySelector('li');
+        while (currentList.firstChild) {
+            prevList.appendChild(currentList.firstChild);
         }
-        currentOl.remove();
+        currentList.remove();
 
         // Riposiziona il cursore sull'elemento trasferito
         if (firstTransferredLi) {
@@ -343,10 +344,11 @@ Object.assign(Editor, {
         if (e) e.stopPropagation();
         Editor.saveSelection();
 
-        const currentOl = Editor._getCurrentOrderedList();
-        const prevOl = currentOl ? Editor._getPreviousOrderedList(currentOl) : null;
-        const nextStartVal = prevOl ? Editor._calculateListEndValue(prevOl) : null;
-        const currentStart = currentOl ? (parseInt(currentOl.getAttribute('start'), 10) || 1) : 1;
+        const currentList = Editor._getCurrentList();
+        const prevSameList = currentList ? Editor._getPreviousSameTypeList(currentList) : null;
+        const isOrdered = !!(currentList && currentList.tagName === 'OL');
+        const nextStartVal = (isOrdered && prevSameList) ? Editor._calculateListEndValue(prevSameList) : null;
+        const currentStart = isOrdered ? (parseInt(currentList.getAttribute('start'), 10) || 1) : 1;
 
         const executeInsert = (cmd, arg) => {
             Editor.restoreSelection();
@@ -362,12 +364,12 @@ Object.assign(Editor, {
             { icon: Icons.journal, label: I18n.t('format_lists.journal_log'), onClick: () => JournalManager.insert(true) }
         ];
 
-        // Selezionatore contestuale dedicato agli elenchi numerati
-        if (currentOl) {
+        // Selezionatore contestuale dedicato agli elenchi numerati e letterali
+        if (isOrdered) {
             items.push({ type: 'divider' });
             items.push({ type: 'custom', html: `<div class="adv-dropdown-title" style="margin-bottom: 2px;">${I18n.t('format_lists.num_management')}</div>` });
 
-            if (prevOl) {
+            if (prevSameList) {
                 items.push({
                     icon: Icons.play,
                     label: I18n.t('format_lists.continue_from_prev', { nextStartVal: nextStartVal }),
@@ -393,6 +395,13 @@ Object.assign(Editor, {
                     onClick: () => Editor.resetListStart()
                 });
             }
+        } else if (currentList && prevSameList) {
+            items.push({ type: 'divider' });
+            items.push({
+                icon: Icons.merge,
+                label: I18n.t('format_lists.merge_with_prev'),
+                onClick: () => Editor.mergeWithPreviousList()
+            });
         }
 
         UI.Menu.buildContextMenu(anchorId, items);

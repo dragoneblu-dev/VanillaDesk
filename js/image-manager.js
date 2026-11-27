@@ -515,7 +515,6 @@ const ImageManager = {
 
             <button onclick="ImageManager.openImage(ImageManager.activeImage)" title="${I18n.t('image_manager.open_title')}">${Icons.openLink}</button>
             <button onclick="ImageManager.copyImage(ImageManager.activeImage)" title="${I18n.t('image_manager.copy_image')}">${Icons.clipboard}</button>
-            <button onclick="ImageManager.downloadImage(ImageManager.activeImage)" title="${I18n.t('image_manager.download_image')}">${Icons.download}</button>
             <button onclick="ImageManager.openDescriptionDrawer(ImageManager.activeImage)" style="${noteBtnStyle}" title="${noteBtnTitle}">${Icons.noteInline}</button>
             ${annotateBtnHtml}
         `;
@@ -728,16 +727,18 @@ const ImageManager = {
         modal.id = 'adv-image-editor-modal';
         modal.style.cssText = 'position:fixed; inset:0; background:color-mix(in srgb, var(--bg-color) 92%, transparent); z-index:10015; display:flex; flex-direction:column; backdrop-filter:blur(6px);';
 
+        const cropIcon = Icons.crop || Icons.widthFit;
+
         modal.innerHTML = `
             <div style="height:48px; padding:0 16px; display:flex; align-items:center; justify-content:space-between; background:var(--sidebar-bg); border-bottom:1px solid var(--border-color); color:var(--text-primary); flex-shrink:0; width:100%; box-sizing:border-box; gap:10px;">
                 <span style="font-size:0.88rem; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">${I18n.t('image_manager.editor_title')}</span>
                 <div style="display:flex; align-items:center; gap:6px; flex-wrap:wrap;" id="imgEditorToolsGroup">
-                    <button class="btn btn-primary" data-tool="rect" id="imgToolRect" style="padding:4px 10px;">${I18n.t('image_manager.tool_rect')}</button>
-                    <button class="btn" data-tool="arrow" id="imgToolArrow" style="padding:4px 10px;">${I18n.t('image_manager.tool_arrow')}</button>
-                    <button class="btn" data-tool="blur" id="imgToolBlur" style="padding:4px 10px;">${I18n.t('image_manager.tool_blur')}</button>
-                    <button class="btn" data-tool="crop" id="imgToolCrop" style="padding:4px 10px;">${I18n.t('image_manager.tool_crop')}</button>
+                    <button class="btn btn-primary" data-tool="rect" id="imgToolRect" style="padding:4px 10px;" title="${I18n.t('image_manager.tool_rect')}">${Icons.square}</button>
+                    <button class="btn" data-tool="arrow" id="imgToolArrow" style="padding:4px 10px;" title="${I18n.t('image_manager.tool_arrow')}">${Icons.arrowRightUp}</button>
+                    <button class="btn" data-tool="blur" id="imgToolBlur" style="padding:4px 10px;" title="${I18n.t('image_manager.tool_blur')}">${Icons.eyeOff}</button>
+                    <button class="btn" data-tool="crop" id="imgToolCrop" style="padding:4px 10px;" title="${I18n.t('image_manager.tool_crop')}">${cropIcon}</button>
                     <div style="width:1px; height:18px; background:var(--border-color); margin:0 4px;"></div>
-                    <button class="btn" id="imgToolUndo" disabled style="opacity:0.4; padding:4px 10px;">${Icons.undo} ${I18n.t('image_manager.tool_undo')}</button>
+                    <button class="btn" id="imgToolUndo" disabled style="opacity:0.4; padding:4px 10px;" title="${I18n.t('image_manager.tool_undo')}">${Icons.undo}</button>
                 </div>
                 <div style="display:flex; align-items:center; gap:8px;" id="imgEditorActionsGroup">
                     <button class="btn" id="imgEditCancel" style="padding:4px 10px;">${I18n.t('common.cancel')}</button>

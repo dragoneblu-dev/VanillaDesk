@@ -203,7 +203,7 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (test-event
         Assert.strictEqual(LinkManager.activeLink, link);
     });
 
-    test("EventsGlobal: Ctrl+P apre la sidebar e focalizza il campo di ricerca globale", () => {
+    test("EventsGlobal: Ctrl+F apre la sidebar e focalizza il campo di ricerca globale", () => {
         const oldSidebar = document.getElementById('sidebar');
         if (oldSidebar) oldSidebar.remove();
 
@@ -223,7 +223,7 @@ describe("EventsGlobal: Router Tastiera, Navigazione Link & Checkbox (test-event
         input.addEventListener('focus', () => { focused = true; });
 
         try {
-            const ev = new KeyboardEvent('keydown', { key: 'p', ctrlKey: true, bubbles: true });
+            const ev = new KeyboardEvent('keydown', { key: 'f', ctrlKey: true, bubbles: true });
             document.dispatchEvent(ev);
 
             Assert.isFalse(sidebar.classList.contains('collapsed'));

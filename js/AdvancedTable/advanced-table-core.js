@@ -2,18 +2,18 @@
  * AdvancedTableCore.js
  * Motore di Stato (State Management), Lifecycle e Inizializzazione RDBMS.
  * Supporto esteso ai parametri per la Vista Gerarchica ad Albero (Tree Table / WBS).
- * FIX DEFENSIVE GUARDS: Inizializzazione difensiva e controlli rigorosi su Array.isArray(db.rows) 
+ * Inizializzazione difensiva e controlli rigorosi su Array.isArray(db.rows) 
  * e r.cells in ensureSystemPropertiesDB, syncSystemPropertiesRow e deleteSystemPropertiesRow.
- * FIX MULTI-WIDGET ROUTING: updateDependentViews ora riconosce esplicitamente i diari (JournalManager),
+ * updateDependentViews riconosce esplicitamente i diari (JournalManager),
  * blocchi codice (CodeManager) e button bar (ButtonManager), evitando che vengano ridisegnati come tabelle RDBMS.
- * FEAT DEFAULT COMMENT: Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
- * FEAT REACTIVE DEPENDENCIES (2-PASS CONVERGENCE): updateDependentViews supporta formule cross-database sia per
+ * Inserito commento esplicativo nella colonna Nome sul doppio uso di Invio e Ctrl+Invio.
+ * updateDependentViews supporta formule cross-database sia per
  * Titolo (tabella["..."]) che per ID Immutabile (tabella["adv_tbl_..."]) e convergenza ciclica stabilizzata a 2 passaggi.
- * FEAT QUICK SEARCH: Motore universale di ricerca full-text integrato nello stato (quickSearch, showQuickSearch).
- * PERF QUICK SEARCH: Gestione sincrona del focus/cursore senza timeout intermedi e correzione 'event.key' su Escape.
- * PERF INVERTED INDEX O(1): Struttura volatile in memoria _rowIndices e lookup atomico getRow() per relazioni e rollup.
- * FIX QUICK SEARCH FOCUS STYLING: Rimozione degli stili inline invasivi e adozione della classe .adv-quick-search-input per consentire l'evidenziazione :focus.
- * REFACTOR I18N: Sostituzione delle stringhe hardcoded nei default di creazione, nomi di sistema e avvisi con I18n.t().
+ * Motore universale di ricerca full-text integrato nello stato (quickSearch, showQuickSearch).
+ * Gestione sincrona del focus/cursore senza timeout intermedi e correzione 'event.key' su Escape.
+ * Struttura volatile in memoria _rowIndices e lookup atomico getRow() per relazioni e rollup.
+ * Rimozione degli stili inline invasivi e adozione della classe .adv-quick-search-input per consentire l'evidenziazione :focus.
+ * Sostituzione delle stringhe hardcoded nei default di creazione, nomi di sistema e avvisi con I18n.t().
  */
 
 const AdvancedTable = {
@@ -800,6 +800,24 @@ const AdvancedTable = {
 
         AdvancedTable.renderTable(tableId);
         Store.triggerAutoSave();
+
+        // Seleziona automaticamente il titolo del database appena creato per consentirne la rinomina immediata
+        setTimeout(() => {
+            const wrapperEl = document.getElementById(tableId);
+            const titleEl = wrapperEl ? wrapperEl.querySelector('.widget-title, .adv-table-title') : null;
+            if (titleEl && titleEl.getAttribute('contenteditable') === 'true') {
+                titleEl.focus();
+                try {
+                    const currentSel = window.getSelection();
+                    if (currentSel) {
+                        const range = document.createRange();
+                        range.selectNodeContents(titleEl);
+                        currentSel.removeAllRanges();
+                        currentSel.addRange(range);
+                    }
+                } catch (_) {}
+            }
+        }, 50);
     }
 };
 

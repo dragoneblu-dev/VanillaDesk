@@ -1,24 +1,58 @@
 /**
  * AdvancedTableFilter.js
  * Modulo Filtri Avanzato con Autocompletamento e Gestione Filtri Salvati.
- * FIX CHECKBOX SUGGESTIONS: Normalizzati i suggerimenti per i campi checkbox con icona chiara e valore associato
+ * Normalizzati i suggerimenti per i campi checkbox con icona chiara e valore associato
  * per guidare l'utente anche in assenza della dicitura testuale nella cella.
- * FIX PIVOT MAX/MIN DATE: Risolto bug per cui le date venivano scambiate per numeri da parseFloat.
+ * Gestione date coerente per evitare ambiguità numeriche.
  * MOTORE FILTRI POLIMORFO: Gli operatori (=, !=, <, >, <=, >=) operano coerentemente anche nei filtri live:
  * - Numeri: confronto matematico.
  * - Testo/Select/ID: uguaglianza esatta su '=', esclusione di contenimento su '!=', confronto naturale su '<, >, <=, >='.
- * FIX AUTOCOMPLETE DATES: Allineamento parsing delle date con estrazione sicura di intervalli {start, end}
+ * Allineamento parsing delle date con estrazione sicura di intervalli {start, end}
  * e timestamp di sistema in buildFilteredRows; rimozione automatica di stringhe "Invalid Date" dai suggerimenti unici.
- * FEAT DATE RANGE FILTERING: buildFilteredRows allineato all'algebra degli intervalli di advanced-table-data.js.
- * FEAT RIGHT-ALIGNED EXPANDABLE AUTOCOMPLETE: Ancoraggio al bordo destro dell'input con espansione fluida verso sinistra (fino a 2x) senza troncamenti forzati.
- * FEAT DYNAMIC TOOLTIP ON OVERFLOW: Tooltip mostrato solo quando il testo della voce è effettivamente troncato (scrollWidth > clientWidth).
- * FEAT CHECKBOX FILTER PLACEHOLDER: Placeholder esplicito per guidare l'utente nei campi di tipo checkbox.
+ * Supporto completo e unificato per filtri su intervalli temporali e range.
+ * Ancoraggio al bordo destro dell'input con espansione fluida verso sinistra (fino a 2x) e contenimento verticale nella viewport con scrollbar automatica.
+ * Tooltip mostrato solo quando il testo della voce è effettivamente troncato (scrollWidth > clientWidth).
+ * Placeholder esplicito per guidare l'utente nei campi di tipo checkbox.
  */
 
 Object.assign(AdvancedTable, {
 
     _filterTimeout: null,
     _currentFilterInput: null, 
+
+    // Posiziona la tendina di autocompletamento confinandola ai bordi della viewport con scrollbar automatica
+    _positionFilterAutocompletePopup: (popup, inputEl) => {
+        const rect = inputEl.getBoundingClientRect();
+        const margin = 10;
+        const spaceBelow = window.innerHeight - rect.bottom - margin;
+        const spaceAbove = rect.top - margin;
+
+        popup.style.position = 'fixed';
+        popup.style.zIndex = '99999';
+        popup.style.left = 'auto';
+        popup.style.right = (window.innerWidth - rect.right) + 'px';
+
+        // LARGHEZZA ELASTICA: Ancorato a destra dell'input, si espande verso sinistra fino a 2x senza uscire dal viewport
+        const maxAllowedWidth = Math.min(rect.width * 2, rect.right - margin);
+        popup.style.minWidth = rect.width + 'px';
+        popup.style.maxWidth = Math.max(rect.width, maxAllowedWidth) + 'px';
+        popup.style.width = 'max-content';
+        popup.style.boxSizing = 'border-box';
+        popup.style.overflowY = 'auto';
+        popup.style.overflowX = 'hidden';
+
+        // Vincolo verticale dinamico: si ferma al bordo inferiore attivando la scrollbar,
+        // oppure si ribalta sopra l'input se sotto rimane spazio insufficiente e sopra c'è più spazio.
+        if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+            popup.style.top = rect.bottom + 'px';
+            popup.style.bottom = 'auto';
+            popup.style.maxHeight = Math.max(60, spaceBelow) + 'px';
+        } else {
+            popup.style.top = 'auto';
+            popup.style.bottom = (window.innerHeight - rect.top) + 'px';
+            popup.style.maxHeight = Math.max(60, spaceAbove) + 'px';
+        }
+    },
 
     // MENU 1: INPUT DI RICERCA (Filtra)
     openFilterMenu: (e, tableId) => {
@@ -298,20 +332,9 @@ Object.assign(AdvancedTable, {
                 popup = document.createElement('div');
                 popup.id = 'adv-filter-autocomplete-portal';
                 popup.className = 'adv-filter-autocomplete';
-                popup.style.position = 'fixed';
-                popup.style.zIndex = '99999';
                 document.body.appendChild(popup);
             }
-            const rect = inputEl.getBoundingClientRect();
-            popup.style.top = rect.bottom + 'px';
-            popup.style.left = 'auto';
-            popup.style.right = (window.innerWidth - rect.right) + 'px';
-
-            const maxAllowedWidth = Math.min(rect.width * 2, rect.right - 10);
-            popup.style.minWidth = rect.width + 'px';
-            popup.style.maxWidth = maxAllowedWidth + 'px';
-            popup.style.width = 'max-content';
-            popup.style.boxSizing = 'border-box';
+            AdvancedTable._positionFilterAutocompletePopup(popup, inputEl);
 
             const optYes = I18n.t('adv_filter.cb_checked');
             const optNo = I18n.t('adv_filter.cb_unchecked');
@@ -320,6 +343,7 @@ Object.assign(AdvancedTable, {
                 <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'Sì')">${optYes}</div>
                 <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'No')">${optNo}</div>
             `;
+            popup.scrollTop = 0;
             popup.style.display = 'block';
             return;
         }
@@ -630,22 +654,10 @@ Object.assign(AdvancedTable, {
             popup = document.createElement('div');
             popup.id = 'adv-filter-autocomplete-portal';
             popup.className = 'adv-filter-autocomplete';
-            popup.style.position = 'fixed';
-            popup.style.zIndex = '99999';
             document.body.appendChild(popup);
         }
 
-        const rect = inputEl.getBoundingClientRect();
-        popup.style.top = rect.bottom + 'px';
-        popup.style.left = 'auto';
-        popup.style.right = (window.innerWidth - rect.right) + 'px';
-
-        // LARGHEZZA ELASTICA: Ancorato a destra dell'input, si espande verso sinistra fino a 2x senza uscire dal viewport
-        const maxAllowedWidth = Math.min(rect.width * 2, rect.right - 10);
-        popup.style.minWidth = rect.width + 'px';
-        popup.style.maxWidth = maxAllowedWidth + 'px';
-        popup.style.width = 'max-content';
-        popup.style.boxSizing = 'border-box';
+        AdvancedTable._positionFilterAutocompletePopup(popup, inputEl);
 
         let html = '';
         valArray.forEach(v => {
@@ -655,6 +667,7 @@ Object.assign(AdvancedTable, {
         });
 
         popup.innerHTML = html;
+        popup.scrollTop = 0;
         popup.style.display = 'block';
     },
 

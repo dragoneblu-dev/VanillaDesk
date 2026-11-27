@@ -18,7 +18,7 @@
  * Supporto a Ctrl+Click (o Cmd+Click) su link e hashtag per navigazione rapida in Edit Mode.
  * Normalizzazione immediata del cursore per impedire digitazioni nella zona morta ZWS.
  * Chiusura automatica della toolbar fluttuante del link all'uscita del cursore.
- * Sincronizzazione dell'indice delle occorrenze di ricerca al movimento nell'editor (scroll o click/tastiera).
+ * Sincronizzazione dell'indice delle occorrenze di ricerca al movimento nell'editor (scroll manuale o cursore).
  * Persistenza immediata su saveToIndexedDB() alla chiusura della scheda se in modalità Browser.
  */
 
@@ -28,6 +28,7 @@ Object.assign(EventsGlobal, {
     _lastMiddleClickTime: 0,
     _initialized: false,
     _searchScrollSyncTimer: null,
+    _lastUserScrollInput: 0,
 
     // Risoluzione ed esecuzione diretta dei link (usata da click, auxclick e Ctrl+Click)
     openLinkDirectly: (link) => {
@@ -112,16 +113,45 @@ Object.assign(EventsGlobal, {
             EventsGlobal.initDragAndDrop(editorEl, scrollArea);
         }
 
-        // Sincronizza l'indicatore delle occorrenze quando l'utente scrolla manualmente l'editor
+        // Sincronizza l'indicatore delle occorrenze solo su scroll manuale reale dell'utente
         if (scrollArea) {
+            const markUserScroll = () => {
+                EventsGlobal._lastUserScrollInput = Date.now();
+            };
+            scrollArea.addEventListener('wheel', markUserScroll, { passive: true });
+            scrollArea.addEventListener('touchstart', markUserScroll, { passive: true });
+            scrollArea.addEventListener('mousedown', (e) => {
+                if (e.target === scrollArea) markUserScroll();
+            }, { passive: true });
+
+            scrollArea.addEventListener('scrollend', () => {
+                if (AppState._isAutoScrollingToHighlight) {
+                    clearTimeout(AppState._autoScrollHighlightTimer);
+                    AppState._isAutoScrollingToHighlight = false;
+                }
+            }, { passive: true });
+
             scrollArea.addEventListener('scroll', () => {
-                if (!AppState._totalHighlights || AppState._isAutoScrollingToHighlight || AppState.isSwitchingNote) return;
+                if (!AppState._totalHighlights || AppState.isSwitchingNote) return;
+
+                if (AppState._isAutoScrollingToHighlight) {
+                    clearTimeout(EventsGlobal._searchScrollSyncTimer);
+                    clearTimeout(AppState._autoScrollHighlightTimer);
+                    AppState._autoScrollHighlightTimer = setTimeout(() => {
+                        AppState._isAutoScrollingToHighlight = false;
+                    }, 180);
+                    return;
+                }
+
+                if (Date.now() - EventsGlobal._lastUserScrollInput > 1200) return;
+
                 clearTimeout(EventsGlobal._searchScrollSyncTimer);
                 EventsGlobal._searchScrollSyncTimer = setTimeout(() => {
+                    if (AppState._isAutoScrollingToHighlight || AppState.isSwitchingNote) return;
                     if (typeof AppState.syncHighlightToPosition === 'function') {
                         AppState.syncHighlightToPosition(false);
                     }
-                }, 120);
+                }, 150);
             }, { passive: true });
         }
 
@@ -541,6 +571,7 @@ Object.assign(EventsGlobal, {
                 }
                 if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
                 if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
+                if (typeof UI !== 'undefined' && UI.hideCustomTooltip) UI.hideCustomTooltip();
                 
                 if (wasDrawerOpen) {
                     if (typeof UI.closeDrawer !== 'undefined') UI.closeDrawer();
@@ -580,6 +611,39 @@ Object.assign(EventsGlobal, {
             if (!target || !target.closest) return;
 
             if (!AppState.isEditMode) return;
+
+            const inlineNote = target.closest('.inline-note-marker');
+            if (inlineNote && !inlineNote.closest('.block-citation')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof UI !== 'undefined' && UI.hideCustomTooltip) UI.hideCustomTooltip();
+                if (typeof Editor !== 'undefined' && Editor.handleInlineNoteClick) {
+                    Editor.handleInlineNoteClick(inlineNote);
+                }
+                return;
+            }
+
+            const bookmark = target.closest('.adv-bookmark-marker');
+            if (bookmark && !bookmark.closest('.block-citation')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof Editor !== 'undefined' && Editor.openBookmarkCommentDrawer) {
+                    if (!bookmark.id) bookmark.id = 'bkm_' + Store.generateId();
+                    Editor.openBookmarkCommentDrawer(bookmark.id);
+                }
+                return;
+            }
+
+            const link = (target.tagName === 'A' ? target : target.closest('a'));
+            if (link && link.closest('#noteContent') && !link.hasAttribute('download') && !link.closest('.block-citation')) {
+                e.preventDefault();
+                e.stopPropagation();
+                if (typeof LinkManager !== 'undefined') {
+                    LinkManager.activeLink = link;
+                    LinkManager.editCurrentLink();
+                }
+                return;
+            }
 
             const resizer = target.closest('.adv-col-resizer');
             if (resizer) {
@@ -810,9 +874,15 @@ Object.assign(EventsGlobal, {
             const bookmark = target.closest('.adv-bookmark-marker');
             if (bookmark) {
                 e.preventDefault();
-                e.stopPropagation(); 
-                if (typeof Editor !== 'undefined' && Editor.showBookmarkMenu) {
-                    Editor.showBookmarkMenu(bookmark);
+                e.stopPropagation();
+                if (AppState.isEditMode) {
+                    if (typeof Editor !== 'undefined' && Editor.showBookmarkMenu) {
+                        Editor.showBookmarkMenu(bookmark);
+                    }
+                } else if (typeof UI !== 'undefined' && UI.showCustomTooltipNow) {
+                    const tipHtml = bookmark.getAttribute('data-tooltip') ||
+                        I18n.t('bookmarks.label_placed_on', { date: bookmark.getAttribute('data-date') || I18n.t('bookmarks.date_unknown') });
+                    UI.showCustomTooltipNow(bookmark, tipHtml);
                 }
                 if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
                 return;
@@ -821,10 +891,12 @@ Object.assign(EventsGlobal, {
             const inlineNote = target.closest('.inline-note-marker');
             if (inlineNote) {
                 e.preventDefault();
-                if (inlineNote.closest('.block-citation')) return; 
-                
-                if (typeof Editor !== 'undefined' && Editor.handleInlineNoteClick) {
-                    Editor.handleInlineNoteClick(inlineNote);
+                if (inlineNote.closest('.block-citation')) return;
+                const wrapper = inlineNote.closest('.inline-note-wrapper');
+                const dataSpan = wrapper ? wrapper.querySelector('.inline-note-data') : null;
+                const tipHtml = (dataSpan && dataSpan.innerHTML) || inlineNote.getAttribute('data-tooltip') || '';
+                if (tipHtml && typeof UI !== 'undefined' && UI.showCustomTooltipNow) {
+                    UI.showCustomTooltipNow(inlineNote, tipHtml);
                 }
                 return;
             }
@@ -879,6 +951,7 @@ Object.assign(EventsGlobal, {
                 }
             }
 
+            if (typeof UI !== 'undefined' && UI.hideCustomTooltip) UI.hideCustomTooltip();
             if (typeof LinkManager !== 'undefined') LinkManager.hideFloatingMenu();
             if (typeof Editor !== 'undefined' && Editor.hideBookmarkMenu) Editor.hideBookmarkMenu();
         });

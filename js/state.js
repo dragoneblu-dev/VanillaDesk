@@ -526,6 +526,14 @@ const AppState = {
         }
     },
 
+    beginAutoScrollHighlight: () => {
+        clearTimeout(AppState._autoScrollHighlightTimer);
+        AppState._isAutoScrollingToHighlight = true;
+        AppState._autoScrollHighlightTimer = setTimeout(() => {
+            AppState._isAutoScrollingToHighlight = false;
+        }, 900);
+    },
+
     _focusHighlight: (index, shouldScroll = true) => {
         const editor = document.getElementById('noteContent');
         if (!editor) return;
@@ -554,12 +562,20 @@ const AppState = {
             }
             
             if (shouldScroll) {
-                clearTimeout(AppState._autoScrollHighlightTimer);
-                AppState._isAutoScrollingToHighlight = true;
-                targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                AppState._autoScrollHighlightTimer = setTimeout(() => {
-                    AppState._isAutoScrollingToHighlight = false;
-                }, 550);
+                const scrollArea = document.getElementById('editorScrollContent');
+                let needsScroll = true;
+                if (scrollArea) {
+                    const areaRect = scrollArea.getBoundingClientRect();
+                    if (areaRect.height > 0) {
+                        const markRect = targetMark.getBoundingClientRect();
+                        const margin = 24;
+                        needsScroll = markRect.top < (areaRect.top + margin) || markRect.bottom > (areaRect.bottom - margin);
+                    }
+                }
+                if (needsScroll) {
+                    AppState.beginAutoScrollHighlight();
+                    targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                }
             }
             
             const counterEl = document.getElementById('searchCounter');

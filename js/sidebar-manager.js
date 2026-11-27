@@ -5,7 +5,7 @@
  * e per accedere allo storico delle ultime 10 ricerche (SearchHistory).
  * SearchAutocomplete accetta ed elabora termini sia con prefisso '#' che puri, lasciando al
  * controller degli eventi la discrezione sull'apertura dell'overlay.
- * L'altezza e lo scorrimento del menu a tendina sono governati dal CSS (.adv-filter-autocomplete).
+ * L'altezza e lo scorrimento del menu a tendina si adattano dinamicamente alla viewport.
  * Pillole dei filtri interattive con apertura menu a tendina sul corpo, visualizzazione delle
  * opzioni disponibili per proprietà e rimozione isolata su click della ✕.
  * Risoluzione semantica dei record collegati, date ad intervallo {start, end} e note_link.
@@ -209,7 +209,10 @@ const SidebarManager = {
             }
 
             const rect = inputEl.getBoundingClientRect();
-            popup.style.top = rect.bottom + 5 + 'px';
+            const margin = 10;
+            const spaceBelow = window.innerHeight - (rect.bottom + 5) - margin;
+            const spaceAbove = (rect.top - 5) - margin;
+
             popup.style.left = rect.left + 'px';
             popup.style.minWidth = rect.width + 'px';
             const availableSpace = Math.max(rect.width, window.innerWidth - rect.left - 15);
@@ -217,6 +220,20 @@ const SidebarManager = {
             popup.style.maxWidth = maxAllowedWidth + 'px';
             popup.style.width = 'max-content';
             popup.style.boxSizing = 'border-box';
+            popup.style.overflowY = 'auto';
+            popup.style.overflowX = 'hidden';
+
+            if (spaceBelow >= 120 || spaceBelow >= spaceAbove) {
+                popup.style.top = (rect.bottom + 5) + 'px';
+                popup.style.bottom = 'auto';
+                popup.style.maxHeight = Math.max(60, spaceBelow) + 'px';
+            } else {
+                popup.style.top = 'auto';
+                popup.style.bottom = (window.innerHeight - rect.top + 5) + 'px';
+                popup.style.maxHeight = Math.max(60, spaceAbove) + 'px';
+            }
+
+            popup.scrollTop = 0;
             return popup;
         },
 

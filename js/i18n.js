@@ -396,6 +396,14 @@ adv_pivot: {
     filter_pivot_title: "Filtra Tabella Pivot",
     no_results_filtered: "Nessun risultato per i filtri attuali."
 },
+adv_charts: {
+    no_valid_dates: "Nessun record con data valida trovato per generare la serie temporale.",
+    tooltip_total: "Totale",
+    tooltip_no_activity: "Nessun record",
+    unscheduled_excluded: "{count} record senza data esclusi dall'asse temporale",
+    auto_scaled_week: "Intervallo ampio: visualizzazione raggruppata automaticamente per Settimana",
+    auto_scaled_month: "Intervallo ampio: visualizzazione raggruppata automaticamente per Mese"
+},
 sidebar_filter: {
     recent_searches_title: "Ricerche recenti:",
     clear_history: "Pulisci",
@@ -917,7 +925,6 @@ image_manager: {
     copied_toast: "Immagine copiata negli appunti!",
     copy_error: "Impossibile copiare l'immagine negli appunti.",
     download_image: "Scarica immagine",
-    edit_image: "Ritaglia e Annota",
     lightbox_fit: "Adatta",
     editor_title: "Ritaglia e Annota Immagine",
     tool_crop: "Ritaglia",
@@ -1186,6 +1193,20 @@ adv_automations: {
     configure_automation: "Configura Automazione"
 },
 adv_pivot_menu: {
+    palette_select: "Colori della colonna Select",
+    time_axis_section: "Opzioni Asse Temporale",
+    time_granularity_label: "Raggruppa date per:",
+    granularity_day: "Giorno",
+    granularity_week: "Settimana",
+    granularity_month: "Mese",
+    time_window_label: "Finestra temporale:",
+    window_auto: "Intervallo completo dei dati",
+    window_30d: "Ultimi 30 giorni",
+    window_90d: "Ultimi 90 giorni",
+    window_365d: "Ultimi 365 giorni",
+    window_year: "Anno corrente",
+    fill_time_gaps: "Mostra giorni/periodi vuoti (asse continuo)",
+    multiselect_stack_hint: "Nota: il campo selezionato per impilare è di tipo Multi-Select; i record con più tag formano serie combinate.",
     search_source_placeholder: "Cerca database o pagina contenitrice (Invio per selezionare)...",
     source_records_count: "{records} record • {cols} col.",
     change_source_btn: "Cambia Database ↺",
@@ -2358,6 +2379,14 @@ adv_pivot: {
     filter_pivot_title: "Filter Pivot Table",
     no_results_filtered: "No results for current filters."
 },
+adv_charts: {
+    no_valid_dates: "No records with a valid date found to generate the time series.",
+    tooltip_total: "Total",
+    tooltip_no_activity: "No records",
+    unscheduled_excluded: "{count} records without a date excluded from the time axis",
+    auto_scaled_week: "Wide range: view automatically grouped by Week",
+    auto_scaled_month: "Wide range: view automatically grouped by Month"
+},
 sidebar_filter: {
     recent_searches_title: "Recent searches:",
     clear_history: "Clear",
@@ -2879,7 +2908,6 @@ image_manager: {
     copied_toast: "Image copied to clipboard!",
     copy_error: "Unable to copy image to clipboard.",
     download_image: "Download image",
-    edit_image: "Crop & Annotate",
     lightbox_fit: "Fit",
     editor_title: "Crop & Annotate Image",
     tool_crop: "Crop",
@@ -3148,6 +3176,20 @@ adv_automations: {
     configure_automation: "Configure Automation"
 },
 adv_pivot_menu: {
+    palette_select: "Select Column Colors",
+    time_axis_section: "Time Axis Options",
+    time_granularity_label: "Group dates by:",
+    granularity_day: "Day",
+    granularity_week: "Week",
+    granularity_month: "Month",
+    time_window_label: "Time window:",
+    window_auto: "Full data range",
+    window_30d: "Last 30 days",
+    window_90d: "Last 90 days",
+    window_365d: "Last 365 days",
+    window_year: "Current year",
+    fill_time_gaps: "Show empty days/periods (continuous axis)",
+    multiselect_stack_hint: "Note: the stacking field is a Multi-Select; records with multiple tags form combined series.",
     search_source_placeholder: "Search database or containing page (Enter to select)...",
     source_records_count: "{records} records • {cols} cols",
     change_source_btn: "Change Database ↺",
@@ -4318,6 +4360,14 @@ adv_pivot: {
     filter_pivot_title: "Filtrar Tabla Dinámica",
     no_results_filtered: "No hay resultados para los filtros actuales."
 },
+adv_charts: {
+    no_valid_dates: "No se encontraron registros con fecha válida para generar la serie temporal.",
+    tooltip_total: "Total",
+    tooltip_no_activity: "Sin registros",
+    unscheduled_excluded: "{count} registros sin fecha excluidos del eje temporal",
+    auto_scaled_week: "Rango amplio: vista agrupada automáticamente por Semana",
+    auto_scaled_month: "Rango amplio: vista agrupada automáticamente por Mes"
+},
 sidebar_filter: {
     recent_searches_title: "Búsquedas recientes:",
     clear_history: "Limpiar",
@@ -4839,7 +4889,6 @@ image_manager: {
     copied_toast: "¡Imagen copiada al portapapeles!",
     copy_error: "No se pudo copiar la imagen al portapapeles.",
     download_image: "Descargar imagen",
-    edit_image: "Recortar y Anotar",
     lightbox_fit: "Ajustar",
     editor_title: "Recortar y Anotar Imagen",
     tool_crop: "Recortar",
@@ -5108,6 +5157,20 @@ adv_automations: {
     configure_automation: "Configurar Automatización"
 },
 adv_pivot_menu: {
+    palette_select: "Colores de la columna Select",
+    time_axis_section: "Opciones de Eje Temporal",
+    time_granularity_label: "Agrupar fechas por:",
+    granularity_day: "Día",
+    granularity_week: "Semana",
+    granularity_month: "Mes",
+    time_window_label: "Ventana temporal:",
+    window_auto: "Rango completo de datos",
+    window_30d: "Últimos 30 días",
+    window_90d: "Últimos 90 días",
+    window_365d: "Últimos 365 días",
+    window_year: "Año actual",
+    fill_time_gaps: "Mostrar días/períodos vacíos (eje continuo)",
+    multiselect_stack_hint: "Nota: el campo seleccionado para apilar es Multi-Select; los registros con varias etiquetas forman series combinadas.",
     search_source_placeholder: "Buscar base de datos o página contenedora (Intro para seleccionar)...",
     source_records_count: "{records} registros • {cols} col.",
     change_source_btn: "Cambiar base de datos ↺",
@@ -6277,6 +6340,14 @@ adv_pivot: {
     filter_pivot_title: "Pivot-Tabelle filtern",
     no_results_filtered: "Keine Ergebnisse für die aktuellen Filter."
 },
+adv_charts: {
+    no_valid_dates: "Keine Datensätze mit gültigem Datum gefunden, um die Zeitreihe zu erstellen.",
+    tooltip_total: "Gesamt",
+    tooltip_no_activity: "Keine Einträge",
+    unscheduled_excluded: "{count} Datensätze ohne Datum von der Zeitachse ausgeschlossen",
+    auto_scaled_week: "Großer Bereich: Ansicht automatisch nach Woche gruppiert",
+    auto_scaled_month: "Großer Bereich: Ansicht automatisch nach Monat gruppiert"
+},
 sidebar_filter: {
     recent_searches_title: "Letzte Suchen:",
     clear_history: "Leeren",
@@ -6798,7 +6869,6 @@ image_manager: {
     copied_toast: "Bild in Zwischenablage kopiert!",
     copy_error: "Bild konnte nicht kopiert werden.",
     download_image: "Bild herunterladen",
-    edit_image: "Zuschneiden & Kommentieren",
     lightbox_fit: "Anpassen",
     editor_title: "Bild zuschneiden & kommentieren",
     tool_crop: "Zuschneiden",
@@ -7067,6 +7137,20 @@ adv_automations: {
     configure_automation: "Automatisierung konfigurieren"
 },
 adv_pivot_menu: {
+    palette_select: "Farben der Select-Spalte",
+    time_axis_section: "Zeitachsen-Optionen",
+    time_granularity_label: "Daten gruppieren nach:",
+    granularity_day: "Tag",
+    granularity_week: "Woche",
+    granularity_month: "Monat",
+    time_window_label: "Zeitfenster:",
+    window_auto: "Gesamter Datenbereich",
+    window_30d: "Letzte 30 Tage",
+    window_90d: "Letzte 90 Tage",
+    window_365d: "Letzte 365 Tage",
+    window_year: "Aktuelles Jahr",
+    fill_time_gaps: "Leere Tage/Zeiträume anzeigen (kontinuierliche Achse)",
+    multiselect_stack_hint: "Hinweis: Das Feld zum Stapeln ist ein Multi-Select; Einträge mit mehreren Tags bilden kombinierte Serien.",
     search_source_placeholder: "Datenbank oder übergeordnete Seite suchen (Eingabetaste zum Auswählen)...",
     source_records_count: "{records} Datensätze • {cols} Spalten",
     change_source_btn: "Datenbank wechseln ↺",

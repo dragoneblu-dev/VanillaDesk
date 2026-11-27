@@ -633,6 +633,32 @@ Object.assign(UI, {
         if (typeof UI.Alarm !== 'undefined') UI.Alarm.init(); 
     },
 
+    showCustomTooltipNow: (target, htmlText) => {
+        const tooltipEl = document.getElementById('advCustomTooltip');
+        if (!tooltipEl || !target || !htmlText || !document.body.contains(target)) return;
+
+        clearTimeout(UI.tooltipTimeout);
+        tooltipEl.innerHTML = htmlText;
+        const rect = target.getBoundingClientRect();
+
+        let topPos = rect.top - tooltipEl.offsetHeight - 10;
+        let leftPos = rect.left + (rect.width / 2) - (tooltipEl.offsetWidth / 2);
+
+        if (topPos < 0) topPos = rect.bottom + 10;
+        if (leftPos < 10) leftPos = 10;
+        if (leftPos + tooltipEl.offsetWidth > window.innerWidth - 10) leftPos = window.innerWidth - tooltipEl.offsetWidth - 10;
+
+        tooltipEl.style.top = topPos + 'px';
+        tooltipEl.style.left = leftPos + 'px';
+        tooltipEl.style.opacity = '1';
+    },
+
+    hideCustomTooltip: () => {
+        clearTimeout(UI.tooltipTimeout);
+        const tooltipEl = document.getElementById('advCustomTooltip');
+        if (tooltipEl) tooltipEl.style.opacity = '0';
+    },
+
     initCustomTooltips: () => {
         const tooltipEl = document.getElementById('advCustomTooltip');
         if (!tooltipEl) return;
@@ -737,21 +763,7 @@ Object.assign(UI, {
             observer.observe(document.body, { childList: true, subtree: true });
 
             UI.tooltipTimeout = setTimeout(() => {
-                if (!document.body.contains(target)) return;
-
-                tooltipEl.innerHTML = htmlText; 
-                const rect = target.getBoundingClientRect();
-
-                let topPos = rect.top - tooltipEl.offsetHeight - 10;
-                let leftPos = rect.left + (rect.width / 2) - (tooltipEl.offsetWidth / 2);
-
-                if (topPos < 0) topPos = rect.bottom + 10;
-                if (leftPos < 10) leftPos = 10;
-                if (leftPos + tooltipEl.offsetWidth > window.innerWidth - 10) leftPos = window.innerWidth - tooltipEl.offsetWidth - 10;
-
-                tooltipEl.style.top = topPos + 'px';
-                tooltipEl.style.left = leftPos + 'px';
-                tooltipEl.style.opacity = '1';
+                UI.showCustomTooltipNow(target, htmlText);
             }, 300);
         });
 

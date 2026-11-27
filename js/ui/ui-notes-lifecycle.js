@@ -551,14 +551,24 @@ Object.assign(UI, {
                             if (curr.classList && curr.classList.contains('collapsed')) curr.classList.remove('collapsed');
                             curr = curr.parentNode;
                         }
-                        clearTimeout(AppState._autoScrollHighlightTimer);
-                        AppState._isAutoScrollingToHighlight = true;
-                        setTimeout(() => {
-                            targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
-                            AppState._autoScrollHighlightTimer = setTimeout(() => {
-                                AppState._isAutoScrollingToHighlight = false;
-                            }, 550);
-                        }, 50);
+
+                        const scrollArea = document.getElementById('editorScrollContent');
+                        let needsScroll = true;
+                        if (scrollArea) {
+                            const areaRect = scrollArea.getBoundingClientRect();
+                            if (areaRect.height > 0) {
+                                const markRect = targetMark.getBoundingClientRect();
+                                const margin = 24;
+                                needsScroll = markRect.top < (areaRect.top + margin) || markRect.bottom > (areaRect.bottom - margin);
+                            }
+                        }
+                        if (needsScroll) {
+                            AppState.beginAutoScrollHighlight();
+                            setTimeout(() => {
+                                AppState.beginAutoScrollHighlight();
+                                targetMark.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            }, 50);
+                        }
                     }
                 } else {
                     searchCounter.innerText = "0/0";

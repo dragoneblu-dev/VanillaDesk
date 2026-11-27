@@ -185,6 +185,31 @@ window.UI = {
                 : `<span style="color:#d97706; font-size:0.7rem; display:inline-flex; align-items:center; gap:3px;">${Icons.alertTriangle} ${I18n.t('idb_storage.no_backup_warning')}</span>`;
             const marginBottom = (isOnboarding && idx === workspaces.length - 1) ? '0' : '8px';
 
+            if (isOnboarding) {
+                return `
+                    <div role="button" tabindex="0"
+                         title="${I18n.t('idb_storage.btn_open')}: ${safeName}"
+                         onclick="Store.openBrowserWorkspace('${safeId}');"
+                         onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();Store.openBrowserWorkspace('${safeId}');}"
+                         onmouseenter="this.style.borderColor='var(--col_memBro)'; this.style.background='var(--item-hover)';"
+                         onmouseleave="this.style.borderColor='var(--border-color)'; this.style.background='${itemBg}';"
+                         style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:${itemBg}; border:1px solid var(--border-color); border-radius:6px; margin-bottom:${marginBottom}; cursor:pointer; transition:border-color 0.15s ease, background-color 0.15s ease;">
+                        <div style="flex:1; min-width:0; overflow:hidden; padding-right:10px;">
+                            <div style="font-weight:bold; font-size:0.9rem; color:var(--text-primary); display:flex; align-items:center; gap:6px;">
+                                <span style="color:var(--col_memBro); display:inline-flex; flex-shrink:0;">${Icons.globe}</span>
+                                <span style="overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${safeName}</span>
+                            </div>
+                            <div style="display:flex; gap:10px; align-items:center; margin-top:3px; flex-wrap:wrap;">
+                                <span style="font-size:0.75rem; color:var(--text-secondary);">${I18n.t('idb_storage.modified_at', { date: dateStr })}</span>
+                                <span style="font-size:0.75rem; opacity:0.3;">•</span>
+                                ${backupInfo}
+                            </div>
+                        </div>
+                        <span style="color:var(--col_memBro); display:inline-flex; flex-shrink:0; opacity:0.85;">${Icons.chevronRight}</span>
+                    </div>
+                `;
+            }
+
             return `
                 <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:${itemBg}; border:1px solid var(--border-color); border-radius:6px; margin-bottom:${marginBottom};">
                     <div style="flex:1; min-width:0; overflow:hidden; padding-right:10px;">
