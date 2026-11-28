@@ -12,10 +12,13 @@
  * per l'autoselezione immediata di "Tabella Pivot" o "Grafico Visivo".
  * FEAT TIME SERIES CHART: Opzioni Asse Temporale (Granularità, Finestra, Riempimento giorni vuoti),
  * palette ereditata da colonne Select, pre-impostazione Conteggio e auto-stacking.
+ * FEAT LIVE PREVIEW & CHART OPTIONS: Pulsante "Applica" con ripristino su Annulla, ordinamento categorie,
+ * limite Top-N + Altri, opzione beginAtZero e scala 100% per grafici impilati.
  */
 
 const AdvancedPivotMenus = {
     pendingConfig: null,
+    _initialSnapshot: null,
     draggedIndex: null,
     draggedType: null,
     _availableDbList: [],
@@ -24,6 +27,10 @@ const AdvancedPivotMenus = {
         visible: false,
         type: 'bar',
         stacked: false,
+        stacked100: false,
+        beginAtZero: true,
+        sortOrder: 'default',
+        topN: 'all',
         showLabels: true,
         centerTotal: true,
         legendPos: 'bottom',
@@ -167,6 +174,7 @@ const AdvancedPivotMenus = {
         if (!sourceState || !Array.isArray(sourceState.columns)) return;
 
         const chartType = document.getElementById('pivotChartStyle')?.value || 'bar';
+        const isPieType = chartType === 'pie' || chartType === 'doughnut';
         const isTimeChartCompatible = ['bar', 'horizontalBar', 'line'].includes(chartType);
 
         const grp0Col = config.groupBy.length > 0 ? sourceState.columns.find(c => c.id === config.groupBy[0]) : null;
@@ -178,10 +186,21 @@ const AdvancedPivotMenus = {
             timeBox.style.display = (isFirstColDate && isTimeChartCompatible) ? 'flex' : 'none';
         }
 
+        // Gestione visibilità opzioni specifiche per grafici cartesiani vs torte
+        const beginZeroRow = document.getElementById('chartBeginAtZeroRow');
+        if (beginZeroRow) {
+            beginZeroRow.style.display = isPieType ? 'none' : 'flex';
+        }
+
+        const isStacked = document.getElementById('chartStacked')?.checked;
+        const stacked100Row = document.getElementById('chartStacked100Row');
+        if (stacked100Row) {
+            stacked100Row.style.display = (isStacked && !isPieType && config.groupBy.length >= 2) ? 'flex' : 'none';
+        }
+
         // Gestione avviso informativo per Multi-Select come seconda dimensione (stacking)
         const multiHint = document.getElementById('pivotMultiSelectStackHint');
         if (multiHint) {
-            const isStacked = document.getElementById('chartStacked')?.checked;
             multiHint.style.display = (isStacked && grp1Col && grp1Col.type === 'multi-select') ? 'block' : 'none';
         }
 
@@ -234,30 +253,49 @@ const AdvancedPivotMenus = {
         }
     },
 
-    switchToFullConfig: (tableId) => {
-        if (AdvancedPivotMenus.pendingConfig) {
-            const chartTypeInput = document.getElementById('pivotChartStyle');
-            const stackCheck = document.getElementById('chartStacked');
-            const labelsCheck = document.getElementById('chartShowLabels');
-            const centerCheck = document.getElementById('chartCenterTotal');
-            const legendPosSel = document.getElementById('chartLegendPos');
-            const paletteSel = document.getElementById('chartColorPalette');
-            const heightSel = document.getElementById('chartHeight');
-            const timeGranSel = document.getElementById('chartTimeGranularity');
-            const timeWinSel = document.getElementById('chartTimeWindow');
-            const fillGapsCheck = document.getElementById('chartFillTimeGaps');
+    _syncChartConfigFromDOM: () => {
+        if (!AdvancedPivotMenus.pendingConfig) return false;
 
-            if (chartTypeInput) AdvancedPivotMenus.pendingConfig.chartConfig.type = chartTypeInput.value;
-            if (stackCheck) AdvancedPivotMenus.pendingConfig.chartConfig.stacked = stackCheck.checked;
-            if (labelsCheck) AdvancedPivotMenus.pendingConfig.chartConfig.showLabels = labelsCheck.checked;
-            if (centerCheck) AdvancedPivotMenus.pendingConfig.chartConfig.centerTotal = centerCheck.checked;
-            if (legendPosSel) AdvancedPivotMenus.pendingConfig.chartConfig.legendPos = legendPosSel.value;
-            if (paletteSel) AdvancedPivotMenus.pendingConfig.chartConfig.colorPalette = paletteSel.value;
-            if (heightSel) AdvancedPivotMenus.pendingConfig.chartConfig.height = heightSel.value;
-            if (timeGranSel) AdvancedPivotMenus.pendingConfig.chartConfig.timeGranularity = timeGranSel.value;
-            if (timeWinSel) AdvancedPivotMenus.pendingConfig.chartConfig.timeWindow = timeWinSel.value;
-            if (fillGapsCheck) AdvancedPivotMenus.pendingConfig.chartConfig.fillTimeGaps = fillGapsCheck.checked;
-        }
+        const displaySelect = document.getElementById('pivotDisplayType');
+        const chartTypeInput = document.getElementById('pivotChartStyle');
+        const stackCheck = document.getElementById('chartStacked');
+        const stacked100Check = document.getElementById('chartStacked100');
+        const beginZeroCheck = document.getElementById('chartBeginAtZero');
+        const sortOrderSel = document.getElementById('chartSortOrder');
+        const topNSel = document.getElementById('chartTopN');
+        const labelsCheck = document.getElementById('chartShowLabels');
+        const centerCheck = document.getElementById('chartCenterTotal');
+        const legendPosSel = document.getElementById('chartLegendPos');
+        const paletteSel = document.getElementById('chartColorPalette');
+        const heightSel = document.getElementById('chartHeight');
+        const timeGranSel = document.getElementById('chartTimeGranularity');
+        const timeWinSel = document.getElementById('chartTimeWindow');
+        const fillGapsCheck = document.getElementById('chartFillTimeGaps');
+
+        const isChart = displaySelect ? displaySelect.value === 'chart' : true;
+
+        AdvancedPivotMenus.pendingConfig.chartConfig = {
+            visible: isChart,
+            type: chartTypeInput ? chartTypeInput.value : 'bar',
+            stacked: stackCheck ? stackCheck.checked : false,
+            stacked100: stacked100Check ? stacked100Check.checked : false,
+            beginAtZero: beginZeroCheck ? beginZeroCheck.checked : true,
+            sortOrder: sortOrderSel ? sortOrderSel.value : 'default',
+            topN: topNSel ? topNSel.value : 'all',
+            showLabels: labelsCheck ? labelsCheck.checked : true,
+            centerTotal: centerCheck ? centerCheck.checked : true,
+            legendPos: legendPosSel ? legendPosSel.value : 'bottom',
+            colorPalette: paletteSel ? paletteSel.value : 'default',
+            height: heightSel ? heightSel.value : 'medium',
+            timeGranularity: timeGranSel ? timeGranSel.value : 'day',
+            timeWindow: timeWinSel ? timeWinSel.value : 'auto',
+            fillTimeGaps: fillGapsCheck ? fillGapsCheck.checked : true
+        };
+        return true;
+    },
+
+    switchToFullConfig: (tableId) => {
+        AdvancedPivotMenus._syncChartConfigFromDOM();
         AdvancedPivotMenus.openCreateWizard(tableId, false, true);
     },
 
@@ -361,6 +399,9 @@ const AdvancedPivotMenus = {
         const pVis = document.getElementById('pivotVisualSettings');
         if (pVis) pVis.style.display = 'none';
 
+        const applyBtn = document.getElementById('btnApplyPivotPreview');
+        if (applyBtn) applyBtn.style.display = 'none';
+
         const finalizeBtn = document.getElementById('btnFinalizePivot');
         if (finalizeBtn) finalizeBtn.style.display = 'none';
 
@@ -413,6 +454,16 @@ const AdvancedPivotMenus = {
                 aggregations: [],
                 chartConfig: AdvancedPivotMenus._getDefaultChartConfig()
             };
+
+            // Salva lo snapshot iniziale per consentire il ripristino pulito in caso di Annulla dopo Anteprima
+            if (editTableId) {
+                const origState = AdvancedTable.getState(editTableId);
+                AdvancedPivotMenus._initialSnapshot = origState
+                    ? { isNew: false, tableId: editTableId, state: JSON.parse(JSON.stringify(origState)), previewApplied: false }
+                    : null;
+            } else {
+                AdvancedPivotMenus._initialSnapshot = { isNew: true, createdTableId: null, previewApplied: false };
+            }
         }
 
         let isEditing = false;
@@ -442,6 +493,10 @@ const AdvancedPivotMenus = {
         const cCfg = AdvancedPivotMenus.pendingConfig.chartConfig;
         const isChart = cCfg.visible;
         const chartType = cCfg.type || 'bar';
+        const sortOrder = cCfg.sortOrder || 'default';
+        const topN = cCfg.topN !== undefined ? String(cCfg.topN) : 'all';
+        const beginAtZero = cCfg.beginAtZero !== false;
+        const stacked100 = cCfg.stacked100 === true;
         const legendPos = cCfg.legendPos || 'bottom';
         const currentPalette = cCfg.colorPalette || 'default';
         const currentHeight = cCfg.height || 'medium';
@@ -716,9 +771,20 @@ const AdvancedPivotMenus = {
                                 <input type="checkbox" id="chartStacked" style="transform:scale(1.1);" ${cCfg.stacked ? 'checked' : ''} onchange="AdvancedPivotMenus.updateTimeSeriesUI()">
                                 ${I18n.t('adv_pivot_menu.chart_stacked')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_stacked_hint')}</span>
                             </label>
+
+                            <label id="chartStacked100Row" style="display:none; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer; margin-left:20px;">
+                                <input type="checkbox" id="chartStacked100" style="transform:scale(1.1);" ${stacked100 ? 'checked' : ''}>
+                                <span>${I18n.t('adv_pivot_menu.chart_stacked_100')}</span>
+                            </label>
+
                             <div id="pivotMultiSelectStackHint" style="display:none; font-size:0.72rem; color:var(--tx-c4); background:rgba(255, 134, 0, 0.08); border:1px dashed rgba(255, 134, 0, 0.35); border-radius:4px; padding:6px 8px;">
                                 ℹ️ ${I18n.t('adv_pivot_menu.multiselect_stack_hint')}
                             </div>
+
+                            <label id="chartBeginAtZeroRow" style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
+                                <input type="checkbox" id="chartBeginAtZero" style="transform:scale(1.1);" ${beginAtZero ? 'checked' : ''}>
+                                <span>${I18n.t('adv_pivot_menu.chart_begin_at_zero')}</span>
+                            </label>
                             
                             <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
                                 <input type="checkbox" id="chartShowLabels" style="transform:scale(1.1);" ${cCfg.showLabels !== false ? 'checked' : ''}>
@@ -731,8 +797,28 @@ const AdvancedPivotMenus = {
                             </label>
 
                             <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
+                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.sort_order_label')}</label>
+                                <select id="chartSortOrder" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
+                                    <option value="default" ${sortOrder === 'default' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.sort_default')}</option>
+                                    <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.sort_desc')}</option>
+                                    <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.sort_asc')}</option>
+                                </select>
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.top_n_label')}</label>
+                                <select id="chartTopN" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
+                                    <option value="all" ${topN === 'all' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_all')}</option>
+                                    <option value="5" ${topN === '5' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_5')}</option>
+                                    <option value="8" ${topN === '8' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_8')}</option>
+                                    <option value="10" ${topN === '10' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_10')}</option>
+                                    <option value="12" ${topN === '12' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_12')}</option>
+                                </select>
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px;">
                                 <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.legend_position')}</label>
-                                <select id="chartLegendPos" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
+                                <select id="chartLegendPos" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
                                     <option value="bottom" ${legendPos === 'bottom' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_bottom')}</option>
                                     <option value="right" ${legendPos === 'right' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_right')}</option>
                                     <option value="left" ${legendPos === 'left' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_left')}</option>
@@ -741,9 +827,9 @@ const AdvancedPivotMenus = {
                             </div>
 
                             <!-- Selettore Dimensione / Altezza Grafico -->
-                            <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
+                            <div style="display:flex; align-items:center; gap:8px;">
                                 <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.chart_height_label')}</label>
-                                <select id="chartHeight" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1;">
+                                <select id="chartHeight" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
                                     <option value="small" ${currentHeight === 'small' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_small')}</option>
                                     <option value="medium" ${currentHeight === 'medium' || !currentHeight ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_medium')}</option>
                                     <option value="large" ${currentHeight === 'large' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_large')}</option>
@@ -758,7 +844,8 @@ const AdvancedPivotMenus = {
         const showFinalizeBtn = isEditing || chartOnlyMode;
 
         const footerHTML = `
-            <button class="btn" onclick="UI.closeDrawer()">${I18n.t('common.cancel')}</button>
+            <button class="btn" onclick="AdvancedPivotMenus.cancelWizard()">${I18n.t('common.cancel')}</button>
+            <button class="btn" id="btnApplyPivotPreview" style="${showFinalizeBtn ? '' : 'display:none;'}" onclick="AdvancedPivotMenus.applyPreview()">${I18n.t('adv_pivot_menu.apply_preview')}</button>
             <button class="btn btn-primary" id="btnFinalizePivot" style="${showFinalizeBtn ? '' : 'display:none;'}" onclick="AdvancedPivotMenus.finalizePivot()">${isEditing && !chartOnlyMode ? I18n.t('adv_pivot_menu.save_config') : I18n.t('adv_pivot_menu.save_chart')}</button>
         `;
 
@@ -976,7 +1063,10 @@ const AdvancedPivotMenus = {
             }
         }
 
-        // Mostra il pulsante di salvataggio per la configurazione analitica
+        // Mostra i pulsanti di anteprima e salvataggio per la configurazione analitica
+        const applyBtn = document.getElementById('btnApplyPivotPreview');
+        if (applyBtn) applyBtn.style.display = '';
+
         const finalizeBtn = document.getElementById('btnFinalizePivot');
         if (finalizeBtn) {
             finalizeBtn.style.display = '';
@@ -1251,40 +1341,65 @@ const AdvancedPivotMenus = {
         AdvancedPivotMenus.updateTimeSeriesUI();
     },
 
+    applyPreview: () => {
+        const config = AdvancedPivotMenus.pendingConfig;
+        if (!config) return;
+        if (config.groupBy.length === 0) { alert(I18n.t('adv_pivot_menu.alert_require_group')); return; }
+        if (config.aggregations.length === 0) { alert(I18n.t('adv_pivot_menu.alert_require_metric')); return; }
+
+        AdvancedPivotMenus._syncChartConfigFromDOM();
+
+        const prevKeys = new Set(Object.keys(AppState.databases || {}));
+        AdvancedPivot.createOrUpdate(config.tableId, config.sourceId, config.groupBy, config.aggregations, null, config.chartConfig);
+
+        if (!config.tableId) {
+            const createdId = Object.keys(AppState.databases || {}).find(k => !prevKeys.has(k));
+            if (createdId) {
+                config.tableId = createdId;
+                if (AdvancedPivotMenus._initialSnapshot) {
+                    AdvancedPivotMenus._initialSnapshot.createdTableId = createdId;
+                }
+            }
+        }
+
+        if (AdvancedPivotMenus._initialSnapshot) {
+            AdvancedPivotMenus._initialSnapshot.previewApplied = true;
+        }
+
+        if (typeof UI !== 'undefined' && typeof UI.showToast === 'function') {
+            const msg = I18n.t('adv_pivot_menu.preview_applied_toast') !== 'adv_pivot_menu.preview_applied_toast'
+                ? I18n.t('adv_pivot_menu.preview_applied_toast')
+                : 'Anteprima aggiornata.';
+            UI.showToast(msg, 'info');
+        }
+    },
+
+    cancelWizard: () => {
+        const snap = AdvancedPivotMenus._initialSnapshot;
+        if (snap && snap.previewApplied) {
+            if (snap.isNew && snap.createdTableId) {
+                if (typeof AdvancedTable !== 'undefined' && typeof AdvancedTable.deleteTable === 'function') {
+                    AdvancedTable.deleteTable(snap.createdTableId, true);
+                }
+            } else if (!snap.isNew && snap.tableId && snap.state) {
+                AdvancedTable.setState(snap.tableId, JSON.parse(JSON.stringify(snap.state)));
+                AdvancedPivot.render(snap.tableId);
+                if (typeof Store !== 'undefined') Store.triggerAutoSave();
+            }
+        }
+        AdvancedPivotMenus._initialSnapshot = null;
+        UI.closeDrawer();
+    },
+
     finalizePivot: () => {
         const config = AdvancedPivotMenus.pendingConfig;
         if (config.groupBy.length === 0) { alert(I18n.t('adv_pivot_menu.alert_require_group')); return; }
         if (config.aggregations.length === 0) { alert(I18n.t('adv_pivot_menu.alert_require_metric')); return; }
 
-        const displaySelect = document.getElementById('pivotDisplayType');
-        const chartTypeInput = document.getElementById('pivotChartStyle');
-        const stackCheck = document.getElementById('chartStacked');
-        const labelsCheck = document.getElementById('chartShowLabels');
-        const centerCheck = document.getElementById('chartCenterTotal');
-        const legendPosSel = document.getElementById('chartLegendPos');
-        const paletteSel = document.getElementById('chartColorPalette');
-        const heightSel = document.getElementById('chartHeight');
-        const timeGranSel = document.getElementById('chartTimeGranularity');
-        const timeWinSel = document.getElementById('chartTimeWindow');
-        const fillGapsCheck = document.getElementById('chartFillTimeGaps');
-        
-        const isChart = displaySelect ? displaySelect.value === 'chart' : true;
-
-        config.chartConfig = {
-            visible: isChart,
-            type: chartTypeInput ? chartTypeInput.value : 'bar',
-            stacked: stackCheck ? stackCheck.checked : false,
-            showLabels: labelsCheck ? labelsCheck.checked : true,
-            centerTotal: centerCheck ? centerCheck.checked : true,
-            legendPos: legendPosSel ? legendPosSel.value : 'bottom',
-            colorPalette: paletteSel ? paletteSel.value : 'default',
-            height: heightSel ? heightSel.value : 'medium',
-            timeGranularity: timeGranSel ? timeGranSel.value : 'day',
-            timeWindow: timeWinSel ? timeWinSel.value : 'auto',
-            fillTimeGaps: fillGapsCheck ? fillGapsCheck.checked : true
-        };
+        AdvancedPivotMenus._syncChartConfigFromDOM();
 
         AdvancedPivot.createOrUpdate(config.tableId, config.sourceId, config.groupBy, config.aggregations, null, config.chartConfig);
+        AdvancedPivotMenus._initialSnapshot = null;
         UI.closeDrawer();
     }
 };

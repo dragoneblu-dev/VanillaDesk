@@ -18,7 +18,17 @@
 Object.assign(AdvancedTable, {
 
     _filterTimeout: null,
-    _currentFilterInput: null, 
+    _currentFilterInput: null,
+    _activeAutocompleteData: null,
+
+    // Estrae il termine di ricerca attivo a partire dall'ultimo ';' ignorando eventuali operatori iniziali
+    _extractCurrentFilterQuery: (rawValue) => {
+        const raw = String(rawValue || '');
+        const lastSemiIdx = raw.lastIndexOf(';');
+        const currentSegment = (lastSemiIdx !== -1 ? raw.substring(lastSemiIdx + 1) : raw).trim();
+        const opMatch = currentSegment.match(/^(>=|<=|!=|>|<|=)\s*(.*)$/);
+        return (opMatch ? opMatch[2] : currentSegment).trim().toLowerCase();
+    },
 
     // Posiziona la tendina di autocompletamento confinandola ai bordi della viewport con scrollbar automatica
     _positionFilterAutocompletePopup: (popup, inputEl) => {
@@ -52,6 +62,83 @@ Object.assign(AdvancedTable, {
             popup.style.bottom = (window.innerHeight - rect.top) + 'px';
             popup.style.maxHeight = Math.max(60, spaceAbove) + 'px';
         }
+    },
+
+    // Renderizza nel portale solo le voci coerenti con la porzione digitata dopo l'ultimo ';'
+    _renderFilterAutocompleteItems: (tableId, targetColId, inputEl, valArray, isCheckbox = false) => {
+        const query = AdvancedTable._extractCurrentFilterQuery(inputEl.value);
+        let popup = document.getElementById('adv-filter-autocomplete-portal');
+
+        if (isCheckbox) {
+            const cbOpts = [
+                { val: 'Sì', label: I18n.t('adv_filter.cb_checked') },
+                { val: 'No', label: I18n.t('adv_filter.cb_unchecked') }
+            ].filter(opt => !query || opt.val.toLowerCase().includes(query) || opt.label.toLowerCase().includes(query));
+
+            if (cbOpts.length === 0) {
+                if (popup) popup.style.display = 'none';
+                return;
+            }
+
+            if (!popup) {
+                popup = document.createElement('div');
+                popup.id = 'adv-filter-autocomplete-portal';
+                popup.className = 'adv-filter-autocomplete';
+                document.body.appendChild(popup);
+            }
+
+            let cbHtml = '';
+            cbOpts.forEach(opt => {
+                cbHtml += `<div class="adv-filter-autocomplete-item" data-val="${opt.val}" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', this.getAttribute('data-val'))">${opt.label}</div>`;
+            });
+            popup.innerHTML = cbHtml;
+            AdvancedTable._positionFilterAutocompletePopup(popup, inputEl);
+            popup.scrollTop = 0;
+            popup.style.display = 'block';
+            return;
+        }
+
+        const filteredVals = query
+            ? valArray.filter(v => v.toLowerCase().includes(query))
+            : valArray;
+
+        if (filteredVals.length === 0) {
+            if (popup) popup.style.display = 'none';
+            return;
+        }
+
+        if (!popup) {
+            popup = document.createElement('div');
+            popup.id = 'adv-filter-autocomplete-portal';
+            popup.className = 'adv-filter-autocomplete';
+            document.body.appendChild(popup);
+        }
+
+        let html = '';
+        filteredVals.forEach(v => {
+            const safeAttr = v.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            const safeText = v.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            html += `<div class="adv-filter-autocomplete-item" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" data-val="${safeAttr}" data-full-title="${safeAttr}" onmouseenter="if (this.scrollWidth > this.clientWidth) { this.title = this.getAttribute('data-full-title'); } else { this.removeAttribute('title'); }" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', this.getAttribute('data-val'))">${safeText}</div>`;
+        });
+
+        popup.innerHTML = html;
+        AdvancedTable._positionFilterAutocompletePopup(popup, inputEl);
+        popup.scrollTop = 0;
+        popup.style.display = 'block';
+    },
+
+    // Aggiornamento rapido durante la digitazione sfruttando la cache già estratta al focus
+    updateFilterAutocomplete: (tableId, inputEl) => {
+        AdvancedTable._currentFilterInput = inputEl;
+        const targetColId = inputEl.getAttribute('data-col');
+        const cache = AdvancedTable._activeAutocompleteData;
+
+        if (cache && cache.tableId === tableId && cache.colId === targetColId) {
+            AdvancedTable._renderFilterAutocompleteItems(tableId, targetColId, inputEl, cache.values, cache.isCheckbox);
+            return;
+        }
+
+        AdvancedTable.showFilterAutocomplete(tableId, inputEl);
     },
 
     // MENU 1: INPUT DI RICERCA (Filtra)
@@ -114,7 +201,7 @@ Object.assign(AdvancedTable, {
                                    autocomplete="chrome-off" name="prevent_autofill_${c.id}" data-lpignore="true" data-1p-ignore="true" spellcheck="false"
                                    data-col="${c.id}" value="${safeVal}" placeholder="${placeholderText}" 
                                    onkeydown="event.stopPropagation()" 
-                                   oninput="AdvancedTable.applyFilter('${tableId}', this)"
+                                   oninput="AdvancedTable.applyFilter('${tableId}', this); AdvancedTable.updateFilterAutocomplete('${tableId}', this);"
                                    onfocus="AdvancedTable.showFilterAutocomplete('${tableId}', this)"
                                    onblur="AdvancedTable.hideFilterAutocomplete()">
                             ${clearBtn}
@@ -327,28 +414,18 @@ Object.assign(AdvancedTable, {
 
         // GESTIONE CHECKBOX: Suggerimenti visivi con icona e valore, eliminando ogni disorientamento
         if (tgtColDef && tgtColDef.type === 'checkbox') {
-            let popup = document.getElementById('adv-filter-autocomplete-portal');
-            if (!popup) {
-                popup = document.createElement('div');
-                popup.id = 'adv-filter-autocomplete-portal';
-                popup.className = 'adv-filter-autocomplete';
-                document.body.appendChild(popup);
-            }
-            AdvancedTable._positionFilterAutocompletePopup(popup, inputEl);
-
-            const optYes = I18n.t('adv_filter.cb_checked');
-            const optNo = I18n.t('adv_filter.cb_unchecked');
-            
-            popup.innerHTML = `
-                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'Sì')">${optYes}</div>
-                <div class="adv-filter-autocomplete-item" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', 'No')">${optNo}</div>
-            `;
-            popup.scrollTop = 0;
-            popup.style.display = 'block';
+            AdvancedTable._activeAutocompleteData = {
+                tableId,
+                colId: targetColId,
+                values: [],
+                isCheckbox: true
+            };
+            AdvancedTable._renderFilterAutocompleteItems(tableId, targetColId, inputEl, [], true);
             return;
         }
 
         let uniqueVals = new Set();
+        const sharedRenderCache = {};
 
         const isStrictNumeric = (str) => {
             if (str === null || str === undefined) return false;
@@ -374,7 +451,7 @@ Object.assign(AdvancedTable, {
                         let cellVal = r.virtualCells[cId];
 
                         // Usiamo il Core per convertire le matrici complesse in testo semplice in modo coerente
-                        const displayVal = AdvancedTable.getFormatDisplayValue(colDef, cellVal);
+                        const displayVal = AdvancedTable.getFormatDisplayValue(colDef, cellVal, sharedRenderCache);
 
                         return terms.some(term => {
                             const matchOp = term.match(/^(>=|<=|!=|>|<|=)\s*(.*)/);
@@ -475,7 +552,7 @@ Object.assign(AdvancedTable, {
                 let vRow = { ...r, virtualCells: { ...r.cells } };
                 (sourceState.columns || []).forEach(col => {
                     if (col.type === 'formula') {
-                        vRow.virtualCells[col.id] = (typeof AdvancedTable.evaluateFormula === 'function') ? AdvancedTable.evaluateFormula(col.formula, vRow, sourceState.columns, state.sourceTableId, sourceState.title, vRow.virtualCells) : '';
+                        vRow.virtualCells[col.id] = (typeof AdvancedTable.evaluateFormula === 'function') ? AdvancedTable.evaluateFormula(col.formula, vRow, sourceState.columns, state.sourceTableId, sourceState.title, vRow.virtualCells, sharedRenderCache) : '';
                     } else vRow.virtualCells[col.id] = vRow.cells[col.id];
                 });
                 sourceRows.push(vRow);
@@ -599,9 +676,8 @@ Object.assign(AdvancedTable, {
         } else {
             // DATABASE STANDARD
             let rawDbRows = [];
-            const renderCache = {};
             (state.rows || []).forEach(r => {
-                rawDbRows.push(AdvancedTable.buildVirtualRow(tableId, r, state, renderCache));
+                rawDbRows.push(AdvancedTable.buildVirtualRow(tableId, r, state, sharedRenderCache));
             });
 
             const filteredRows = buildFilteredRows(rawDbRows, false);
@@ -612,7 +688,7 @@ Object.assign(AdvancedTable, {
                 if (tgtColDef) {
                     if (tgtColDef.type === 'relation' || (tgtColDef.type === 'relation_backlink' && (!tgtColDef.backlinkDisplay || tgtColDef.backlinkDisplay === 'list'))) {
                         // Per le relazioni vogliamo i singoli nomi esposti separatamente nell'autocomplete (non il listone aggregato)
-                        const names = AdvancedTable._resolveRelationNames(tgtColDef, val);
+                        const names = AdvancedTable._resolveRelationNames(tgtColDef, val, sharedRenderCache);
                         names.forEach(n => {
                             if (n && !String(n).includes('Invalid Date')) uniqueVals.add(String(n).trim());
                         });
@@ -624,7 +700,7 @@ Object.assign(AdvancedTable, {
                         });
                     } else {
                         // Per tutto il resto usiamo il Core (Date formattate, Record Note, ecc)
-                        val = AdvancedTable.getFormatDisplayValue(tgtColDef, val);
+                        val = AdvancedTable.getFormatDisplayValue(tgtColDef, val, sharedRenderCache);
                         if (val !== undefined && val !== null && val !== '' && !String(val).includes('Invalid Date')) {
                             uniqueVals.add(String(val).trim());
                         }
@@ -642,36 +718,30 @@ Object.assign(AdvancedTable, {
         }
 
         let valArray = Array.from(uniqueVals).filter(v => v !== '');
-        if (valArray.length === 0) return;
+        if (valArray.length === 0) {
+            AdvancedTable._activeAutocompleteData = null;
+            const popup = document.getElementById('adv-filter-autocomplete-portal');
+            if (popup) popup.style.display = 'none';
+            return;
+        }
 
         valArray.sort((a, b) => {
             if (!isNaN(parseFloat(a)) && !isNaN(parseFloat(b))) return parseFloat(a) - parseFloat(b);
             return a.localeCompare(b);
         });
 
-        let popup = document.getElementById('adv-filter-autocomplete-portal');
-        if (!popup) {
-            popup = document.createElement('div');
-            popup.id = 'adv-filter-autocomplete-portal';
-            popup.className = 'adv-filter-autocomplete';
-            document.body.appendChild(popup);
-        }
+        AdvancedTable._activeAutocompleteData = {
+            tableId,
+            colId: targetColId,
+            values: valArray,
+            isCheckbox: false
+        };
 
-        AdvancedTable._positionFilterAutocompletePopup(popup, inputEl);
-
-        let html = '';
-        valArray.forEach(v => {
-            let displayVal = v;
-            const safeVal = v.replace(/"/g, '&quot;');
-            html += `<div class="adv-filter-autocomplete-item" style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" data-full-title="${safeVal}" onmouseenter="if (this.scrollWidth > this.clientWidth) { this.title = this.getAttribute('data-full-title'); } else { this.removeAttribute('title'); }" onmousedown="event.preventDefault(); AdvancedTable.selectAutocompleteValue('${tableId}', '${targetColId}', '${v.replace(/'/g, "\\'")}')">${displayVal.replace(/</g, '&lt;')}</div>`;
-        });
-
-        popup.innerHTML = html;
-        popup.scrollTop = 0;
-        popup.style.display = 'block';
+        AdvancedTable._renderFilterAutocompleteItems(tableId, targetColId, inputEl, valArray, false);
     },
 
     hideFilterAutocomplete: () => {
+        AdvancedTable._activeAutocompleteData = null;
         const popup = document.getElementById('adv-filter-autocomplete-portal');
         if (popup) popup.style.display = 'none';
     },
@@ -680,22 +750,27 @@ Object.assign(AdvancedTable, {
         const inputEl = AdvancedTable._currentFilterInput;
         if (!inputEl) return;
 
-        let currentVal = inputEl.value.trim();
-        
-        let exactValue = value;
-        // Se non contiene operatori logici espliciti, assegna operatore di uguaglianza/match
-        if (!/^(>=|<=|!=|>|<|=)\s*/.test(exactValue)) {
-            exactValue = '= ' + exactValue;
+        const rawVal = inputEl.value || '';
+        const lastSemiIdx = rawVal.lastIndexOf(';');
+
+        const prefixBefore = lastSemiIdx !== -1 ? rawVal.substring(0, lastSemiIdx).trim() : '';
+        const currentSegment = (lastSemiIdx !== -1 ? rawVal.substring(lastSemiIdx + 1) : rawVal).trim();
+
+        let newTerm = value;
+        if (!/^(>=|<=|!=|>|<|=)\s*/.test(newTerm)) {
+            const opMatch = currentSegment.match(/^(>=|<=|!=|>|<|=)\s*/);
+            const prefixOp = opMatch ? (opMatch[1] + ' ') : '= ';
+            newTerm = prefixOp + newTerm;
         }
 
-        if (currentVal) {
-            if (currentVal.endsWith(';')) currentVal = currentVal.slice(0, -1).trim();
-            const existingTerms = currentVal.split(';').map(t => t.trim().toLowerCase());
-            if (!existingTerms.includes(exactValue.toLowerCase())) {
-                inputEl.value = currentVal + (currentVal ? '; ' : '') + exactValue;
-            }
+        if (prefixBefore) {
+            const prevTerms = prefixBefore.split(';').map(t => t.trim()).filter(Boolean);
+            const alreadyExists = prevTerms.some(t => t.toLowerCase() === newTerm.toLowerCase());
+            inputEl.value = alreadyExists
+                ? prevTerms.join('; ')
+                : (prevTerms.length > 0 ? (prevTerms.join('; ') + '; ' + newTerm) : newTerm);
         } else {
-            inputEl.value = exactValue;
+            inputEl.value = newTerm;
         }
         
         AdvancedTable.applyFilter(tableId, inputEl);

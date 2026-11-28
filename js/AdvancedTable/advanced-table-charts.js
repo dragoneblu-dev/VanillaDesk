@@ -9,6 +9,8 @@
  * Guardia preventiva isPie in cima ad afterDatasetsDraw prima di ctx.save() per eliminare overhead.
  * Supporto Time-Series ad alta densità (365+ giorni) con asse adattivo (cambi mese),
  * soppressione automatica delle etichette numeriche, geometria ottimizzata delle barre e tooltip unificato.
+ * Supporto a ordinamento per valore (desc/asc), raggruppamento Top-N + Altri, ereditarietà unità/decimali,
+ * opzione beginAtZero e scala percentuale 100% per grafici impilati.
  */
 
 const AdvancedTableCharts = {
@@ -29,6 +31,34 @@ const AdvancedTableCharts = {
             }
             delete AdvancedTableCharts.instances[tableId];
         }
+    },
+
+    // Estrae unità di misura e decimali dalla colonna sorgente (escluso il conteggio puro)
+    _getMetricMeta: (agg, sourceState) => {
+        if (!agg || agg.type === 'count' || !sourceState || !Array.isArray(sourceState.columns)) {
+            return { numberUnit: '', decimals: undefined };
+        }
+        const col = sourceState.columns.find(c => c.id === agg.sourceColId);
+        return {
+            numberUnit: col && col.numberUnit ? col.numberUnit : '',
+            decimals: col ? col.decimals : undefined
+        };
+    },
+
+    // Formatta un valore numerico rispettando decimali e unità di misura della colonna
+    _formatMetricValue: (val, meta = null) => {
+        if (val === null || val === undefined || isNaN(Number(val))) return '0';
+        const num = Number(val);
+        let numStr;
+        if (meta && meta.decimals !== undefined && meta.decimals !== 'default') {
+            numStr = num.toFixed(parseInt(meta.decimals, 10));
+        } else {
+            numStr = String(Math.round(num * 100) / 100);
+        }
+        if (meta && meta.numberUnit) {
+            numStr += meta.numberUnit === '%' ? '%' : ` ${meta.numberUnit}`;
+        }
+        return numStr;
     },
 
     // Risolve il colore saturo reale da una classe pillola Select (hl-c* / tx-c*), restituendo null se non assegnato
@@ -134,6 +164,7 @@ const AdvancedTableCharts = {
                 
                 const textColor = getComputedStyle(document.body).getPropertyValue('--text-secondary').trim() || '#666';
                 const accentColor = getComputedStyle(document.body).getPropertyValue('--border-color').trim() || '#ccc';
+                const metricMeta = pluginOptions.metricMeta || null;
                 
                 ctx.font = '11px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
                 ctx.textAlign = 'center';
@@ -220,7 +251,8 @@ const AdvancedTableCharts = {
                     ctx.stroke();
                     
                     const pct = Math.round(item.pctNum * 10) / 10 + '%';
-                    const text = `${item.val} (${pct})`;
+                    const formattedVal = AdvancedTableCharts._formatMetricValue(item.val, metricMeta);
+                    const text = `${formattedVal} (${pct})`;
                     
                     const canvasWidth = chart.width;
                     let maxTextWidth = isRightSide ? (canvasWidth - endX - 5) : (endX - 5);
@@ -246,6 +278,7 @@ const AdvancedTableCharts = {
                 
                 const textColor = getComputedStyle(document.body).getPropertyValue('--text-primary').trim() || '#000';
                 const meta0 = chart.getDatasetMeta(0);
+                const metricMeta = pluginOptions.metricMeta || null;
 
                 let sum = 0;
                 data.datasets[0].data.forEach((val, i) => {
@@ -256,8 +289,7 @@ const AdvancedTableCharts = {
                     }
                 });
 
-                if (sum % 1 !== 0) sum = Math.round(sum * 100) / 100;
-                const sumText = String(sum);
+                const sumText = AdvancedTableCharts._formatMetricValue(sum, metricMeta);
 
                 const centerX = (chartArea.left + chartArea.right) / 2;
                 const centerY = (chartArea.top + chartArea.bottom) / 2;
@@ -314,7 +346,7 @@ const AdvancedTableCharts = {
 
         AdvancedTableCharts._clearInstances(tableId);
 
-        const config = state.chartConfig || { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium' };
+        const config = state.chartConfig || { visible: false, type: 'bar', stacked: false, showLabels: true, centerTotal: true, legendPos: 'bottom', colorPalette: 'default', height: 'medium', sortOrder: 'default', topN: 'all', beginAtZero: true, stacked100: false };
         if (!config.visible) return;
 
         if (!state.groupBy || state.groupBy.length === 0 || !state.aggregations || state.aggregations.length === 0) {
@@ -369,8 +401,14 @@ const AdvancedTableCharts = {
 
         const isPie = chartType === 'doughnut' || chartType === 'pie';
         const isStackedEngine = config.stacked && state.groupBy.length >= 2 && !isPie;
+        const isStacked100 = isStackedEngine && config.stacked100 === true;
         const legendPos = config.legendPos || 'bottom';
         const chartHeight = config.height || 'medium';
+        const sortOrder = config.sortOrder || 'default';
+        const topNLimit = (config.topN && config.topN !== 'all') ? parseInt(config.topN, 10) : 0;
+        const otherLabel = (typeof I18n !== 'undefined' && I18n.t('adv_charts.other_category') !== 'adv_charts.other_category')
+            ? I18n.t('adv_charts.other_category')
+            : 'Altro';
 
         // Definizione altezze personalizzabili
         let standardBarHeight = '400px';
@@ -409,7 +447,7 @@ const AdvancedTableCharts = {
 
             AdvancedTableCharts.instances[tableId] = [];
 
-            let pieLabels = pivotRows.map(row => {
+            const rawPieLabels = pivotRows.map(row => {
                 let parts = [];
                 state.groupBy.forEach((g, idx) => {
                     let val = row.virtualCells['grp_' + idx] || 'Nessuno';
@@ -418,24 +456,58 @@ const AdvancedTableCharts = {
                 return parts.join(' - ');
             });
 
-            let pieSliceColors = multiColors;
-            if (activePalette === 'select' && sourceState && state.groupBy.length > 0) {
-                const grp0Col = sourceState.columns.find(c => c.id === state.groupBy[0]);
-                if (grp0Col && (grp0Col.type === 'select' || grp0Col.type === 'multi-select')) {
-                    const colorMap = AdvancedTableCharts._buildSelectColorMap(pieLabels, grp0Col, sourceState, style, multiColors);
-                    pieSliceColors = pieLabels.map(lbl => colorMap.get(lbl));
-                }
-            }
+            const grp0Col = (sourceState && state.groupBy.length > 0) ? sourceState.columns.find(c => c.id === state.groupBy[0]) : null;
+            const useSelectColors = activePalette === 'select' && grp0Col && (grp0Col.type === 'select' || grp0Col.type === 'multi-select');
 
             state.aggregations.forEach((agg, idx) => {
                 if (agg.type === 'list') return;
 
-                let dataValues = pivotRows.map(row => {
-                    let v = parseFloat(row.virtualCells['agg_' + idx]);
-                    return isNaN(v) ? 0 : v;
-                });
+                const metricMeta = AdvancedTableCharts._getMetricMeta(agg, sourceState);
 
-                if (dataValues.every(v => v === 0)) return;
+                let items = pivotRows.map((row, rIdx) => {
+                    let v = parseFloat(row.virtualCells['agg_' + idx]);
+                    return { label: rawPieLabels[rIdx], value: isNaN(v) ? 0 : v, isOther: false };
+                }).filter(it => it.value > 0);
+
+                if (items.length === 0) return;
+
+                // Top-N + Altri per Torta/Ciambella
+                if (topNLimit > 0 && items.length > topNLimit) {
+                    const ranked = [...items].sort((a, b) => b.value - a.value);
+                    const kept = ranked.slice(0, topNLimit);
+                    const rest = ranked.slice(topNLimit);
+                    let otherVal = 0;
+                    if (agg.type === 'avg') otherVal = rest.reduce((s, x) => s + x.value, 0) / rest.length;
+                    else if (agg.type === 'max') otherVal = Math.max(...rest.map(x => x.value));
+                    else if (agg.type === 'min') otherVal = Math.min(...rest.map(x => x.value));
+                    else otherVal = rest.reduce((s, x) => s + x.value, 0);
+
+                    if (sortOrder === 'asc') {
+                        kept.sort((a, b) => a.value - b.value);
+                        items = kept;
+                    } else if (sortOrder === 'default') {
+                        const keptSet = new Set(kept);
+                        items = items.filter(it => keptSet.has(it));
+                    } else {
+                        items = kept;
+                    }
+                    items.push({ label: otherLabel, value: otherVal, isOther: true });
+                } else if (sortOrder === 'desc') {
+                    items.sort((a, b) => b.value - a.value);
+                } else if (sortOrder === 'asc') {
+                    items.sort((a, b) => a.value - b.value);
+                }
+
+                const pieLabels = items.map(it => it.label);
+                const dataValues = items.map(it => it.value);
+
+                let pieSliceColors = multiColors;
+                if (useSelectColors) {
+                    const colorMap = AdvancedTableCharts._buildSelectColorMap(pieLabels, grp0Col, sourceState, style, multiColors);
+                    pieSliceColors = items.map(it => it.isOther ? '#9ca3af' : colorMap.get(it.label));
+                } else if (items.some(it => it.isOther)) {
+                    pieSliceColors = items.map((it, cIdx) => it.isOther ? '#9ca3af' : multiColors[cIdx % multiColors.length]);
+                }
 
                 const wrapper = document.createElement('div');
                 wrapper.style.flex = '1 1 280px';
@@ -470,6 +542,8 @@ const AdvancedTableCharts = {
                     if (legendPos === 'right') layoutPadding = { left: 40, right: 0, top: 10, bottom: 10 };
                     if (legendPos === 'left') layoutPadding = { left: 0, right: 40, top: 10, bottom: 10 };
                 }
+
+                const totalPieSum = dataValues.reduce((a, b) => a + b, 0);
 
                 const chartConfig = {
                     type: chartType,
@@ -506,11 +580,21 @@ const AdvancedTableCharts = {
                                     filter: topLegendIndices ? (legendItem) => topLegendIndices.has(legendItem.index) : undefined
                                 }
                             },
-                            customDataLabels: { display: config.showLabels !== false },
+                            tooltip: {
+                                callbacks: {
+                                    label: (item) => {
+                                        const val = item.parsed || 0;
+                                        const pct = totalPieSum > 0 ? Math.round((val / totalPieSum) * 1000) / 10 : 0;
+                                        return ` ${item.label}: ${AdvancedTableCharts._formatMetricValue(val, metricMeta)} (${pct}%)`;
+                                    }
+                                }
+                            },
+                            customDataLabels: { display: config.showLabels !== false, metricMeta },
                             datalabels: { display: false },
                             centerText: { 
                                 display: config.centerTotal !== false && chartType === 'doughnut',
-                                chartHeight: chartHeight
+                                chartHeight: chartHeight,
+                                metricMeta
                             }
                         }
                     },
@@ -558,11 +642,13 @@ const AdvancedTableCharts = {
             }
 
             if (timeSeries.seriesColDef) {
+                const targetMeta = AdvancedTableCharts._getMetricMeta(timeSeries.targetAgg, timeSeries.sourceState);
                 if (timeSeries.seriesKeys.length === 0) {
                     const emptySerieColor = multiColors[0];
                     datasets.push({
                         label: timeSeries.targetAgg ? timeSeries.targetAgg.label : I18n.t('adv_pivot.default_metric'),
                         data: timeBuckets.map(() => 0),
+                        metricMeta: targetMeta,
                         backgroundColor: chartType === 'line' ? 'transparent' : emptySerieColor,
                         borderColor: emptySerieColor,
                         borderWidth: isHighDensity ? 0 : (chartType === 'line' ? 2.5 : 1),
@@ -582,6 +668,7 @@ const AdvancedTableCharts = {
                         datasets.push({
                             label: seriesName,
                             data: timeSeries.datasetsData[seriesName] || [],
+                            metricMeta: targetMeta,
                             backgroundColor: chartType === 'line' ? 'transparent' : color,
                             borderColor: color,
                             borderWidth: chartType === 'line' ? 2.5 : (isHighDensity ? 0 : 1),
@@ -599,9 +686,11 @@ const AdvancedTableCharts = {
                 const metrics = timeSeries.metrics || [];
                 metrics.forEach((agg, idx) => {
                     const color = multiColors[idx % multiColors.length];
+                    const metricMeta = AdvancedTableCharts._getMetricMeta(agg, timeSeries.sourceState);
                     datasets.push({
                         label: agg.label || 'Metrica',
                         data: timeSeries.datasetsData['agg_' + idx] || [],
+                        metricMeta,
                         backgroundColor: chartType === 'line' ? 'transparent' : color,
                         borderColor: color,
                         borderWidth: chartType === 'line' ? 2.5 : (isHighDensity ? 0 : 1),
@@ -617,7 +706,7 @@ const AdvancedTableCharts = {
             }
         } else if (isStackedEngine) {
             const xLabelsRaw = pivotRows.map(r => r.virtualCells['grp_0'] || 'Senza Stato');
-            labels = [...new Set(xLabelsRaw)].map(l => l.replace(/<[^>]*>?/gm, '')); 
+            let baseLabels = [...new Set(xLabelsRaw)].map(l => l.replace(/<[^>]*>?/gm, ''));
             
             const seriesNamesRaw = pivotRows.map(r => r.virtualCells['grp_1'] || 'Nessuno');
             const seriesNames = [...new Set(seriesNamesRaw)].map(l => l.replace(/<[^>]*>?/gm, ''));
@@ -625,12 +714,49 @@ const AdvancedTableCharts = {
             const targetAggIdx = state.aggregations.findIndex(a => a.type !== 'list');
             
             if (targetAggIdx > -1) {
+                const targetAgg = state.aggregations[targetAggIdx];
+                const targetMeta = AdvancedTableCharts._getMetricMeta(targetAgg, sourceState);
                 const lookupMap = new Map();
+                const totalsByX = new Map();
+
                 pivotRows.forEach(r => {
                     const rGrp0 = (r.virtualCells['grp_0'] || 'Senza Stato').replace(/<[^>]*>?/gm, '');
                     const rGrp1 = (r.virtualCells['grp_1'] || 'Nessuno').replace(/<[^>]*>?/gm, '');
-                    lookupMap.set(`${rGrp0}\u0001${rGrp1}`, parseFloat(r.virtualCells['agg_' + targetAggIdx]) || 0);
+                    const val = parseFloat(r.virtualCells['agg_' + targetAggIdx]) || 0;
+                    lookupMap.set(`${rGrp0}\u0001${rGrp1}`, val);
+                    totalsByX.set(rGrp0, (totalsByX.get(rGrp0) || 0) + val);
                 });
+
+                // Top-N + Altri e Ordinamento per Grafici Impilati
+                if (topNLimit > 0 && baseLabels.length > topNLimit) {
+                    const rankedLabels = [...baseLabels].sort((a, b) => (totalsByX.get(b) || 0) - (totalsByX.get(a) || 0));
+                    const kept = rankedLabels.slice(0, topNLimit);
+                    const rest = rankedLabels.slice(topNLimit);
+
+                    seriesNames.forEach(sn => {
+                        let sumRest = 0;
+                        rest.forEach(xl => { sumRest += (lookupMap.get(`${xl}\u0001${sn}`) || 0); });
+                        lookupMap.set(`${otherLabel}\u0001${sn}`, sumRest);
+                    });
+                    totalsByX.set(otherLabel, rest.reduce((acc, xl) => acc + (totalsByX.get(xl) || 0), 0));
+
+                    if (sortOrder === 'asc') {
+                        kept.sort((a, b) => (totalsByX.get(a) || 0) - (totalsByX.get(b) || 0));
+                        labels = [...kept, otherLabel];
+                    } else if (sortOrder === 'default') {
+                        const keptSet = new Set(kept);
+                        labels = [...baseLabels.filter(l => keptSet.has(l)), otherLabel];
+                    } else {
+                        labels = [...kept, otherLabel];
+                    }
+                } else {
+                    labels = [...baseLabels];
+                    if (sortOrder === 'desc') {
+                        labels.sort((a, b) => (totalsByX.get(b) || 0) - (totalsByX.get(a) || 0));
+                    } else if (sortOrder === 'asc') {
+                        labels.sort((a, b) => (totalsByX.get(a) || 0) - (totalsByX.get(b) || 0));
+                    }
+                }
 
                 const grp1Col = sourceState && state.groupBy[1] ? sourceState.columns.find(c => c.id === state.groupBy[1]) : null;
                 const useSelectColors = activePalette === 'select' && grp1Col && (grp1Col.type === 'select' || grp1Col.type === 'multi-select');
@@ -661,6 +787,7 @@ const AdvancedTableCharts = {
                     datasets.push({
                         label: seriesName,
                         data: dataValues,
+                        metricMeta: targetMeta,
                         backgroundColor: chartType === 'line' ? 'transparent' : color,
                         borderColor: color,
                         borderWidth: chartType === 'line' ? 3 : (isHighDensity ? 0 : 1),
@@ -672,46 +799,105 @@ const AdvancedTableCharts = {
             }
 
         } else {
-            labels = pivotRows.map(row => {
-                let parts = [];
-                state.groupBy.forEach((g, idx) => {
-                    let val = row.virtualCells['grp_' + idx] || 'Nessuno';
-                    parts.push(val.replace(/<[^>]*>?/gm, ''));
-                });
-                return parts.join(' - ');
-            });
+            const numericAggs = state.aggregations
+                .map((agg, idx) => ({ agg, idx }))
+                .filter(item => item.agg.type !== 'list');
 
-            const grp0Col = sourceState && state.groupBy[0] ? sourceState.columns.find(c => c.id === state.groupBy[0]) : null;
-            const useSelectColors = activePalette === 'select' && state.groupBy.length === 1 && grp0Col && (grp0Col.type === 'select' || grp0Col.type === 'multi-select');
-            const selectColorMap = useSelectColors
-                ? AdvancedTableCharts._buildSelectColorMap(labels, grp0Col, sourceState, style, multiColors)
-                : null;
-            const isHighDensity = labels.length > 60;
+            if (numericAggs.length > 0) {
+                const primaryAggIdx = numericAggs[0].idx;
 
-            state.aggregations.forEach((agg, idx) => {
-                if (agg.type === 'list') return; 
-
-                let dataValues = pivotRows.map(row => {
-                    let v = parseFloat(row.virtualCells['agg_' + idx]);
-                    return isNaN(v) ? 0 : v;
+                let items = pivotRows.map(row => {
+                    let parts = [];
+                    state.groupBy.forEach((g, idx) => {
+                        let val = row.virtualCells['grp_' + idx] || 'Nessuno';
+                        parts.push(val.replace(/<[^>]*>?/gm, ''));
+                    });
+                    const primaryVal = parseFloat(row.virtualCells['agg_' + primaryAggIdx]);
+                    return {
+                        label: parts.join(' - '),
+                        row,
+                        primaryVal: isNaN(primaryVal) ? 0 : primaryVal,
+                        isOther: false
+                    };
                 });
 
-                const color = multiColors[idx % multiColors.length];
-                const barColors = (selectColorMap && chartType !== 'line')
-                    ? labels.map(lbl => selectColorMap.get(lbl))
-                    : (chartType === 'line' ? 'transparent' : color);
+                // Top-N + Altri e Ordinamento per Barre/Linee standard
+                if (topNLimit > 0 && items.length > topNLimit) {
+                    const ranked = [...items].sort((a, b) => b.primaryVal - a.primaryVal);
+                    const kept = ranked.slice(0, topNLimit);
+                    const rest = ranked.slice(topNLimit);
 
-                datasets.push({
-                    label: agg.label || 'Metrica',
-                    data: dataValues,
-                    backgroundColor: barColors,
-                    borderColor: selectColorMap && chartType !== 'line' ? barColors : color,
-                    borderWidth: chartType === 'line' ? 3 : (isHighDensity ? 0 : 1),
-                    borderRadius: isHighDensity ? 0 : 4,
-                    pointBackgroundColor: color,
-                    tension: 0.3
+                    const otherRow = { virtualCells: {} };
+                    numericAggs.forEach(({ agg, idx }) => {
+                        const restVals = rest.map(it => {
+                            const v = parseFloat(it.row.virtualCells['agg_' + idx]);
+                            return isNaN(v) ? 0 : v;
+                        });
+                        let aggVal = 0;
+                        if (agg.type === 'avg') aggVal = restVals.reduce((a, b) => a + b, 0) / restVals.length;
+                        else if (agg.type === 'max') aggVal = Math.max(...restVals);
+                        else if (agg.type === 'min') aggVal = Math.min(...restVals);
+                        else aggVal = restVals.reduce((a, b) => a + b, 0);
+                        otherRow.virtualCells['agg_' + idx] = aggVal;
+                    });
+
+                    if (sortOrder === 'asc') {
+                        kept.sort((a, b) => a.primaryVal - b.primaryVal);
+                        items = kept;
+                    } else if (sortOrder === 'default') {
+                        const keptSet = new Set(kept);
+                        items = items.filter(it => keptSet.has(it));
+                    } else {
+                        items = kept;
+                    }
+                    items.push({ label: otherLabel, row: otherRow, primaryVal: 0, isOther: true });
+                } else if (sortOrder === 'desc') {
+                    items.sort((a, b) => b.primaryVal - a.primaryVal);
+                } else if (sortOrder === 'asc') {
+                    items.sort((a, b) => a.primaryVal - b.primaryVal);
+                }
+
+                labels = items.map(it => it.label);
+
+                const grp0Col = sourceState && state.groupBy[0] ? sourceState.columns.find(c => c.id === state.groupBy[0]) : null;
+                const useSelectColors = activePalette === 'select' && state.groupBy.length === 1 && grp0Col && (grp0Col.type === 'select' || grp0Col.type === 'multi-select');
+                const selectColorMap = useSelectColors
+                    ? AdvancedTableCharts._buildSelectColorMap(labels, grp0Col, sourceState, style, multiColors)
+                    : null;
+                const isHighDensity = labels.length > 60;
+
+                numericAggs.forEach(({ agg, idx }, mPos) => {
+                    let dataValues = items.map(it => {
+                        let v = parseFloat(it.row.virtualCells['agg_' + idx]);
+                        return isNaN(v) ? 0 : v;
+                    });
+
+                    const metricMeta = AdvancedTableCharts._getMetricMeta(agg, sourceState);
+                    const color = multiColors[mPos % multiColors.length];
+                    let barColors;
+                    if (selectColorMap && chartType !== 'line') {
+                        barColors = items.map(it => it.isOther ? '#9ca3af' : selectColorMap.get(it.label));
+                    } else if (chartType === 'line') {
+                        barColors = 'transparent';
+                    } else if (items.some(it => it.isOther)) {
+                        barColors = items.map(it => it.isOther ? '#9ca3af' : color);
+                    } else {
+                        barColors = color;
+                    }
+
+                    datasets.push({
+                        label: agg.label || 'Metrica',
+                        data: dataValues,
+                        metricMeta,
+                        backgroundColor: barColors,
+                        borderColor: selectColorMap && chartType !== 'line' ? barColors : color,
+                        borderWidth: chartType === 'line' ? 3 : (isHighDensity ? 0 : 1),
+                        borderRadius: isHighDensity ? 0 : 4,
+                        pointBackgroundColor: color,
+                        tension: 0.3
+                    });
                 });
-            });
+            }
         }
 
         if (datasets.length === 0) {
@@ -719,9 +905,34 @@ const AdvancedTableCharts = {
             return;
         }
 
+        // Trasformazione percentuale per modalità Scala 100% (Stacked 100%)
+        if (isStacked100 && datasets.length > 0) {
+            const pointCount = labels.length;
+            const sumsAtPoint = new Array(pointCount).fill(0);
+
+            datasets.forEach(ds => {
+                for (let i = 0; i < pointCount; i++) {
+                    sumsAtPoint[i] += Math.max(0, Number(ds.data[i]) || 0);
+                }
+            });
+
+            datasets.forEach(ds => {
+                ds.rawData = [...ds.data];
+                ds.data = ds.data.map((val, i) => {
+                    const total = sumsAtPoint[i];
+                    if (total <= 0) return 0;
+                    return Math.round(((Math.max(0, Number(val) || 0) / total) * 100) * 100) / 100;
+                });
+            });
+        }
+
         const totalBars = labels.length;
         const suppressDatalabels = totalBars > 35;
         const isOnlyCountMetrics = (state.aggregations || []).filter(a => a.type !== 'list').every(a => a.type === 'count');
+
+        // Se tutte le metriche condividono la stessa unità di misura (es. € o %), la mostriamo anche sui tick dell'asse
+        const datasetUnits = [...new Set(datasets.map(ds => (ds.metricMeta && ds.metricMeta.numberUnit) || ''))];
+        const sharedAxisUnit = (!isStacked100 && datasetUnits.length === 1 && datasetUnits[0]) ? datasetUnits[0] : '';
 
         const canvasWrapperStyle = footerNotices.length > 0 ? 'height: calc(100% - 22px); position: relative;' : 'height: 100%; position: relative;';
         const noticeHtml = footerNotices.length > 0
@@ -778,11 +989,19 @@ const AdvancedTableCharts = {
             stacked: isStackedEngine,
             ticks: {
                 color: textColor,
-                precision: isOnlyCountMetrics ? 0 : undefined
+                precision: isOnlyCountMetrics && !isStacked100 ? 0 : undefined,
+                callback: isStacked100
+                    ? (v) => (Math.round(v * 100) / 100) + '%'
+                    : (sharedAxisUnit ? (v) => (Math.round(v * 100) / 100) + (sharedAxisUnit === '%' ? '%' : ` ${sharedAxisUnit}`) : undefined)
             },
             grid: { color: gridColor, drawBorder: false },
-            beginAtZero: true
+            beginAtZero: isStacked100 ? true : (config.beginAtZero !== false)
         };
+
+        if (isStacked100) {
+            valScaleConfig.min = 0;
+            valScaleConfig.max = 100;
+        }
 
         const scalesConfig = {};
         scalesConfig[catAxis] = catScaleConfig;
@@ -832,19 +1051,32 @@ const AdvancedTableCharts = {
                             },
                             label: (item) => {
                                 const val = isHorizontal ? (item.parsed.x || 0) : (item.parsed.y || 0);
-                                if (val === 0) {
-                                    return ` ${I18n.t('adv_charts.tooltip_no_activity')}: 0`;
+                                const ds = item.dataset || {};
+                                const meta = ds.metricMeta || null;
+                                if (isStacked100 && Array.isArray(ds.rawData)) {
+                                    const rawVal = ds.rawData[item.dataIndex] || 0;
+                                    const pctStr = Math.round(val * 10) / 10 + '%';
+                                    return ` ${ds.label}: ${pctStr} (${AdvancedTableCharts._formatMetricValue(rawVal, meta)})`;
                                 }
-                                const rounded = Math.round(val * 100) / 100;
-                                return ` ${item.dataset.label}: ${rounded}`;
+                                if (val === 0) {
+                                    return ` ${I18n.t('adv_charts.tooltip_no_activity')}: ${AdvancedTableCharts._formatMetricValue(0, meta)}`;
+                                }
+                                return ` ${ds.label}: ${AdvancedTableCharts._formatMetricValue(val, meta)}`;
                             },
                             footer: (items) => {
                                 if (!isStackedEngine || !items || items.length === 0) return '';
                                 const hasNonZero = items.some(it => (isHorizontal ? (it.parsed.x || 0) : (it.parsed.y || 0)) !== 0);
                                 if (!hasNonZero) return '';
+                                const firstMeta = items[0]?.dataset?.metricMeta || null;
+                                if (isStacked100) {
+                                    const rawSum = items.reduce((acc, it) => {
+                                        const rd = it.dataset?.rawData;
+                                        return acc + (rd ? (Number(rd[it.dataIndex]) || 0) : 0);
+                                    }, 0);
+                                    return `${I18n.t('adv_charts.tooltip_total')}: 100% (${AdvancedTableCharts._formatMetricValue(rawSum, firstMeta)})`;
+                                }
                                 const sum = items.reduce((acc, it) => acc + (isHorizontal ? (it.parsed.x || 0) : (it.parsed.y || 0)), 0);
-                                const rounded = Math.round(sum * 100) / 100;
-                                return `${I18n.t('adv_charts.tooltip_total')}: ${rounded}`;
+                                return `${I18n.t('adv_charts.tooltip_total')}: ${AdvancedTableCharts._formatMetricValue(sum, firstMeta)}`;
                             }
                         }
                     },
@@ -876,9 +1108,11 @@ const AdvancedTableCharts = {
                         anchor: isStackedEngine ? 'center' : 'end',
                         align: isStackedEngine ? 'center' : 'end',
                         offset: isStackedEngine ? 0 : 4,
-                        formatter: (v) => {
+                        formatter: (v, ctx) => {
                             if (v === null || v === undefined || Number(v) === 0) return null;
-                            return Math.round(v * 100) / 100;
+                            if (isStacked100) return Math.round(v) + '%';
+                            const meta = ctx?.dataset?.metricMeta || null;
+                            return AdvancedTableCharts._formatMetricValue(v, meta);
                         },
                         font: {
                             family: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',

@@ -16,6 +16,7 @@
  * il link al termine della modifica, con blocco dello scroll { preventScroll: true } per impedire salti a inizio pagina.
  * YOUTUBE FILE PROTOCOL FALLBACK: Su protocollo file:// delega a WidgetManager.setupVideoShell evitando l'Errore 153.
  * Posizionamento orizzontale della toolbar contestuale dei link centrato sotto la coordinata del click.
+ * In modifica di un link esistente con URL/percorso valorizzato, il focus viene posizionato sul campo "Testo da visualizzare".
  */
 
 const LinkManager = {
@@ -281,21 +282,48 @@ const LinkManager = {
         } else if (link.classList.contains('file-link')) {
             LinkManager.openFileModal();
             setTimeout(() => {
-                document.getElementById('fileLinkName').value = link.innerText.replace('📄 ', '');
-                document.getElementById('fileLinkPath').value = link.dataset.filePath;
-                
-                const noteVal = link.getAttribute('data-link-note') || '';
-                document.getElementById('fileLinkNote').value = LinkManager._decodeEntities(noteVal);
+                const nameEl = document.getElementById('fileLinkName');
+                const pathEl = document.getElementById('fileLinkPath');
+                const noteEl = document.getElementById('fileLinkNote');
+
+                if (nameEl) nameEl.value = link.innerText.replace('📄 ', '');
+                if (pathEl) pathEl.value = link.dataset.filePath || '';
+                if (noteEl) {
+                    const noteVal = link.getAttribute('data-link-note') || '';
+                    noteEl.value = LinkManager._decodeEntities(noteVal);
+                }
+
+                if (pathEl && pathEl.value.trim() !== '' && nameEl) {
+                    nameEl.focus();
+                    nameEl.setSelectionRange(nameEl.value.length, nameEl.value.length);
+                } else if (pathEl) {
+                    pathEl.focus();
+                }
             }, 50);
         } else {
             LinkManager.openExternalModal();
             setTimeout(() => {
-                let cleanHref = link.href.replace(/^https?:\/\/file:\/\/\//i, 'file:///');
-                document.getElementById('externalLinkUrl').value = cleanHref;
-                document.getElementById('externalLinkText').value = link.innerText;
-                
-                const noteVal = link.getAttribute('data-link-note') || '';
-                document.getElementById('externalLinkNote').value = LinkManager._decodeEntities(noteVal);
+                const urlEl = document.getElementById('externalLinkUrl');
+                const textEl = document.getElementById('externalLinkText');
+                const noteEl = document.getElementById('externalLinkNote');
+
+                const rawAttrHref = (link.getAttribute('href') || '').trim();
+                const cleanHref = rawAttrHref ? link.href.replace(/^https?:\/\/file:\/\/\//i, 'file:///') : '';
+
+                if (urlEl) urlEl.value = cleanHref;
+                if (textEl) textEl.value = link.innerText;
+                if (noteEl) {
+                    const noteVal = link.getAttribute('data-link-note') || '';
+                    noteEl.value = LinkManager._decodeEntities(noteVal);
+                }
+
+                if (urlEl && urlEl.value.trim() !== '' && textEl) {
+                    textEl.dataset.userEdited = textEl.value.trim() !== '' ? 'true' : '';
+                    textEl.focus();
+                    textEl.setSelectionRange(textEl.value.length, textEl.value.length);
+                } else if (urlEl) {
+                    urlEl.focus();
+                }
             }, 50);
         }
     },
@@ -391,8 +419,10 @@ const LinkManager = {
                 textInput.addEventListener('input', () => {
                     textInput.dataset.userEdited = textInput.value.trim() !== '' ? 'true' : '';
                 });
-                urlInput.focus();
-                if (prefilledUrl) urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
+                if (!LinkManager.isEditingMode) {
+                    urlInput.focus();
+                    if (prefilledUrl) urlInput.setSelectionRange(urlInput.value.length, urlInput.value.length);
+                }
             }
         }, 50);
     },
@@ -570,8 +600,10 @@ const LinkManager = {
                 if (selectedText) document.getElementById('fileLinkName').value = selectedText;
             }
             
-            const fileInput = document.getElementById('fileLinkPath');
-            if (fileInput) fileInput.focus();
+            if (!LinkManager.isEditingMode) {
+                const fileInput = document.getElementById('fileLinkPath');
+                if (fileInput) fileInput.focus();
+            }
         }, 50);
     },
 

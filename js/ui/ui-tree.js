@@ -7,10 +7,11 @@
  * Include:
  * - Navigazione schede (Note, Preferiti, Segnalibri, Database).
  * - Rendering gerarchico delle note standard e record note (renderTree, buildTreeElement).
+ * - Icona cartella (Icons.folder) automatica per le note prive di contenuto (solo titolo).
  * - Iniezione contestuale del Database e della Record Note attiva direttamente dentro la nota ospite nella scheda "Note".
  * - Matching delle proprietà della pagina delegato al motore centrale AppState.matchesPropertyFilters.
  * - Pillola estesa in sovraimpressione per titoli e capitoli (TOC) troncati nella sidebar, con ritrazione immediata
- *   al passaggio sul pulsante '+' o all'uscita dal pannello laterale.
+ *   al passaggio sul pulsante '+' o all'uscita dal pannello laterale e allineamento esatto al pixel.
  * - TOC dinamico per capitoli H1, H2, H3 (scrollToHeader) con micro-pillole numeriche basate sui blocchi di occorrenza,
  *   anteprima contestuale su hover (250ms) e salto diretto all'occorrenza selezionata (jumpToChapterSearchMatch).
  * - Evidenziazione del nodo attivo nella sidebar (highlightTreeNode).
@@ -23,6 +24,21 @@ Object.assign(UI, {
     _activeRecordDbIds: null,
     _activeRecordHostNoteIds: null,
     _activeRecordDbInjected: false,
+
+    // Verifica rapida O(1) senza parsing DOM se il corpo della nota è vuoto (solo titolo)
+    isNoteContentEmpty: (htmlContent) => {
+        if (!htmlContent) return true;
+        const trimmed = htmlContent.trim();
+        if (trimmed === '' || trimmed === '<p><br></p>' || trimmed === '<br>' || trimmed === '<p></p>') return true;
+        if (/<(img|audio|video|iframe|table|hr|ul|ol|pre|blockquote)\b|adv-widget-shell|adv-inline-shell/i.test(trimmed)) {
+            return false;
+        }
+        const textOnly = trimmed
+            .replace(/<[^>]+>/g, '')
+            .replace(/&nbsp;/gi, ' ')
+            .replace(/[\u200B\uFEFF\u00A0\s\r\n]/g, '');
+        return textOnly === '';
+    },
 
     _showTitleOverflowPill: (titleEl, contentEl) => {
         if (!titleEl || !contentEl) return;
@@ -57,6 +73,7 @@ Object.assign(UI, {
         pill.innerHTML = titleEl.innerHTML;
         pill.style.fontSize = '';
         pill.style.fontWeight = '';
+        pill.style.gap = '';
         pill.style.top = `${contentRect.top}px`;
         pill.style.left = `${leftPos}px`;
         pill.style.height = `${contentRect.height}px`;
@@ -87,19 +104,36 @@ Object.assign(UI, {
         const anchorRect = iconEl ? iconEl.getBoundingClientRect() : textSpan.getBoundingClientRect();
         if (anchorRect.width === 0 || tocRect.height === 0) return;
 
-        const leftPos = Math.max(0, anchorRect.left);
-        const maxWidth = Math.max(textSpan.clientWidth + 30, window.innerWidth - leftPos - 16);
         const cs = window.getComputedStyle(tocEl);
-
         pill.className = 'tree-title-pill-portal toc-pill';
         pill.innerHTML = tocEl.innerHTML;
         pill.style.fontSize = cs.fontSize;
         pill.style.fontWeight = cs.fontWeight;
+        pill.style.gap = cs.gap;
+        pill.style.display = 'flex';
+
+        if (iconEl) {
+            const iconCs = window.getComputedStyle(iconEl);
+            const pillIcon = pill.querySelector('.toc-icon');
+            if (pillIcon) {
+                pillIcon.style.width = iconCs.width;
+                pillIcon.style.minWidth = iconCs.minWidth;
+                pillIcon.style.textAlign = iconCs.textAlign;
+                pillIcon.style.marginRight = iconCs.marginRight;
+                pillIcon.style.marginLeft = iconCs.marginLeft;
+                pillIcon.style.flexShrink = '0';
+            }
+        }
+
+        const pillCs = window.getComputedStyle(pill);
+        const pillPadLeft = parseFloat(pillCs.paddingLeft) || 0;
+        const leftPos = Math.max(0, anchorRect.left - pillPadLeft);
+        const maxWidth = Math.max(textSpan.clientWidth + 30 + pillPadLeft, window.innerWidth - leftPos - 16);
+
         pill.style.top = `${tocRect.top}px`;
         pill.style.left = `${leftPos}px`;
         pill.style.height = `${tocRect.height}px`;
         pill.style.maxWidth = `${maxWidth}px`;
-        pill.style.display = 'flex';
     },
 
     _hideTitleOverflowPill: () => {
@@ -839,7 +873,8 @@ Object.assign(UI, {
             };
         }
 
-        let customIcon = Icons.file;
+        const isNoteEmpty = UI.isNoteContentEmpty(node.content);
+        let customIcon = isNoteEmpty ? Icons.folder : Icons.file;
         let iconColorStyle = "";
         const hasBookmark = node.content && node.content.includes('adv-bookmark-marker');
 

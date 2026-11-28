@@ -2,11 +2,11 @@
  * tests/test-advanced-table-charts.js
  * Suite Modulare di Collaudo Unitario e di Integrazione.
  * Modulo testato: advanced-table-charts
- * Conteggio test case: 26
- * Generato automaticamente il: 2026-10-01 00:25:00
+ * Copertura completa di istanze, helper matematici/cromatici, plugin Canvas,
+ * ordinamento, Top-N + Altri, unità/decimali, beginAtZero e stacked 100%.
  */
 
-describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugins (26 Test)", () => {
+describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugins", () => {
 
     // =========================================================================
     // 1. GESTIONE ISTANZE E PULIZIA MEMORIA
@@ -41,7 +41,75 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
     });
 
     // =========================================================================
-    // 2. PLUGIN CENTER TEXT (CIAMBELLA DOUGHNUT)
+    // 2. HELPER METRICHE, FORMATTAZIONE E COLORI
+    // =========================================================================
+
+    test("Charts: _getMetricMeta eredita unità e decimali solo per metriche non 'count'", () => {
+        const sourceState = {
+            columns: [
+                { id: 'c_price', type: 'number', numberUnit: '€', decimals: 2 },
+                { id: 'c_pct', type: 'number', numberUnit: '%', decimals: 1 }
+            ]
+        };
+
+        const metaSum = AdvancedTableCharts._getMetricMeta({ type: 'sum', sourceColId: 'c_price' }, sourceState);
+        Assert.strictEqual(metaSum.numberUnit, '€');
+        Assert.strictEqual(metaSum.decimals, 2);
+
+        const metaCount = AdvancedTableCharts._getMetricMeta({ type: 'count', sourceColId: 'c_price' }, sourceState);
+        Assert.strictEqual(metaCount.numberUnit, '');
+        Assert.strictEqual(metaCount.decimals, undefined);
+
+        const metaMissing = AdvancedTableCharts._getMetricMeta({ type: 'sum', sourceColId: 'c_none' }, sourceState);
+        Assert.strictEqual(metaMissing.numberUnit, '');
+        Assert.strictEqual(metaMissing.decimals, undefined);
+    });
+
+    test("Charts: _formatMetricValue formatta decimali, arrotondamenti, unità e fallback NaN", () => {
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue(null, null), '0');
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue(undefined, null), '0');
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue('abc', null), '0');
+
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue(12.3456, null), '12.35');
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue(10, { numberUnit: '€', decimals: 2 }), '10.00 €');
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue(45.5, { numberUnit: '%', decimals: 1 }), '45.5%');
+        Assert.strictEqual(AdvancedTableCharts._formatMetricValue(99, { numberUnit: '$', decimals: 0 }), '99 $');
+    });
+
+    test("Charts: _getContrastingLabelColor calcola contrasto corretto su sfondi chiari e scuri", () => {
+        Assert.strictEqual(AdvancedTableCharts._getContrastingLabelColor('#ffffff', '#000'), '#111827');
+        Assert.strictEqual(AdvancedTableCharts._getContrastingLabelColor('#fde047', '#000'), '#111827');
+        Assert.strictEqual(AdvancedTableCharts._getContrastingLabelColor('#111827', '#000'), '#ffffff');
+        Assert.strictEqual(AdvancedTableCharts._getContrastingLabelColor('rgb(0, 0, 0)', '#000'), '#ffffff');
+        Assert.strictEqual(AdvancedTableCharts._getContrastingLabelColor('rgb(255, 255, 255)', '#000'), '#111827');
+        Assert.strictEqual(AdvancedTableCharts._getContrastingLabelColor('invalid', '#333333'), '#333333');
+    });
+
+    test("Charts: _buildSelectColorMap assegna colori univoci evitando duplicazioni con quelli espliciti", () => {
+        const fakeStyle = {
+            getPropertyValue: (prop) => {
+                if (prop === '--tx-c1') return '#111111';
+                if (prop === '--tx-c2') return '#222222';
+                if (prop === '--tx-c3') return '#333333';
+                return '';
+            }
+        };
+        const colDef = { id: 'c_status', type: 'select' };
+        const sourceState = {
+            selectColors: {
+                c_status: {
+                    'Aperto': 'hl-c1',
+                    'Chiuso': ''
+                }
+            }
+        };
+        const map = AdvancedTableCharts._buildSelectColorMap(['Aperto', 'Chiuso'], colDef, sourceState, fakeStyle, ['#111111', '#222222']);
+        Assert.strictEqual(map.get('Aperto'), '#111111');
+        Assert.strictEqual(map.get('Chiuso'), '#222222');
+    });
+
+    // =========================================================================
+    // 3. PLUGIN CENTER TEXT (CIAMBELLA DOUGHNUT)
     // =========================================================================
 
     test("Charts: plugin centerText non esegue calcoli se il tipo non è 'doughnut'", () => {
@@ -67,7 +135,7 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
         Assert.isFalse(drawn);
     });
 
-    test("Charts: plugin centerText somma i valori del dataset per doughnut", () => {
+    test("Charts: plugin centerText somma i valori del dataset per doughnut e applica metricMeta", () => {
         const plugin = AdvancedTableCharts._getCenterTextPlugin();
         let printedText = null;
         const fakeChart = {
@@ -87,8 +155,10 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             }
         };
         plugin.beforeDraw(fakeChart, null, { display: true });
-        // 10 + 25 + 15 = 50 disegnato su canvas come stringa "50"
         Assert.strictEqual(printedText, "50");
+
+        plugin.beforeDraw(fakeChart, null, { display: true, metricMeta: { numberUnit: '€', decimals: 2 } });
+        Assert.strictEqual(printedText, "50.00 €");
     });
 
     test("Charts: plugin centerText esclude dal calcolo gli elementi nascosti nel grafico (hidden === true)", () => {
@@ -101,7 +171,7 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             getDatasetMeta: () => ({
                 data: [
                     { hidden: false },
-                    { hidden: true }, // Elemento da 50 escluso perché nascosto
+                    { hidden: true },
                     { hidden: false }
                 ]
             }),
@@ -117,7 +187,6 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             }
         };
         plugin.beforeDraw(fakeChart, null, { display: true });
-        // 100 + 20 = 120
         Assert.strictEqual(printedText, "120");
     });
 
@@ -141,7 +210,6 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             }
         };
         plugin.beforeDraw(fakeChart, null, { display: true });
-        // 10.3333 + 20.2222 = 30.5555 -> arrotondato a "30.56"
         Assert.strictEqual(printedText, "30.56");
     });
 
@@ -163,15 +231,12 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             }
         });
 
-        // 1. Small -> 15px
         plugin.beforeDraw(createChart(), null, { display: true, chartHeight: 'small' });
         Assert.isTrue(capturedFont.includes('15px'));
 
-        // 2. Large -> 34px
         plugin.beforeDraw(createChart(), null, { display: true, chartHeight: 'large' });
         Assert.isTrue(capturedFont.includes('34px'));
 
-        // 3. Medium (Default) -> 24px
         plugin.beforeDraw(createChart(), null, { display: true, chartHeight: 'medium' });
         Assert.isTrue(capturedFont.includes('24px'));
     });
@@ -218,18 +283,17 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
         };
 
         plugin.beforeDraw(fakeChart, null, { display: true });
-        // X = (50 + 250) / 2 = 150; Y = (100 + 300) / 2 = 200
         Assert.strictEqual(posX, 150);
         Assert.strictEqual(posY, 200);
     });
 
     // =========================================================================
-    // 3. PLUGIN CUSTOM DATA LABELS (TORTA E CIAMBELLA)
+    // 4. PLUGIN CUSTOM DATA LABELS (TORTA E CIAMBELLA)
     // =========================================================================
 
-    test("Charts: plugin customDataLabels calcola percentuali su totale della torta", () => {
+    test("Charts: plugin customDataLabels calcola percentuali su totale della torta con priorità decrescente", () => {
         const plugin = AdvancedTableCharts._getCustomDataLabelsPlugin();
-        let lastDrawnLabel = '';
+        const drawnLabels = [];
         const fakeChart = {
             config: { type: 'pie' },
             width: 400,
@@ -243,12 +307,37 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             }),
             ctx: {
                 save: () => {}, restore: () => {}, beginPath: () => {}, moveTo: () => {},
-                lineTo: () => {}, stroke: () => {}, fillText: (t) => { lastDrawnLabel = t; }
+                lineTo: () => {}, stroke: () => {}, fillText: (t) => { drawnLabels.push(t); }
+            }
+        };
+        plugin.afterDatasetsDraw(fakeChart, null, { display: true, metricMeta: { numberUnit: '€' } });
+        Assert.strictEqual(drawnLabels.length, 2);
+        Assert.isTrue(drawnLabels[0].includes('80 € (80%)'));
+        Assert.isTrue(drawnLabels[1].includes('20 € (20%)'));
+    });
+
+    test("Charts: plugin customDataLabels attiva anti-collisione verticale sullo stesso lato", () => {
+        const plugin = AdvancedTableCharts._getCustomDataLabelsPlugin();
+        const drawnLabels = [];
+        const fakeChart = {
+            config: { type: 'pie' },
+            width: 400,
+            data: { datasets: [{ data: [60, 40] }] },
+            getDatasetMeta: () => ({
+                hidden: false,
+                data: [
+                    { x: 200, y: 200, startAngle: 0, endAngle: 0.1, outerRadius: 50 },
+                    { x: 200, y: 200, startAngle: 0.1, endAngle: 0.2, outerRadius: 50 }
+                ]
+            }),
+            ctx: {
+                save: () => {}, restore: () => {}, beginPath: () => {}, moveTo: () => {},
+                lineTo: () => {}, stroke: () => {}, fillText: (t) => { drawnLabels.push(t); }
             }
         };
         plugin.afterDatasetsDraw(fakeChart, null, { display: true });
-        // L'ultima fetta è 80 su 100 -> deve contenere '80 (80%)'
-        Assert.isTrue(lastDrawnLabel.includes('80%'));
+        Assert.strictEqual(drawnLabels.length, 1);
+        Assert.isTrue(drawnLabels[0].includes('60%'));
     });
 
     test("Charts: plugin customDataLabels si disattiva per grafici diversi da pie o doughnut", () => {
@@ -257,7 +346,7 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
         let fillTextCalled = false;
 
         const fakeChart = {
-            config: { type: 'bar' }, // Non è né pie né doughnut
+            config: { type: 'bar' },
             data: { datasets: [{ data: [20, 80] }] },
             getDatasetMeta: () => ({ hidden: false, data: [{ outerRadius: 20 }] }),
             ctx: {
@@ -288,7 +377,7 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
     });
 
     // =========================================================================
-    // 4. CONFIGURAZIONI LAYOUT, PADDING & TIPI DI GRAFICO
+    // 5. CONFIGURAZIONI LAYOUT, PADDING & TIPI DI GRAFICO
     // =========================================================================
 
     test("Charts: configurazione layoutPadding per legenda a destra", () => {
@@ -341,7 +430,7 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
     });
 
     // =========================================================================
-    // 5. RENDERING GRAFICI (renderChart)
+    // 6. RENDERING GRAFICI, ORDINAMENTO, TOP-N, UNITÀ E SCALA 100%
     // =========================================================================
 
     test("Charts: renderChart esce tempestivamente se config.visible === false", () => {
@@ -371,7 +460,7 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
         const state = {
             chartConfig: { visible: true, type: 'bar' },
             groupBy: ['g1'],
-            aggregations: [] // Nessuna metrica
+            aggregations: []
         };
         AdvancedTableCharts.renderChart('t2', 'chart_box_empty', [{ virtualCells: {} }], state);
         Assert.isTrue(dummyDiv.innerText.includes('almeno un raggruppamento e una metrica'));
@@ -409,11 +498,14 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             { virtualCells: { grp_0: 'Sud', agg_0: '200' } }
         ];
 
-        AdvancedTableCharts.renderChart('t_pie', 'chart_box_pie_flex', pivotRows, state);
-
-        Assert.strictEqual(dummyDiv.style.display, 'flex');
-        Assert.strictEqual(dummyDiv.style.flexWrap, 'wrap');
-        dummyDiv.remove();
+        try {
+            AdvancedTableCharts.renderChart('t_pie', 'chart_box_pie_flex', pivotRows, state);
+            Assert.strictEqual(dummyDiv.style.display, 'flex');
+            Assert.strictEqual(dummyDiv.style.flexWrap, 'wrap');
+        } finally {
+            AdvancedTableCharts._clearInstances('t_pie');
+            dummyDiv.remove();
+        }
     });
 
     test("Charts: altezze del contenitore impostate correttamente per barre e linee", () => {
@@ -431,11 +523,152 @@ describe("AdvancedTable Charts: Integrazione Chart.js, Stacking, Palette & Plugi
             Assert.strictEqual(dummyDiv.style.height, expectedPx);
         };
 
-        testHeight('small', '260px');
-        testHeight('medium', '400px');
-        testHeight('large', '600px');
+        try {
+            testHeight('small', '260px');
+            testHeight('medium', '400px');
+            testHeight('large', '600px');
+        } finally {
+            AdvancedTableCharts._clearInstances('t_h');
+            dummyDiv.remove();
+        }
+    });
 
-        dummyDiv.remove();
+    test("Charts: renderChart ordina le barre per valore decrescente e crescente con sortOrder", () => {
+        const dummyDiv = document.createElement('div');
+        dummyDiv.id = 'chart_box_sort';
+        document.body.appendChild(dummyDiv);
+
+        const pivotRows = [
+            { virtualCells: { grp_0: 'B', agg_0: '20' } },
+            { virtualCells: { grp_0: 'A', agg_0: '80' } },
+            { virtualCells: { grp_0: 'C', agg_0: '5' } }
+        ];
+
+        try {
+            AdvancedTableCharts.renderChart('t_sort', 'chart_box_sort', pivotRows, {
+                chartConfig: { visible: true, type: 'bar', sortOrder: 'desc' },
+                groupBy: ['g1'],
+                aggregations: [{ type: 'sum', label: 'Tot', sourceColId: 'c1' }]
+            });
+            let chartCfg = AdvancedTableCharts.instances['t_sort'].config;
+            Assert.deepEqual(chartCfg.data.labels, ['A', 'B', 'C']);
+            Assert.deepEqual(chartCfg.data.datasets[0].data, [80, 20, 5]);
+
+            AdvancedTableCharts.renderChart('t_sort', 'chart_box_sort', pivotRows, {
+                chartConfig: { visible: true, type: 'bar', sortOrder: 'asc' },
+                groupBy: ['g1'],
+                aggregations: [{ type: 'sum', label: 'Tot', sourceColId: 'c1' }]
+            });
+            chartCfg = AdvancedTableCharts.instances['t_sort'].config;
+            Assert.deepEqual(chartCfg.data.labels, ['C', 'B', 'A']);
+            Assert.deepEqual(chartCfg.data.datasets[0].data, [5, 20, 80]);
+        } finally {
+            AdvancedTableCharts._clearInstances('t_sort');
+            dummyDiv.remove();
+        }
+    });
+
+    test("Charts: renderChart raggruppa in 'Altro' le categorie eccedenti Top-N su barre e torte", () => {
+        const dummyDiv = document.createElement('div');
+        dummyDiv.id = 'chart_box_topn';
+        document.body.appendChild(dummyDiv);
+
+        const pivotRows = [
+            { virtualCells: { grp_0: 'Cat1', agg_0: '50' } },
+            { virtualCells: { grp_0: 'Cat2', agg_0: '40' } },
+            { virtualCells: { grp_0: 'Cat3', agg_0: '15' } },
+            { virtualCells: { grp_0: 'Cat4', agg_0: '5' } }
+        ];
+
+        try {
+            // 1. Su Barre
+            AdvancedTableCharts.renderChart('t_topn_bar', 'chart_box_topn', pivotRows, {
+                chartConfig: { visible: true, type: 'bar', topN: '2', sortOrder: 'desc' },
+                groupBy: ['g1'],
+                aggregations: [{ type: 'sum', label: 'Tot', sourceColId: 'c1' }]
+            });
+            const barCfg = AdvancedTableCharts.instances['t_topn_bar'].config;
+            Assert.strictEqual(barCfg.data.labels.length, 3);
+            Assert.deepEqual(barCfg.data.datasets[0].data, [50, 40, 20]);
+
+            // 2. Su Torta
+            AdvancedTableCharts.renderChart('t_topn_pie', 'chart_box_topn', pivotRows, {
+                chartConfig: { visible: true, type: 'pie', topN: '2', sortOrder: 'desc' },
+                groupBy: ['g1'],
+                aggregations: [{ type: 'sum', label: 'Tot', sourceColId: 'c1' }]
+            });
+            const pieCfg = AdvancedTableCharts.instances['t_topn_pie'][0].config;
+            Assert.strictEqual(pieCfg.data.labels.length, 3);
+            Assert.deepEqual(pieCfg.data.datasets[0].data, [50, 40, 20]);
+        } finally {
+            AdvancedTableCharts._clearInstances('t_topn_bar');
+            AdvancedTableCharts._clearInstances('t_topn_pie');
+            dummyDiv.remove();
+        }
+    });
+
+    test("Charts: renderChart applica Top-N + Altri e Scala 100% ai grafici impilati (stacked)", () => {
+        const dummyDiv = document.createElement('div');
+        dummyDiv.id = 'chart_box_stacked100';
+        document.body.appendChild(dummyDiv);
+
+        const pivotRows = [
+            { virtualCells: { grp_0: 'Nord', grp_1: 'Aperto', agg_0: '30' } },
+            { virtualCells: { grp_0: 'Nord', grp_1: 'Chiuso', agg_0: '70' } },
+            { virtualCells: { grp_0: 'Sud', grp_1: 'Aperto', agg_0: '10' } },
+            { virtualCells: { grp_0: 'Sud', grp_1: 'Chiuso', agg_0: '10' } },
+            { virtualCells: { grp_0: 'Est', grp_1: 'Aperto', agg_0: '5' } },
+            { virtualCells: { grp_0: 'Est', grp_1: 'Chiuso', agg_0: '5' } }
+        ];
+
+        try {
+            AdvancedTableCharts.renderChart('t_st100', 'chart_box_stacked100', pivotRows, {
+                chartConfig: { visible: true, type: 'bar', stacked: true, stacked100: true, topN: '1', sortOrder: 'desc' },
+                groupBy: ['g1', 'g2'],
+                aggregations: [{ type: 'sum', label: 'Tot', sourceColId: 'c1' }]
+            });
+            const cfg = AdvancedTableCharts.instances['t_st100'].config;
+            Assert.strictEqual(cfg.data.labels.length, 2); // Nord + Altro (Sud+Est)
+            Assert.strictEqual(cfg.data.datasets[0].data[0], 30); // Nord Aperto = 30 / 100 = 30%
+            Assert.strictEqual(cfg.data.datasets[1].data[0], 70); // Nord Chiuso = 70 / 100 = 70%
+            Assert.strictEqual(cfg.data.datasets[0].data[1], 50); // Altro Aperto = 15 / 30 = 50%
+            Assert.strictEqual(cfg.options.scales.y.min, 0);
+            Assert.strictEqual(cfg.options.scales.y.max, 100);
+            Assert.strictEqual(cfg.options.scales.y.ticks.callback(50), '50%');
+        } finally {
+            AdvancedTableCharts._clearInstances('t_st100');
+            dummyDiv.remove();
+        }
+    });
+
+    test("Charts: renderChart rispetta beginAtZero: false ed eredita unità di misura sull'asse Y", () => {
+        const dummyDiv = document.createElement('div');
+        dummyDiv.id = 'chart_box_units';
+        document.body.appendChild(dummyDiv);
+
+        const prevDatabases = AppState.databases;
+        AppState.databases = {
+            src_db_units: {
+                columns: [{ id: 'c_eur', name: 'Importo', type: 'number', numberUnit: '€', decimals: 2 }],
+                rows: []
+            }
+        };
+
+        try {
+            AdvancedTableCharts.renderChart('t_units', 'chart_box_units', [{ virtualCells: { grp_0: 'A', agg_0: '950' } }], {
+                sourceTableId: 'src_db_units',
+                chartConfig: { visible: true, type: 'line', beginAtZero: false },
+                groupBy: ['g1'],
+                aggregations: [{ type: 'sum', label: 'Importo', sourceColId: 'c_eur' }]
+            });
+            const cfg = AdvancedTableCharts.instances['t_units'].config;
+            Assert.isFalse(cfg.options.scales.y.beginAtZero);
+            Assert.strictEqual(cfg.options.scales.y.ticks.callback(100), '100 €');
+        } finally {
+            AppState.databases = prevDatabases;
+            AdvancedTableCharts._clearInstances('t_units');
+            dummyDiv.remove();
+        }
     });
 
     test("Charts: openConfigMenu delega correttamente ad AdvancedPivotMenus.openCreateWizard con flag chartOnlyMode", () => {

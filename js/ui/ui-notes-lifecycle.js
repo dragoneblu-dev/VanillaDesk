@@ -657,7 +657,8 @@ Object.assign(UI, {
 
         const treeTitleContainer = document.querySelector(`.node-wrapper[data-id="${AppState.currentNoteId}"] > .node-content .node-title`);
         if (treeTitleContainer) {
-            let customIcon = Icons.file;
+            const isNoteEmpty = typeof UI.isNoteContentEmpty === 'function' ? UI.isNoteContentEmpty(note.content) : false;
+            let customIcon = isNoteEmpty ? Icons.folder : Icons.file;
             let iconColorStyle = "";
             const hasBookmark = note.content && note.content.includes('adv-bookmark-marker');
 

@@ -8,7 +8,7 @@
  * RESTORE DRAG & DROP DEI BLOCCHI: Ripristinato l'intero motore nativo di intercettazione
  * dragstart, dragenter, dragover, dragleave, dragend e drop su editorEl con posizionamento
  * dinamico di #adv-drop-indicator.
- * FEAT HORIZONTAL WHEEL SCROLL: Scorrimento orizzontale continuo su Kanban e Timeline tramite mouse wheel.
+ * FEAT HORIZONTAL WHEEL SCROLL: Scorrimento orizzontale tramite Shift + Wheel su container larghi (incluse Bacheche Kanban) e mouse wheel su Timeline.
  * FEAT GUTTER/PADDING CLICK & DBLCLICK STANDARD: Click nel padding di editorScrollContent posiziona il cursore
  * all'inizio della riga corrispondente; doppio click seleziona l'intero paragrafo/blocco.
  */
@@ -615,7 +615,7 @@ Object.assign(EventsGlobal, {
             }, 10);
         });
 
-        // SCROLL ORIZZONTALE FLUIDO CON MOUSE WHEEL (Shift + Wheel o Timeline/Kanban)
+        // SCROLL ORIZZONTALE FLUIDO CON MOUSE WHEEL (Shift + Wheel su container larghi o Timeline)
         document.addEventListener('wheel', (e) => {
             let target = e.target;
             if (target && target.nodeType === 3) target = target.parentNode;
@@ -624,7 +624,6 @@ Object.assign(EventsGlobal, {
             if (target.closest('#canvasViewport')) return;
 
             const timelineScroll = target.closest('[id^="timeline-scroll-"]');
-            const boardContainer = target.closest('.adv-board-container');
             const scrollContainer = target.closest('.adv-scroll-container');
 
             if (e.shiftKey && scrollContainer) {
@@ -638,15 +637,6 @@ Object.assign(EventsGlobal, {
                     if (timelineScroll.scrollWidth > timelineScroll.clientWidth) {
                         e.preventDefault();
                         timelineScroll.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
-                    }
-                }
-            } else if (boardContainer) {
-                // Nella bacheca Kanban, se l'utente usa la rotella sull'intestazione o tra le colonne
-                const kanbanCol = target.closest('.adv-kanban-col');
-                if (!kanbanCol || kanbanCol.scrollHeight <= kanbanCol.clientHeight) {
-                    if (boardContainer.scrollWidth > boardContainer.clientWidth) {
-                        e.preventDefault();
-                        boardContainer.scrollLeft += e.deltaY !== 0 ? e.deltaY : e.deltaX;
                     }
                 }
             }

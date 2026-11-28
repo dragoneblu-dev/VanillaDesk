@@ -118,6 +118,17 @@ const SidebarManager = {
     SearchAutocomplete: {
         _activeHistoryIndex: -1,
 
+        // Porta il focus sull'input di ricerca senza aprire automaticamente lo storico (che resta attivo al click fisico)
+        _focusInputWithoutHistory: () => {
+            const inputEl = document.getElementById('searchInput');
+            if (!inputEl) return;
+            if (document.activeElement !== inputEl) {
+                inputEl._skipNextFocusHistory = true;
+                inputEl.focus();
+                setTimeout(() => { inputEl._skipNextFocusHistory = false; }, 0);
+            }
+        },
+
         // Formatta valori composti di tipo Date Range o Note Link; restituisce null per altri tipi
         _formatDateOrLinkValue: (col, val) => {
             if (['date', 'datetime'].includes(col?.type) || (typeof val === 'object' && val !== null && (val.start !== undefined || val.end !== undefined))) {
@@ -507,7 +518,6 @@ const SidebarManager = {
             const inputEl = document.getElementById('searchInput');
             if (inputEl) {
                 inputEl.value = '';
-                inputEl.focus();
             }
 
             if (!AppState.activePropertyFilters) AppState.activePropertyFilters = [];
@@ -545,6 +555,8 @@ const SidebarManager = {
             if (typeof EventsGlobal !== 'undefined' && typeof EventsGlobal._triggerSearchUpdate === 'function') {
                 EventsGlobal._triggerSearchUpdate();
             }
+
+            SidebarManager.SearchAutocomplete._focusInputWithoutHistory();
         },
 
         remove: (index) => {
@@ -557,8 +569,7 @@ const SidebarManager = {
                     EventsGlobal._triggerSearchUpdate();
                 }
                 
-                const inputEl = document.getElementById('searchInput');
-                if (inputEl) inputEl.focus();
+                SidebarManager.SearchAutocomplete._focusInputWithoutHistory();
             }
         },
 
@@ -583,8 +594,7 @@ const SidebarManager = {
                 EventsGlobal._triggerSearchUpdate();
             }
 
-            const inputEl = document.getElementById('searchInput');
-            if (inputEl) inputEl.focus();
+            SidebarManager.SearchAutocomplete._focusInputWithoutHistory();
         },
 
         openPillMenu: (e, filterIndex, anchorId) => {
