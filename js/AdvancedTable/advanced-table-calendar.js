@@ -5,17 +5,24 @@
  * FEAT UX: Nomi dei mesi cliccabili nella Vista Annuale per navigare rapidamente alla Vista Mensile corrispondente.
  * FIX ALLINEAMENTO: Risolto bug delle Regex in _cleanFormulaRendering che lasciava Select e Pulsanti disallineati a sinistra nelle Card temporali.
  * FEAT QUICK SEARCH: Integrata la ricerca rapida universale 'Cerca in tutti i campi' con riuso atomico delle virtualCells.
+ * FIX LAYOUT CARD & SCROLLBARS: Rimozione del pulsante di espansione testo nelle card, layout verticale per testi lunghi,
+ * troncamento a 200 caratteri in vista settimanale, scroll automatico al mese corrente in vista Anno, rimozione limite 800px
+ * e padding 5px in vista Giorno, scrollbar coerenti col tema e isolamento Drag & Drop su date con intervallo.
+ * FEAT CHRONO & DAY JUMP: Ordinamento cronologico rigoroso per ora in tutte le viste, apertura del giorno al click su
+ * etichetta/header in vista Mensile e Settimanale, e auto-scroll intelligente sugli orari degli eventi in vista Settimanale e Giornaliera.
  */
 
 const AdvancedCalendar = {
     resizeState: null,
     touchStartX: 0,
     touchStartY: 0,
+    _resetScrollOnNextRender: false,
 
     changeMode: (e, tableId, mode) => {
         if (e) e.stopPropagation();
         let state = AdvancedTable.getState(tableId);
         state.calendarMode = mode;
+        AdvancedCalendar._resetScrollOnNextRender = true;
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);
     },
@@ -40,6 +47,7 @@ const AdvancedCalendar = {
         }
 
         state.calendarFocusDate = focusDate.getTime();
+        AdvancedCalendar._resetScrollOnNextRender = true;
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);
     },
@@ -91,6 +99,7 @@ const AdvancedCalendar = {
         let state = AdvancedTable.getState(tableId);
         state.calendarMode = 'day';
         state.calendarFocusDate = ms;
+        AdvancedCalendar._resetScrollOnNextRender = true;
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);
     },
@@ -100,6 +109,7 @@ const AdvancedCalendar = {
         let state = AdvancedTable.getState(tableId);
         state.calendarMode = 'month';
         state.calendarFocusDate = ms;
+        AdvancedCalendar._resetScrollOnNextRender = true;
         AdvancedTable.setState(tableId, state);
         AdvancedTable.renderTable(tableId);
     },
@@ -126,7 +136,7 @@ const AdvancedCalendar = {
 
     createRecord: (e, tableId, baseTimeMs, pxPerHour = null) => {
         if (!AppState.isEditMode) return;
-        if (e.target.closest('.adv-cal-event-std, .adv-cal-event-abs, .adv-cal-more-btn, .adv-quick-search-wrapper')) return;
+        if (e.target.closest('.adv-cal-event-std, .adv-cal-event-abs, .adv-cal-more-btn, .adv-cal-day-label, .adv-quick-search-wrapper')) return;
         
         let finalMs = Number(baseTimeMs);
         if (pxPerHour) {
@@ -142,6 +152,7 @@ const AdvancedCalendar = {
 
     onDragStart: (e, tableId, rowId) => {
         if (!AppState.isEditMode) return;
+        e.stopPropagation();
 
         const rect = e.currentTarget.getBoundingClientRect();
         const offsetY = e.clientY - rect.top;
@@ -151,8 +162,16 @@ const AdvancedCalendar = {
         e.currentTarget.style.opacity = '0.5';
     },
 
+    onDragEnd: (e) => {
+        if (e && e.currentTarget) e.currentTarget.style.opacity = '1';
+        document.querySelectorAll('.adv-cal-droppable').forEach(el => {
+            el.style.boxShadow = 'none';
+        });
+    },
+
     onDragOver: (e) => {
         e.preventDefault();
+        e.stopPropagation();
         if (e.currentTarget.classList.contains('adv-cal-droppable')) {
             e.currentTarget.style.boxShadow = 'inset 0 0 0 2px var(--accent-color)';
         }
@@ -166,36 +185,69 @@ const AdvancedCalendar = {
 
     onDrop: (e, targetTableId, timestampMs) => {
         e.preventDefault();
+        e.stopPropagation();
         if (e.currentTarget.classList.contains('adv-cal-droppable')) {
             e.currentTarget.style.boxShadow = 'none';
         }
 
         try {
-            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
-            if (data.tableId !== targetTableId) return;
+            const rawData = e.dataTransfer.getData('text/plain');
+            if (!rawData) return;
+            const data = JSON.parse(rawData);
+            if (!data || data.tableId !== targetTableId) return;
 
-            const state = AdvancedTable.getState(targetTableId);
+            const realTableId = AdvancedTable._resolveSourceId(targetTableId);
+            const state = AdvancedTable.getState(realTableId);
+            const viewState = AdvancedTable.getState(targetTableId);
+            if (!state || !viewState) return;
+
             const row = state.rows.find(r => r.id === data.rowId);
             if (!row) return;
 
-            const dateCol = state.columns.find(c => c.id === state.calendarDateCol);
+            const dateCol = state.columns.find(c => c.id === viewState.calendarDateCol);
+            if (!dateCol) return;
+
+            const parseLocalMs = (val) => {
+                if (!val) return null;
+                const str = String(val).trim();
+                const m = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+                if (m) {
+                    return new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)).getTime();
+                }
+                const t = new Date(str).getTime();
+                return isNaN(t) ? null : t;
+            };
+
+            const formatDateValue = (dObj, colType) => {
+                if (colType === 'datetime') {
+                    const c = new Date(dObj.getTime());
+                    c.setMinutes(c.getMinutes() - c.getTimezoneOffset());
+                    return c.toISOString().slice(0, 16);
+                }
+                const yyyy = dObj.getFullYear();
+                const mm = String(dObj.getMonth() + 1).padStart(2, '0');
+                const dd = String(dObj.getDate()).padStart(2, '0');
+                return `${yyyy}-${mm}-${dd}`;
+            };
+
             const newDate = new Date(Number(timestampMs));
+            const viewMode = viewState.calendarMode || 'month';
 
             let oldStartMs = null;
             let oldEndMs = null;
             const currentCell = row.cells[dateCol.id];
 
             if (currentCell && typeof currentCell === 'object') {
-                if (currentCell.start) oldStartMs = new Date(currentCell.start).getTime();
-                if (currentCell.end) oldEndMs = new Date(currentCell.end).getTime();
+                if (currentCell.start) oldStartMs = parseLocalMs(currentCell.start);
+                if (currentCell.end) oldEndMs = parseLocalMs(currentCell.end);
             } else if (currentCell) {
-                oldStartMs = new Date(currentCell).getTime();
+                oldStartMs = parseLocalMs(currentCell);
             }
 
             let deltaMs = 0;
 
-            if (dateCol.type === 'datetime' && state.calendarMode !== 'month' && state.calendarMode !== 'year') {
-                const pxPerHour = state.calendarZoom || 40;
+            if (dateCol.type === 'datetime' && viewMode !== 'month' && viewMode !== 'year') {
+                const pxPerHour = viewState.calendarZoom || 40;
                 const rect = e.currentTarget.getBoundingClientRect();
                 const dropY = e.clientY - rect.top;
 
@@ -213,12 +265,11 @@ const AdvancedCalendar = {
                 newDate.setHours(oldDateObj.getHours(), oldDateObj.getMinutes(), 0, 0);
             }
 
-            if (oldStartMs) {
+            if (oldStartMs !== null) {
                 deltaMs = newDate.getTime() - oldStartMs;
             }
 
-            newDate.setMinutes(newDate.getMinutes() - newDate.getTimezoneOffset());
-            const formattedStart = dateCol.type === 'datetime' ? newDate.toISOString().slice(0, 16) : newDate.toISOString().split('T')[0];
+            const formattedStart = formatDateValue(newDate, dateCol.type);
 
             if (!currentCell || typeof currentCell !== 'object') {
                 if (dateCol.hasEndDate) {
@@ -228,15 +279,27 @@ const AdvancedCalendar = {
                 }
             } else {
                 row.cells[dateCol.id].start = formattedStart;
-                if (oldEndMs && dateCol.hasEndDate) {
-                    const newEnd = new Date(oldEndMs + deltaMs);
-                    newEnd.setMinutes(newEnd.getMinutes() - newEnd.getTimezoneOffset());
-                    row.cells[dateCol.id].end = newEnd.toISOString().slice(0, 16);
+                if (oldEndMs !== null && dateCol.hasEndDate) {
+                    if (dateCol.type === 'date') {
+                        const daysDiff = Math.round(deltaMs / 86400000);
+                        const newEnd = new Date(oldEndMs);
+                        newEnd.setDate(newEnd.getDate() + daysDiff);
+                        row.cells[dateCol.id].end = formatDateValue(newEnd, 'date');
+                    } else {
+                        const newEnd = new Date(oldEndMs + deltaMs);
+                        row.cells[dateCol.id].end = formatDateValue(newEnd, 'datetime');
+                    }
                 }
             }
 
             row.updatedAt = Date.now();
-            AdvancedTable.setState(targetTableId, state);
+            if (typeof AdvancedTable.buildVirtualRow === 'function') {
+                const freshVRow = AdvancedTable.buildVirtualRow(realTableId, row, state);
+                row.virtualCells = freshVRow.virtualCells;
+            }
+
+            AdvancedTable.setState(realTableId, state);
+            AdvancedTable.updateDependentViews(realTableId);
             Store.triggerAutoSave();
             AdvancedTable.renderTable(targetTableId);
 
@@ -357,26 +420,89 @@ const AdvancedCalendar = {
     },
 
     /**
-     * CLEAN FORMULA RENDERING (CSS Injection)
-     * Riscrive l'HTML generato da renderCell() per forzare gli allineamenti a destra 
-     * e sovrascrivere i comportamenti di default (flex-start/center) delle tabelle.
+     * CLEAN FORMULA RENDERING (CSS Injection & Action Cleanup)
+     * Riscrive l'HTML generato da renderCell() per adattarlo alle card temporali:
+     * rimuove il pulsante di espansione testo lungo, rimuove il line-clamp e gestisce l'allineamento.
      */
-    _cleanFormulaRendering: (htmlStr) => {
+    _cleanFormulaRendering: (htmlStr, alignLeft = false) => {
         let cleaned = htmlStr;
-        
-        // 1. Forza i flexbox generici a spostarsi a destra (es. Bottoni)
-        cleaned = cleaned.replace(/justify-content:\s*flex-start/gi, 'justify-content: flex-end');
-        cleaned = cleaned.replace(/justify-content:\s*center/gi, 'justify-content: flex-end');
-        
-        // 2. Inietta esplicitamente l'allineamento sulle classi di base usando Regex tolleranti agli spazi
-        cleaned = cleaned.replace(/class=["']([^"']*?\badv-select-container\b[^"']*)["']/g, 'class="$1" style="justify-content:flex-end; width:100%; margin:0;"');
-        cleaned = cleaned.replace(/class=["']([^"']*?\badv-cell-text\b[^"']*)["']/g, 'class="$1" style="text-align:right; width:100%; margin:0;"');
-        cleaned = cleaned.replace(/class=["']([^"']*?\badv-cell-number\b[^"']*)["']/g, 'class="$1" style="text-align:right; width:100%; margin:0;"');
-        
-        // 3. Pulisce eventuali sfondi ereditati dalla griglia ReadOnly
+
+        // 1. Rimuove il pulsante di espansione testo lungo (ridondante nella card calendario)
+        cleaned = cleaned.replace(/<button[^>]*openLongTextModal[^>]*>[\s\S]*?<\/button>/gi, '');
+
+        // 2. Rimuove il troncamento forzato (-webkit-line-clamp) per permettere la lettura del contenuto
+        cleaned = cleaned.replace(/-webkit-line-clamp\s*:\s*[^;]+;?/gi, '');
+        cleaned = cleaned.replace(/-webkit-box-orient\s*:\s*[^;]+;?/gi, '');
+        cleaned = cleaned.replace(/display\s*:\s*-webkit-box;?/gi, 'display: block;');
+
+        // 3. Gestione allineamento (a sinistra per testi lunghi impilati sotto la label, a destra per valori compatti)
+        if (alignLeft) {
+            cleaned = cleaned.replace(/justify-content:\s*flex-end/gi, 'justify-content: flex-start');
+            cleaned = cleaned.replace(/class=["']([^"']*?\badv-select-container\b[^"']*)["']/g, 'class="$1" style="justify-content:flex-start; width:100%; margin:0;"');
+            cleaned = cleaned.replace(/class=["']([^"']*?\badv-cell-text\b[^"']*)["']/g, 'class="$1" style="text-align:left; width:100%; margin:0; white-space:pre-wrap; word-break:break-word;"');
+            cleaned = cleaned.replace(/class=["']([^"']*?\badv-cell-number\b[^"']*)["']/g, 'class="$1" style="text-align:left; width:100%; margin:0;"');
+        } else {
+            cleaned = cleaned.replace(/justify-content:\s*flex-start/gi, 'justify-content: flex-end');
+            cleaned = cleaned.replace(/justify-content:\s*center/gi, 'justify-content: flex-end');
+            cleaned = cleaned.replace(/class=["']([^"']*?\badv-select-container\b[^"']*)["']/g, 'class="$1" style="justify-content:flex-end; width:100%; margin:0;"');
+            cleaned = cleaned.replace(/class=["']([^"']*?\badv-cell-text\b[^"']*)["']/g, 'class="$1" style="text-align:right; width:100%; margin:0;"');
+            cleaned = cleaned.replace(/class=["']([^"']*?\badv-cell-number\b[^"']*)["']/g, 'class="$1" style="text-align:right; width:100%; margin:0;"');
+        }
+
+        // 4. Pulisce eventuali sfondi ereditati dalla griglia ReadOnly
         cleaned = cleaned.replace(/background:\s*rgba\(0,\s*0,\s*0,\s*0\.02\);?/gi, '');
         cleaned = cleaned.replace(/adv-cell-readonly/g, '');
         return cleaned;
+    },
+
+    _renderPropRowsHtml: (tableId, r, propCols, state, mode) => {
+        if (!propCols || propCols.length === 0) return '';
+        let rowsHtml = '';
+
+        propCols.forEach(pCol => {
+            let pVal = r.virtualCells[pCol.id];
+            if (pVal === '' || pVal === null || pVal === undefined || (Array.isArray(pVal) && pVal.length === 0)) return;
+
+            const displayStr = AdvancedTable.getFormatDisplayValue(pCol, pVal) || '';
+            const isErrorToken = typeof pVal === 'string' && pVal.startsWith('ERROR:');
+            const isTextualType = ['text', 'url', 'formula', 'rollup'].includes(pCol.type);
+            const isLongTextProp = isTextualType &&
+                !isErrorToken &&
+                (displayStr.length > 50 || displayStr.includes('\n'));
+
+            // Nella visualizzazione settimanale tronca i testi oltre 200 caratteri (il testo integrale resta in tooltip e pannello record)
+            let cellValToRender = pVal;
+            let cellColToRender = pCol;
+            if (mode === 'week' && isTextualType && !isErrorToken && displayStr.length > 200) {
+                cellValToRender = displayStr.slice(0, 200).trimEnd() + '...';
+                if (pCol.type === 'url') {
+                    cellColToRender = { ...pCol, type: 'text' };
+                }
+            }
+
+            let rendered = AdvancedTable.renderCell(tableId, r, cellColToRender, cellValToRender, state, false);
+            rendered = AdvancedCalendar._cleanFormulaRendering(rendered, isLongTextProp);
+
+            const safePColName = String(pCol.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+            if (isLongTextProp) {
+                rowsHtml += `
+                    <div style="display:flex; flex-direction:column; align-items:stretch; gap:2px; font-size:0.65rem;">
+                        <span style="opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${safePColName}</span>
+                        <div style="width:100%; text-align:left; overflow:hidden;">${rendered}</div>
+                    </div>
+                `;
+            } else {
+                rowsHtml += `
+                    <div style="display:flex; justify-content:space-between; align-items:center; gap:5px; font-size:0.65rem;">
+                        <span style="opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%;">${safePColName}</span>
+                        <div style="flex:1; text-align:right; overflow:hidden; display:flex; justify-content:flex-end; align-items:center;">${rendered}</div>
+                    </div>
+                `;
+            }
+        });
+
+        return rowsHtml;
     },
 
     render: (tableId, wrapper, state) => {
@@ -409,10 +535,14 @@ const AdvancedCalendar = {
         }
 
         let prevScrollX = 0, prevScrollY = 0;
-        const existingScroll = bodyContainer.querySelector('.adv-scroll-container, .adv-cal-week-container .adv-scroll-container,[style*="overflow-y:auto"]');
-        if (existingScroll) {
-            prevScrollX = existingScroll.scrollLeft;
-            prevScrollY = existingScroll.scrollTop;
+        if (AdvancedCalendar._resetScrollOnNextRender) {
+            AdvancedCalendar._resetScrollOnNextRender = false;
+        } else {
+            const existingScroll = bodyContainer.querySelector('.adv-scroll-container, .adv-cal-week-container .adv-scroll-container,[style*="overflow-y:auto"]');
+            if (existingScroll) {
+                prevScrollX = existingScroll.scrollLeft;
+                prevScrollY = existingScroll.scrollTop;
+            }
         }
 
         const mode = state.calendarMode || 'month';
@@ -461,6 +591,16 @@ const AdvancedCalendar = {
         // Iniezione barra di ricerca rapida a scomparsa
         html += AdvancedTable.renderQuickSearchBar(tableId, state);
 
+        const parseCalendarDateMs = (val) => {
+            if (!val) return NaN;
+            const str = String(val).trim();
+            const dateOnly = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+            if (dateOnly) {
+                return new Date(parseInt(dateOnly[1], 10), parseInt(dateOnly[2], 10) - 1, parseInt(dateOnly[3], 10)).getTime();
+            }
+            return new Date(str).getTime();
+        };
+
         let viewRows = [];
         const renderCache = {};
         state.rows.forEach(r => {
@@ -471,11 +611,11 @@ const AdvancedCalendar = {
             let parsedStart = null, parsedEnd = null;
 
             if (rawDate && typeof rawDate === 'string') {
-                parsedStart = new Date(rawDate).getTime();
+                parsedStart = parseCalendarDateMs(rawDate);
                 parsedEnd = parsedStart;
             } else if (rawDate && typeof rawDate === 'object') {
-                if (rawDate.start) parsedStart = new Date(rawDate.start).getTime();
-                if (rawDate.end) parsedEnd = new Date(rawDate.end).getTime();
+                if (rawDate.start) parsedStart = parseCalendarDateMs(rawDate.start);
+                if (rawDate.end) parsedEnd = parseCalendarDateMs(rawDate.end);
                 else parsedEnd = parsedStart;
             }
 
@@ -520,6 +660,11 @@ const AdvancedCalendar = {
                     iter.setDate(iter.getDate() + 1);
                 }
             }
+        });
+
+        // Ordinamento cronologico garantito per orario di inizio in ogni giornata (per tutte le viste)
+        Object.keys(eventsByDate).forEach(dayKey => {
+            eventsByDate[dayKey].sort((a, b) => a._timeStart - b._timeStart || a._timeEnd - b._timeEnd);
         });
 
         let monthName = focusDate.toLocaleString(currentLocale, { month: 'long', year: 'numeric' }).toUpperCase();
@@ -596,7 +741,7 @@ const AdvancedCalendar = {
             const year = focusDate.getFullYear();
             const daysInitials = (I18n.dict[currentLocale]?.calendar_view?.days_initials) || ['L', 'M', 'M', 'G', 'V', 'S', 'D'];
             
-            html += `<div class="adv-scroll-container" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; padding: 15px; background: var(--bg-color); max-height: 600px; overflow-y: auto;">`;
+            html += `<div class="adv-scroll-container adv-cal-year-grid" style="display:grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 15px; padding: 15px; background: var(--bg-color); max-height: 600px; overflow-y: auto; position: relative;">`;
 
             for (let m = 0; m < 12; m++) {
                 const firstDay = new Date(year, m, 1);
@@ -606,7 +751,7 @@ const AdvancedCalendar = {
                 let startOffset = firstDay.getDay() - 1;
                 if (startOffset === -1) startOffset = 6;
 
-                html += `<div style="border: 1px solid var(--border-color); border-radius: 6px; background: var(--sidebar-bg); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">`;
+                html += `<div data-cal-month="${m}" style="border: 1px solid var(--border-color); border-radius: 6px; background: var(--sidebar-bg); overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">`;
                 
                 const targetMs = firstDay.getTime();
                 html += `<div onclick="AdvancedCalendar.expandMonthView(event, '${tableId}', ${targetMs})" title="${I18n.t('calendar_view.switch_to_month')}" style="text-align:center; font-weight:bold; font-size: 0.9rem; padding: 6px; background: rgba(0,0,0,0.03); border-bottom: 1px solid var(--border-color); color: var(--accent-color); cursor: pointer; transition: background 0.2s, opacity 0.2s;" onmouseenter="this.style.opacity='0.7'" onmouseleave="this.style.opacity='1'">${capitalMonthTitle}</div>`;
@@ -661,6 +806,22 @@ const AdvancedCalendar = {
 
             html += `</div></div>`;
             bodyContainer.innerHTML = html;
+
+            // Scorrimento automatico al mese corrente (o preservazione dello scroll manuale precedente)
+            const yearScroll = bodyContainer.querySelector('.adv-cal-year-grid');
+            if (yearScroll) {
+                if (prevScrollY > 0) {
+                    yearScroll.scrollTop = prevScrollY;
+                } else {
+                    const now = new Date();
+                    if (year === now.getFullYear()) {
+                        const currentMonthCard = yearScroll.querySelector(`[data-cal-month="${now.getMonth()}"]`);
+                        if (currentMonthCard) {
+                            yearScroll.scrollTop = Math.max(0, currentMonthCard.offsetTop - 15);
+                        }
+                    }
+                }
+            }
             return;
         }
 
@@ -690,7 +851,7 @@ const AdvancedCalendar = {
                 if (colorClass.includes('c10')) { barColor = 'var(--tx-c10)'; barBg = 'var(--hl-c10)'; }
             }
 
-            const dragAttrs = isEdit ? `draggable="true" ondragstart="AdvancedCalendar.onDragStart(event, '${tableId}', '${r.id}')"` : '';
+            const dragAttrs = isEdit ? `draggable="true" ondragstart="AdvancedCalendar.onDragStart(event, '${tableId}', '${r.id}')" ondragend="AdvancedCalendar.onDragEnd(event)"` : '';
             const cursor = isEdit ? 'cursor:grab;' : 'cursor:pointer;';
 
             let timeLabelHtml = '';
@@ -706,25 +867,14 @@ const AdvancedCalendar = {
             let wrapperStyle = (mode === 'month') 
                 ? 'white-space: nowrap; overflow: hidden; text-overflow: ellipsis;' 
                 : 'white-space: normal; word-break: break-word; line-height: 1.3; height: auto; display: block;';
+            if (mode === 'day') wrapperStyle += ' padding: 5px;';
 
             let extraPropsHtml = '';
             if (mode !== 'month' && propCols.length > 0) {
-                 extraPropsHtml += `<div style="margin-top:4px; border-top:1px solid rgba(0,0,0,0.1); padding-top:4px; display:flex; flex-direction:column; gap:2px;">`;
-                 propCols.forEach(pCol => {
-                    let pVal = r.virtualCells[pCol.id];
-                    if (pVal !== '' && pVal !== null && pVal !== undefined && !(Array.isArray(pVal) && pVal.length === 0)) {
-                        let rendered = AdvancedTable.renderCell(tableId, r, pCol, pVal, state, false);
-                        rendered = AdvancedCalendar._cleanFormulaRendering(rendered);
-                        
-                        const safePColName = String(pCol.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        
-                        extraPropsHtml += `<div style="display:flex; justify-content:space-between; align-items:center; gap:5px; font-size:0.65rem;">
-                                            <span style="opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%;">${safePColName}</span>
-                                            <div style="flex:1; text-align:right; overflow:hidden; display:flex; justify-content:flex-end; align-items:center;">${rendered}</div>
-                                           </div>`;
-                    }
-                 });
-                 extraPropsHtml += `</div>`;
+                const rowsInner = AdvancedCalendar._renderPropRowsHtml(tableId, r, propCols, state, mode);
+                if (rowsInner) {
+                    extraPropsHtml = `<div style="margin-top:4px; border-top:1px solid rgba(0,0,0,0.1); padding-top:4px; display:flex; flex-direction:column; gap:3px;">${rowsInner}</div>`;
+                }
             }
 
             return `
@@ -780,8 +930,9 @@ const AdvancedCalendar = {
             widthPct = `calc(${widthPct}% - 2px)`;
             leftPct = `calc(${leftPct}% + 1px)`;
 
-            const dragAttrs = isEdit ? `draggable="true" ondragstart="AdvancedCalendar.onDragStart(event, '${tableId}', '${r.id}')"` : '';
+            const dragAttrs = isEdit ? `draggable="true" ondragstart="AdvancedCalendar.onDragStart(event, '${tableId}', '${r.id}')" ondragend="AdvancedCalendar.onDragEnd(event)"` : '';
             const cursor = isEdit ? 'cursor:grab;' : 'cursor:pointer;';
+            const paddingOverride = mode === 'day' ? 'padding:5px;' : '';
             const resizeHandle = (isEdit && dateCol.hasEndDate && eMs === r._timeEnd) ?
                 `<div style="position:absolute; bottom:0; left:0; right:0; height:8px; cursor:ns-resize; z-index:20;" onmousedown="AdvancedCalendar.startResize(event, '${tableId}', '${r.id}')"></div>` : '';
 
@@ -789,28 +940,16 @@ const AdvancedCalendar = {
 
             let extraPropsHtml = '';
             if (propCols.length > 0) {
-                extraPropsHtml += `<div style="margin-top:4px; border-top:1px solid rgba(0,0,0,0.1); padding-top:4px; display:flex; flex-direction:column; gap:2px; flex-shrink: 0; overflow: hidden;">`;
-                propCols.forEach(pCol => {
-                    let pVal = r.virtualCells[pCol.id];
-                    if (pVal !== '' && pVal !== null && pVal !== undefined && !(Array.isArray(pVal) && pVal.length === 0)) {
-                        let rendered = AdvancedTable.renderCell(tableId, r, pCol, pVal, state, false);
-                        rendered = AdvancedCalendar._cleanFormulaRendering(rendered);
-                        
-                        const safePColName = String(pCol.name || '').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-                        
-                        extraPropsHtml += `<div style="display:flex; justify-content:space-between; align-items:center; gap:5px; font-size:0.65rem;">
-                                            <span style="opacity:0.7; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:40%;">${safePColName}</span>
-                                            <div style="flex:1; text-align:right; overflow:hidden; display:flex; justify-content:flex-end; align-items:center;">${rendered}</div>
-                                           </div>`;
-                    }
-                });
-                extraPropsHtml += `</div>`;
+                const rowsInner = AdvancedCalendar._renderPropRowsHtml(tableId, r, propCols, state, mode);
+                if (rowsInner) {
+                    extraPropsHtml = `<div style="margin-top:4px; border-top:1px solid rgba(0,0,0,0.1); padding-top:4px; display:flex; flex-direction:column; gap:3px; flex-shrink: 0; overflow: hidden;">${rowsInner}</div>`;
+                }
             }
 
             const tooltipHtml = AdvancedCalendar._buildTooltipHTML(tVal, timeLabelText, r, propCols);
 
             return `
-                <div class="adv-cal-event-abs" ${dragAttrs} style="top:${topPx}px; left:${leftPct}; width:${widthPct}; height:${heightPx}px; background:${barBg}; border:1px solid ${barColor}; color:${textCol}; ${cursor}; display: flex; flex-direction: column; overflow: hidden; justify-content: flex-start;"
+                <div class="adv-cal-event-abs" ${dragAttrs} style="top:${topPx}px; left:${leftPct}; width:${widthPct}; height:${heightPx}px; background:${barBg}; border:1px solid ${barColor}; color:${textCol}; ${cursor} ${paddingOverride} display: flex; flex-direction: column; overflow: hidden; justify-content: flex-start;"
                      data-base-height="${heightPx}"
                      onclick="AdvancedTable.openRecordView('${tableId}', '${r.id}')" data-tooltip="${tooltipHtml}">
                     <div class="adv-cal-abs-time" style="flex-shrink:0;">${timeLabelText}</div>
@@ -869,6 +1008,20 @@ const AdvancedCalendar = {
 
         const daysShort = (I18n.dict[currentLocale]?.calendar_view?.days_short) || ['LUN', 'MAR', 'MER', 'GIO', 'VEN', 'SAB', 'DOM'];
 
+        // Intervallo orario complessivo degli eventi nel periodo visualizzato (per auto-scroll intelligente in week/day)
+        let periodMinHour = Infinity;
+        let periodMaxHour = -Infinity;
+        const trackDayHourBounds = (dayEvents, dayStartMs) => {
+            dayEvents.forEach(ev => {
+                const sMs = Math.max(ev._timeStart, dayStartMs);
+                const eMs = Math.min(ev._timeEnd, dayStartMs + 86400000);
+                const sHour = (sMs - dayStartMs) / 3600000;
+                const eHour = Math.max(sHour + 0.5, (eMs - dayStartMs) / 3600000);
+                if (sHour < periodMinHour) periodMinHour = sHour;
+                if (eHour > periodMaxHour) periodMaxHour = eHour;
+            });
+        };
+
         if (mode === 'month') {
             const year = focusDate.getFullYear();
             const month = focusDate.getMonth();
@@ -913,8 +1066,8 @@ const AdvancedCalendar = {
                 }
 
                 html += `<div class="adv-cal-day-cell" ${dropHandlers} ${dblClick} style="background:${bg};">
-                            <div class="adv-cal-day-label" style="color:${isCurrentMonth ? 'var(--text-primary)' : 'var(--text-secondary)'}; font-weight:${isToday ? 'bold' : 'normal'};">${dayStr}</div>
-                            <div class="adv-cal-day-content">
+                            <div class="adv-cal-day-label" style="pointer-events:auto; cursor:pointer; color:${isCurrentMonth ? 'var(--text-primary)' : 'var(--text-secondary)'}; font-weight:${isToday ? 'bold' : 'normal'};" onclick="AdvancedCalendar.expandDayView(event, '${tableId}', ${currentGridDate.getTime()})" title="${I18n.t('calendar_view.day')}">${dayStr}</div>
+                            <div class="adv-cal-day-content adv-scroll-container">
                                 ${eventsHtml}
                             </div>
                          </div>`;
@@ -942,7 +1095,7 @@ const AdvancedCalendar = {
                 const isToday = currentGridDate.getTime() === new Date().setHours(0, 0, 0, 0);
                 const dayStr = isToday ? `<span style="background:var(--accent-color); color:var(--accent-color-tx); border-radius:50%; width:28px; height:28px; display:inline-flex; align-items:center; justify-content:center;">${currentGridDate.getDate()}</span>` : currentGridDate.getDate();
 
-                html += `<div style="padding:10px; text-align:center; background:var(--sidebar-bg);">
+                html += `<div onclick="AdvancedCalendar.expandDayView(event, '${tableId}', ${currentGridDate.getTime()})" title="${I18n.t('calendar_view.day')}" style="padding:10px; text-align:center; background:var(--sidebar-bg); cursor:pointer;" onmouseenter="this.style.background='var(--item-hover)'" onmouseleave="this.style.background='var(--sidebar-bg)'">
                             <div style="font-size:0.75rem; font-weight:bold; color:var(--text-secondary); text-transform:uppercase;">${daysNames[i]}</div>
                             <div style="font-size:1.2rem; font-weight:${isToday ? 'bold' : 'normal'}; color:${isToday ? 'var(--accent-color)' : 'var(--text-primary)'}; display:flex; justify-content:center; align-items:center; margin-top:2px;">${dayStr}</div>
                          </div>`;
@@ -957,18 +1110,20 @@ const AdvancedCalendar = {
             for (let i = 0; i < 7; i++) {
                 const currentGridDate = new Date(startOfWeek);
                 currentGridDate.setDate(startOfWeek.getDate() + i);
-                const events = eventsByDate[currentGridDate.getTime()] || [];
+                const dayMs = currentGridDate.getTime();
+                const events = eventsByDate[dayMs] || [];
+                if (isTimeCol && events.length > 0) trackDayHourBounds(events, dayMs);
                 
-                const dblClick = isEdit ? `ondblclick="AdvancedCalendar.createRecord(event, '${tableId}', '${currentGridDate.getTime()}', ${isTimeCol ? pxPerHour : 'null'})"` : '';
-                const dropHandlers = isEdit ? `class="adv-cal-droppable" ondragover="AdvancedCalendar.onDragOver(event)" ondragleave="AdvancedCalendar.onDragLeave(event)" ondrop="AdvancedCalendar.onDrop(event, '${tableId}', '${currentGridDate.getTime()}')"` : '';
+                const dblClick = isEdit ? `ondblclick="AdvancedCalendar.createRecord(event, '${tableId}', '${dayMs}', ${isTimeCol ? pxPerHour : 'null'})"` : '';
+                const dropHandlers = isEdit ? `class="adv-cal-droppable" ondragover="AdvancedCalendar.onDragOver(event)" ondragleave="AdvancedCalendar.onDragLeave(event)" ondrop="AdvancedCalendar.onDrop(event, '${tableId}', '${dayMs}')"` : '';
 
                 html += `<div ${dropHandlers} ${dblClick} style="background:var(--bg-color); position:relative; transition:box-shadow 0.2s;">`;
                 if (isTimeCol) {
                     html += buildTimeGrid(pxPerHour);
                     const formattedEvents = layoutDayEvents(events);
-                    html += `<div style="position:relative; width:100%; height:100%; z-index:5;">${formattedEvents.map(e => renderEventAbsolute(e.record, currentGridDate.getTime(), pxPerHour, e.colIdx, e.colCount)).join('')}</div>`;
+                    html += `<div style="position:relative; width:100%; height:100%; z-index:5;">${formattedEvents.map(e => renderEventAbsolute(e.record, dayMs, pxPerHour, e.colIdx, e.colCount)).join('')}</div>`;
                 } else {
-                    html += `<div style="padding:10px; height:100%; overflow-y:auto;">${events.map(e => renderEventStandard(e)).join('')}</div>`;
+                    html += `<div class="adv-scroll-container" style="padding:10px; height:100%; overflow-y:auto;">${events.map(e => renderEventStandard(e)).join('')}</div>`;
                 }
                 html += `</div>`;
             }
@@ -978,8 +1133,9 @@ const AdvancedCalendar = {
             const pxPerHour = state.calendarZoom || 40;
             const targetTime = new Date(focusDate).setHours(0, 0, 0, 0);
             const events = eventsByDate[targetTime] || [];
+            if (isTimeCol && events.length > 0) trackDayHourBounds(events, targetTime);
 
-            html += `<div style="display:flex; flex-direction:row; height:600px; overflow-y:auto; border-top:1px solid var(--border-color);">`;
+            html += `<div class="adv-scroll-container" style="display:flex; flex-direction:row; height:600px; overflow-y:auto; border-top:1px solid var(--border-color);">`;
 
             if (isTimeCol) html += buildTimeAxis(pxPerHour);
 
@@ -995,7 +1151,7 @@ const AdvancedCalendar = {
                 if (events.length === 0) {
                     html += `<div style="text-align:center; color:var(--text-secondary); margin-top:40px; pointer-events:none;">${I18n.t('calendar_view.no_events_day')}</div>`;
                 } else {
-                    html += `<div style="display:flex; flex-direction:column; gap:10px; max-width:800px; margin:20px auto; pointer-events:auto;">${events.map(e => renderEventStandard(e)).join('')}</div>`;
+                    html += `<div style="display:flex; flex-direction:column; gap:10px; padding:5px; width:100%; box-sizing:border-box; pointer-events:auto;">${events.map(e => renderEventStandard(e)).join('')}</div>`;
                 }
             }
 
@@ -1016,7 +1172,7 @@ const AdvancedCalendar = {
                             tTitle = String(tTitle).replace(/</g, '&lt;').replace(/>/g, '&gt;');
                             
                             return `<span draggable="${isEdit ? 'true' : 'false'}" 
-                                  ${isEdit ? `ondragstart="AdvancedCalendar.onDragStart(event, '${tableId}', '${r.id}')"` : ''}
+                                  ${isEdit ? `ondragstart="AdvancedCalendar.onDragStart(event, '${tableId}', '${r.id}')" ondragend="AdvancedCalendar.onDragEnd(event)"` : ''}
                                   style="cursor:${isEdit ? 'grab' : 'pointer'}; color:var(--accent-color); margin-right:8px; display:inline-block;" 
                                   onclick="AdvancedTable.openRecordView('${tableId}', '${r.id}')">
                                 ${tTitle}
@@ -1027,11 +1183,21 @@ const AdvancedCalendar = {
 
         bodyContainer.innerHTML = html;
 
-        if (prevScrollX > 0 || prevScrollY > 0) {
-            const newScroll = bodyContainer.querySelector('.adv-scroll-container, .adv-cal-week-container .adv-scroll-container,[style*="overflow-y:auto"]');
-            if (newScroll) {
-                newScroll.scrollLeft = prevScrollX;
-                newScroll.scrollTop = prevScrollY;
+        const targetScroll = bodyContainer.querySelector('.adv-scroll-container, .adv-cal-week-container .adv-scroll-container,[style*="overflow-y:auto"]');
+        if (targetScroll) {
+            if (prevScrollX > 0 || prevScrollY > 0) {
+                targetScroll.scrollLeft = prevScrollX;
+                targetScroll.scrollTop = prevScrollY;
+            } else if ((mode === 'week' || mode === 'day') && isTimeCol && periodMinHour < Infinity) {
+                const pxPerHour = state.calendarZoom || 40;
+                const viewHeight = targetScroll.clientHeight || 550;
+                const visibleHours = viewHeight / pxPerHour;
+
+                let idealTopHour = Math.max(0, periodMinHour - 0.5);
+                if (periodMaxHour + 0.5 - idealTopHour > visibleHours && (periodMaxHour - periodMinHour + 1) <= visibleHours) {
+                    idealTopHour = Math.max(0, periodMaxHour + 0.5 - visibleHours);
+                }
+                targetScroll.scrollTop = Math.round(idealTopHour * pxPerHour);
             }
         }
     }

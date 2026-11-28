@@ -186,6 +186,7 @@ Object.assign(EventsGlobal, {
             
             if (target.closest('.adv-col-resizer') || 
                 target.closest('.adv-board-card') || 
+                target.closest('.adv-cal-event-std, .adv-cal-event-abs') || 
                (thElement && thElement.hasAttribute('data-col')) || 
                 (target.classList && (
                     target.classList.contains('table-row-trigger') || 
