@@ -14,6 +14,8 @@
  * palette ereditata da colonne Select, pre-impostazione Conteggio e auto-stacking.
  * FEAT LIVE PREVIEW & CHART OPTIONS: Pulsante "Applica" con ripristino su Annulla, ordinamento categorie,
  * limite Top-N + Altri, opzione beginAtZero e scala 100% per grafici impilati.
+ * FEAT VISUAL ICON CONTROLS: Sostituzione dei dropdown di Ordine, Legenda e Altezza con selettori
+ * visivi ad icone SVG dotati di tooltip, griglia palette responsive (2/3 colonne) e visibilità contestuale per Ciambella/Stacking.
  */
 
 const AdvancedPivotMenus = {
@@ -126,7 +128,8 @@ const AdvancedPivotMenus = {
     },
 
     selectChartType: (type) => {
-        document.getElementById('pivotChartStyle').value = type;
+        const input = document.getElementById('pivotChartStyle');
+        if (input) input.value = type;
         document.querySelectorAll('.chart-type-card').forEach(card => {
             if (card.dataset.type === type) {
                 card.style.borderColor = 'var(--accent-color)';
@@ -143,25 +146,34 @@ const AdvancedPivotMenus = {
         AdvancedPivotMenus.updateTimeSeriesUI();
     },
 
+    selectChartOptionCard: (inputId, groupClass, val) => {
+        const input = document.getElementById(inputId);
+        if (input) input.value = val;
+        document.querySelectorAll('.' + groupClass).forEach(card => {
+            if (card.dataset.value === val) {
+                card.style.borderColor = 'var(--accent-color)';
+                card.style.backgroundColor = 'rgba(37, 99, 235, 0.08)';
+                card.style.color = 'var(--accent-color)';
+            } else {
+                card.style.borderColor = 'var(--border-color)';
+                card.style.backgroundColor = 'var(--bg-color)';
+                card.style.color = 'var(--text-secondary)';
+            }
+        });
+    },
+
     selectPalette: (paletteKey) => {
-        document.getElementById('chartColorPalette').value = paletteKey;
+        const input = document.getElementById('chartColorPalette');
+        if (input) input.value = paletteKey;
         document.querySelectorAll('.palette-card').forEach(card => {
             if (card.dataset.palette === paletteKey) {
                 card.style.borderColor = 'var(--accent-color)';
-                card.style.backgroundColor = 'rgba(37, 99, 235, 0.05)';
-                const lbl = card.querySelector('.palette-label');
-                if (lbl) {
-                    lbl.style.fontWeight = 'bold';
-                    lbl.style.color = 'var(--accent-color)';
-                }
+                card.style.backgroundColor = 'rgba(37, 99, 235, 0.08)';
+                card.style.boxShadow = '0 0 0 1px var(--accent-color)';
             } else {
                 card.style.borderColor = 'var(--border-color)';
                 card.style.backgroundColor = 'transparent';
-                const lbl = card.querySelector('.palette-label');
-                if (lbl) {
-                    lbl.style.fontWeight = 'normal';
-                    lbl.style.color = 'var(--text-primary)';
-                }
+                card.style.boxShadow = 'none';
             }
         });
     },
@@ -175,6 +187,7 @@ const AdvancedPivotMenus = {
 
         const chartType = document.getElementById('pivotChartStyle')?.value || 'bar';
         const isPieType = chartType === 'pie' || chartType === 'doughnut';
+        const isDoughnut = chartType === 'doughnut';
         const isTimeChartCompatible = ['bar', 'horizontalBar', 'line'].includes(chartType);
 
         const grp0Col = config.groupBy.length > 0 ? sourceState.columns.find(c => c.id === config.groupBy[0]) : null;
@@ -186,22 +199,38 @@ const AdvancedPivotMenus = {
             timeBox.style.display = (isFirstColDate && isTimeChartCompatible) ? 'flex' : 'none';
         }
 
-        // Gestione visibilità opzioni specifiche per grafici cartesiani vs torte
+        // Gestione visibilità opzioni specifiche per tipo di grafico
         const beginZeroRow = document.getElementById('chartBeginAtZeroRow');
         if (beginZeroRow) {
             beginZeroRow.style.display = isPieType ? 'none' : 'flex';
         }
 
-        const isStacked = document.getElementById('chartStacked')?.checked;
+        const centerTotalRow = document.getElementById('chartCenterTotalRow');
+        if (centerTotalRow) {
+            centerTotalRow.style.display = isDoughnut ? 'flex' : 'none';
+        }
+
+        const hasTwoGroups = config.groupBy.length >= 2;
+        const stackedRow = document.getElementById('chartStackedRow');
+        const stackedCheck = document.getElementById('chartStacked');
+        if (stackedRow) {
+            stackedRow.style.display = isPieType ? 'none' : 'flex';
+            stackedRow.style.opacity = hasTwoGroups ? '1' : '0.5';
+        }
+        if (stackedCheck) {
+            stackedCheck.disabled = !hasTwoGroups;
+        }
+
+        const isStacked = stackedCheck?.checked;
         const stacked100Row = document.getElementById('chartStacked100Row');
         if (stacked100Row) {
-            stacked100Row.style.display = (isStacked && !isPieType && config.groupBy.length >= 2) ? 'flex' : 'none';
+            stacked100Row.style.display = (isStacked && !isPieType && hasTwoGroups) ? 'flex' : 'none';
         }
 
         // Gestione avviso informativo per Multi-Select come seconda dimensione (stacking)
         const multiHint = document.getElementById('pivotMultiSelectStackHint');
         if (multiHint) {
-            multiHint.style.display = (isStacked && grp1Col && grp1Col.type === 'multi-select') ? 'block' : 'none';
+            multiHint.style.display = (isStacked && !isPieType && grp1Col && grp1Col.type === 'multi-select') ? 'block' : 'none';
         }
 
         // Gestione dinamica della palette "Colori della colonna Select"
@@ -417,6 +446,24 @@ const AdvancedPivotMenus = {
         }
     },
 
+    _buildIconCardsRowHTML: (inputId, groupClass, currentVal, optionsList) => {
+        let html = `<div style="display:flex; gap:6px; flex-wrap:wrap; flex:1;">`;
+        html += `<input type="hidden" id="${inputId}" value="${currentVal}">`;
+        optionsList.forEach(opt => {
+            const isActive = currentVal === opt.value;
+            const safeTooltip = UI.escapeHTML(opt.label);
+            html += `
+                <div class="${groupClass}" data-value="${opt.value}" data-tooltip="${safeTooltip}"
+                     onclick="AdvancedPivotMenus.selectChartOptionCard('${inputId}', '${groupClass}', '${opt.value}')"
+                     style="width:36px; height:32px; border:1px solid ${isActive ? 'var(--accent-color)' : 'var(--border-color)'}; border-radius:6px; display:flex; align-items:center; justify-content:center; cursor:pointer; transition:all 0.15s ease; background:${isActive ? 'rgba(37, 99, 235, 0.08)' : 'var(--bg-color)'}; color:${isActive ? 'var(--accent-color)' : 'var(--text-secondary)'};">
+                    ${opt.svg}
+                </div>
+            `;
+        });
+        html += `</div>`;
+        return html;
+    },
+
     openCreateWizard: (editTableId = null, chartOnlyMode = false, preserveDraft = false) => {
         AdvancedTable.closeDropdowns(true);
         const dbList = [];
@@ -510,6 +557,66 @@ const AdvancedPivotMenus = {
         const svgDoughnut = `<svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="9"></circle><circle cx="12" cy="12" r="4"></circle></svg>`;
         const svgPie = `<svg viewBox="0 0 24 24" width="32" height="32" stroke="currentColor" stroke-width="2" fill="none"><circle cx="12" cy="12" r="9"></circle><path d="M12 12 L12 3 A9 9 0 0 1 21 12 Z" fill="currentColor" opacity="0.3"></path><path d="M12 3v9h9"></path></svg>`;
 
+        // Icone SVG compatte (18x18) per Ordine Categorie, Posizione Legenda e Altezza Grafico
+        const sortOrderCardsHTML = AdvancedPivotMenus._buildIconCardsRowHTML('chartSortOrder', 'chart-sort-card', sortOrder, [
+            {
+                value: 'default',
+                label: I18n.t('adv_pivot_menu.sort_default'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round"><line x1="4" y1="6" x2="14" y2="6"></line><line x1="4" y1="12" x2="20" y2="12"></line><line x1="4" y1="18" x2="11" y2="18"></line></svg>`
+            },
+            {
+                value: 'desc',
+                label: I18n.t('adv_pivot_menu.sort_desc'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="18" y2="6"></line><line x1="4" y1="12" x2="13" y2="12"></line><line x1="4" y1="18" x2="8" y2="18"></line><polyline points="16 15 19 18 22 15"></polyline><line x1="19" y1="10" x2="19" y2="18"></line></svg>`
+            },
+            {
+                value: 'asc',
+                label: I18n.t('adv_pivot_menu.sort_asc'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="2" fill="none" stroke-linecap="round" stroke-linejoin="round"><line x1="4" y1="6" x2="6" y2="6"></line><line x1="4" y1="12" x2="10" y2="12"></line><line x1="4" y1="18" x2="14" y2="18"></line><polyline points="16 15 19 18 22 15"></polyline><line x1="19" y1="10" x2="19" y2="18"></line></svg>`
+            }
+        ]);
+
+        const legendPosCardsHTML = AdvancedPivotMenus._buildIconCardsRowHTML('chartLegendPos', 'chart-legend-card', legendPos, [
+            {
+                value: 'bottom',
+                label: I18n.t('adv_pivot_menu.legend_bottom'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.4"></rect><rect x="6" y="15" width="12" height="3" rx="1" fill="currentColor" stroke="none"></rect></svg>`
+            },
+            {
+                value: 'right',
+                label: I18n.t('adv_pivot_menu.legend_right'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.4"></rect><rect x="15" y="6" width="3" height="12" rx="1" fill="currentColor" stroke="none"></rect></svg>`
+            },
+            {
+                value: 'left',
+                label: I18n.t('adv_pivot_menu.legend_left'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.4"></rect><rect x="6" y="6" width="3" height="12" rx="1" fill="currentColor" stroke="none"></rect></svg>`
+            },
+            {
+                value: 'none',
+                label: I18n.t('adv_pivot_menu.legend_none'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.4"></rect><line x1="6" y1="18" x2="18" y2="6"></line></svg>`
+            }
+        ]);
+
+        const heightCardsHTML = AdvancedPivotMenus._buildIconCardsRowHTML('chartHeight', 'chart-height-card', currentHeight, [
+            {
+                value: 'small',
+                label: I18n.t('adv_pivot_menu.chart_height_small'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.3"></rect><rect x="5" y="13" width="14" height="6" rx="1" fill="currentColor" stroke="none"></rect></svg>`
+            },
+            {
+                value: 'medium',
+                label: I18n.t('adv_pivot_menu.chart_height_medium'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.3"></rect><rect x="5" y="9" width="14" height="10" rx="1" fill="currentColor" stroke="none"></rect></svg>`
+            },
+            {
+                value: 'large',
+                label: I18n.t('adv_pivot_menu.chart_height_large'),
+                svg: `<svg viewBox="0 0 24 24" width="18" height="18" stroke="currentColor" stroke-width="1.6" fill="none"><rect x="3" y="3" width="18" height="18" rx="2" opacity="0.3"></rect><rect x="5" y="5" width="14" height="14" rx="1" fill="currentColor" stroke="none"></rect></svg>`
+            }
+        ]);
+
         const style = getComputedStyle(document.body);
         const pastelDefaults = ['#93c5fd', '#fca5a5', '#86efac', '#fde047', '#d8b4fe', '#f9a8d4'];
         const vibrantDefaults = ['#2563eb', '#dc2626', '#16a34a', '#ea580c', '#9333ea', '#db2777'];
@@ -540,16 +647,15 @@ const AdvancedPivotMenus = {
             sunset: I18n.t('adv_pivot_menu.palette_sunset') 
         };
 
-        let paletteHTML = `<div style="display:flex; flex-direction:column; gap:5px; margin-bottom:15px;">
+        let paletteHTML = `<div style="display:grid; grid-template-columns: repeat(auto-fill, minmax(125px, 1fr)); gap:6px; margin-bottom:15px;">
             <input type="hidden" id="chartColorPalette" value="${currentPalette}">`;
 
         // Card opzionale dinamica per i colori ereditati da Select (visibile solo se una colonna select/multi-select è nei gruppi)
         const isSelectPalActive = currentPalette === 'select';
         paletteHTML += `
-            <div class="palette-card" data-palette="select" onclick="AdvancedPivotMenus.selectPalette('select')"
-                 style="display:none; align-items:center; gap:10px; padding:6px 10px; border-radius:4px; border:1px solid ${isSelectPalActive ? 'var(--accent-color)' : 'var(--border-color)'}; background:${isSelectPalActive ? 'rgba(37,99,235,0.05)' : 'transparent'}; cursor:pointer; transition:all 0.1s;">
-                <div class="palette-label" style="flex:1; font-size:0.8rem; font-weight:${isSelectPalActive ? 'bold' : 'normal'}; color:${isSelectPalActive ? 'var(--accent-color)' : 'var(--text-primary)'};">${paletteNames.select}</div>
-                <div class="palette-swatches" style="display:flex; gap:2px;"></div>
+            <div class="palette-card" data-palette="select" data-tooltip="${UI.escapeHTML(paletteNames.select)}" onclick="AdvancedPivotMenus.selectPalette('select')"
+                 style="display:none; align-items:center; justify-content:center; padding:8px 6px; border-radius:6px; border:1px solid ${isSelectPalActive ? 'var(--accent-color)' : 'var(--border-color)'}; background:${isSelectPalActive ? 'rgba(37,99,235,0.08)' : 'transparent'}; box-shadow:${isSelectPalActive ? '0 0 0 1px var(--accent-color)' : 'none'}; cursor:pointer; transition:all 0.12s;">
+                <div class="palette-swatches" style="display:flex; gap:3px;"></div>
             </div>`;
 
         for (const [key, colors] of Object.entries(palettes)) {
@@ -557,10 +663,9 @@ const AdvancedPivotMenus = {
             const colorSquares = colors.map(c => `<div style="width:16px; height:16px; border-radius:3px; background-color:${c}; border:1px solid rgba(0,0,0,0.1);"></div>`).join('');
             
             paletteHTML += `
-            <div class="palette-card" data-palette="${key}" onclick="AdvancedPivotMenus.selectPalette('${key}')"
-                 style="display:flex; align-items:center; gap:10px; padding:6px 10px; border-radius:4px; border:1px solid ${isActive ? 'var(--accent-color)' : 'var(--border-color)'}; background:${isActive ? 'rgba(37,99,235,0.05)' : 'transparent'}; cursor:pointer; transition:all 0.1s;">
-                <div class="palette-label" style="flex:1; font-size:0.8rem; font-weight:${isActive ? 'bold' : 'normal'}; color:${isActive ? 'var(--accent-color)' : 'var(--text-primary)'};">${paletteNames[key]}</div>
-                <div style="display:flex; gap:2px;">${colorSquares}</div>
+            <div class="palette-card" data-palette="${key}" data-tooltip="${UI.escapeHTML(paletteNames[key])}" onclick="AdvancedPivotMenus.selectPalette('${key}')"
+                 style="display:flex; align-items:center; justify-content:center; padding:8px 6px; border-radius:6px; border:1px solid ${isActive ? 'var(--accent-color)' : 'var(--border-color)'}; background:${isActive ? 'rgba(37,99,235,0.08)' : 'transparent'}; box-shadow:${isActive ? '0 0 0 1px var(--accent-color)' : 'none'}; cursor:pointer; transition:all 0.12s;">
+                <div class="palette-swatches" style="display:flex; gap:3px;">${colorSquares}</div>
             </div>`;
         }
         paletteHTML += `</div>`;
@@ -767,7 +872,7 @@ const AdvancedPivotMenus = {
                         ${paletteHTML}
 
                         <div style="display:flex; flex-direction:column; gap:12px; border-top: 1px solid var(--border-color); padding-top:15px;">
-                            <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
+                            <label id="chartStackedRow" style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
                                 <input type="checkbox" id="chartStacked" style="transform:scale(1.1);" ${cCfg.stacked ? 'checked' : ''} onchange="AdvancedPivotMenus.updateTimeSeriesUI()">
                                 ${I18n.t('adv_pivot_menu.chart_stacked')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_stacked_hint')}</span>
                             </label>
@@ -791,18 +896,24 @@ const AdvancedPivotMenus = {
                                 ${I18n.t('adv_pivot_menu.chart_show_labels')}
                             </label>
                             
-                            <label style="display:flex; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
+                            <label id="chartCenterTotalRow" style="display:none; align-items:center; gap:8px; font-size:0.8rem; cursor:pointer;">
                                 <input type="checkbox" id="chartCenterTotal" style="transform:scale(1.1);" ${cCfg.centerTotal !== false ? 'checked' : ''}>
-                                ${I18n.t('adv_pivot_menu.chart_center_total')} <span style="color:var(--text-secondary); font-size:0.7rem;">${I18n.t('adv_pivot_menu.chart_center_total_hint')}</span>
+                                <span>${I18n.t('adv_pivot_menu.chart_center_total')}</span>
                             </label>
 
-                            <div style="display:flex; align-items:center; gap:8px; margin-top: 5px;">
+                            <div style="display:flex; align-items:center; gap:8px; margin-top: 4px;">
                                 <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.sort_order_label')}</label>
-                                <select id="chartSortOrder" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
-                                    <option value="default" ${sortOrder === 'default' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.sort_default')}</option>
-                                    <option value="desc" ${sortOrder === 'desc' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.sort_desc')}</option>
-                                    <option value="asc" ${sortOrder === 'asc' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.sort_asc')}</option>
-                                </select>
+                                ${sortOrderCardsHTML}
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.legend_position')}</label>
+                                ${legendPosCardsHTML}
+                            </div>
+
+                            <div style="display:flex; align-items:center; gap:8px;">
+                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.chart_height_label')}</label>
+                                ${heightCardsHTML}
                             </div>
 
                             <div style="display:flex; align-items:center; gap:8px;">
@@ -813,26 +924,6 @@ const AdvancedPivotMenus = {
                                     <option value="8" ${topN === '8' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_8')}</option>
                                     <option value="10" ${topN === '10' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_10')}</option>
                                     <option value="12" ${topN === '12' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.top_n_12')}</option>
-                                </select>
-                            </div>
-
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.legend_position')}</label>
-                                <select id="chartLegendPos" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
-                                    <option value="bottom" ${legendPos === 'bottom' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_bottom')}</option>
-                                    <option value="right" ${legendPos === 'right' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_right')}</option>
-                                    <option value="left" ${legendPos === 'left' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_left')}</option>
-                                    <option value="none" ${legendPos === 'none' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.legend_none')}</option>
-                                </select>
-                            </div>
-
-                            <!-- Selettore Dimensione / Altezza Grafico -->
-                            <div style="display:flex; align-items:center; gap:8px;">
-                                <label style="font-size:0.8rem; color:var(--text-secondary); width:120px;">${I18n.t('adv_pivot_menu.chart_height_label')}</label>
-                                <select id="chartHeight" class="modern-input" style="padding: 4px; font-size: 0.8rem; flex:1; margin:0;">
-                                    <option value="small" ${currentHeight === 'small' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_small')}</option>
-                                    <option value="medium" ${currentHeight === 'medium' || !currentHeight ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_medium')}</option>
-                                    <option value="large" ${currentHeight === 'large' ? 'selected' : ''}>${I18n.t('adv_pivot_menu.chart_height_large')}</option>
                                 </select>
                             </div>
                         </div>

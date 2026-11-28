@@ -12,6 +12,7 @@
  * Esclusione di .link-modal-overlay e #advRelationPeekModalOverlay dal listener di chiusura del Drawer.
  * Protezione del tooltip custom (#advCustomTooltip) quando il cursore passa sopra i nodi nella sidebar.
  * Anteprima on-the-fly della thumbnail YouTube al passaggio del mouse sui link <a> di YouTube.
+ * Chiusura immediata del tooltip custom all'avvio di qualsiasi operazione di drag & drop (dragstart).
  */
 
 Object.assign(UI, {
@@ -671,6 +672,12 @@ Object.assign(UI, {
             activeTarget = null;
             if (observer) { observer.disconnect(); observer = null; }
         };
+
+        document.addEventListener('dragstart', () => {
+            UI.hideCustomTooltip();
+            activeTarget = null;
+            if (observer) { observer.disconnect(); observer = null; }
+        }, true);
 
         document.addEventListener('mouseover', (e) => {
             let target = null;
